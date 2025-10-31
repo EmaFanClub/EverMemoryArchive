@@ -295,17 +295,24 @@ The agent uses smart summarization instead of simple truncation to manage long c
 
 **Token Limit**: 80,000 tokens (configurable)
 
-**Summarization Strategy**:
+**Summarization Strategy** (Agent Mode):
 1. **Precise Token Calculation**: Uses tiktoken (cl100k_base encoder) for accurate token counting
 2. **Trigger Condition**: Automatically summarizes when token count exceeds the limit
-3. **Smart Preservation**: Keeps recent messages (default: 4) + system prompt + summary
-4. **LLM-Generated Summary**: Uses LLM to create concise summaries of conversation history
-5. **Iterative Summarization**: Subsequent summaries append to existing summaries
+3. **Per-Round Summarization**: Summarizes agent execution between each pair of user messages
+4. **User Intent Preservation**: All user messages are preserved (never summarized)
+5. **In-Progress Handling**: Even the current executing round gets summarized
+6. **LLM-Generated Summary**: Uses LLM to create concise summaries (≤300 words) of each execution round
+
+**Message Structure After Summary**:
+```
+system → user1 → summary1 → user2 → summary2 → user3 → summary3 (if executing)
+```
 
 **Benefits**:
 - ✅ Maintains long-term context without token overflow
-- ✅ Preserves key information and decisions
-- ✅ More efficient than simple truncation
+- ✅ Preserves all user task intents (never lost)
+- ✅ Compresses only agent execution process (assistant/tool messages)
+- ✅ Each round independently summarized for clarity
 - ✅ Continuous context across long conversations
 
 ### 4. Complete Run Logging 🆕
@@ -318,40 +325,6 @@ Every agent run is fully logged with detailed information:
 - **[N] REQUEST**: LLM requests with all messages and available tools
 - **[N+1] RESPONSE**: LLM responses with content, thinking, and tool calls
 - **[N+2] TOOL_RESULT**: Tool execution results with arguments and outputs
-
-**Log Structure**:
-```
-================================================================================
-Agent Run Log - 2025-10-31 16:44:02
-================================================================================
-
---------------------------------------------------------------------------------
-[1] REQUEST
-Timestamp: 2025-10-31 16:44:02.545
---------------------------------------------------------------------------------
-LLM Request:
-Message Count: 5
-Messages: ...
-Available Tools: 8
-
---------------------------------------------------------------------------------
-[2] RESPONSE
-Timestamp: 2025-10-31 16:44:03.120
---------------------------------------------------------------------------------
-LLM Response:
-Thinking: Let me analyze this task...
-Content: I'll help you with that...
-Tool Calls (2): ...
-
---------------------------------------------------------------------------------
-[3] TOOL_RESULT
-Timestamp: 2025-10-31 16:44:03.850
---------------------------------------------------------------------------------
-Tool Execution: read_file
-Arguments: {"file_path": "test.txt"}
-Success: True
-Result: File content...
-```
 
 **Benefits**:
 - ✅ Complete audit trail of all interactions
