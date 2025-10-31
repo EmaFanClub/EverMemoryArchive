@@ -46,34 +46,38 @@ class AgentLogger:
         """
         self.log_index += 1
 
-        content = "LLM Request:\n\n"
-        content += f"Message Count: {len(messages)}\n"
+        # 构建完整的请求数据结构
+        request_data = {
+            "messages": [],
+            "tools": [],
+        }
 
-        # 格式化消息
-        content += "\nMessages:\n"
-        for i, msg in enumerate(messages):
-            content += f"\n--- Message {i + 1} ---\n"
-            content += f"Role: {msg.role}\n"
-
-            if isinstance(msg.content, str):
-                content += f"Content: {msg.content}\n"
-            elif isinstance(msg.content, list):
-                content += f"Content (blocks): {json.dumps(msg.content, indent=2, ensure_ascii=False)}\n"
-
+        # 转换消息为 JSON 可序列化格式
+        for msg in messages:
+            msg_dict = {
+                "role": msg.role,
+                "content": msg.content,
+            }
             if msg.thinking:
-                content += f"Thinking: {msg.thinking}\n"
-
+                msg_dict["thinking"] = msg.thinking
             if msg.tool_calls:
-                content += f"Tool Calls: {json.dumps(msg.tool_calls, indent=2, ensure_ascii=False)}\n"
-
+                msg_dict["tool_calls"] = msg.tool_calls
             if msg.tool_call_id:
-                content += f"Tool Call ID: {msg.tool_call_id}\n"
+                msg_dict["tool_call_id"] = msg.tool_call_id
+            if msg.name:
+                msg_dict["name"] = msg.name
 
-        # 工具信息
+            request_data["messages"].append(msg_dict)
+
+        # 只记录工具名称
         if tools:
-            content += f"\nAvailable Tools: {len(tools)}\n"
-            for tool in tools:
-                content += f"  - {tool.get('function', {}).get('name', 'unknown')}\n"
+            request_data["tools"] = [
+                tool.get("function", {}).get("name", "unknown") for tool in tools
+            ]
+
+        # 格式化为 JSON
+        content = "LLM Request:\n\n"
+        content += json.dumps(request_data, indent=2, ensure_ascii=False)
 
         self._write_log("REQUEST", content)
 
@@ -94,21 +98,23 @@ class AgentLogger:
         """
         self.log_index += 1
 
-        log_content = "LLM Response:\n\n"
+        # 构建完整的响应数据结构
+        response_data = {
+            "content": content,
+        }
 
         if thinking:
-            log_content += f"Thinking:\n{thinking}\n\n"
-
-        log_content += f"Content:\n{content}\n\n"
+            response_data["thinking"] = thinking
 
         if tool_calls:
-            log_content += f"Tool Calls ({len(tool_calls)}):\n"
-            for i, tc in enumerate(tool_calls):
-                log_content += f"\n--- Tool Call {i + 1} ---\n"
-                log_content += json.dumps(tc, indent=2, ensure_ascii=False) + "\n"
+            response_data["tool_calls"] = tool_calls
 
         if finish_reason:
-            log_content += f"\nFinish Reason: {finish_reason}\n"
+            response_data["finish_reason"] = finish_reason
+
+        # 格式化为 JSON
+        log_content = "LLM Response:\n\n"
+        log_content += json.dumps(response_data, indent=2, ensure_ascii=False)
 
         self._write_log("RESPONSE", log_content)
 
@@ -131,16 +137,21 @@ class AgentLogger:
         """
         self.log_index += 1
 
-        content = f"Tool Execution: {tool_name}\n\n"
-        content += (
-            f"Arguments:\n{json.dumps(arguments, indent=2, ensure_ascii=False)}\n\n"
-        )
-        content += f"Success: {result_success}\n\n"
+        # 构建完整的工具执行结果数据结构
+        tool_result_data = {
+            "tool_name": tool_name,
+            "arguments": arguments,
+            "success": result_success,
+        }
 
         if result_success:
-            content += f"Result:\n{result_content}\n"
+            tool_result_data["result"] = result_content
         else:
-            content += f"Error:\n{result_error}\n"
+            tool_result_data["error"] = result_error
+
+        # 格式化为 JSON
+        content = "Tool Execution:\n\n"
+        content += json.dumps(tool_result_data, indent=2, ensure_ascii=False)
 
         self._write_log("TOOL_RESULT", content)
 

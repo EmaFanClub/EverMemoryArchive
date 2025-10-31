@@ -561,7 +561,7 @@ pytest tests/test_agent.py tests/test_note_tool.py -v
 
 ## 总结
 
-本项目是一个**教学友好**且****的 Agent 实现：
+本项目是一个**教学友好**且**生产级**的 Agent 实现：
 
 ✅ **足够简单**: 代码结构清晰，易于理解
 ✅ **足够完整**: 包含所有核心 Agent 功能和高级特性
