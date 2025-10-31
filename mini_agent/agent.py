@@ -49,14 +49,12 @@ class Agent:
         max_steps: int = 50,
         workspace_dir: str = "./workspace",
         token_limit: int = 80000,  # Token 超过此值时触发 summary
-        keep_recent_messages: int = 4,  # Summary 后保留最近的消息数
     ):
         self.llm = llm_client
         self.system_prompt = system_prompt
         self.tools = {tool.name: tool for tool in tools}
         self.max_steps = max_steps
         self.token_limit = token_limit
-        self.keep_recent_messages = keep_recent_messages
         self.workspace_dir = Path(workspace_dir)
 
         # Ensure workspace exists
@@ -64,9 +62,6 @@ class Agent:
 
         # Initialize message history
         self.messages: List[Message] = [Message(role="system", content=system_prompt)]
-
-        # 记录是否已经有 summary
-        self.has_summary = False
 
         # 初始化日志记录器
         self.logger = AgentLogger(self.workspace_dir)
@@ -133,13 +128,13 @@ class Agent:
         return int(total_chars / 2.5)
 
     async def _summarize_messages(self):
-        """消息历史摘要：当 token 超限时，将旧消息总结为摘要
+        """消息历史摘要：当 token 超限时，对每一轮 user-user 之间的对话进行摘要
 
-        策略：
-        - 检查 token 是否超过限制
-        - 保留 system prompt + summary + 最近的 N 条消息
-        - 将中间的消息总结成摘要
-        - 确保摘要后第一条非 system 消息是 user 消息
+        策略 (Agent 模式)：
+        - 保留所有 user 消息（这是用户的意图）
+        - 对每一轮 user-user 之间的内容（agent 执行过程）进行 summary
+        - 最后一轮如果还在执行中（有 agent/tool 消息但没有下一个 user），也要 summary
+        - 结构：system -> user1 -> summary1 -> user2 -> summary2 -> user3 -> summary3(如果执行中)
         """
         estimated_tokens = self._estimate_tokens()
 
@@ -152,105 +147,127 @@ class Agent:
         )
         print(f"{Colors.BRIGHT_YELLOW}🔄 触发消息历史摘要...{Colors.RESET}")
 
-        # 计算需要保留的最近消息的起始位置
-        # 确保从 user 消息开始
-        keep_start_idx = len(self.messages) - self.keep_recent_messages
-        if keep_start_idx <= 1:
-            # 消息太少，不需要 summary
+        # 找到所有 user 消息的索引（跳过 system prompt）
+        user_indices = [
+            i for i, msg in enumerate(self.messages) if msg.role == "user" and i > 0
+        ]
+
+        # 至少需要 1 个 user 消息才能进行 summary
+        if len(user_indices) < 1:
+            print(f"{Colors.BRIGHT_YELLOW}⚠️  消息不足，无法进行摘要{Colors.RESET}")
             return
 
-        # 向前搜索最近的 user 消息作为保留起点
-        while keep_start_idx > 1 and self.messages[keep_start_idx].role != "user":
-            keep_start_idx -= 1
+        # 构建新的消息列表
+        new_messages = [self.messages[0]]  # 保留 system prompt
+        summary_count = 0
 
-        # 要总结的消息：system prompt 之后，最近消息之前
-        messages_to_summarize = self.messages[1:keep_start_idx]
+        # 遍历每个 user 消息，对其后面的执行过程进行 summary
+        for i, user_idx in enumerate(user_indices):
+            # 添加当前 user 消息
+            new_messages.append(self.messages[user_idx])
 
-        if not messages_to_summarize:
-            return
+            # 确定要 summary 的消息范围
+            # 如果是最后一个 user，则到消息列表末尾；否则到下一个 user 之前
+            if i < len(user_indices) - 1:
+                next_user_idx = user_indices[i + 1]
+            else:
+                next_user_idx = len(self.messages)
+
+            # 提取这一轮的执行消息
+            execution_messages = self.messages[user_idx + 1 : next_user_idx]
+
+            # 如果这一轮有执行消息，进行 summary
+            if execution_messages:
+                summary_text = await self._create_summary(
+                    execution_messages, user_idx, i + 1
+                )
+                if summary_text:
+                    summary_message = Message(
+                        role="user", content=f"[执行摘要]\n\n{summary_text}"
+                    )
+                    new_messages.append(summary_message)
+                    summary_count += 1
+
+        # 替换消息列表
+        self.messages = new_messages
+
+        new_tokens = self._estimate_tokens()
+        print(
+            f"{Colors.BRIGHT_GREEN}✓ 摘要完成，Token 从 {estimated_tokens} 降至 {new_tokens}{Colors.RESET}"
+        )
+        print(
+            f"{Colors.DIM}  结构: system + {len(user_indices)} 个 user 消息 + {summary_count} 个 summary{Colors.RESET}"
+        )
+
+    async def _create_summary(
+        self, messages: List[Message], user_idx: int, round_num: int
+    ) -> str:
+        """为一轮执行创建摘要
+
+        Args:
+            messages: 要总结的消息列表
+            user_idx: 用户消息的索引
+            round_num: 轮次编号
+
+        Returns:
+            摘要文本
+        """
+        if not messages:
+            return ""
 
         # 构建摘要内容
-        summary_content = "以下是之前对话的摘要：\n\n"
-        for msg in messages_to_summarize:
-            if msg.role == "user":
-                content_text = (
-                    msg.content if isinstance(msg.content, str) else str(msg.content)
-                )
-                summary_content += f"用户: {content_text[:200]}\n"
-            elif msg.role == "assistant":
+        summary_content = f"第 {round_num} 轮执行过程：\n\n"
+        for msg in messages:
+            if msg.role == "assistant":
                 content_text = (
                     msg.content if isinstance(msg.content, str) else str(msg.content)
                 )
                 summary_content += f"助手: {content_text[:200]}\n"
                 if msg.tool_calls:
                     tool_names = [tc["function"]["name"] for tc in msg.tool_calls]
-                    summary_content += f"  (调用工具: {', '.join(tool_names)})\n"
+                    summary_content += f"  → 调用工具: {', '.join(tool_names)}\n"
             elif msg.role == "tool":
                 result_preview = (
                     msg.content[:100]
                     if isinstance(msg.content, str)
                     else str(msg.content)[:100]
                 )
-                summary_content += f"  工具结果: {result_preview}...\n"
+                summary_content += f"  ← 工具返回: {result_preview}...\n"
 
-        # 调用 LLM 生成更简洁的摘要（如果已经有 summary，则追加）
+        # 调用 LLM 生成简洁的摘要
         try:
-            if self.has_summary:
-                # 已经有摘要，追加新的内容
-                summary_prompt = f"""请将以下对话历史进行简洁总结（追加到已有摘要）：
+            summary_prompt = f"""请将以下 Agent 执行过程进行简洁总结：
 
 {summary_content}
 
 要求：
-1. 保留关键信息和重要决策
-2. 记录主要的工具调用和结果
-3. 简洁明了，控制在 500 字以内
-4. 使用中文"""
-            else:
-                # 第一次生成摘要
-                summary_prompt = f"""请将以下对话历史进行简洁总结：
-
-{summary_content}
-
-要求：
-1. 保留关键信息和重要决策
-2. 记录主要的工具调用和结果
-3. 简洁明了，控制在 500 字以内
-4. 使用中文"""
+1. 重点记录完成了什么任务、调用了哪些工具
+2. 保留关键的执行结果和重要发现
+3. 简洁明了，控制在 300 字以内
+4. 使用中文
+5. 不要包含"用户"相关内容，只总结 Agent 的执行过程"""
 
             summary_msg = Message(role="user", content=summary_prompt)
             response = await self.llm.generate(
                 messages=[
-                    Message(role="system", content="你是一个擅长总结对话历史的助手。"),
+                    Message(
+                        role="system",
+                        content="你是一个擅长总结 Agent 执行过程的助手。",
+                    ),
                     summary_msg,
                 ]
             )
 
             summary_text = response.content
-            self.has_summary = True
-
-            print(f"{Colors.BRIGHT_GREEN}✓ 摘要生成完成{Colors.RESET}")
+            print(f"{Colors.BRIGHT_GREEN}✓ 第 {round_num} 轮摘要生成完成{Colors.RESET}")
+            return summary_text
 
         except Exception as e:
-            print(f"{Colors.BRIGHT_RED}✗ 摘要生成失败: {e}{Colors.RESET}")
+            print(
+                f"{Colors.BRIGHT_RED}✗ 第 {round_num} 轮摘要生成失败: {e}{Colors.RESET}"
+            )
             # 失败时使用简单的文本摘要
-            summary_text = summary_content
-
-        # 重新构建消息列表：system prompt + summary + 最近的消息
-        summary_message = Message(
-            role="user", content=f"[对话历史摘要]\n\n{summary_text}"
-        )
-
-        self.messages = [
-            self.messages[0],  # system prompt
-            summary_message,  # summary
-            *self.messages[keep_start_idx:],  # 最近的消息
-        ]
-
-        new_tokens = self._estimate_tokens()
-        print(
-            f"{Colors.BRIGHT_GREEN}✓ 摘要完成，Token 从 {estimated_tokens} 降至 {new_tokens}{Colors.RESET}"
-        )
+            return summary_content
 
     async def run(self) -> str:
         """Execute agent loop until task is complete or max steps reached."""
