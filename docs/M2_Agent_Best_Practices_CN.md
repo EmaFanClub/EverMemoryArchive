@@ -419,7 +419,7 @@ Agent: (加载 mcp-builder skill)
 
 **1. Skill 文件结构**
 
-```
+```text
 skills/
 ├── document-skills/
 │   ├── pdf/
@@ -617,7 +617,7 @@ plt.savefig("output.png")
 
 **步骤 3: 添加资源文件**
 
-```
+```text
 skills/data-visualization/
 ├── SKILL.md
 ├── templates/
