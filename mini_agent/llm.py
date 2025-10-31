@@ -18,6 +18,7 @@ class Message(BaseModel):
 
     role: str  # "system", "user", "assistant", "tool"
     content: str | List[Dict[str, Any]]  # Can be string or list of content blocks
+    thinking: str | None = None  # Extended thinking content for assistant messages
     tool_calls: List[Dict[str, Any]] | None = None
     tool_call_id: str | None = None
     name: str | None = None  # For tool role
@@ -129,23 +130,34 @@ class LLMClient:
 
             # For user and assistant messages
             if msg.role in ["user", "assistant"]:
-                # Handle tool results embedded in assistant messages
-                if msg.role == "assistant" and msg.tool_calls:
-                    # Build content blocks for assistant with tool calls
+                # Handle assistant messages with thinking or tool calls
+                if msg.role == "assistant" and (msg.thinking or msg.tool_calls):
+                    # Build content blocks for assistant with thinking and/or tool calls
                     content_blocks = []
+
+                    # Add thinking block if present
+                    if msg.thinking:
+                        content_blocks.append(
+                            {"type": "thinking", "thinking": msg.thinking}
+                        )
+
+                    # Add text content if present
                     if msg.content:
                         content_blocks.append({"type": "text", "text": msg.content})
 
                     # Add tool use blocks
-                    for tool_call in msg.tool_calls:
-                        content_blocks.append(
-                            {
-                                "type": "tool_use",
-                                "id": tool_call["id"],
-                                "name": tool_call["function"]["name"],
-                                "input": json.loads(tool_call["function"]["arguments"]),
-                            }
-                        )
+                    if msg.tool_calls:
+                        for tool_call in msg.tool_calls:
+                            content_blocks.append(
+                                {
+                                    "type": "tool_use",
+                                    "id": tool_call["id"],
+                                    "name": tool_call["function"]["name"],
+                                    "input": json.loads(
+                                        tool_call["function"]["arguments"]
+                                    ),
+                                }
+                            )
 
                     api_messages.append(
                         {"role": "assistant", "content": content_blocks}

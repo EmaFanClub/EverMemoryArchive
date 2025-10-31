@@ -145,15 +145,19 @@ Common commands: `/help`, `/clear`, `/history`, `/stats`, `/exit`
 - ✅ **Agent Multi-round Execution Loop**: Complete tool calling pipeline
 - ✅ **Basic Tool Set**: Read / Write / Edit files + Bash commands
 - ✅ **Session Note Tool**: Agent actively records and retrieves session highlights ⭐
-- ✅ **Claude Skills Integration**: 20+ professional skills (documentation, design, testing, development) ⭐💡 🆕
-- ✅ **MCP Tool Integration**: Memory (knowledge graph) + MiniMax Search (web search) ⭐ 🆕
-- ✅ **MiniMax M2 Model**: Through Anthropic-compatible endpoint
+- ✅ **Claude Skills Integration**: 20+ professional skills (documentation, design, testing, development) ⭐💡
+- ✅ **MCP Tool Integration**: Memory (knowledge graph) + MiniMax Search (web search) ⭐
+- ✅ **MiniMax M2 Model**: Through Anthropic-compatible endpoint with extended thinking support 🆕
 
 ### Advanced Features ⭐
+- ✅ **Extended Thinking**: Full support for M2's thinking capability, preserves reasoning in context 🆕
+- ✅ **Intelligent Context Management**: Smart message history summarization (80K token limit) 🆕
+- ✅ **Precise Token Calculation**: Using tiktoken for accurate token counting 🆕
+- ✅ **Complete Run Logging**: Detailed logs of all requests, responses, and tool executions 🆕
 - ✅ **Persistent Notes**: Agent maintains context across sessions and execution chains
 - ✅ **Intelligent Recording**: Agent autonomously determines what information needs to be recorded
-- ✅ **Multi-round Sessions**: Supports session management, history clearing, statistics, etc. 🆕
-- ✅ **Beautiful Interaction**: Colorful terminal output, clear session interface 🆕
+- ✅ **Multi-round Sessions**: Supports session management, history clearing, statistics, etc.
+- ✅ **Beautiful Interaction**: Colorful terminal output, clear session interface
 - ✅ **Simple yet Complete**: Showcases core functionality, avoids excessive complexity
 
 ## Project Structure
@@ -172,15 +176,17 @@ mini-agent/
 │   ├── config-example.yaml # API configuration example
 │   ├── agent.py          # Core Agent
 │   ├── llm.py            # LLM Client (Anthropic compatible)
-│   ├── config.py         # Configuration loader 🆕
+│   ├── logger.py         # Agent run logger 🆕
+│   ├── retry.py          # Retry mechanism
+│   ├── config.py         # Configuration loader
 │   └── tools/
 │       ├── base.py       # Tool base class
 │       ├── file_tools.py # File tools
 │       ├── bash_tool.py  # Bash tool
 │       ├── note_tool.py  # Session Note tool ⭐
 │       ├── mcp_loader.py # MCP loader (supports external servers) ⭐
-│       ├── skill_loader.py # Skill loader 🆕
-│       └── skill_tool.py # Skill tool 🆕
+│       ├── skill_loader.py # Skill loader
+│       └── skill_tool.py # Skill tool
 ├── tests/
 │   ├── test_agent.py     # Agent integration tests
 │   ├── test_llm.py       # LLM tests
@@ -212,10 +218,27 @@ External MCP Servers:
 ```python
 # Simplified core loop (from agent.py)
 async def run(self) -> str:
+    # Initialize run logging
+    self.logger.start_new_run()
+    
     step = 0
     while step < self.max_steps:
+        # Check and summarize message history if needed
+        await self._summarize_messages()
+        
+        # Log LLM request
+        self.logger.log_request(messages=self.messages, tools=tool_schemas)
+        
         # 1. Call LLM
         response = await self.llm.generate(messages, tools)
+        
+        # Log LLM response
+        self.logger.log_response(
+            content=response.content,
+            thinking=response.thinking,
+            tool_calls=response.tool_calls,
+            finish_reason=response.finish_reason
+        )
 
         # 2. If no tool calls, task complete
         if not response.tool_calls:
@@ -224,12 +247,119 @@ async def run(self) -> str:
         # 3. Execute tool calls
         for tool_call in response.tool_calls:
             result = await tool.execute(**arguments)
+            
+            # Log tool result
+            self.logger.log_tool_result(
+                tool_name=function_name,
+                arguments=arguments,
+                result_success=result.success,
+                result_content=result.content
+            )
+            
             self.messages.append(tool_result_message)
 
         step += 1
 ```
 
-### 2. Session Note Tool - Session Note Recording ⭐
+### 2. Extended Thinking Support 🆕
+
+The agent fully supports MiniMax M2's extended thinking capability:
+
+**Key Features**:
+- **Thinking Preservation**: Thinking content is preserved in message history for context continuity
+- **Display Control**: Thinking is displayed separately from response content in the terminal
+- **Context Injection**: When replaying conversation history, thinking blocks are properly injected
+
+**Message Structure**:
+```python
+class Message(BaseModel):
+    role: str
+    content: str | List[Dict[str, Any]]
+    thinking: str | None = None  # Extended thinking content
+    tool_calls: List[Dict[str, Any]] | None = None
+```
+
+**API Format Conversion**:
+```python
+# When sending to API, thinking is injected as content block
+content_blocks = []
+if msg.thinking:
+    content_blocks.append({"type": "thinking", "thinking": msg.thinking})
+if msg.content:
+    content_blocks.append({"type": "text", "text": msg.content})
+```
+
+### 3. Intelligent Context Management 🆕
+
+The agent uses smart summarization instead of simple truncation to manage long conversations:
+
+**Token Limit**: 80,000 tokens (configurable)
+
+**Summarization Strategy**:
+1. **Precise Token Calculation**: Uses tiktoken (cl100k_base encoder) for accurate token counting
+2. **Trigger Condition**: Automatically summarizes when token count exceeds the limit
+3. **Smart Preservation**: Keeps recent messages (default: 4) + system prompt + summary
+4. **LLM-Generated Summary**: Uses LLM to create concise summaries of conversation history
+5. **Iterative Summarization**: Subsequent summaries append to existing summaries
+
+**Benefits**:
+- ✅ Maintains long-term context without token overflow
+- ✅ Preserves key information and decisions
+- ✅ More efficient than simple truncation
+- ✅ Continuous context across long conversations
+
+### 4. Complete Run Logging 🆕
+
+Every agent run is fully logged with detailed information:
+
+**Log File Format**: `workspace/agent_run_YYYYMMDD_HHMMSS.log`
+
+**Logged Information**:
+- **[N] REQUEST**: LLM requests with all messages and available tools
+- **[N+1] RESPONSE**: LLM responses with content, thinking, and tool calls
+- **[N+2] TOOL_RESULT**: Tool execution results with arguments and outputs
+
+**Log Structure**:
+```
+================================================================================
+Agent Run Log - 2025-10-31 16:44:02
+================================================================================
+
+--------------------------------------------------------------------------------
+[1] REQUEST
+Timestamp: 2025-10-31 16:44:02.545
+--------------------------------------------------------------------------------
+LLM Request:
+Message Count: 5
+Messages: ...
+Available Tools: 8
+
+--------------------------------------------------------------------------------
+[2] RESPONSE
+Timestamp: 2025-10-31 16:44:03.120
+--------------------------------------------------------------------------------
+LLM Response:
+Thinking: Let me analyze this task...
+Content: I'll help you with that...
+Tool Calls (2): ...
+
+--------------------------------------------------------------------------------
+[3] TOOL_RESULT
+Timestamp: 2025-10-31 16:44:03.850
+--------------------------------------------------------------------------------
+Tool Execution: read_file
+Arguments: {"file_path": "test.txt"}
+Success: True
+Result: File content...
+```
+
+**Benefits**:
+- ✅ Complete audit trail of all interactions
+- ✅ Easy debugging and troubleshooting
+- ✅ Sequential indexing for event tracking
+- ✅ Separate log file per run
+
+### 5. Session Note Tool - Session Note Recording ⭐
 
 This is one of the **core highlights** of this demo, showcasing a simple and efficient session memory management approach.
 
@@ -298,7 +428,7 @@ Notes are stored in JSON format at `workspace/.agent_memory.json`:
 ]
 ```
 
-### 3. MiniMax Search - Web Search and Browse ⭐
+### 6. MiniMax Search - Web Search and Browse ⭐
 
 This is an **independent MCP Server** integrated into the Agent via `mcp.json`.
 
@@ -357,7 +487,7 @@ Agent: (calls browse tool)
 
 ---
 
-### 4. Tool Definition
+### 7. Tool Definition
 
 Each tool inherits from the `Tool` base class:
 
@@ -428,18 +558,26 @@ pytest tests/test_agent.py tests/test_note_tool.py -v
 
 ## Summary
 
-This project is an **educational-friendly** yet **technically complete** Agent implementation:
+This project is an **educational-friendly** yet **production-ready** Agent implementation:
 
-✅ **Simple Enough**: Minimal code, easy to understand
-✅ **Complete Enough**: Includes core functionality and Session Note Tool
-✅ **Shows the Gap**: Clearly contrasts the huge difference between Demo and production
+✅ **Simple Enough**: Clean code structure, easy to understand
+✅ **Complete Enough**: Includes all core Agent functionality with advanced features
+✅ **Production Features**: Extended thinking, smart context management, complete logging
+✅ **Shows the Gap**: Clearly contrasts differences between Demo and production
+
+**Key Highlights**:
+- 🧠 **Extended Thinking Support**: Full M2 thinking capability with context preservation
+- 📊 **Smart Context Management**: LLM-based summarization for long conversations (80K tokens)
+- 📝 **Complete Logging**: Detailed audit trail of all interactions
+- 🎯 **Precise Token Counting**: Using tiktoken for accurate calculation
 
 Suitable for:
 - 🎓 Learning Agent architecture and working principles
 - 🧪 Rapid experimentation and prototype validation
 - 📚 Understanding production environment complexity
+- 🚀 Building production-grade Agent applications
 
-**Not suitable** for direct production use.
+This implementation demonstrates both simplicity and completeness, bridging the gap between educational demos and production systems.
 
 ## 📚 Related Documentation
 
