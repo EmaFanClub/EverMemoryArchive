@@ -1070,26 +1070,7 @@ class CachedTool(Tool):
 
 ## 5. FAQ
 
-### Q1: How to choose between M2 and Claude/GPT-4?
-
-**Choose M2 when**:
-- Cost-sensitive scenarios
-- Agent workflows (tool-calling intensive)
-- Primarily Chinese tasks
-- Need fast responses
-
-**Choose Claude/GPT-4 when**:
-- Need strongest reasoning capabilities
-- Creative content generation
-- Complex code understanding and generation
-- Sufficient budget
-
-**Recommended Strategy**: Multi-model hybrid approach
-- M2 as primary model (handles 80% of tasks)
-- Automatically switch to Claude/GPT-4 for complex tasks
-- Configure comprehensive Fallback mechanisms
-
-### Q2: How to debug Agent's erroneous behavior?
+### Q1: How to debug Agent's erroneous behavior?
 
 **Three-Step Debugging**:
 
@@ -1130,7 +1111,7 @@ session.save_step({
 session.replay(from_step=5)
 ```
 
-### Q3: Agent frequently executes wrong tool calls?
+### Q2: Agent frequently executes wrong tool calls?
 
 **Possible Causes and Solutions**:
 
@@ -1159,7 +1140,7 @@ Tool usage rules:
 """
 ```
 
-### Q4: How to handle Agent getting stuck in loops?
+### Q3: How to handle Agent getting stuck in loops?
 
 **Detect Loops**:
 ```python
