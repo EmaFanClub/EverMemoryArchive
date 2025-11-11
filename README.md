@@ -11,6 +11,7 @@ This project comes packed with features designed for a robust and intelligent ag
 *   ✅ **Intelligent Context Management**: Automatically summarizes conversation history to handle contexts up to a configurable token limit, enabling infinitely long tasks.
 *   ✅ **Claude Skills Integration**: Comes with 15 professional skills for documents, design, testing, and development.
 *   ✅ **MCP Tool Integration**: Natively supports MCP for tools like knowledge graph access and web search.
+*   ✅ **ACP Support**: Native support for [Agent Client Protocol](https://agentclientprotocol.com/) for integration with ACP-compatible clients like Zed.
 *   ✅ **Comprehensive Logging**: Detailed logs for every request, response, and tool execution for easy debugging.
 *   ✅ **Clean & Simple Design**: A beautiful CLI and a codebase that is easy to understand, making it the perfect starting point for building advanced agents.
 
@@ -30,6 +31,10 @@ This project comes packed with features designed for a robust and intelligent ag
   - [Testing](#testing)
     - [Quick Run](#quick-run)
     - [Test Coverage](#test-coverage)
+  - [ACP (Agent Client Protocol) Support](#acp-agent-client-protocol-support)
+    - [Features](#features)
+    - [Quick Start](#quick-start-1)
+    - [Integration with Zed](#integration-with-zed)
   - [Related Documentation](#related-documentation)
   - [Contributing](#contributing)
   - [License](#license)
@@ -220,10 +225,49 @@ pytest tests/test_agent.py tests/test_note_tool.py -v
 - ✅ **External Services** - Git MCP Server loading
 
 
+## ACP (Agent Client Protocol) Support
+
+Mini-Agent supports the [Agent Client Protocol](https://agentclientprotocol.com/), allowing it to integrate seamlessly with ACP-compatible clients like Zed.
+
+### Features
+
+- ✅ **Multiple Concurrent Sessions**: Run multiple conversations simultaneously
+- ✅ **Real-time Streaming**: Stream agent thoughts, messages, and tool execution in real-time
+- ✅ **Tool Execution**: Execute tools with progress tracking and error handling
+- ✅ **MiniMax Integration**: Full support for MiniMax's thinking blocks and unique tool format
+
+### Quick Start
+
+```bash
+# Install with ACP support
+pip install mini-agent
+
+# Run as ACP server
+mini-agent-acp
+```
+
+### Integration with Zed
+
+Add to your Zed agent configuration:
+
+```json
+{
+  "agents": [
+    {
+      "name": "mini-agent",
+      "command": "mini-agent-acp"
+    }
+  ]
+}
+```
+
+For detailed ACP documentation, see [mini_agent/acp/README.md](mini_agent/acp/README.md).
+
 ## Related Documentation
 
 - [Development Guide](docs/DEVELOPMENT_GUIDE.md) - Detailed development and configuration guidance
 - [Production Guide](docs/PRODUCTION_GUIDE.md) - Best practices for production deployment
+- [ACP Integration](mini_agent/acp/README.md) - Agent Client Protocol implementation details
 
 ## Contributing
 

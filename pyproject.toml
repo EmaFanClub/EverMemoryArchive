@@ -19,10 +19,12 @@ dependencies = [
     "prompt-toolkit>=3.0.0",
     "pip>=25.3",
     "pipx>=1.8.0",
+    "agent-client-protocol>=0.1.0",
 ]
 
 [project.scripts]
 mini-agent = "mini_agent.cli:main"
+mini-agent-acp = "mini_agent.acp.server:main"
 
 [project.optional-dependencies]
 dev = [
