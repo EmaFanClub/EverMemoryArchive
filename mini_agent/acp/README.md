@@ -87,6 +87,11 @@ Steps:
 - Optional: set Working Directory to your project path.
 - Start a thread. You should see streaming updates for thoughts, messages, and tools.
 
+Path resolution for file tools:
+- In ACP mode, file tool paths are resolved relative to the session working directory (the `cwd` Zed sends, typically your project root).
+- Use absolute paths if you need to operate outside the project root.
+- If a relative path doesn’t exist, read tools will return a “File not found” error; they do not create files.
+
 Verifying the version Zed runs:
 - Use a small wrapper to print version + module path, then exec Mini‑Agent:
   - Command: `/bin/bash`

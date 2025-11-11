@@ -15,6 +15,7 @@ from typing import Any
 from mini_agent.agent import Agent
 from mini_agent.llm import LLMClient
 from mini_agent.schema.schema import Message
+from mini_agent.tools.file_tools import ReadTool, WriteTool, EditTool
 
 
 @dataclass
@@ -76,11 +77,20 @@ class SessionManager:
             if session_id in self._sessions:
                 raise ValueError(f"Session {session_id} already exists")
 
-            # Create session-specific agent
-            # Note: Each session gets its own workspace
+            # Rebind file tools to the session's working directory
+            session_tools = []
+            for tool in self._tools:
+                if isinstance(tool, (ReadTool, WriteTool, EditTool)):
+                    # Create a fresh instance bound to session cwd
+                    session_tools.append(tool.__class__(workspace_dir=cwd))
+                else:
+                    # Reuse non-filesystem tools as-is
+                    session_tools.append(tool)
+
+            # Create session-specific agent (workspace set to cwd)
             agent = Agent(
                 llm_client=self._llm_client,
-                tools=self._tools,
+                tools=session_tools,
                 system_prompt=self._system_prompt,
                 workspace_dir=Path(cwd),
             )
