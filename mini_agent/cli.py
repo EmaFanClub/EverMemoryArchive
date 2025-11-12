@@ -11,6 +11,8 @@ Examples:
 
 import argparse
 import asyncio
+import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -68,14 +70,38 @@ class Colors:
     BG_BLUE = "\033[44m"
 
 
+ansi_re = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _col_width(s: str) -> int:
+    """Approximate terminal column width (ANSI-stripped, emoji/EAW-aware)."""
+    s = ansi_re.sub("", s)
+    total = 0
+    for ch in s:
+        if unicodedata.combining(ch):
+            continue
+        code = ord(ch)
+        # Treat most emoji as width 2
+        if 0x1F300 <= code <= 0x1FAFF:
+            total += 2
+            continue
+        eaw = unicodedata.east_asian_width(ch)
+        total += 2 if eaw in ("W", "F") else 1
+    return total
+
+
 def print_banner():
-    """Print welcome banner"""
+    """Print welcome banner with robust centering."""
+    INNER_WIDTH = 58
     print()
-    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}╔{'═' * 58}╗{Colors.RESET}")
-    print(
-        f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{Colors.RESET}  {Colors.BOLD}🤖 Mini Agent - Multi-turn Interactive Session{Colors.RESET}        {Colors.BOLD}{Colors.BRIGHT_CYAN}║{Colors.RESET}"
-    )
-    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}╚{'═' * 58}╝{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}╔{'═' * INNER_WIDTH}╗{Colors.RESET}")
+    text = f"{Colors.BOLD}🤖 Mini Agent - Multi-turn Interactive Session{Colors.RESET}"
+    w = _col_width(text)
+    # Two spaces of left margin inside the box looks nice
+    left = max(0, (INNER_WIDTH - w) // 2)
+    right = max(0, INNER_WIDTH - w - left)
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{Colors.RESET}{' ' * left}{text}{' ' * right}{Colors.BOLD}{Colors.BRIGHT_CYAN}║{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}╚{'═' * INNER_WIDTH}╝{Colors.RESET}")
     print()
 
 
@@ -108,29 +134,48 @@ def print_help():
 
 
 def print_session_info(agent: Agent, workspace_dir: Path, model: str):
-    """Print session information"""
-    print(f"{Colors.DIM}┌{'─' * 58}┐{Colors.RESET}")
-    print(
-        f"{Colors.DIM}│{Colors.RESET} {Colors.BRIGHT_CYAN}Session Info{Colors.RESET}                                         {Colors.DIM}│{Colors.RESET}"
-    )
-    print(f"{Colors.DIM}├{'─' * 58}┤{Colors.RESET}")
-    print(f"{Colors.DIM}│{Colors.RESET} Model: {model}{' ' * max(0, 49 - len(str(model)))} {Colors.DIM}│{Colors.RESET}")
-    print(
-        f"{Colors.DIM}│{Colors.RESET} Workspace: {workspace_dir}{' ' * max(0, 45 - len(str(workspace_dir)))} {Colors.DIM}│{Colors.RESET}"
-    )
-    msg_text = f"{len(agent.messages)} messages"
-    print(
-        f"{Colors.DIM}│{Colors.RESET} Message History: {msg_text}{' ' * max(0, 38 - len(msg_text))} {Colors.DIM}│{Colors.RESET}"
-    )
-    tools_text = f"{len(agent.tools)} tools"
-    print(
-        f"{Colors.DIM}│{Colors.RESET} Available Tools: {tools_text}{' ' * max(0, 41 - len(tools_text))} {Colors.DIM}│{Colors.RESET}"
-    )
-    print(f"{Colors.DIM}└{'─' * 58}┘{Colors.RESET}")
+    """Print session information with robust padding.
+
+    Uses a fixed inner width and computes padding based on visible length
+    (ANSI color codes are ignored for width calculation).
+    """
+
+    INNER_WIDTH = 58
+
+    def box_line(text: str):
+        # Fit text into INNER_WIDTH with a leading single space and trailing padding
+        max_content = INNER_WIDTH - 1  # account for the single leading space
+        # Ellipsize if too long (no color inside these labels by default)
+        if _col_width(text) > max_content:
+            plain = ansi_re.sub("", text)
+            # Leave 1 char for ellipsis
+            if max_content > 1:
+                text = plain[: max_content - 1] + "…"
+            else:
+                text = plain[: max_content]
+        pad = max(0, INNER_WIDTH - 1 - _col_width(text))
+        print(f"{Colors.DIM}│{Colors.RESET} {text}{' ' * pad}{Colors.DIM}│{Colors.RESET}")
+
+    # Top border
+    print(f"{Colors.DIM}┌{'─' * INNER_WIDTH}┐{Colors.RESET}")
+    # Header centered
+    header = f"{Colors.BRIGHT_CYAN}Session Info{Colors.RESET}"
+    # Center by adding left padding inside text
+    free_space = INNER_WIDTH - _col_width(header)
+    left_pad = max(0, (free_space - 1) // 2)  # subtract 1 for the fixed leading space
+    box_line(" " * left_pad + header)
+    # Divider
+    print(f"{Colors.DIM}├{'─' * INNER_WIDTH}┤{Colors.RESET}")
+
+    box_line(f"Model: {model}")
+    box_line(f"Workspace: {workspace_dir}")
+    box_line(f"Message History: {len(agent.messages)} messages")
+    box_line(f"Available Tools: {len(agent.tools)} tools")
+
+    # Bottom border and helper hint
+    print(f"{Colors.DIM}└{'─' * INNER_WIDTH}┘{Colors.RESET}")
     print()
-    print(
-        f"{Colors.DIM}Type {Colors.BRIGHT_GREEN}/help{Colors.DIM} for help, {Colors.BRIGHT_GREEN}/exit{Colors.DIM} to quit{Colors.RESET}"
-    )
+    print(f"{Colors.DIM}Type {Colors.BRIGHT_GREEN}/help{Colors.DIM} for help, {Colors.BRIGHT_GREEN}/exit{Colors.DIM} to quit{Colors.RESET}")
     print()
 
 

@@ -1,6 +1,8 @@
 """Core Agent implementation."""
 
 import json
+import re
+import unicodedata
 from pathlib import Path
 
 import tiktoken
@@ -267,12 +269,38 @@ Requirements:
             # Check and summarize message history to prevent context overflow
             await self._summarize_messages()
 
-            # Step header
-            print(f"\n{Colors.DIM}╭{'─' * 58}╮{Colors.RESET}")
-            print(
-                f"{Colors.DIM}│{Colors.RESET} {Colors.BOLD}{Colors.BRIGHT_CYAN}💭 Step {step + 1}/{self.max_steps}{Colors.RESET}{' ' * (49 - len(f'Step {step + 1}/{self.max_steps}'))}{Colors.DIM}│{Colors.RESET}"
-            )
-            print(f"{Colors.DIM}╰{'─' * 58}╯{Colors.RESET}")
+            # Step header (ANSI/emoji aware padding)
+            INNER_WIDTH = 58
+
+            ansi_re = re.compile(r"\x1b\[[0-9;]*m")
+
+            def col_width(s: str) -> int:
+                s = ansi_re.sub("", s)
+                total = 0
+                for ch in s:
+                    if unicodedata.combining(ch):
+                        continue
+                    code = ord(ch)
+                    if 0x1F300 <= code <= 0x1FAFF:
+                        total += 2
+                        continue
+                    eaw = unicodedata.east_asian_width(ch)
+                    total += 2 if eaw in ("W", "F") else 1
+                return total
+
+            def box_line(text: str):
+                max_content = INNER_WIDTH - 1
+                # Ellipsize overly long
+                if col_width(text) > max_content:
+                    plain = ansi_re.sub("", text)
+                    text = plain[: max_content - 1] + "…" if max_content > 1 else plain[:max_content]
+                pad = max(0, INNER_WIDTH - 1 - col_width(text))
+                print(f"{Colors.DIM}│{Colors.RESET} {text}{' ' * pad}{Colors.DIM}│{Colors.RESET}")
+
+            print(f"\n{Colors.DIM}╭{'─' * INNER_WIDTH}╮{Colors.RESET}")
+            header = f"{Colors.BOLD}{Colors.BRIGHT_CYAN}💭 Step {step + 1}/{self.max_steps}{Colors.RESET}"
+            box_line(header)
+            print(f"{Colors.DIM}╰{'─' * INNER_WIDTH}╯{Colors.RESET}")
 
             # Get tool schemas
             tool_schemas = [tool.to_schema() for tool in self.tools.values()]
