@@ -267,4 +267,14 @@ model: "YOUR_LOADED_MODEL_NAME"       # Must match the loaded model in LM Studio
 
 Notes:
 - Tool/function calling is supported via the OpenAI tools schema.
-- Structured "thinking" blocks are not returned by OpenAI-compatible APIs, so the Thinking panel will be empty when using LM Studio.
+- Reasoning/Thinking with LM Studio:
+  - If you enable LM Studio → Settings → Developer → "When applicable, separate reasoning_content and content in API responses",
+    Mini Agent will display the model’s reasoning in the "🧠 Thinking" panel.
+  - If the model emits thoughts as `<think>...</think>` inside normal content, Mini Agent will extract and move those
+    to the "🧠 Thinking" panel automatically and show only the visible answer under "🤖 Assistant".
+
+Interleaved thinking (MiniMax vs LM Studio)
+- MiniMax M2 (Anthropic-compatible): returns structured content blocks, including `{"type":"thinking","thinking":"..."}` and
+  tool use blocks. Mini Agent preserves and resubmits these blocks to support true interleaved thinking across steps.
+- LM Studio (OpenAI-compatible): returns standard Chat Completions. Reasoning may be provided via `reasoning_content` (when the
+  setting is enabled) or inline `<think>...</think>` tags. Mini Agent supports both and renders them in the "🧠 Thinking" panel.
