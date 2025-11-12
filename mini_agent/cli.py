@@ -376,6 +376,7 @@ async def run_agent(workspace_dir: Path):
         api_key=config.llm.api_key,
         api_base=config.llm.api_base,
         model=config.llm.model,
+        provider=getattr(config.llm, "provider", "anthropic"),
         retry_config=retry_config if config.llm.retry.enabled else None,
     )
 

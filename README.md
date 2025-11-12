@@ -34,6 +34,7 @@ This project comes packed with features designed for a robust and intelligent ag
   - [Contributing](#contributing)
   - [License](#license)
   - [References](#references)
+  - [LM Studio (Local) Usage](#lm-studio-local-usage)
 
 ## Quick Start
 
@@ -247,3 +248,23 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 **⭐ If this project helps you, please give it a Star!**
+## LM Studio (Local) Usage
+
+You can run Mini Agent against an OpenAI-compatible local server like LM Studio.
+
+Steps:
+- In LM Studio, start the local server (default base URL: `http://localhost:1234/v1`) and load your model.
+- Update your config to use the OpenAI-compatible provider.
+
+Example config (same file as above):
+
+```yaml
+provider: "openai-compatible"
+api_key: "lm-studio"                 # LM Studio accepts any non-empty key
+api_base: "http://localhost:1234/v1"  # LM Studio local server default
+model: "YOUR_LOADED_MODEL_NAME"       # Must match the loaded model in LM Studio
+```
+
+Notes:
+- Tool/function calling is supported via the OpenAI tools schema.
+- Structured "thinking" blocks are not returned by OpenAI-compatible APIs, so the Thinking panel will be empty when using LM Studio.

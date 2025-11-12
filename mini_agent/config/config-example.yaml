@@ -11,7 +11,12 @@
 # - All config files (config.yaml, mcp.json, system_prompt.md) are in the same directory
 
 # ===== LLM Configuration =====
-# MiniMax API Configuration
+# Provider selection:
+# - anthropic (default): MiniMax Anthropic-compatible API
+# - openai-compatible:  OpenAI-compatible servers (e.g., LM Studio local API)
+provider: "anthropic"
+
+# MiniMax API Configuration (anthropic)
 # MiniMax provides both global and China platforms:
 # - Global: https://platform.minimax.io -> api_base: https://api.minimax.io/anthropic
 # - China: https://platform.minimaxi.com -> api_base: https://api.minimaxi.com/anthropic
@@ -20,6 +25,13 @@ api_key: "YOUR_API_KEY_HERE"  # Replace with your MiniMax API Key
 api_base: "https://api.minimax.io/anthropic"  # Global users
 # api_base: "https://api.minimaxi.com/anthropic"  # China users
 model: "MiniMax-M2"
+
+# --- LM Studio (OpenAI-compatible) Example ---
+# To use LM Studio, change these fields (uncomment and adjust):
+# provider: "openai-compatible"
+# api_key: "lm-studio"            # LM Studio accepts any non-empty key
+# api_base: "http://localhost:1234/v1"  # LM Studio local server default
+# model: "YOUR_LOADED_MODEL_NAME"  # Must match the model loaded in LM Studio
 
 # ===== Retry Configuration =====
 retry:

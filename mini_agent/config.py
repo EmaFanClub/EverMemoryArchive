@@ -25,6 +25,10 @@ class LLMConfig(BaseModel):
     api_key: str
     api_base: str = "https://api.minimax.io/anthropic"
     model: str = "MiniMax-M2"
+    # Provider for the API. Supported values:
+    # - "anthropic" (default, MiniMax Anthropic-compatible endpoint)
+    # - "openai-compatible" (e.g., LM Studio local server or any OpenAI-compatible API)
+    provider: str = "anthropic"
     retry: RetryConfig = Field(default_factory=RetryConfig)
 
 
@@ -106,6 +110,7 @@ class Config(BaseModel):
             api_key=data["api_key"],
             api_base=data.get("api_base", "https://api.minimax.io/anthropic"),
             model=data.get("model", "MiniMax-M2"),
+            provider=data.get("provider", "anthropic"),
             retry=retry_config,
         )
 
