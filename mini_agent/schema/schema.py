@@ -1,6 +1,14 @@
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
+
+
+class LLMProvider(str, Enum):
+    """LLM provider types."""
+
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
 
 
 class FunctionCall(BaseModel):

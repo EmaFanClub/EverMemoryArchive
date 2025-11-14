@@ -11,9 +11,9 @@ import json
 import tempfile
 from pathlib import Path
 
+from mini_agent import LLMClient
 from mini_agent.agent import Agent
 from mini_agent.config import Config
-from mini_agent.llm import LLMClient
 from mini_agent.tools import BashTool, ReadTool, WriteTool
 from mini_agent.tools.note_tool import RecallNoteTool, SessionNoteTool
 

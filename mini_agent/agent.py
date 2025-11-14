@@ -278,15 +278,14 @@ Requirements:
             print(f"{Colors.DIM}│{Colors.RESET} {step_text}{' ' * padding}{Colors.DIM}│{Colors.RESET}")
             print(f"{Colors.DIM}╰{'─' * BOX_WIDTH}╯{Colors.RESET}")
 
-            # Get tool schemas
-            tool_schemas = [tool.to_schema() for tool in self.tools.values()]
+            # Get tool list for LLM call
+            tool_list = list(self.tools.values())
 
-            # Log LLM request
-            self.logger.log_request(messages=self.messages, tools=tool_schemas)
+            # Log LLM request and call LLM with Tool objects directly
+            self.logger.log_request(messages=self.messages, tools=tool_list)
 
-            # Call LLM
             try:
-                response = await self.llm.generate(messages=self.messages, tools=tool_schemas)
+                response = await self.llm.generate(messages=self.messages, tools=tool_list)
             except Exception as e:
                 # Check if it's a retry exhausted error
                 from .retry import RetryExhaustedError

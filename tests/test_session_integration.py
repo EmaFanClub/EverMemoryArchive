@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from mini_agent import LLMClient
 from mini_agent.agent import Agent
-from mini_agent.llm import LLMClient
 from mini_agent.schema import LLMResponse, Message
 from mini_agent.tools.bash_tool import BashTool
 from mini_agent.tools.file_tools import ReadTool, WriteTool

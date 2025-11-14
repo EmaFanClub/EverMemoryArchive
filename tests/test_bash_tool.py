@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from mini_agent.tools.bash_tool import BashKillTool, BashOutputTool, BashTool, BackgroundShellManager
+from mini_agent.tools.bash_tool import BackgroundShellManager, BashKillTool, BashOutputTool, BashTool
 
 
 @pytest.mark.asyncio

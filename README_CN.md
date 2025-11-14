@@ -30,6 +30,9 @@
   - [测试](#测试)
     - [快速运行](#快速运行)
     - [测试覆盖范围](#测试覆盖范围)
+  - [常见问题](#常见问题)
+    - [SSL 证书错误](#ssl-证书错误)
+    - [模块未找到错误](#模块未找到错误)
   - [相关文档](#相关文档)
   - [贡献](#贡献)
   - [许可证](#许可证)
@@ -41,10 +44,10 @@
 
 MiniMax 提供国内和海外两个平台，请根据您的网络环境选择：
 
-| 版本       | 平台地址                                                       | API Base                             |
-| ---------- | -------------------------------------------------------------- | ------------------------------------ |
-| **国内版** | [https://platform.minimaxi.com](https://platform.minimaxi.com) | `https://api.minimaxi.com/anthropic` |
-| **海外版** | [https://platform.minimax.io](https://platform.minimax.io)     | `https://api.minimax.io/anthropic`   |
+| 版本       | 平台地址                                                       | API Base                   |
+| ---------- | -------------------------------------------------------------- | -------------------------- |
+| **国内版** | [https://platform.minimaxi.com](https://platform.minimaxi.com) | `https://api.minimaxi.com` |
+| **海外版** | [https://platform.minimax.io](https://platform.minimax.io)     | `https://api.minimax.io`   |
 
 **获取步骤：**
 1. 访问相应平台注册并登录
@@ -109,8 +112,8 @@ nano ~/.mini-agent/config/config.yaml
 
 ```yaml
 api_key: "YOUR_API_KEY_HERE"          # 填入第 1 步获取的 API Key
-api_base: "https://api.minimaxi.com/anthropic"  # 国内版
-# api_base: "https://api.minimax.io/anthropic"  # 海外版（如使用海外平台，请取消本行注释）
+api_base: "https://api.minimaxi.com"  # 国内版
+# api_base: "https://api.minimax.io"  # 海外版（如使用海外平台，请取消本行注释）
 model: "MiniMax-M2"
 ```
 
@@ -176,8 +179,8 @@ vim mini_agent/config/config.yaml  # 或使用您偏好的编辑器
 
 ```yaml
 api_key: "YOUR_API_KEY_HERE"          # 填入第 1 步获取的 API Key
-api_base: "https://api.minimaxi.com/anthropic"  # 国内版
-# api_base: "https://api.minimax.io/anthropic"  # 海外版（如使用海外平台，请修改此行）
+api_base: "https://api.minimaxi.com"  # 国内版
+# api_base: "https://api.minimax.io"  # 海外版（如使用海外平台，请修改此行）
 model: "MiniMax-M2"
 max_steps: 100
 workspace_dir: "./workspace"

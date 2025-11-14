@@ -22,16 +22,17 @@ from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 
+from mini_agent import LLMClient
 from mini_agent.agent import Agent
 from mini_agent.config import Config
-from mini_agent.llm import LLMClient
+from mini_agent.schema import LLMProvider
 from mini_agent.tools.base import Tool
-from mini_agent.utils import calculate_display_width
-from mini_agent.tools.bash_tool import BashTool, BashKillTool, BashOutputTool
+from mini_agent.tools.bash_tool import BashKillTool, BashOutputTool, BashTool
 from mini_agent.tools.file_tools import EditTool, ReadTool, WriteTool
 from mini_agent.tools.mcp_loader import cleanup_mcp_connections, load_mcp_tools_async
 from mini_agent.tools.note_tool import SessionNoteTool
 from mini_agent.tools.skill_tool import create_skill_tools
+from mini_agent.utils import calculate_display_width
 
 
 # ANSI color codes
@@ -389,8 +390,12 @@ async def run_agent(workspace_dir: Path):
         next_delay = retry_config.calculate_delay(attempt - 1)
         print(f"{Colors.DIM}   Retrying in {next_delay:.1f}s (attempt {attempt + 1})...{Colors.RESET}")
 
+    # Convert provider string to LLMProvider enum
+    provider = LLMProvider.ANTHROPIC if config.llm.provider.lower() == "anthropic" else LLMProvider.OPENAI
+
     llm_client = LLMClient(
         api_key=config.llm.api_key,
+        provider=provider,
         api_base=config.llm.api_base,
         model=config.llm.model,
         retry_config=retry_config if config.llm.retry.enabled else None,

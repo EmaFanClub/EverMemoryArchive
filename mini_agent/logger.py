@@ -40,12 +40,12 @@ class AgentLogger:
             f.write(f"Agent Run Log - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("=" * 80 + "\n\n")
 
-    def log_request(self, messages: list[Message], tools: list[dict[str, Any]] | None = None):
+    def log_request(self, messages: list[Message], tools: list[Any] | None = None):
         """Log LLM request
 
         Args:
             messages: Message list
-            tools: Tool schema list (optional)
+            tools: Tool list (optional)
         """
         self.log_index += 1
 
@@ -74,7 +74,7 @@ class AgentLogger:
 
         # Only record tool names
         if tools:
-            request_data["tools"] = [tool.get("name", "unknown") for tool in tools]
+            request_data["tools"] = [tool.name for tool in tools]
 
         # Format as JSON
         content = "LLM Request:\n\n"

@@ -30,6 +30,9 @@ This project comes packed with features designed for a robust and intelligent ag
   - [Testing](#testing)
     - [Quick Run](#quick-run)
     - [Test Coverage](#test-coverage)
+  - [Troubleshooting](#troubleshooting)
+    - [SSL Certificate Error](#ssl-certificate-error)
+    - [Module Not Found Error](#module-not-found-error)
   - [Related Documentation](#related-documentation)
   - [Contributing](#contributing)
   - [License](#license)
@@ -41,10 +44,10 @@ This project comes packed with features designed for a robust and intelligent ag
 
 MiniMax provides both global and China platforms. Choose based on your network environment:
 
-| Version    | Platform                                                       | API Base                             |
-| ---------- | -------------------------------------------------------------- | ------------------------------------ |
-| **Global** | [https://platform.minimax.io](https://platform.minimax.io)     | `https://api.minimax.io/anthropic`   |
-| **China**  | [https://platform.minimaxi.com](https://platform.minimaxi.com) | `https://api.minimaxi.com/anthropic` |
+| Version    | Platform                                                       | API Base                   |
+| ---------- | -------------------------------------------------------------- | -------------------------- |
+| **Global** | [https://platform.minimax.io](https://platform.minimax.io)     | `https://api.minimax.io`   |
+| **China**  | [https://platform.minimaxi.com](https://platform.minimaxi.com) | `https://api.minimaxi.com` |
 
 **Steps to get API Key:**
 1. Visit the corresponding platform to register and login
@@ -109,8 +112,8 @@ Fill in your API Key and corresponding API Base:
 
 ```yaml
 api_key: "YOUR_API_KEY_HERE"          # API Key from step 1
-api_base: "https://api.minimax.io/anthropic"  # Global
-# api_base: "https://api.minimaxi.com/anthropic"  # China
+api_base: "https://api.minimax.io"  # Global
+# api_base: "https://api.minimaxi.com"  # China
 model: "MiniMax-M2"
 ```
 
@@ -176,8 +179,8 @@ Fill in your API Key and corresponding API Base:
 
 ```yaml
 api_key: "YOUR_API_KEY_HERE"          # API Key from step 1
-api_base: "https://api.minimax.io/anthropic"  # Global
-# api_base: "https://api.minimaxi.com/anthropic"  # China
+api_base: "https://api.minimax.io"  # Global
+# api_base: "https://api.minimaxi.com"  # China
 model: "MiniMax-M2"
 max_steps: 100
 workspace_dir: "./workspace"

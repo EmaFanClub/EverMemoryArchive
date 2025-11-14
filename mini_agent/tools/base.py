@@ -42,3 +42,14 @@ class Tool:
             "description": self.description,
             "input_schema": self.parameters,
         }
+
+    def to_openai_schema(self) -> dict[str, Any]:
+        """Convert tool to OpenAI tool schema."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
