@@ -28,6 +28,7 @@ class OpenAIClient(LLMClientBase):
         api_base: str = "https://api.minimaxi.com/v1",
         model: str = "MiniMax-M2",
         retry_config: RetryConfig | None = None,
+        enable_reasoning_split: bool = True,
     ):
         """Initialize OpenAI client.
 
@@ -36,6 +37,7 @@ class OpenAIClient(LLMClientBase):
             api_base: Base URL for the API (default: MiniMax OpenAI endpoint)
             model: Model name to use (default: MiniMax-M2)
             retry_config: Optional retry configuration
+            enable_reasoning_split: Enable reasoning_split parameter (default: True for MiniMax)
         """
         super().__init__(api_key, api_base, model, retry_config)
 
@@ -44,6 +46,9 @@ class OpenAIClient(LLMClientBase):
             api_key=api_key,
             base_url=api_base,
         )
+
+        # Store whether to use reasoning_split
+        self.enable_reasoning_split = enable_reasoning_split
 
     async def _make_api_request(
         self,
@@ -65,15 +70,31 @@ class OpenAIClient(LLMClientBase):
         params = {
             "model": self.model,
             "messages": api_messages,
-            # Enable reasoning_split to separate thinking content
-            "extra_body": {"reasoning_split": True},
         }
+
+        # Only add reasoning_split if enabled (MiniMax-specific feature)
+        if self.enable_reasoning_split:
+            params["extra_body"] = {"reasoning_split": True}
 
         if tools:
             params["tools"] = self._convert_tools(tools)
 
         # Use OpenAI SDK's chat.completions.create
         response = await self.client.chat.completions.create(**params)
+
+        # Add null checks and better error handling
+        if response is None:
+            logger.error("API returned None response")
+            raise ValueError("API returned None response")
+
+        if not hasattr(response, 'choices') or response.choices is None:
+            logger.error(f"API response missing choices field. Response: {response}")
+            raise ValueError(f"API response missing choices field. Response type: {type(response)}")
+
+        if len(response.choices) == 0:
+            logger.error(f"API response has empty choices array. Response: {response}")
+            raise ValueError("API response has empty choices array")
+
         return response.choices[0].message
 
     def _convert_tools(self, tools: list[Any]) -> list[dict[str, Any]]:
