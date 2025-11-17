@@ -50,6 +50,16 @@ class OpenAIClient(LLMClientBase):
         # Store whether to use reasoning_split
         self.enable_reasoning_split = enable_reasoning_split
 
+        # Auto-detect reasoning format based on model name
+        # GLM uses "reasoning_content" (string), MiniMax uses "reasoning_details" (list)
+        self.reasoning_format = "none"
+        if model.lower().startswith("glm"):
+            self.reasoning_format = "glm"  # GLM format: reasoning_content
+            logger.info("Using GLM reasoning format (reasoning_content)")
+        elif model.startswith("MiniMax"):
+            self.reasoning_format = "minimax"  # MiniMax format: reasoning_details
+            logger.info("Using MiniMax reasoning format (reasoning_details)")
+
     async def _make_api_request(
         self,
         api_messages: list[dict[str, Any]],
@@ -177,13 +187,18 @@ class OpenAIClient(LLMClientBase):
                         )
                     assistant_msg["tool_calls"] = tool_calls_list
 
-                # IMPORTANT: Add reasoning_details if thinking is present
+                # IMPORTANT: Add reasoning content if thinking is present
                 # This is CRITICAL for Interleaved Thinking to work properly!
-                # The complete response_message (including reasoning_details) must be
+                # The complete response_message (including reasoning content) must be
                 # preserved in Message History and passed back to the model in the next turn.
                 # This ensures the model's chain of thought is not interrupted.
                 if msg.thinking:
-                    assistant_msg["reasoning_details"] = [{"text": msg.thinking}]
+                    if self.reasoning_format == "glm":
+                        # GLM format: reasoning_content (string)
+                        assistant_msg["reasoning_content"] = msg.thinking
+                    elif self.reasoning_format == "minimax":
+                        # MiniMax format: reasoning_details (list)
+                        assistant_msg["reasoning_details"] = [{"text": msg.thinking}]
 
                 api_messages.append(assistant_msg)
 
@@ -232,13 +247,20 @@ class OpenAIClient(LLMClientBase):
         # Extract text content
         text_content = response.content or ""
 
-        # Extract thinking content from reasoning_details
+        # Extract thinking content - support both MiniMax and GLM formats
         thinking_content = ""
-        if hasattr(response, "reasoning_details") and response.reasoning_details:
-            # reasoning_details is a list of reasoning blocks
+
+        # Method 1: GLM format - reasoning_content (string)
+        if hasattr(response, "reasoning_content") and response.reasoning_content:
+            thinking_content = response.reasoning_content
+            logger.debug("Extracted reasoning from reasoning_content (GLM format)")
+
+        # Method 2: MiniMax format - reasoning_details (list)
+        elif hasattr(response, "reasoning_details") and response.reasoning_details:
             for detail in response.reasoning_details:
                 if hasattr(detail, "text"):
                     thinking_content += detail.text
+            logger.debug("Extracted reasoning from reasoning_details (MiniMax format)")
 
         # Extract tool calls
         tool_calls = []

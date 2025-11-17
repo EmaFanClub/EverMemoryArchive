@@ -74,8 +74,11 @@ class LLMClient:
             )
         elif provider == LLMProvider.OPENAI:
             # Auto-detect if we should enable reasoning_split
-            # Only enable for MiniMax models, disable for others (e.g., GLM, GPT)
-            enable_reasoning_split = model.startswith("MiniMax")
+            # Enable for MiniMax and GLM models (both support interleaved thinking)
+            # Disable for standard GPT models
+            enable_reasoning_split = (
+                model.startswith("MiniMax") or model.lower().startswith("glm")
+            )
 
             self._client = OpenAIClient(
                 api_key=api_key,
