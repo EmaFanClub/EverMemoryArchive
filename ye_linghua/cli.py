@@ -148,6 +148,12 @@ def print_session_info(agent: Agent, workspace_dir: Path, model: str):
     print_info_line(f"Message History: {len(agent.messages)} messages")
     print_info_line(f"Available Tools: {len(agent.tools)} tools")
 
+    # Plugin information
+    if agent.plugin_registry:
+        plugins = agent.plugin_registry.get_all_plugins()
+        if plugins:
+            print_info_line(f"Active Plugins: {len(plugins)} plugins")
+
     # Bottom border
     print(f"{Colors.DIM}└{'─' * BOX_WIDTH}┘{Colors.RESET}")
     print()
@@ -479,13 +485,71 @@ async def run_agent(workspace_dir: Path):
         # Remove placeholder if skills not enabled
         system_prompt = system_prompt.replace("{SKILLS_METADATA}", "")
 
-    # 7. Create Agent
+    # 7. Initialize Plugin System
+    plugin_registry = None
+    if config.plugins.enabled:
+        from ye_linghua.plugins import PluginLoader, PluginRegistry
+        from ye_linghua.plugins.notification import NotificationPlugin, NotificationConfig
+        from ye_linghua.plugins.timer import TimerPlugin
+
+        print(f"{Colors.BRIGHT_CYAN}Initializing plugin system...{Colors.RESET}")
+
+        plugin_registry = PluginRegistry()
+        plugin_loader = PluginLoader(plugin_registry)
+
+        # Load built-in plugins
+        if config.plugins.timer_enabled:
+            try:
+                timer_plugin = TimerPlugin()
+                await timer_plugin.initialize()
+                plugin_registry.register_plugin(timer_plugin)
+                print(f"{Colors.GREEN}✅ Loaded Timer plugin{Colors.RESET}")
+            except Exception as e:
+                print(f"{Colors.YELLOW}⚠️  Failed to load Timer plugin: {e}{Colors.RESET}")
+
+        if config.plugins.notification_enabled:
+            try:
+                notification_config = NotificationConfig(
+                    enabled=True,
+                    sound_enabled=config.plugins.notification_sound,
+                )
+                notification_plugin = NotificationPlugin(notification_config)
+                await notification_plugin.initialize()
+                plugin_registry.register_plugin(notification_plugin)
+                print(f"{Colors.GREEN}✅ Loaded Notification plugin{Colors.RESET}")
+            except Exception as e:
+                print(f"{Colors.YELLOW}⚠️  Failed to load Notification plugin: {e}{Colors.RESET}")
+
+        # Auto-discover and load plugins from plugins directory
+        if config.plugins.auto_discover:
+            try:
+                plugins_dir = Path(config.plugins.plugins_dir)
+                if plugins_dir.exists():
+                    discovered = await plugin_loader.discover_plugins(str(plugins_dir))
+                    if discovered:
+                        print(f"{Colors.GREEN}✅ Auto-discovered {len(discovered)} plugins from {plugins_dir}{Colors.RESET}")
+                else:
+                    print(f"{Colors.DIM}   Plugins directory not found: {plugins_dir}{Colors.RESET}")
+            except Exception as e:
+                print(f"{Colors.YELLOW}⚠️  Plugin auto-discovery failed: {e}{Colors.RESET}")
+
+        print()  # Empty line separator
+
+    # Generate session ID
+    import uuid
+
+    session_id = str(uuid.uuid4())
+
+    # 8. Create Agent
     agent = Agent(
         llm_client=llm_client,
         system_prompt=system_prompt,
         tools=tools,
         max_steps=config.agent.max_steps,
         workspace_dir=str(workspace_dir),
+        plugin_registry=plugin_registry,
+        platform="cli",
+        session_id=session_id,
     )
 
     # 8. Display welcome information
@@ -609,7 +673,20 @@ async def run_agent(workspace_dir: Path):
             print(f"\n{Colors.RED}❌ Error: {e}{Colors.RESET}")
             print(f"{Colors.DIM}{'─' * 60}{Colors.RESET}\n")
 
-    # 10. Cleanup MCP connections
+    # 10. Cleanup plugins
+    if plugin_registry:
+        try:
+            print(f"{Colors.BRIGHT_CYAN}Shutting down plugins...{Colors.RESET}")
+            for plugin in plugin_registry.get_all_plugins():
+                try:
+                    await plugin.shutdown()
+                except Exception as e:
+                    print(f"{Colors.YELLOW}Warning: Failed to shutdown plugin {plugin.metadata.name}: {e}{Colors.RESET}")
+            print(f"{Colors.GREEN}✅ Plugins shutdown complete{Colors.RESET}")
+        except Exception as e:
+            print(f"{Colors.YELLOW}Error during plugin cleanup (can be ignored): {e}{Colors.RESET}")
+
+    # 11. Cleanup MCP connections
     try:
         print(f"{Colors.BRIGHT_CYAN}Cleaning up MCP connections...{Colors.RESET}")
         await cleanup_mcp_connections()

@@ -7,6 +7,8 @@ import tiktoken
 
 from .llm import LLMClient
 from .logger import AgentLogger
+from .plugins import PluginRegistry
+from .plugins.base import PluginContext
 from .schema import Message
 from .tools.base import Tool, ToolResult
 from .utils import calculate_display_width
@@ -50,12 +52,20 @@ class Agent:
         max_steps: int = 50,
         workspace_dir: str = "./workspace",
         token_limit: int = 80000,  # Summary triggered when tokens exceed this value
+        plugin_registry: PluginRegistry | None = None,
+        platform: str = "cli",
+        user_id: str | None = None,
+        session_id: str | None = None,
     ):
         self.llm = llm_client
         self.tools = {tool.name: tool for tool in tools}
         self.max_steps = max_steps
         self.token_limit = token_limit
         self.workspace_dir = Path(workspace_dir)
+        self.plugin_registry = plugin_registry
+        self.platform = platform
+        self.user_id = user_id
+        self.session_id = session_id
 
         # Ensure workspace exists
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -64,6 +74,12 @@ class Agent:
         if "Current Workspace" not in system_prompt:
             workspace_info = f"\n\n## Current Workspace\nYou are currently working in: `{self.workspace_dir.absolute()}`\nAll relative paths will be resolved relative to this directory."
             system_prompt = system_prompt + workspace_info
+
+        # Inject plugin prompt extensions if plugins are enabled
+        if self.plugin_registry:
+            plugin_extensions = self._get_plugin_prompt_extensions()
+            if plugin_extensions:
+                system_prompt = system_prompt + "\n\n" + plugin_extensions
 
         self.system_prompt = system_prompt
 
@@ -320,14 +336,22 @@ Requirements:
                 print(f"\n{Colors.BOLD}{Colors.MAGENTA}🧠 Thinking:{Colors.RESET}")
                 print(f"{Colors.DIM}{response.thinking}{Colors.RESET}")
 
-            # Print assistant response
+            # Process response through plugin ReplyHandler chain
+            processed_content = response.content
             if response.content:
+                processed_content = await self._process_reply_with_plugins(response.content)
+
+            # Update the assistant message content with processed version
+            assistant_msg.content = processed_content
+
+            # Print assistant response
+            if processed_content:
                 print(f"\n{Colors.BOLD}{Colors.BRIGHT_BLUE}🤖 Assistant:{Colors.RESET}")
-                print(f"{response.content}")
+                print(f"{processed_content}")
 
             # Check if task is complete (no tool calls)
             if not response.tool_calls:
-                return response.content
+                return processed_content
 
             # Execute tool calls
             for tool_call in response.tool_calls:
@@ -412,3 +436,96 @@ Requirements:
     def get_history(self) -> list[Message]:
         """Get message history."""
         return self.messages.copy()
+
+    def _build_plugin_context(self) -> PluginContext:
+        """Build plugin context from current agent state
+
+        Returns:
+            PluginContext with current conversation state
+        """
+        # Convert messages to dict format for plugins
+        messages_dict = []
+        for msg in self.messages:
+            msg_dict = {
+                "role": msg.role,
+                "content": msg.content,
+            }
+            if msg.thinking:
+                msg_dict["thinking"] = msg.thinking
+            if msg.tool_calls:
+                msg_dict["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in msg.tool_calls
+                ]
+            if msg.tool_call_id:
+                msg_dict["tool_call_id"] = msg.tool_call_id
+            if msg.name:
+                msg_dict["name"] = msg.name
+            messages_dict.append(msg_dict)
+
+        return PluginContext(
+            messages=messages_dict,
+            platform=self.platform,
+            user_id=self.user_id,
+            session_id=self.session_id,
+            config={},
+            extra={},
+        )
+
+    def _get_plugin_prompt_extensions(self) -> str:
+        """Get prompt extensions from all plugins
+
+        Returns:
+            Combined prompt extensions from all plugins
+        """
+        if not self.plugin_registry:
+            return ""
+
+        context = self._build_plugin_context()
+        extensions = []
+
+        for plugin in self.plugin_registry.get_all_plugins():
+            try:
+                extension = plugin.get_prompt_extension(context)
+                if extension:
+                    extensions.append(extension)
+            except Exception as e:
+                print(f"{Colors.BRIGHT_RED}⚠️  Error getting prompt extension from plugin {plugin.metadata.name}: {e}{Colors.RESET}")
+
+        if extensions:
+            return "# Plugin Extensions\n\n" + "\n\n".join(extensions)
+        return ""
+
+    async def _process_reply_with_plugins(self, response_content: str) -> str:
+        """Process LLM reply through plugin ReplyHandler chain
+
+        Args:
+            response_content: Original LLM response content
+
+        Returns:
+            Modified response content after plugin processing
+        """
+        if not self.plugin_registry:
+            return response_content
+
+        context = self._build_plugin_context()
+        handlers = self.plugin_registry.get_reply_handlers()
+
+        modified_content = response_content
+
+        for handler in handlers:
+            try:
+                modified_content, should_continue = await handler.handle_reply(modified_content, context)
+                if not should_continue:
+                    break
+            except Exception as e:
+                print(f"{Colors.BRIGHT_RED}⚠️  Error in plugin reply handler {handler.__class__.__name__}: {e}{Colors.RESET}")
+                continue
+
+        return modified_content
