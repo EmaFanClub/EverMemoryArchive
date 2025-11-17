@@ -320,6 +320,28 @@ def add_workspace_tools(tools: List[Tool], config: Config, workspace_dir: Path):
         tools.append(SessionNoteTool(memory_file=str(workspace_dir / ".agent_memory.json")))
         print(f"{Colors.GREEN}✅ Loaded session note tool{Colors.RESET}")
 
+    # GLM Search tool - web search powered by ZhipuAI
+    if config.tools.enable_glm_search:
+        try:
+            from mini_agent.tools.glm_search_tool import GLMSearchTool, GLMBatchSearchTool
+
+            # Use API key from config or environment variable
+            api_key = config.tools.glm_api_key or None
+
+            glm_search = GLMSearchTool(api_key=api_key)
+            tools.append(glm_search)
+            print(f"{Colors.GREEN}✅ Loaded GLM search tool{Colors.RESET}")
+
+            glm_batch_search = GLMBatchSearchTool(api_key=api_key)
+            tools.append(glm_batch_search)
+            print(f"{Colors.GREEN}✅ Loaded GLM batch search tool{Colors.RESET}")
+
+        except ValueError as e:
+            print(f"{Colors.YELLOW}⚠️  Failed to load GLM search: {e}{Colors.RESET}")
+            print(f"{Colors.YELLOW}   Please set ZHIPU_API_KEY environment variable or configure glm_api_key in config.yaml{Colors.RESET}")
+        except Exception as e:
+            print(f"{Colors.YELLOW}⚠️  Failed to load GLM search: {e}{Colors.RESET}")
+
 
 async def run_agent(workspace_dir: Path):
     """Run interactive Agent

@@ -52,3 +52,7 @@ tools:
   enable_mcp: true         # Enable MCP tools
   mcp_config_path: "mcp.json"  # MCP configuration file (same config directory)
                            # Note: API Keys for MCP tools are configured in mcp.json
+
+  # GLM Search Tool
+  enable_glm_search: false  # Enable GLM (ZhipuAI) web search tool
+  glm_api_key: ""          # ZhipuAI API Key (or set ZHIPU_API_KEY env var)
