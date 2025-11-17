@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Markdown 代码块样式 */
+.prose pre {
+  @apply bg-gray-800 text-gray-100 rounded-lg p-4 overflow-x-auto;
+}
+
+.prose code {
+  @apply text-sm font-mono;
+}
+
+.prose :where(code):not(:where([class~="not-prose"] *))::before {
+  content: none;
+}
+
+.prose :where(code):not(:where([class~="not-prose"] *))::after {
+  content: none;
+}
+
+/* 表格样式 */
+.prose table {
+  @apply w-full text-sm;
+}
+
+.prose th {
+  @apply bg-gray-100 font-semibold text-left p-2;
+}
+
+.prose td {
+  @apply border-t border-gray-200 p-2;
+}
+
+/* 链接样式 */
+.prose a {
+  @apply text-primary-600 hover:text-primary-700 no-underline;
+}
+
+/* 列表样式 */
+.prose ul {
+  @apply list-disc pl-5;
+}
+
+.prose ol {
+  @apply list-decimal pl-5;
+}
+
+.prose li {
+  @apply my-1;
+}
+
+/* 引用样式 */
+.prose blockquote {
+  @apply border-l-4 border-gray-300 pl-4 italic text-gray-600;
+}
+
+/* 标题样式 */
+.prose h1 {
+  @apply text-2xl font-bold mt-6 mb-4;
+}
+
+.prose h2 {
+  @apply text-xl font-bold mt-5 mb-3;
+}
+
+.prose h3 {
+  @apply text-lg font-bold mt-4 mb-2;
+}
+
+.prose h4 {
+  @apply text-base font-bold mt-3 mb-2;
+}
+
+/* 段落样式 */
+.prose p {
+  @apply my-3;
+}
+
+/* 水平分隔线 */
+.prose hr {
+  @apply my-6 border-gray-300;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .prose {
+    @apply text-sm;
+  }
+}
