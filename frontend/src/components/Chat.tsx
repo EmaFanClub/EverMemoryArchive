@@ -89,9 +89,18 @@ export function Chat({ sessionId }: ChatProps) {
 
       setMessages((prev) => [...prev, assistantMessage]);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to send message:', err);
-      setError('发送消息失败，请重试');
+
+      // 提取详细错误信息
+      let errorMessage = '发送消息失败';
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
       // 移除临时用户消息
       setMessages((prev) => prev.filter((m) => m.id !== tempUserMessage.id));
     } finally {
@@ -182,10 +191,22 @@ export function Chat({ sessionId }: ChatProps) {
 
       {/* Error Message */}
       {error && (
-        <div className="px-4 py-2 bg-red-50 border-t border-red-200">
-          <div className="max-w-4xl mx-auto flex items-center gap-2 text-red-700">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span className="text-sm">{error}</span>
+        <div className="px-4 py-3 bg-red-50 border-t border-red-200">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-start gap-3 text-red-700">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-medium mb-1">发生错误</div>
+                <pre className="text-sm whitespace-pre-wrap font-mono bg-red-100 p-2 rounded overflow-x-auto">{error}</pre>
+              </div>
+              <button
+                onClick={() => setError('')}
+                className="text-red-500 hover:text-red-700 transition-colors text-xl leading-none"
+                aria-label="关闭错误提示"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         </div>
       )}
