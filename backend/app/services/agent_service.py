@@ -36,12 +36,18 @@ class AgentService:
 
     def initialize_agent(self):
         """初始化 Agent"""
+        # 根据配置确定 provider
+        if settings.llm_provider.lower() == "openai":
+            provider = LLMProvider.OPENAI
+        else:
+            provider = LLMProvider.ANTHROPIC
+
         # 创建 LLM 客户端
         llm_client = LLMClient(
-            api_key=settings.minimax_api_key,
-            api_base=settings.minimax_api_base,
-            provider=LLMProvider.ANTHROPIC,
-            model=settings.minimax_model,
+            api_key=settings.llm_api_key,
+            api_base=settings.llm_api_base,
+            provider=provider,
+            model=settings.llm_model,
         )
 
         # 加载 system prompt
@@ -73,7 +79,7 @@ class AgentService:
         )
         if prompt_file.exists():
             return prompt_file.read_text(encoding="utf-8")
-        return "You are Mini-Agent, an AI assistant powered by MiniMax."
+        return "You are Mini-Agent, an AI assistant."
 
     def _create_tools(self) -> List:
         """创建工具列表"""

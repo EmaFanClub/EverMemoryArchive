@@ -25,7 +25,8 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# 编辑 .env 文件，填入你的 MiniMax API Key
+# 编辑 .env 文件，填入你的 LLM API Key（支持 MiniMax、GLM、OpenAI 等）
+# 详见 CONFIG_SECURITY.md
 ```
 
 ### 3. 启动服务

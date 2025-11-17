@@ -23,10 +23,11 @@ class Settings(BaseSettings):
     # 数据库配置
     database_url: str = "sqlite:///./data/database/mini_agent.db"
 
-    # MiniMax API 配置
-    minimax_api_key: str
-    minimax_api_base: str = "https://api.minimax.chat"
-    minimax_model: str = "MiniMax-Text-01"
+    # LLM API 配置（支持 MiniMax、GLM、OpenAI 等）
+    llm_api_key: str  # API 密钥
+    llm_api_base: str = "https://api.minimax.chat"  # API 基础地址
+    llm_model: str = "MiniMax-Text-01"  # 模型名称
+    llm_provider: str = "anthropic"  # 提供商：anthropic 或 openai
 
     # 工作空间配置
     workspace_base: Path = Path("./data/workspaces")
