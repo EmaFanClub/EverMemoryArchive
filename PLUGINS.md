@@ -10,6 +10,95 @@
 - ✅ **自动发现** - 自动扫描plugins目录
 - ✅ **Reply Handler链** - 处理LLM回复的插件链
 - ✅ **上下文注入** - 向LLM注入插件功能
+- ✅ **Agent集成** - 完全集成到Agent运行时
+
+## Agent集成
+
+插件系统已完全集成到Ye Linghua的Agent类中，无需额外配置即可工作：
+
+### 自动集成特性
+
+1. **系统提示词注入**
+   - 插件的 `get_prompt_extension()` 会在Agent初始化时自动注入到系统提示词
+   - LLM可以看到所有可用的插件功能和使用方法
+
+2. **响应处理链**
+   - LLM的每个响应都会通过 ReplyHandler 链处理
+   - 插件可以提取标记（如 `<set-timer>`、`<notify>`）并执行相应操作
+   - 按优先级顺序执行Handler
+
+3. **上下文共享**
+   - 插件接收完整的对话历史和平台信息
+   - 可以访问session_id、user_id、platform等元数据
+
+### 在CLI中使用
+
+启动Ye Linghua CLI时，插件会自动加载：
+
+```bash
+ye-linghua
+```
+
+启动信息会显示加载的插件：
+
+```
+Initializing plugin system...
+✅ Loaded Timer plugin
+✅ Loaded Notification plugin
+✅ Auto-discovered 2 plugins from ./plugins
+
+╔══════════════════════════════════════════════════════════╗
+║            🌸 叶灵华 (Ye Linghua) - 热爱编程的AI少女           ║
+╚══════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────┐
+│                     Session Info                          │
+├──────────────────────────────────────────────────────────┤
+│ Model: MiniMax-M2                                         │
+│ Workspace: /path/to/workspace                            │
+│ Message History: 1 messages                              │
+│ Available Tools: 10 tools                                │
+│ Active Plugins: 2 plugins                                │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 编程方式使用
+
+如果要在代码中使用Agent：
+
+```python
+from ye_linghua import LLMClient, Agent
+from ye_linghua.plugins import PluginRegistry
+from ye_linghua.plugins.timer import TimerPlugin
+from ye_linghua.plugins.notification import NotificationPlugin
+
+# 创建插件注册表
+plugin_registry = PluginRegistry()
+
+# 加载插件
+timer_plugin = TimerPlugin()
+await timer_plugin.initialize()
+plugin_registry.register_plugin(timer_plugin)
+
+notification_plugin = NotificationPlugin()
+await notification_plugin.initialize()
+plugin_registry.register_plugin(notification_plugin)
+
+# 创建Agent，传入插件注册表
+agent = Agent(
+    llm_client=llm_client,
+    system_prompt=system_prompt,
+    tools=tools,
+    plugin_registry=plugin_registry,
+    platform="custom",
+    session_id="my-session-id"
+)
+
+# 运行Agent - 插件会自动工作
+agent.add_user_message("提醒我5分钟后查看邮件")
+response = await agent.run()
+# LLM会生成 <set-timer> 标记，Timer插件自动处理
+```
 
 ## 内置插件
 
