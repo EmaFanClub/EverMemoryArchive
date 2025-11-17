@@ -49,12 +49,27 @@ tools:
   enable_file_tools: true  # File read/write/edit tools (ReadTool, WriteTool, EditTool)
   enable_bash: true        # Bash command execution tool
   enable_note: true        # Session note tool (SessionNoteTool)
-  
+
   # Claude Skills
   enable_skills: true      # Enable Skills
   skills_dir: "./skills"   # Skills directory path
-  
+
   # MCP Tools
   enable_mcp: true         # Enable MCP tools
   mcp_config_path: "mcp.json"  # MCP configuration file (same config directory)
                            # Note: API Keys for MCP tools are configured in mcp.json
+
+# ===== Plugins Configuration =====
+plugins:
+  enabled: true            # Enable plugin system
+  plugins_dir: "./plugins" # Plugins directory path
+  auto_discover: true      # Automatically discover and load plugins
+  hot_reload: false        # Enable hot reloading (experimental)
+
+  # Built-in plugins
+  timer_enabled: true      # Enable timer/reminder plugin
+  notification_enabled: true  # Enable desktop notification plugin
+
+  # Plugin settings
+  timer_check_interval: 30  # Timer check interval in seconds
+  notification_sound: true  # Enable notification sounds

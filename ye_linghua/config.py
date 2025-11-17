@@ -58,12 +58,30 @@ class ToolsConfig(BaseModel):
     mcp_config_path: str = "mcp.json"
 
 
+class PluginsConfig(BaseModel):
+    """Plugins configuration"""
+
+    enabled: bool = True
+    plugins_dir: str = "./plugins"
+    auto_discover: bool = True
+    hot_reload: bool = False
+
+    # Built-in plugins
+    timer_enabled: bool = True
+    notification_enabled: bool = True
+
+    # Plugin-specific settings
+    timer_check_interval: int = 30  # seconds
+    notification_sound: bool = True
+
+
 class Config(BaseModel):
     """Main configuration class"""
 
     llm: LLMConfig
     agent: AgentConfig
     tools: ToolsConfig
+    plugins: PluginsConfig = Field(default_factory=PluginsConfig)
 
     @classmethod
     def from_yaml(cls, config_path: str | Path) -> "Config":
@@ -138,10 +156,24 @@ class Config(BaseModel):
             mcp_config_path=tools_data.get("mcp_config_path", "mcp.json"),
         )
 
+        # Parse plugins configuration
+        plugins_data = data.get("plugins", {})
+        plugins_config = PluginsConfig(
+            enabled=plugins_data.get("enabled", True),
+            plugins_dir=plugins_data.get("plugins_dir", "./plugins"),
+            auto_discover=plugins_data.get("auto_discover", True),
+            hot_reload=plugins_data.get("hot_reload", False),
+            timer_enabled=plugins_data.get("timer_enabled", True),
+            notification_enabled=plugins_data.get("notification_enabled", True),
+            timer_check_interval=plugins_data.get("timer_check_interval", 30),
+            notification_sound=plugins_data.get("notification_sound", True),
+        )
+
         return cls(
             llm=llm_config,
             agent=agent_config,
             tools=tools_config,
+            plugins=plugins_config,
         )
 
     @staticmethod
