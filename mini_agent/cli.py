@@ -614,6 +614,7 @@ async def run_agent(workspace_dir: Path):
                 elif command == "/help":
                     print_help()
                     resume_pending = False
+                    agent.cancel_pause()
                     continue
 
                 elif command == "/clear":
@@ -622,22 +623,26 @@ async def run_agent(workspace_dir: Path):
                     agent.messages = [agent.messages[0]]  # Keep only system message
                     print(f"{Colors.GREEN}✅ Cleared {old_count - 1} messages, starting new session{Colors.RESET}\n")
                     resume_pending = False
+                    agent.cancel_pause()
                     continue
 
                 elif command == "/history":
                     print(f"\n{Colors.BRIGHT_CYAN}Current session message count: {len(agent.messages)}{Colors.RESET}\n")
                     resume_pending = False
+                    agent.cancel_pause()
                     continue
 
                 elif command == "/stats":
                     print_stats(agent, session_start)
                     resume_pending = False
+                    agent.cancel_pause()
                     continue
 
                 else:
                     print(f"{Colors.RED}❌ Unknown command: {user_input}{Colors.RESET}")
                     print(f"{Colors.DIM}Type /help to see available commands{Colors.RESET}\n")
                     resume_pending = False
+                    agent.cancel_pause()
                     continue
 
             # Normal conversation - exit check
@@ -647,6 +652,9 @@ async def run_agent(workspace_dir: Path):
                 break
 
             # Run Agent
+            if resume_pending:
+                agent.cancel_pause()
+                resume_pending = False
             agent.add_user_message(user_input)
             result = await invoke_agent_run()
             resume_pending = agent.is_paused()

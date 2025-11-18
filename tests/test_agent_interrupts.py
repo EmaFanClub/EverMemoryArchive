@@ -136,7 +136,7 @@ async def _run_agent_can_resume_after_interrupt(tmp_path):
 
     tool_messages = [m for m in agent.messages if m.role == "tool"]
     assert len(tool_messages) == 2
-    assert agent.current_step == 0  # Run completed and reset
+    assert not agent.is_paused()
 
 
 def test_interrupt_preserves_tool_results(tmp_path):

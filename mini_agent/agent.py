@@ -73,12 +73,11 @@ class Agent:
         # Initialize logger
         self.logger = AgentLogger()
 
-        # Stop control flag, allows external interrupt requests
+        # Pause/stop control flags
         self._stop_requested = False
         self._stop_notified = False
         self._paused = False
-        self.current_step = 0
-        self._run_active = False
+        self._resume_step = 0
 
     def add_user_message(self, content: str):
         """Add a user message to history."""
@@ -89,12 +88,14 @@ class Agent:
         self._stop_requested = True
         self._stop_notified = False
 
-    def _reset_stop_request(self):
+    def cancel_pause(self):
+        """Reset pause state when user abandons a resume."""
         self._stop_requested = False
         self._stop_notified = False
         self._paused = False
+        self._resume_step = 0
 
-    def _check_stop_requested(self) -> bool:
+    def _check_stop_requested(self, current_step: int) -> bool:
         """Return True if a stop was requested and emit a single notification."""
         if not self._stop_requested:
             return False
@@ -102,6 +103,7 @@ class Agent:
             print(f"\n{Colors.BRIGHT_YELLOW}⏸️  Agent paused by user (press Enter to continue interacting).{Colors.RESET}\n")
             self._stop_notified = True
         self._paused = True
+        self._resume_step = current_step
         return True
 
     def is_paused(self) -> bool:
@@ -289,18 +291,22 @@ Requirements:
 
     async def run(self) -> str:
         """Execute agent loop until task is complete or max steps reached."""
-        if not self._run_active:
-            # Start new run, initialize log file
+        resuming = self._paused
+        if not resuming:
             self.logger.start_new_run()
             print(f"{Colors.DIM}📝 Log file: {self.logger.get_log_file_path()}{Colors.RESET}")
-            self.current_step = 0
-            self._run_active = True
+        else:
+            print(f"{Colors.DIM}📝 Resuming run (log: {self.logger.get_log_file_path()}){Colors.RESET}")
 
-        step = self.current_step
-        self._reset_stop_request()
+        step = self._resume_step if resuming else 0
+        self._stop_requested = False
+        self._stop_notified = False
+        self._paused = False
+        if not resuming:
+            self._resume_step = 0
 
         while step < self.max_steps:
-            if self._check_stop_requested():
+            if self._check_stop_requested(step):
                 return "Agent run interrupted by user."
 
             # Check and summarize message history to prevent context overflow
@@ -334,12 +340,10 @@ Requirements:
                 else:
                     error_msg = f"LLM call failed: {str(e)}"
                     print(f"\n{Colors.BRIGHT_RED}❌ Error:{Colors.RESET} {error_msg}")
-                self._run_active = False
-                self.current_step = 0
-                self._paused = False
+                self.cancel_pause()
                 return error_msg
 
-            if self._check_stop_requested():
+            if self._check_stop_requested(step):
                 return "Agent run interrupted by user."
 
             # Log LLM response
@@ -371,14 +375,11 @@ Requirements:
 
             # Check if task is complete (no tool calls)
             if not response.tool_calls:
-                self._run_active = False
-                self.current_step = 0
-                self._paused = False
+                self.cancel_pause()
                 return response.content
 
             # Execute all tool calls before checking for stop requests again
             for tool_call in response.tool_calls:
-
                 tool_call_id = tool_call.id
                 function_name = tool_call.function.name
                 arguments = tool_call.function.arguments
@@ -451,17 +452,15 @@ Requirements:
                 self.messages.append(tool_msg)
 
             step += 1
-            self.current_step = step
+            self._resume_step = step
 
-            if self._check_stop_requested():
+            if self._check_stop_requested(step):
                 return "Agent run interrupted by user."
 
         # Max steps reached
         error_msg = f"Task couldn't be completed after {self.max_steps} steps."
         print(f"\n{Colors.BRIGHT_YELLOW}⚠️  {error_msg}{Colors.RESET}")
-        self._run_active = False
-        self.current_step = 0
-        self._paused = False
+        self.cancel_pause()
         return error_msg
 
     def get_history(self) -> list[Message]:
