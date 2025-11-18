@@ -144,13 +144,19 @@ class OpenAIClient(LLMClientBase):
                 if msg.tool_calls:
                     tool_calls_list = []
                     for tool_call in msg.tool_calls:
+                        arguments_json = tool_call.function.arguments_json
+                        if arguments_json is None:
+                            # Fall back to deterministic dump if raw string missing
+                            arguments_json = json.dumps(
+                                tool_call.function.arguments, separators=(",", ":"), sort_keys=True
+                            )
                         tool_calls_list.append(
                             {
                                 "id": tool_call.id,
                                 "type": "function",
                                 "function": {
                                     "name": tool_call.function.name,
-                                    "arguments": json.dumps(tool_call.function.arguments),
+                                    "arguments": arguments_json,
                                 },
                             }
                         )
@@ -223,8 +229,9 @@ class OpenAIClient(LLMClientBase):
         tool_calls = []
         if response.tool_calls:
             for tool_call in response.tool_calls:
-                # Parse arguments from JSON string
-                arguments = json.loads(tool_call.function.arguments)
+                # Parse arguments from JSON string while preserving the raw text
+                raw_arguments = tool_call.function.arguments
+                arguments = json.loads(raw_arguments) if raw_arguments else {}
 
                 tool_calls.append(
                     ToolCall(
@@ -233,6 +240,7 @@ class OpenAIClient(LLMClientBase):
                         function=FunctionCall(
                             name=tool_call.function.name,
                             arguments=arguments,
+                            arguments_json=raw_arguments,
                         ),
                     )
                 )
