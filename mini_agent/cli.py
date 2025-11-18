@@ -11,9 +11,17 @@ Examples:
 
 import argparse
 import asyncio
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List
+
+try:
+    import termios
+    import tty
+except ImportError:  # pragma: no cover - Windows fallback
+    termios = None  # type: ignore[assignment]
+    tty = None  # type: ignore[assignment]
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
@@ -70,6 +78,75 @@ class Colors:
     BG_BLUE = "\033[44m"
 
 
+class EscapeKeyListener:
+    """Listen for ESC key presses during agent execution to request a stop."""
+
+    def __init__(self, agent: Agent):
+        self.agent = agent
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._fd: int | None = None
+        self._old_settings = None
+        self._cbreak_enabled = False
+        self._reader_registered = False
+
+    async def __aenter__(self):
+        self._loop = asyncio.get_running_loop()
+        await self._loop.run_in_executor(None, self._enable_cbreak_mode)
+        if (
+            self._cbreak_enabled
+            and self._loop
+            and self._fd is not None
+            and hasattr(self._loop, "add_reader")
+        ):
+            self._loop.add_reader(self._fd, self._handle_keypress)
+            self._reader_registered = True
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if self._reader_registered and self._loop and self._fd is not None:
+            self._loop.remove_reader(self._fd)
+            self._reader_registered = False
+        if self._loop:
+            await self._loop.run_in_executor(None, self._restore_terminal)
+
+    def _enable_cbreak_mode(self):
+        if termios is None or tty is None:
+            return
+        if not sys.stdin.isatty():
+            return
+        try:
+            self._fd = sys.stdin.fileno()
+            self._old_settings = termios.tcgetattr(self._fd)
+            tty.setcbreak(self._fd)
+            self._cbreak_enabled = True
+        except Exception:
+            self._cbreak_enabled = False
+
+    def _restore_terminal(self):
+        if (
+            self._cbreak_enabled
+            and self._fd is not None
+            and self._old_settings is not None
+            and termios is not None
+        ):
+            termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
+        self._cbreak_enabled = False
+
+    def _handle_keypress(self):
+        if not self._cbreak_enabled:
+            return
+        try:
+            ch = sys.stdin.read(1)
+        except Exception:
+            return
+        if ch == "\x1b":  # ESC key
+            print(f"\n{Colors.BRIGHT_YELLOW}⏹️  Escape detected, requesting agent pause...{Colors.RESET}")
+            self.agent.request_stop()
+            if self._loop and self._reader_registered and self._fd is not None:
+                self._loop.remove_reader(self._fd)
+                self._reader_registered = False
+
+
 def print_banner():
     """Print welcome banner with proper alignment"""
     BOX_WIDTH = 58
@@ -105,6 +182,7 @@ def print_help():
   {Colors.BRIGHT_CYAN}Tab{Colors.RESET}        - Auto-complete commands
   {Colors.BRIGHT_CYAN}↑/↓{Colors.RESET}        - Browse command history
   {Colors.BRIGHT_CYAN}→{Colors.RESET}          - Accept auto-suggestion
+  {Colors.BRIGHT_CYAN}Esc{Colors.RESET}        - Pause the current agent run
 
 {Colors.BOLD}{Colors.BRIGHT_YELLOW}Usage:{Colors.RESET}
   - Enter your task directly, Agent will help you complete it
@@ -112,6 +190,7 @@ def print_help():
   - Use {Colors.BRIGHT_GREEN}/clear{Colors.RESET} to start a new session
   - Press {Colors.BRIGHT_CYAN}Enter{Colors.RESET} to submit your message
   - Use {Colors.BRIGHT_CYAN}Ctrl+J{Colors.RESET} to insert line breaks within your message
+  - Press {Colors.BRIGHT_CYAN}Esc{Colors.RESET} anytime during execution to stop the agent
 """
     print(help_text)
 
@@ -551,7 +630,8 @@ async def run_agent(workspace_dir: Path):
             # Run Agent
             print(f"\n{Colors.BRIGHT_BLUE}Agent{Colors.RESET} {Colors.DIM}›{Colors.RESET} {Colors.DIM}Thinking...{Colors.RESET}\n")
             agent.add_user_message(user_input)
-            _ = await agent.run()
+            async with EscapeKeyListener(agent):
+                _ = await agent.run()
 
             # Visual separation - keep it simple like the reference code
             print(f"\n{Colors.DIM}{'─' * 60}{Colors.RESET}\n")
