@@ -15,7 +15,8 @@ class FunctionCall(BaseModel):
     """Function call details."""
 
     name: str
-    arguments: dict[str, Any]  # Function arguments as dict
+    arguments: dict[str, Any]  # Parsed function arguments
+    arguments_json: str | None = None  # Raw JSON string (for deterministic replay)
 
 
 class ToolCall(BaseModel):
