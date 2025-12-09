@@ -19,11 +19,19 @@
     "memory": {
       "description": "Memory - Knowledge graph memory system (long-term memory based on graph database)",
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-memory"
-      ],
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
       "disabled": true
+    },
+    "ticktick": {
+      "command": "/Users/zhangyufeng/.local/bin/uv",
+      "args": [
+        "run",
+        "--directory",
+        "/Users/zhangyufeng/WorkSpace/CodePlace/Personal-Project/ticktick-mcp-enhanced",
+        "-m",
+        "ticktick_mcp.cli",
+        "run"
+      ]
     }
   }
 }
