@@ -494,7 +494,7 @@ async def run_agent(workspace_dir: Path):
         key_bindings=kb,
     )
 
-    # 9. Interactive loop
+    # 10. Interactive loop
     while True:
         try:
             # Get user input using prompt_toolkit
@@ -568,7 +568,7 @@ async def run_agent(workspace_dir: Path):
             print(f"\n{Colors.RED}❌ Error: {e}{Colors.RESET}")
             print(f"{Colors.DIM}{'─' * 60}{Colors.RESET}\n")
 
-    # 10. Cleanup MCP connections
+    # 11. Cleanup MCP connections
     try:
         print(f"{Colors.BRIGHT_CYAN}Cleaning up MCP connections...{Colors.RESET}")
         await cleanup_mcp_connections()
