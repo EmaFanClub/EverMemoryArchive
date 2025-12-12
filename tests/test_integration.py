@@ -46,9 +46,12 @@ async def test_basic_agent_usage():
         else:
             system_prompt = "You are a helpful AI assistant."
 
+        from mini_agent.schema import LLMProvider
+        provider = LLMProvider.ANTHROPIC if config.llm.provider.lower() == "anthropic" else LLMProvider.OPENAI
         # Initialize LLM client
         llm_client = LLMClient(
             api_key=config.llm.api_key,
+            provider=provider,
             api_base=config.llm.api_base,
             model=config.llm.model,
         )

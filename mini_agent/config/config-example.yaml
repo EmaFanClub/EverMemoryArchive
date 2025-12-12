@@ -1,5 +1,5 @@
 # Mini Agent Configuration Example
-# 
+#
 # Configuration File Locations (in priority order):
 # 1) mini_agent/config/config.yaml - Development mode (current directory)
 # 2) ~/.mini-agent/config/config.yaml - User config directory
@@ -16,39 +16,39 @@
 # - Global: https://platform.minimax.io -> api_base: https://api.minimax.io
 # - China: https://platform.minimaxi.com -> api_base: https://api.minimaxi.com
 # Please choose based on your network environment and get API key from corresponding platform
-api_key: "YOUR_API_KEY_HERE"  # Replace with your MiniMax API Key
-api_base: "https://api.minimax.io"   # Global users (default)
+api_key: "YOUR_API_KEY_HERE" # Replace with your MiniMax API Key
+api_base: "https://api.minimax.io/anthropic" # Global users (default)
 # api_base: "https://api.minimaxi.com"  # China users
 model: "MiniMax-M2"
 # LLM provider: "anthropic" or "openai"
-# The LLMClient will automatically append /anthropic or /v1 to api_base based on provider
-provider: "anthropic"  # Default: anthropic
+provider: "anthropic" # Default: anthropic
 
 # ===== Retry Configuration =====
 retry:
-  enabled: true           # Enable retry mechanism
-  max_retries: 3          # Maximum number of retries
-  initial_delay: 1.0      # Initial delay time (seconds)
-  max_delay: 60.0         # Maximum delay time (seconds)
-  exponential_base: 2.0   # Exponential backoff base (delay = initial_delay * base^attempt)
+  enabled: true # Enable retry mechanism
+  max_retries: 3 # Maximum number of retries
+  initial_delay: 1.0 # Initial delay time (seconds)
+  max_delay: 60.0 # Maximum delay time (seconds)
+  exponential_base: 2.0 # Exponential backoff base (delay = initial_delay * base^attempt)
 
 # ===== Agent Configuration =====
-max_steps: 100  # Maximum execution steps
-workspace_dir: "./workspace"  # Working directory
-system_prompt_path: "system_prompt.md"  # System prompt file (same config directory)
+max_steps: 100 # Maximum execution steps
+workspace_dir: "./workspace" # Working directory
+system_prompt_path: "system_prompt.md" # System prompt file (same config directory)
 
 # ===== Tools Configuration =====
 tools:
   # Basic tool switches
-  enable_file_tools: true  # File read/write/edit tools (ReadTool, WriteTool, EditTool)
-  enable_bash: true        # Bash command execution tool
-  enable_note: true        # Session note tool (SessionNoteTool)
-  
+  enable_file_tools: true # File read/write/edit tools (ReadTool, WriteTool, EditTool)
+  enable_bash: true # Bash command execution tool
+  enable_note: true # Session note tool (SessionNoteTool)
+
   # Claude Skills
-  enable_skills: true      # Enable Skills
-  skills_dir: "./skills"   # Skills directory path
-  
+  enable_skills: true # Enable Skills
+  skills_dir: "./skills" # Skills directory path
+
   # MCP Tools
-  enable_mcp: true         # Enable MCP tools
-  mcp_config_path: "mcp.json"  # MCP configuration file (same config directory)
-                           # Note: API Keys for MCP tools are configured in mcp.json
+  enable_mcp: true # Enable MCP tools
+  mcp_config_path:
+    "mcp.json" # MCP configuration file (same config directory)
+    # Note: API Keys for MCP tools are configured in mcp.json
