@@ -47,8 +47,8 @@ MiniMax provides both global and China platforms. Choose based on your network e
 
 | Version    | Platform                                                       | API Base                   |
 | ---------- | -------------------------------------------------------------- | -------------------------- |
-| **Global** | [https://platform.minimax.io](https://platform.minimax.io)     | `https://api.minimax.io`   |
-| **China**  | [https://platform.minimaxi.com](https://platform.minimaxi.com) | `https://api.minimaxi.com` |
+| **Global** | [https://platform.minimax.io](https://platform.minimax.io)     | `https://api.minimax.io/anthropic` |
+| **China**  | [https://platform.minimaxi.com](https://platform.minimaxi.com) | `https://api.minimaxi.com/anthropic` |
 
 **Steps to get API Key:**
 1. Visit the corresponding platform to register and login
@@ -56,7 +56,7 @@ MiniMax provides both global and China platforms. Choose based on your network e
 3. Click **"Create New Key"**
 4. Copy and save it securely (key is only shown once)
 
-> 💡 **Tip**: Remember the API Base address corresponding to your chosen platform, you'll need it for configuration
+> 💡 **Tip**: Use the full provider-specific API Base in config (e.g., `/anthropic` for provider `anthropic`, `/v1` for provider `openai`).
 
 ### 2. Choose Your Usage Mode
 
@@ -113,8 +113,9 @@ Fill in your API Key and corresponding API Base:
 
 ```yaml
 api_key: "YOUR_API_KEY_HERE"          # API Key from step 1
-api_base: "https://api.minimax.io"  # Global
-# api_base: "https://api.minimaxi.com"  # China
+api_base: "https://api.minimax.io/anthropic"  # Global (Anthropic-compatible)
+# api_base: "https://api.minimaxi.com/anthropic"  # China (Anthropic-compatible)
+# If provider is "openai", use: https://api.minimax.io/v1 or https://api.minimaxi.com/v1
 model: "MiniMax-M2"
 ```
 
@@ -180,8 +181,9 @@ Fill in your API Key and corresponding API Base:
 
 ```yaml
 api_key: "YOUR_API_KEY_HERE"          # API Key from step 1
-api_base: "https://api.minimax.io"  # Global
-# api_base: "https://api.minimaxi.com"  # China
+api_base: "https://api.minimax.io/anthropic"  # Global (Anthropic-compatible)
+# api_base: "https://api.minimaxi.com/anthropic"  # China (Anthropic-compatible)
+# If provider is "openai", use: https://api.minimax.io/v1 or https://api.minimaxi.com/v1
 model: "MiniMax-M2"
 max_steps: 100
 workspace_dir: "./workspace"

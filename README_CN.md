@@ -47,8 +47,8 @@ MiniMax 提供国内和海外两个平台，请根据您的网络环境选择：
 
 | 版本       | 平台地址                                                       | API Base                   |
 | ---------- | -------------------------------------------------------------- | -------------------------- |
-| **国内版** | [https://platform.minimaxi.com](https://platform.minimaxi.com) | `https://api.minimaxi.com` |
-| **海外版** | [https://platform.minimax.io](https://platform.minimax.io)     | `https://api.minimax.io`   |
+| **国内版** | [https://platform.minimaxi.com](https://platform.minimaxi.com) | `https://api.minimaxi.com/anthropic` |
+| **海外版** | [https://platform.minimax.io](https://platform.minimax.io)     | `https://api.minimax.io/anthropic`   |
 
 **获取步骤：**
 1. 访问相应平台注册并登录
@@ -56,7 +56,7 @@ MiniMax 提供国内和海外两个平台，请根据您的网络环境选择：
 3. 点击 **"创建新密钥"**
 4. 复制并妥善保存（密钥仅显示一次）
 
-> 💡 **提示**：请记住您所选平台对应的 API Base 地址，后续配置时会用到。
+> 💡 **提示**：配置时请填写完整的、与 provider 匹配的 API Base（如 provider 为 `anthropic` 时使用 `/anthropic`，provider 为 `openai` 时使用 `/v1`）。
 
 ### 2. 选择使用模式
 
@@ -113,8 +113,9 @@ nano ~/.mini-agent/config/config.yaml
 
 ```yaml
 api_key: "YOUR_API_KEY_HERE"          # 填入第 1 步获取的 API Key
-api_base: "https://api.minimaxi.com"  # 国内版
-# api_base: "https://api.minimax.io"  # 海外版（如使用海外平台，请取消本行注释）
+api_base: "https://api.minimaxi.com/anthropic"  # 国内版（Anthropic 兼容）
+# api_base: "https://api.minimax.io/anthropic"  # 海外版（Anthropic 兼容）
+# 若 provider 为 "openai"，请使用：https://api.minimax.io/v1 或 https://api.minimaxi.com/v1
 model: "MiniMax-M2"
 ```
 
@@ -180,8 +181,9 @@ vim mini_agent/config/config.yaml  # 或使用您偏好的编辑器
 
 ```yaml
 api_key: "YOUR_API_KEY_HERE"          # 填入第 1 步获取的 API Key
-api_base: "https://api.minimaxi.com"  # 国内版
-# api_base: "https://api.minimax.io"  # 海外版（如使用海外平台，请修改此行）
+api_base: "https://api.minimaxi.com/anthropic"  # 国内版（Anthropic 兼容）
+# api_base: "https://api.minimax.io/anthropic"  # 海外版（Anthropic 兼容）
+# 若 provider 为 "openai"，请使用：https://api.minimax.io/v1 或 https://api.minimaxi.com/v1
 model: "MiniMax-M2"
 max_steps: 100
 workspace_dir: "./workspace"
