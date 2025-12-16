@@ -43,7 +43,7 @@ export class OpenAIClient extends LLMClientBase {
     // Uses proxy if HTTPS_PROXY or https_proxy is set
     const https_proxy =
       process.env.HTTPS_PROXY || process.env.https_proxy || "";
-    const dispatcher = new ProxyAgent(https_proxy);
+    const dispatcher = https_proxy ? new ProxyAgent(https_proxy) : undefined;
     this.client = new OpenAI({
       apiKey: apiKey,
       baseURL: apiBase,
@@ -73,6 +73,10 @@ export class OpenAIClient extends LLMClientBase {
       model: this.model,
       messages: apiMessages as any,
       tools: tools ? this._convertTools(tools) : undefined,
+      // todo: Platforms' behaviors vary. For example, Minimax requires a extra_body={"reasoning_split": True} and use reasoning_details. Ollama use reasoning.
+      // Enable reasoning_split to separate thinking content
+      //@ts-ignore
+      reasoning_split: true,
     });
   }
 
@@ -114,7 +118,7 @@ export class OpenAIClient extends LLMClientBase {
    * @param response - OpenAI ChatCompletion response (full response object)
    * @returns LLMResponse object
    */
-  async _parseResponse(response: any): Promise<LLMResponse> {
+  _parseResponse(response: any): LLMResponse {
     // Gets message from response
     const message = response.choices[0].message;
     // Extracts text content
@@ -130,6 +134,7 @@ export class OpenAIClient extends LLMClientBase {
       type: "function",
       function: {
         name: toolCall.function.name,
+        // todo: handle exception on malformed JSON string (may be caused by network errors).
         // Parses arguments from JSON string
         arguments: JSON.parse(toolCall.function.arguments),
       },
@@ -144,7 +149,7 @@ export class OpenAIClient extends LLMClientBase {
       : undefined;
     return {
       content: textContent,
-      thinking: thinkingContent,
+      thinking: thinkingContent ?? undefined,
       tool_calls: toolCalls,
       // OpenAI doesn't provide finish_reason in the message
       finish_reason: "stop",
@@ -219,10 +224,10 @@ export class OpenAIClient extends LLMClientBase {
    * @param tools - Optional list of available tools
    * @returns Dictionary containing request parameters
    */
-  async _prepareRequest(
+  _prepareRequest(
     messages: Message[],
     tools?: Tool[]
-  ): Promise<{ apiMessages: Record<string, unknown>[]; tools?: Tool[] }> {
+  ): { apiMessages: Record<string, unknown>[]; tools?: Tool[] } {
     // TODO: Why does mini-agent ignore systemMessage?
     const [systemMessage, apiMessages] = this._convertMessages(messages);
     return {
@@ -239,7 +244,7 @@ export class OpenAIClient extends LLMClientBase {
    * @returns LLMResponse containing the generated content
    */
   async generate(messages: Message[], tools?: Tool[]): Promise<LLMResponse> {
-    const requestParams = await this._prepareRequest(messages, tools);
+    const requestParams = this._prepareRequest(messages, tools);
     if (this.retryConfig.enabled) {
       //             # Applies retry logic
       //             retry_decorator = asyncRetry(config=self.retry_config, on_retry=self.retry_callback)

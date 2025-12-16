@@ -4,8 +4,13 @@ import { OpenAIClient } from "./openai";
 
 describe("OpenAI", () => {
   test("should make a simple completion", async () => {
+    const apiKey = process.env.GEMINI_API_KEY || "";
+    // todo: document that `GEMINI_API_KEY` is required for testing.
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not set to test OpenAIClient");
+    }
     const client = new OpenAIClient(
-      process.env.GEMINI_API_KEY || "",
+      apiKey,
       "https://generativelanguage.googleapis.com/v1beta/openai/",
       // gemini model
       "gemini-2.5-flash"

@@ -57,7 +57,7 @@ export abstract class LLMClientBase {
   abstract _prepareRequest(
     messages: Message[],
     tools?: Tool[]
-  ): Promise<Record<string, unknown>>;
+  ): Record<string, unknown>;
 
   /**
    * Converts internal message format to API-specific format.
