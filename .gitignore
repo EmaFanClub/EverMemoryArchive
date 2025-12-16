@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 *.so
 .Python
+target/
+node_modules/
 build/
 develop-eggs/
 dist/
@@ -25,9 +27,11 @@ venv/
 ENV/
 env/
 .venv
+.env
 
 # IDE
-.vscode/
+.vscode/*
+!.vscode/template.code-workspace
 .idea/
 *.swp
 *.swo
@@ -43,6 +47,7 @@ Thumbs.db
 
 # Config (contains API keys)
 config.yaml
+.data
 
 # test file
 demo.py

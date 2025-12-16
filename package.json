@@ -1,0 +1,30 @@
+{
+  "name": "ema-workspace",
+  "author": "Ema Fan Club",
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "description": "EverMindAgent.",
+  "main": "index.js",
+  "scripts": {
+    "ema": "node packages/ema/bin/ema.js",
+    "ema:ui": "pnpm --filter ema-ui start",
+    "dev:main": "pnpm --filter ema dev",
+    "build:main": "pnpm --filter ema build",
+    "test:main": "pnpm --filter ema test",
+    "build:ui": "pnpm --filter ema-ui build"
+  },
+  "keywords": [],
+  "packageManager": "pnpm@10.16.1",
+  "dependencies": {
+    "vite": "^6.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "tsx": "^4.7.1",
+    "typescript": "~5.9.0",
+    "vite": "^7.1.11",
+    "vite-plugin-vue-devtools": "^8.0.3",
+    "vitest": "^3.2.4",
+    "vue-tsc": "^3.1.1"
+  }
+}

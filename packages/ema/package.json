@@ -1,0 +1,36 @@
+{
+  "name": "ema",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "ema": "bin/ema.js"
+  },
+  "keywords": [
+    "framework"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EmaFanClub/EverMindAgent.git",
+    "directory": "packages/ema"
+  },
+  "bugs": {
+    "url": "https://github.com/EmaFanClub/EverMindAgent/issues"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "misc/**/*.js",
+    "client.d.ts",
+    "types"
+  ],
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "openai": "^6.7.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest"
+  }
+}
