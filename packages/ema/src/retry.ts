@@ -85,7 +85,7 @@ export function asyncRetry(
     const originalMethod = descriptor.value;
     descriptor.value = async function (...args: any[]) {
       let lastException: Error | undefined;
-      for (let attempt = 0; attempt < config.maxRetries; attempt++) {
+      for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
         try {
           return await originalMethod.apply(this, args);
         } catch (exception) {

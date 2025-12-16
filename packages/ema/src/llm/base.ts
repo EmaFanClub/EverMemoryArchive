@@ -15,7 +15,7 @@ type Tool = any;
  * This class defines the interface that all LLM clients must implement,
  * regardless of the underlying API protocol (Anthropic, OpenAI, etc.).
  */
-abstract class LLMClientBase {
+export abstract class LLMClientBase {
   retryCallback: ((exception: Error, attempt: number) => void) | undefined =
     undefined;
 
@@ -39,7 +39,7 @@ abstract class LLMClientBase {
   ) {}
 
   /**
-   * Generate response from LLM.
+   * Generates response from LLM.
    *
    * @param messages - List of conversation messages
    * @param tools - Optional list of Tool objects or dicts
@@ -48,24 +48,24 @@ abstract class LLMClientBase {
   abstract generate(messages: Message[], tools?: Tool[]): Promise<LLMResponse>;
 
   /**
-   * Prepare the request payload for the API.
+   * Prepares the request payload for the API.
    *
    * @param messages - List of conversation messages
    * @param tools - Optional list of Tool objects or dicts
    * @returns Dictionary containing the request payload
    */
-  abstract _prepare_request(
+  abstract _prepareRequest(
     messages: Message[],
     tools?: Tool[]
   ): Promise<Record<string, unknown>>;
 
   /**
-   * Convert internal message format to API-specific format.
+   * Converts internal message format to API-specific format.
    *
    * @param messages - List of internal Message objects
    * @returns Tuple of (system_message, api_messages)
    */
-  abstract _convert_messages(
+  abstract _convertMessages(
     messages: Message[]
   ): [string | undefined, Record<string, unknown>[]];
 }
