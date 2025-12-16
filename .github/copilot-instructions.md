@@ -5,7 +5,7 @@
 
 ## Development Process
 
-Both the core and UI packages are developed using TypeScript.
+Both the core and application packages are developed using TypeScript.
 
 - All of the public classes, methods, and variables should be documented with JSDoc.
 - Write tests (vitest) in the `**/*.spec.ts` files.
