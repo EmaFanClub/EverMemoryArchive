@@ -6,7 +6,7 @@ export enum LLMProvider {
   OPENAI = "openai",
 }
 
-// TOOD: pydantic?
+// TODO: pydantic?
 // from pydantic import BaseModel
 // class FunctionCall(BaseModel):
 
