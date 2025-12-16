@@ -9,6 +9,7 @@
     "ema": "node packages/ema/bin/ema.js",
     "ema:ui": "pnpm --filter ema-ui start",
     "dev:main": "pnpm --filter ema dev",
+    "dev:ui": "pnpm --filter ema-ui dev",
     "build:main": "pnpm --filter ema build",
     "test:main": "pnpm --filter ema test",
     "build:ui": "pnpm --filter ema-ui build"

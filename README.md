@@ -20,4 +20,6 @@ Run UI:
 
 ```bash
 pnpm ema:ui
+# or
+pnpm dev:ui
 ```
