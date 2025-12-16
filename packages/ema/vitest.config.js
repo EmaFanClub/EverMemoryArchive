@@ -10,7 +10,7 @@ export default defineConfig({
       exclude: ["**/tests/**"],
     },
     env: {
-      ...config({ path: "../../.env" }).parsed,
+      ...((config({ path: "../../.env" }).parsed) || {}),
     },
     testTimeout: 60000,
   },
