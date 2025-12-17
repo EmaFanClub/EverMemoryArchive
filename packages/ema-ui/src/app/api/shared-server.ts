@@ -4,7 +4,7 @@
  */
 import { Server } from "ema";
 
-let serverInstance: Server | null = null;
+let serverInstance: Server | undefined;
 
 /**
  * Gets or creates the shared server instance.

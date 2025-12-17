@@ -24,6 +24,18 @@ export async function POST(request: Request) {
       );
     }
 
+    if (messages.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error: "messages must be not empty",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
     // Validate each message has required fields
     for (const message of messages) {
       if (!message.role || !message.content) {
@@ -48,7 +60,10 @@ export async function POST(request: Request) {
   } catch (error) {
     return new Response(
       JSON.stringify({
-        error: error instanceof Error ? error.message : "An error occurred",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to process chat request",
       }),
       {
         status: 500,

@@ -19,6 +19,9 @@ export class Server {
       process.env.OPENAI_MODEL ||
       process.env.GEMINI_MODEL ||
       "gemini-2.5-flash";
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY or GEMINI_API_KEY env is not set");
+    }
 
     this.llmClient = new OpenAIClient(apiKey, apiBase, model);
   }

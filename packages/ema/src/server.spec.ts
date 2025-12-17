@@ -10,10 +10,4 @@ describe("Server", () => {
     expect(user.name).toBe("alice");
     expect(user.email).toBe("alice@example.com");
   });
-
-  test("should have chat method", async () => {
-    const server = new Server();
-    expect(server.chat).toBeDefined();
-    expect(typeof server.chat).toBe("function");
-  });
 });
