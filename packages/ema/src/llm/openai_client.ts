@@ -43,9 +43,12 @@ export class OpenAIClient extends LLMClientBase {
     // Uses proxy if HTTPS_PROXY or https_proxy is set
     const https_proxy =
       process.env.HTTPS_PROXY || process.env.https_proxy || "";
+    console.log(
+      `[OpenAIClient] apiBase: ${apiBase}, apiKey.length: ${apiKey.length}`,
+    );
     const dispatcher = https_proxy ? new ProxyAgent(https_proxy) : undefined;
     this.client = new OpenAI({
-      apiKey: apiKey,
+      apiKey,
       baseURL: apiBase,
       ...(https_proxy
         ? {
