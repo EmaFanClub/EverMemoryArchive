@@ -1,8 +1,14 @@
-# EverMindAgent
+# EverMemoryArchive
+![Logo](./resources/logo.png)
 
 English | [中文](./README_CN.md)
 
-**EverMindAgent** is a framework for building AI agents.
+**EverMemoryArchive** represents Ema Fan Club's initiative to imbue agents with continuously evolving personalities via long-term memory mechanisms. Our goal is to build AI companions that truly understand you—functioning as versatile assistants for daily operations while serving as empathetic partners attuned to your emotional landscape.
+
+
+## Framework
+![framework](./resources/framework2025-12-17.png)
+
 
 ## Getting Started
 
