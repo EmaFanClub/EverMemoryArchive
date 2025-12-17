@@ -1,0 +1,42 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: evermindagent-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - evermindagent-network
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: evermindagent-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../.data/local-instance:/app/.data
+      - ../packages:/app/packages
+      - ../node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/evermindagent?authSource=admin
+    depends_on:
+      - mongodb
+    networks:
+      - evermindagent-network
+    command: pnpm dev
+
+networks:
+  evermindagent-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
