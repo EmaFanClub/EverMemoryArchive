@@ -52,8 +52,9 @@ export interface Message {
   role: string;
   /**
    * Message content.
+   * TODO: is it possible to have a list of content blocks? Record<string, unknown>[]
    */
-  content: string | Record<string, unknown>[];
+  content: string;
   /**
    * Extended thinking content for assistant messages.
    */

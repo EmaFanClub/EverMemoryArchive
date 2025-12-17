@@ -2,12 +2,9 @@
 
 import { useState } from "react";
 import styles from "./page.module.css";
+import type { Message } from "ema";
 
-interface Message {
-  role: string;
-  content: string;
-}
-
+// todo: consider adding tests for this component to verify message state management
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -46,7 +43,9 @@ export default function ChatPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to get response");
+        throw new Error(
+          `Failed to get response: ${response.status} ${response.statusText}`,
+        );
       }
 
       const data = await response.json();
@@ -88,6 +87,7 @@ export default function ChatPage() {
         ) : (
           <div className={styles.messages}>
             {displayMessages.map((message, index) => (
+              // Consider adding a unique identifier to each message (e.g., timestamp or UUID) and use that as the key instead.
               <div
                 key={index}
                 className={`${styles.message} ${
@@ -109,6 +109,7 @@ export default function ChatPage() {
       <form className={styles.inputArea} onSubmit={handleSubmit}>
         <input
           type="text"
+          aria-label="Chat message input"
           className={styles.input}
           placeholder="Enter message..."
           value={inputValue}
@@ -118,6 +119,7 @@ export default function ChatPage() {
         <div className={styles.buttonGroup}>
           <button
             type="submit"
+            aria-label="Send message"
             className={styles.sendButton}
             disabled={isLoading || !inputValue.trim()}
           >
