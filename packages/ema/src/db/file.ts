@@ -44,13 +44,21 @@ export class RealFs implements Fs {
     }
   }
 
+  /**
+   * Writes content to a file atomically
+   * @param path - Path to the file to write
+   * @param content - Content to write to the file
+   */
   async write(path: string, content: string): Promise<void> {
     const dir = dirname(path);
     await mkdir(dir, { recursive: true });
     const tempFile = tmp.fileSync();
-    await writeFile(tempFile.name, content, "utf-8");
-    await rename(tempFile.name, path);
-    tempFile.removeCallback();
+    try {
+      await writeFile(tempFile.name, content, "utf-8");
+      await rename(tempFile.name, path);
+    } finally {
+      tempFile.removeCallback();
+    }
   }
 }
 
