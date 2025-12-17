@@ -140,12 +140,17 @@ export class FileDB implements RoleDB {
 
   async listRoles(): Promise<RoleData[]> {
     const db = await this.readDb();
-    return Object.values(db.roles ?? {});
+    return Object.values(db.roles ?? {}).filter((role) => !role.deleteTime);
   }
 
   async getRole(roleId: string): Promise<RoleData | null> {
     const db = await this.readDb();
-    return db.roles?.[roleId] ?? null;
+    const role = db.roles?.[roleId] ?? null;
+    // Return null if role is soft-deleted
+    if (role && role.deleteTime) {
+      return null;
+    }
+    return role;
   }
 
   async upsertRole(roleData: RoleData): Promise<void> {
@@ -162,7 +167,12 @@ export class FileDB implements RoleDB {
     if (!db.roles || !db.roles[roleId]) {
       return false;
     }
-    delete db.roles[roleId];
+    // Soft delete: set deleteTime instead of removing the role
+    if (db.roles[roleId].deleteTime) {
+      // Already deleted
+      return false;
+    }
+    db.roles[roleId].deleteTime = Date.now();
     await this.writeDb(db);
     return true;
   }

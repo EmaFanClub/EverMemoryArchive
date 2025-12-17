@@ -61,7 +61,7 @@ describe("FileDB with MemFs", () => {
     expect(retrievedRole).toEqual(updatedRole);
   });
 
-  test("should delete a role", async () => {
+  test("should soft delete a role", async () => {
     const roleData: RoleData = {
       id: "role1",
       name: "Test Role",
@@ -71,6 +71,7 @@ describe("FileDB with MemFs", () => {
     const deleted = await db.deleteRole("role1");
     expect(deleted).toBe(true);
 
+    // Soft-deleted role should not be retrievable
     const retrievedRole = await db.getRole("role1");
     expect(retrievedRole).toBeNull();
   });
@@ -78,6 +79,40 @@ describe("FileDB with MemFs", () => {
   test("should return false when deleting non-existent role", async () => {
     const deleted = await db.deleteRole("nonexistent");
     expect(deleted).toBe(false);
+  });
+
+  test("should return false when deleting already deleted role", async () => {
+    const roleData: RoleData = {
+      id: "role1",
+      name: "Test Role",
+    };
+
+    await db.upsertRole(roleData);
+    const deleted1 = await db.deleteRole("role1");
+    expect(deleted1).toBe(true);
+
+    // Try to delete again
+    const deleted2 = await db.deleteRole("role1");
+    expect(deleted2).toBe(false);
+  });
+
+  test("should not list soft-deleted roles", async () => {
+    const role1: RoleData = { id: "role1", name: "Role 1" };
+    const role2: RoleData = { id: "role2", name: "Role 2" };
+    const role3: RoleData = { id: "role3", name: "Role 3" };
+
+    await db.upsertRole(role1);
+    await db.upsertRole(role2);
+    await db.upsertRole(role3);
+
+    // Delete role2
+    await db.deleteRole("role2");
+
+    const roles = await db.listRoles();
+    expect(roles).toHaveLength(2);
+    expect(roles).toContainEqual(role1);
+    expect(roles).toContainEqual(role3);
+    expect(roles).not.toContainEqual(expect.objectContaining({ id: "role2" }));
   });
 
   test("should return null when getting non-existent role", async () => {
@@ -122,10 +157,31 @@ describe("FileDB with MemFs", () => {
     role = await db.getRole("role1");
     expect(role).toEqual(updatedRole);
 
-    // Delete
+    // Soft Delete
     const deleted = await db.deleteRole("role1");
     expect(deleted).toBe(true);
     role = await db.getRole("role1");
     expect(role).toBeNull();
+  });
+
+  test("should set createTime and deleteTime correctly", async () => {
+    const roleData: RoleData = {
+      id: "role1",
+      name: "Test Role",
+      description: "A test role",
+      createTime: Date.now(),
+    };
+
+    await db.upsertRole(roleData);
+    let role = await db.getRole("role1");
+    expect(role?.createTime).toBeDefined();
+    expect(role?.deleteTime).toBeUndefined();
+
+    // Delete the role
+    await db.deleteRole("role1");
+
+    // Get from DB directly to check deleteTime was set
+    const roles = await db.listRoles();
+    expect(roles).toHaveLength(0);
   });
 });

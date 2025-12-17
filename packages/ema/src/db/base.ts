@@ -8,6 +8,9 @@
  */
 export interface RoleData {
   id: string;
+  description?: string;
+  createTime?: number;
+  deleteTime?: number;
   [key: string]: unknown;
 }
 
