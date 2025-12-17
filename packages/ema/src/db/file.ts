@@ -97,7 +97,7 @@ export class FileDB implements RoleDB {
    */
   constructor(
     private readonly dbPath: string = ".data/db.json",
-    private readonly fs: Fs = new RealFs()
+    private readonly fs: Fs = new RealFs(),
   ) {}
 
   /**
