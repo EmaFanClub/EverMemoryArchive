@@ -34,6 +34,7 @@ describe("FileDB with MemFs", () => {
     const roleData: RoleData = {
       name: "Test Role",
       description: "A test role",
+      prompt: "This is a test role",
     };
 
     const id = await db.upsertRole(roleData);
@@ -45,6 +46,8 @@ describe("FileDB with MemFs", () => {
   test("should update an existing role", async () => {
     const roleData: RoleData = {
       name: "Test Role",
+      description: "This is a test role",
+      prompt: "This is a test role",
     };
 
     const id = await db.upsertRole(roleData);
@@ -54,6 +57,7 @@ describe("FileDB with MemFs", () => {
       id,
       name: "Updated Role",
       description: "Updated description",
+      prompt: "Updated prompt",
     };
 
     await db.upsertRole(updatedRole);
@@ -64,6 +68,8 @@ describe("FileDB with MemFs", () => {
   test("should soft delete a role", async () => {
     const roleData: RoleData = {
       name: "Test Role",
+      description: "This is a test role",
+      prompt: "This is a test role",
     };
 
     const id = await db.upsertRole(roleData);
@@ -84,6 +90,8 @@ describe("FileDB with MemFs", () => {
   test("should return false when deleting already deleted role", async () => {
     const roleData: RoleData = {
       name: "Test Role",
+      description: "This is a test role",
+      prompt: "This is a test role",
     };
 
     const id = await db.upsertRole(roleData);
@@ -97,9 +105,21 @@ describe("FileDB with MemFs", () => {
   });
 
   test("should not list soft-deleted roles", async () => {
-    const role1: RoleData = { name: "Role 1" };
-    const role2: RoleData = { name: "Role 2" };
-    const role3: RoleData = { name: "Role 3" };
+    const role1: RoleData = {
+      name: "Role 1",
+      description: "Description 1",
+      prompt: "This is a test role",
+    };
+    const role2: RoleData = {
+      name: "Role 2",
+      description: "Description 2",
+      prompt: "This is a test role",
+    };
+    const role3: RoleData = {
+      name: "Role 3",
+      description: "Description 3",
+      prompt: "This is a test role",
+    };
 
     const id1 = await db.upsertRole(role1);
     expect(id1).toBe("0");
@@ -124,9 +144,21 @@ describe("FileDB with MemFs", () => {
   });
 
   test("should list multiple roles", async () => {
-    const role1: RoleData = { name: "Role 1" };
-    const role2: RoleData = { name: "Role 2" };
-    const role3: RoleData = { name: "Role 3" };
+    const role1: RoleData = {
+      name: "Role 1",
+      description: "Description 1",
+      prompt: "This is a test role",
+    };
+    const role2: RoleData = {
+      name: "Role 2",
+      description: "Description 2",
+      prompt: "This is a test role",
+    };
+    const role3: RoleData = {
+      name: "Role 3",
+      description: "Description 3",
+      prompt: "This is a test role",
+    };
 
     const id1 = await db.upsertRole(role1);
     expect(id1).toBe("0");
@@ -146,6 +178,8 @@ describe("FileDB with MemFs", () => {
     // Create
     const roleData: RoleData = {
       name: "Test Role",
+      description: "This is a test role",
+      prompt: "This is a test role",
     };
     const id = await db.upsertRole(roleData);
     expect(id).toBe("0");
@@ -158,6 +192,8 @@ describe("FileDB with MemFs", () => {
     const updatedRole: RoleData = {
       id,
       name: "Updated Role",
+      description: "Updated description",
+      prompt: "Updated prompt",
     };
     await db.upsertRole(updatedRole);
     role = await db.getRole(id);
@@ -174,6 +210,7 @@ describe("FileDB with MemFs", () => {
     const roleData: RoleData = {
       name: "Test Role",
       description: "A test role",
+      prompt: "This is a test role",
       createTime: Date.now(),
     };
 

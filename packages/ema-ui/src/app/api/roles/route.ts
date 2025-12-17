@@ -68,6 +68,18 @@ export async function POST(request: Request) {
   try {
     const server = getServer();
     const body = await request.json();
+    if (!body.name || !body.description || !body.prompt) {
+      return new Response(
+        JSON.stringify({
+          error: "Name, description and prompt are required",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const id = await server.upsertRole(body);
 
     return new Response(
@@ -101,6 +113,17 @@ export async function PUT(request: Request) {
   try {
     const server = getServer();
     const body = await request.json();
+    if (!body.name || !body.description || !body.prompt) {
+      return new Response(
+        JSON.stringify({
+          error: "Name, description and prompt are required",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
 
     // Validate required fields
     if (!body.id) {
