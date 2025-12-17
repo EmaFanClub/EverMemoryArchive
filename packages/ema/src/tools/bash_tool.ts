@@ -82,7 +82,12 @@ class BackgroundShell {
   status: "running" | "completed" | "failed" | "terminated" | "error";
   exitCode: number | null;
 
-  constructor(options: { bashId: string; command: string; process: ChildProcess; startTime: number }) {
+  constructor(options: {
+    bashId: string;
+    command: string;
+    process: ChildProcess;
+    startTime: number;
+  }) {
     this.bashId = options.bashId;
     this.command = options.command;
     this.process = options.process;
@@ -497,7 +502,10 @@ export class BashOutputTool extends Tool {
     };
   }
 
-  async execute(bashId: string, filterStr: string | null = null): Promise<ToolResult> {
+  async execute(
+    bashId: string,
+    filterStr: string | null = null,
+  ): Promise<ToolResult> {
     /** Retrieve output from background shell.
      *
      * Args:

@@ -30,7 +30,8 @@ export class GetSkillTool extends Tool {
       properties: {
         skill_name: {
           type: "string",
-          description: "Name of the skill to retrieve (use list_skills to view available skills)",
+          description:
+            "Name of the skill to retrieve (use list_skills to view available skills)",
         },
       },
       required: ["skill_name"],

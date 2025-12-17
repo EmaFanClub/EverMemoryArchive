@@ -6,7 +6,11 @@ export class ToolResult {
   content: string;
   error: string | null;
 
-  constructor(options: { success: boolean; content?: string; error?: string | null }) {
+  constructor(options: {
+    success: boolean;
+    content?: string;
+    error?: string | null;
+  }) {
     this.success = options.success;
     this.content = options.content ?? "";
     this.error = options.error ?? null;

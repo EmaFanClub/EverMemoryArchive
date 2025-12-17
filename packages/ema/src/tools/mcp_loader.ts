@@ -40,7 +40,9 @@ export class MCPTool extends Tool {
   async execute(kwargs: Record<string, any>): Promise<ToolResult> {
     /** Execute MCP tool via the session. */
     try {
-      const result = await this._session.callTool(this._name, { arguments: kwargs });
+      const result = await this._session.callTool(this._name, {
+        arguments: kwargs,
+      });
 
       // MCP tool results are a list of content items
       const contentParts: string[] = [];
@@ -82,7 +84,12 @@ class MCPServerConnection {
   transport: any | null;
   tools: MCPTool[];
 
-  constructor(options: { name: string; command: string; args: string[]; env?: Record<string, string> | null }) {
+  constructor(options: {
+    name: string;
+    command: string;
+    args: string[];
+    env?: Record<string, string> | null;
+  }) {
     this.name = options.name;
     this.command = options.command;
     this.args = options.args;
@@ -109,7 +116,9 @@ class MCPServerConnection {
       const Client = sdk.Client ?? sdk.ClientSession ?? sdk.McpClient;
 
       if (!StdioClientTransport || !Client) {
-        throw new Error("MCP SDK missing required client transport/session exports");
+        throw new Error(
+          "MCP SDK missing required client transport/session exports",
+        );
       }
 
       // Prepare transport
@@ -134,7 +143,8 @@ class MCPServerConnection {
       this.transport = transport;
 
       // List available tools
-      const toolsList = (await (session.listTools?.() ?? session.list_tools?.())) ?? { tools: [] };
+      const toolsList = (await (session.listTools?.() ??
+        session.list_tools?.())) ?? { tools: [] };
 
       // Wrap each tool
       for (const tool of toolsList.tools ?? []) {
@@ -150,14 +160,21 @@ class MCPServerConnection {
         this.tools.push(mcpTool);
       }
 
-      console.log(`✓ Connected to MCP server '${this.name}' - loaded ${this.tools.length} tools`);
+      console.log(
+        `✓ Connected to MCP server '${this.name}' - loaded ${this.tools.length} tools`,
+      );
       for (const tool of this.tools) {
-        const desc = tool.description.length > 60 ? tool.description.slice(0, 60) : tool.description;
+        const desc =
+          tool.description.length > 60
+            ? tool.description.slice(0, 60)
+            : tool.description;
         console.log(`  - ${tool.name}: ${desc}...`);
       }
       return true;
     } catch (error) {
-      console.log(`✗ Failed to connect to MCP server '${this.name}': ${(error as Error).message}`);
+      console.log(
+        `✗ Failed to connect to MCP server '${this.name}': ${(error as Error).message}`,
+      );
       await this.disconnect();
       return false;
     }
@@ -183,7 +200,9 @@ class MCPServerConnection {
 // Global connections registry
 const _mcpConnections: MCPServerConnection[] = [];
 
-export async function loadMcpToolsAsync(configPath: string = "mcp.json"): Promise<Tool[]> {
+export async function loadMcpToolsAsync(
+  configPath: string = "mcp.json",
+): Promise<Tool[]> {
   /**
    * Load MCP tools from config file.
    *

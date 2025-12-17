@@ -44,7 +44,8 @@ export class SessionNoteTool extends Tool {
       properties: {
         content: {
           type: "string",
-          description: "The information to record as a note. Be concise but specific.",
+          description:
+            "The information to record as a note. Be concise but specific.",
         },
         category: {
           type: "string",
@@ -83,7 +84,10 @@ export class SessionNoteTool extends Tool {
     fs.writeFileSync(this.memoryFile, JSON.stringify(notes, null, 2), "utf-8");
   }
 
-  async execute(content: string, category: string = "general"): Promise<ToolResult> {
+  async execute(
+    content: string,
+    category: string = "general",
+  ): Promise<ToolResult> {
     /** Record a session note.
      *
      * Args:
@@ -177,7 +181,9 @@ export class RecallNoteTool extends Tool {
         });
       }
 
-      const notes = JSON.parse(fs.readFileSync(this.memoryFile, "utf-8")) as any[];
+      const notes = JSON.parse(
+        fs.readFileSync(this.memoryFile, "utf-8"),
+      ) as any[];
 
       if (!notes?.length) {
         return new ToolResult({
@@ -204,7 +210,9 @@ export class RecallNoteTool extends Tool {
         const timestamp = note?.timestamp ?? "unknown time";
         const cat = note?.category ?? "general";
         const noteContent = note?.content ?? "";
-        formatted.push(`${idx + 1}. [${cat}] ${noteContent}\n   (recorded at ${timestamp})`);
+        formatted.push(
+          `${idx + 1}. [${cat}] ${noteContent}\n   (recorded at ${timestamp})`,
+        );
       });
 
       const result = "Recorded Notes:\n" + formatted.join("\n");

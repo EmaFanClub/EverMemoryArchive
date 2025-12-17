@@ -116,7 +116,11 @@ export class ReadTool extends Tool {
     };
   }
 
-  async execute(pathInput: string, offset?: number | null, limit?: number | null): Promise<ToolResult> {
+  async execute(
+    pathInput: string,
+    offset?: number | null,
+    limit?: number | null,
+  ): Promise<ToolResult> {
     /** Execute read file. */
     try {
       const resolvedPath = path.isAbsolute(pathInput)
@@ -206,7 +210,8 @@ export class WriteTool extends Tool {
         },
         content: {
           type: "string",
-          description: "Complete content to write (will replace existing content)",
+          description:
+            "Complete content to write (will replace existing content)",
         },
       },
       required: ["path", "content"],
@@ -273,18 +278,24 @@ export class EditTool extends Tool {
         },
         old_str: {
           type: "string",
-          description: "Exact string to find and replace (must be unique in file)",
+          description:
+            "Exact string to find and replace (must be unique in file)",
         },
         new_str: {
           type: "string",
-          description: "Replacement string (use for refactoring, renaming, etc.)",
+          description:
+            "Replacement string (use for refactoring, renaming, etc.)",
         },
       },
       required: ["path", "old_str", "new_str"],
     };
   }
 
-  async execute(pathInput: string, oldStr: string, newStr: string): Promise<ToolResult> {
+  async execute(
+    pathInput: string,
+    oldStr: string,
+    newStr: string,
+  ): Promise<ToolResult> {
     /** Execute edit file. */
     try {
       const resolvedPath = path.isAbsolute(pathInput)

@@ -96,7 +96,9 @@ export class SkillLoader {
 
       // Required fields
       if (!frontmatter?.name || !frontmatter?.description) {
-        console.log(`⚠️  ${skillPath} missing required fields (name or description)`);
+        console.log(
+          `⚠️  ${skillPath} missing required fields (name or description)`,
+        );
         return null;
       }
 
@@ -113,8 +115,10 @@ export class SkillLoader {
         description: frontmatter.description as string,
         content: processedContent,
         license: (frontmatter.license as string | undefined) ?? null,
-        allowedTools: (frontmatter["allowed-tools"] as string[] | undefined) ?? null,
-        metadata: (frontmatter.metadata as Record<string, string> | undefined) ?? null,
+        allowedTools:
+          (frontmatter["allowed-tools"] as string[] | undefined) ?? null,
+        metadata:
+          (frontmatter.metadata as Record<string, string> | undefined) ?? null,
         skillPath,
       });
 
@@ -145,12 +149,18 @@ export class SkillLoader {
       return match;
     };
 
-    const patternDirs = /(python\s+|`)((?:scripts|examples|templates|reference)\/[^\s`\)]+)/g;
+    const patternDirs =
+      /(python\s+|`)((?:scripts|examples|templates|reference)\/[^\s`\)]+)/g;
     content = content.replace(patternDirs, replaceDirPath);
 
     // Pattern 2: Direct markdown/document references (forms.md, reference.md, etc.)
     // Matches phrases like "see reference.md" or "read forms.md"
-    const replaceDocPath = (match: string, prefix: string, filename: string, suffix: string) => {
+    const replaceDocPath = (
+      match: string,
+      prefix: string,
+      filename: string,
+      suffix: string,
+    ) => {
       const absPath = path.join(skillDir, filename);
       if (fs.existsSync(absPath)) {
         // Add helpful instruction for Agent
@@ -159,7 +169,8 @@ export class SkillLoader {
       return match;
     };
 
-    const patternDocs = /(see|read|refer to|check)\s+([a-zA-Z0-9_-]+\.(?:md|txt|json|yaml))([.,;\s])/gi;
+    const patternDocs =
+      /(see|read|refer to|check)\s+([a-zA-Z0-9_-]+\.(?:md|txt|json|yaml))([.,;\s])/gi;
     content = content.replace(patternDocs, replaceDocPath);
 
     // Pattern 3: Markdown links - supports multiple formats:
@@ -174,7 +185,9 @@ export class SkillLoader {
       filepath: string,
     ) => {
       // Remove leading ./ if present
-      const cleanPath = filepath.startsWith("./") ? filepath.slice(2) : filepath;
+      const cleanPath = filepath.startsWith("./")
+        ? filepath.slice(2)
+        : filepath;
 
       const absPath = path.join(skillDir, cleanPath);
       if (fs.existsSync(absPath)) {
@@ -262,8 +275,12 @@ export class SkillLoader {
     }
 
     const promptParts = ["## Available Skills\n"];
-    promptParts.push("You have access to specialized skills. Each skill provides expert guidance for specific tasks.\n");
-    promptParts.push("Load a skill's full content using the appropriate skill tool when needed.\n");
+    promptParts.push(
+      "You have access to specialized skills. Each skill provides expert guidance for specific tasks.\n",
+    );
+    promptParts.push(
+      "Load a skill's full content using the appropriate skill tool when needed.\n",
+    );
 
     // List all skills with their descriptions
     for (const skill of Object.values(this.loadedSkills)) {

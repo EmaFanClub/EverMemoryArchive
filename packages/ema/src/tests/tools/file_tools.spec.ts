@@ -6,7 +6,12 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, test, beforeEach, afterEach } from "vitest";
 
-import { ReadTool, WriteTool, EditTool, truncateTextByTokens } from "../../tools/file_tools";
+import {
+  ReadTool,
+  WriteTool,
+  EditTool,
+  truncateTextByTokens,
+} from "../../tools/file_tools";
 
 describe("File Tools", () => {
   let tempDir: string;
@@ -206,7 +211,8 @@ describe("File Tools", () => {
     test("should preserve indentation", async () => {
       console.log("\n=== Testing EditTool Indentation ===");
       const filePath = path.join(tempDir, "indent.txt");
-      const original = "    function test() {\n        console.log('test');\n    }";
+      const original =
+        "    function test() {\n        console.log('test');\n    }";
       await fsp.writeFile(filePath, original);
 
       const tool = new EditTool(tempDir);
