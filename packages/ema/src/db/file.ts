@@ -88,6 +88,9 @@ interface DatabaseSchema {
 /**
  * File-based database implementation
  * Stores data in a JSON file with atomic read/write operations
+ *
+ * TODO: Will there be any data race? Javascript is single-threaded
+ * so we are safe now but we may keep this in mind and fix this in future.
  */
 export class FileDB implements RoleDB {
   /**
