@@ -67,6 +67,14 @@ Both services are connected via the `evermindagent-network` bridge network, allo
 - MongoDB data is stored in the `mongodb_data` Docker volume
 - Application data is stored in `.data/local-instance` directory on the host
 
+### Volume Mounts
+
+The compose file mounts several directories for hot-reloading:
+- `packages/` - For source code changes
+- `node_modules/` - To share dependencies between host and container
+
+**Note:** If you experience performance issues with the `node_modules` mount (especially on Windows or macOS), you can comment out that line in `local.yml` and rebuild the container. The application will still work but you'll need to rebuild the image after dependency changes.
+
 ### Environment Variables
 
 The following environment variables are configured for the app service:
@@ -75,6 +83,8 @@ The following environment variables are configured for the app service:
 - `MONGODB_URI=mongodb://admin:password@mongodb:27017/evermindagent?authSource=admin`
 
 You can override these by creating a `.env` file or modifying the `local.yml` file.
+
+**Security Note:** The default MongoDB credentials (admin/password) are suitable for local development only. If you expose these services to a network or use this in production, make sure to change the credentials and use proper security measures.
 
 ### Troubleshooting
 
