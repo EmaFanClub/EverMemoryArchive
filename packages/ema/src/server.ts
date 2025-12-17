@@ -3,6 +3,8 @@ import type { Message } from "./schema";
 
 /**
  * The server class for the EverMindAgent.
+ * todo: document what specific env are read.
+ * todo: read all of the env in config.ts
  */
 export class Server {
   private llmClient: OpenAIClient;
