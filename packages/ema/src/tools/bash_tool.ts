@@ -133,14 +133,23 @@ class BackgroundShell {
   async terminate(): Promise<void> {
     /** Terminate the background process. */
     if (this.process.exitCode === null) {
-      this.process.kill();
+      this.process.kill("SIGTERM");
+
+      const exitPromise = new Promise<void>((resolve) => {
+        this.process.once("exit", () => resolve());
+      });
+
       try {
-        await delay(5000);
+        await Promise.race([
+          exitPromise,
+          delay(5000).then(() => {
+            throw new Error("Graceful termination timeout");
+          }),
+        ]);
       } catch {
-        // ignore
-      }
-      if (this.process.exitCode === null) {
-        this.process.kill("SIGKILL");
+        if (this.process.exitCode === null) {
+          this.process.kill("SIGKILL");
+        }
       }
     }
     this.status = "terminated";
