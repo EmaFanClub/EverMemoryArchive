@@ -13,7 +13,8 @@
     "build": "pnpm --filter ema-ui build",
     "build:main": "pnpm --filter ema build",
     "test:main": "pnpm --filter ema test",
-    "format": "prettier --write \"packages/**/*.{js,jsx,ts,tsx,json,css}\""
+    "format": "prettier --write \"packages/**/*.{js,jsx,ts,tsx,json,css}\"",
+    "format:check": "prettier --check \"packages/**/*.{js,jsx,ts,tsx,json,css}\""
   },
   "keywords": [],
   "packageManager": "pnpm@10.16.1",
