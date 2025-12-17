@@ -20,6 +20,10 @@
   "packageManager": "pnpm@10.16.1",
   "dependencies": {},
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@dqbd/tiktoken": "^1.0.15",
+    "js-yaml": "^4.1.0",
+    "@types/js-yaml": "^4.0.9",
     "prettier": "^3.7.4",
     "@types/node": "^20.11.17",
     "tsx": "^4.7.1",
