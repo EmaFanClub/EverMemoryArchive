@@ -77,7 +77,7 @@ export class OpenAIClient extends LLMClientBase {
       // todo: Platforms' behaviors vary. For example, Minimax requires a extra_body={"reasoning_split": True} and use reasoning_details. Ollama use reasoning.
       // Enable reasoning_split to separate thinking content
       //@ts-ignore
-      reasoning_split: true,
+      // reasoning_split: true,
     });
   }
 
