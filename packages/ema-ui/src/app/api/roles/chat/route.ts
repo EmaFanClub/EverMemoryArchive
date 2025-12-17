@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     if (messages.length === 0) {
       return new Response(
         JSON.stringify({
-          error: "messages must be not empty",
+          error: "messages must not be empty",
         }),
         {
           status: 400,
