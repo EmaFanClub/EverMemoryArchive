@@ -115,13 +115,13 @@ export class Server {
    * Exposed as `POST /api/roles` for create and `PUT /api/roles` for update.
    *
    * @param roleData - The role data to create or update
-   * @returns Promise<void>
+   * @returns Promise<string> The ID of the created or updated role
    *
    * @example
    * // Example usage:
    * await server.upsertRole({ id: "role1", name: "Test Role", description: "A test role" });
    */
-  async upsertRole(roleData: RoleData): Promise<void> {
+  async upsertRole(roleData: RoleData): Promise<string> {
     // Set createTime if not provided (for new roles)
     if (!roleData.createTime) {
       roleData.createTime = Date.now();
@@ -132,7 +132,7 @@ export class Server {
   /**
    * Deletes a role (soft delete).
    *
-   * Exposed as `DELETE /api/roles?id={roleId}`.
+   * Exposed as `DELETE /api/roles`.
    *
    * @param roleId - The unique identifier for the role to delete
    * @returns Promise<boolean> True if deleted, false if not found

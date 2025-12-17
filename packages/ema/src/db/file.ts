@@ -87,6 +87,7 @@ export class MemFs implements Fs {
  * Database structure stored in JSON file
  */
 interface DatabaseSchema {
+  roleIdCounter: number;
   roles?: Record<string, RoleData>;
 }
 
@@ -116,10 +117,13 @@ export class FileDB implements RoleDB {
   private async readDb(): Promise<DatabaseSchema> {
     const content = await this.fs.read(this.dbPath);
     try {
-      return JSON.parse(content) as DatabaseSchema;
+      const result = JSON.parse(content) as DatabaseSchema;
+      result.roleIdCounter ??= 0;
+      result.roles ??= {};
+      return result;
     } catch (error) {
       console.error(`Failed to parse database file ${this.dbPath}: ${error}`);
-      const emptyDb: DatabaseSchema = { roles: {} };
+      const emptyDb: DatabaseSchema = { roleIdCounter: 0, roles: {} };
       console.warn(
         `Resetting database file ${this.dbPath} to an empty state due to parse failure.`,
       );
@@ -153,13 +157,17 @@ export class FileDB implements RoleDB {
     return role;
   }
 
-  async upsertRole(roleData: RoleData): Promise<void> {
+  async upsertRole(roleData: RoleData): Promise<string> {
     const db = await this.readDb();
     if (!db.roles) {
       db.roles = {};
     }
+    if (!roleData.id) {
+      roleData.id = `${db.roleIdCounter++}`;
+    }
     db.roles[roleData.id] = roleData;
     await this.writeDb(db);
+    return roleData.id;
   }
 
   async deleteRole(roleId: string): Promise<boolean> {

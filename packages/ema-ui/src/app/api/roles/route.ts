@@ -6,9 +6,9 @@
 import { getServer } from "../shared-server";
 
 /**
- * GET /api/roles - List all roles or get a specific role
+ * GET /api/roles - Get a specific role
  * Query params:
- *   - id: (optional) Role ID to fetch a specific role
+ *   - id: Role ID to fetch a specific role
  */
 export async function GET(request: Request) {
   try {
@@ -16,32 +16,34 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const roleId = url.searchParams.get("id");
 
-    if (roleId) {
-      // Get specific role
-      const role = await server.getRole(roleId);
-      if (!role) {
-        return new Response(
-          JSON.stringify({
-            error: "Role not found",
-          }),
-          {
-            status: 404,
-            headers: { "Content-Type": "application/json" },
-          },
-        );
-      }
-      return new Response(JSON.stringify(role), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    } else {
-      // List all roles
-      const roles = await server.listRoles();
-      return new Response(JSON.stringify(roles), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!roleId) {
+      return new Response(
+        JSON.stringify({
+          error: "Role id is required",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
+    // Get specific role
+    const role = await server.getRole(roleId);
+    if (!role) {
+      return new Response(
+        JSON.stringify({
+          error: "Role not found",
+        }),
+        {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+    return new Response(JSON.stringify(role), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (error) {
     return new Response(
       JSON.stringify({
@@ -66,26 +68,12 @@ export async function POST(request: Request) {
   try {
     const server = getServer();
     const body = await request.json();
-
-    // Validate required fields
-    if (!body.id) {
-      return new Response(
-        JSON.stringify({
-          error: "Role id is required",
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    await server.upsertRole(body);
+    const id = await server.upsertRole(body);
 
     return new Response(
       JSON.stringify({
         message: "Role created successfully",
-        id: body.id,
+        id,
       }),
       {
         status: 201,
@@ -141,12 +129,12 @@ export async function PUT(request: Request) {
       );
     }
 
-    await server.upsertRole(body);
+    const id = await server.upsertRole(body);
 
     return new Response(
       JSON.stringify({
         message: "Role updated successfully",
-        id: body.id,
+        id,
       }),
       {
         status: 200,
@@ -174,8 +162,8 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const server = getServer();
-    const url = new URL(request.url);
-    const roleId = url.searchParams.get("id");
+    const body = await request.json();
+    const roleId = body.id;
 
     if (!roleId) {
       return new Response(
