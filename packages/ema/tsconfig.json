@@ -5,8 +5,9 @@
     "moduleResolution": "bundler",
     "strict": true,
     "verbatimModuleSyntax": true,
+    "experimentalDecorators": true,
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": ["vitest/globals", "node"],
     "outDir": "./dist"
   },
   "include": ["src/**/*"],

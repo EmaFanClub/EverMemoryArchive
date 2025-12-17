@@ -57,20 +57,20 @@ export interface Message {
   /**
    * Extended thinking content for assistant messages.
    */
-  thinking: string | null;
+  thinking?: string;
   /**
    * Tool calls.
    */
-  tool_calls: ToolCall[] | null;
+  tool_calls?: ToolCall[];
 
   /**
    * Tool call ID.
    */
-  tool_call_id: string | null;
+  tool_call_id?: string;
   /**
    * For tool role.
    */
-  name: string | null;
+  name?: string;
 }
 
 /**
@@ -102,11 +102,11 @@ export interface LLMResponse {
   /**
    * Extended thinking blocks.
    */
-  thinking: string | null;
+  thinking?: string;
   /**
    * Tool calls.
    */
-  tool_calls: ToolCall[] | null;
+  tool_calls?: ToolCall[];
   /**
    * Finish reason.
    */
@@ -114,5 +114,5 @@ export interface LLMResponse {
   /**
    * Token usage from API response.
    */
-  usage: TokenUsage | null;
+  usage?: TokenUsage;
 }

@@ -28,7 +28,8 @@
   ],
   "dependencies": {
     "dotenv": "^17.2.3",
-    "openai": "^6.13.0"
+    "openai": "^6.13.0",
+    "undici": "^7.16.0"
   },
   "scripts": {
     "build": "tsc",
