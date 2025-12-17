@@ -1,7 +1,6 @@
-import { expect, test, describe, beforeEach, afterEach } from "vitest";
-import { FileDB, MemFs, RealFs } from "./file";
+import { expect, test, describe, beforeEach } from "vitest";
+import { FileDB, MemFs } from "./file";
 import type { RoleData } from "./base";
-import { unlink } from "node:fs/promises";
 
 describe("MemFs", () => {
   test("should read empty object when file doesn't exist", async () => {
