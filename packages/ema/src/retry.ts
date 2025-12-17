@@ -35,7 +35,7 @@ export class RetryConfig {
     /**
      * Tuple of retryable exception types
      */
-    public retryableExceptions: Array<typeof Error> = [Error]
+    public retryableExceptions: Array<typeof Error> = [Error],
   ) {}
 
   /**
@@ -56,7 +56,7 @@ export class RetryExhaustedError extends Error {
 
   constructor(lastException: Error, attempts: number) {
     super(
-      `Retry failed after ${attempts} attempts. Last error: ${lastException.message}`
+      `Retry failed after ${attempts} attempts. Last error: ${lastException.message}`,
     );
     this.name = "RetryExhaustedError";
     this.lastException = lastException;
@@ -75,11 +75,11 @@ export function asyncRetry(
   /**
    * Callback function on retry, receives exception and current attempt number
    */
-  onRetry?: (exception: Error, attempt: number) => void
+  onRetry?: (exception: Error, attempt: number) => void,
 ): (
   target: any,
   propertyKey: string,
-  descriptor: PropertyDescriptor
+  descriptor: PropertyDescriptor,
 ) => PropertyDescriptor {
   return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
     const originalMethod = descriptor.value;
@@ -92,13 +92,13 @@ export function asyncRetry(
           lastException = exception as Error;
           if (attempt >= config.maxRetries) {
             console.error(
-              `Function ${propertyKey} retry failed, reached maximum retry count ${config.maxRetries}`
+              `Function ${propertyKey} retry failed, reached maximum retry count ${config.maxRetries}`,
             );
             throw new RetryExhaustedError(lastException, attempt + 1);
           }
           const delay = config.calculateDelay(attempt);
           console.warn(
-            `Function ${propertyKey} call ${attempt + 1} failed: ${lastException.message}, retrying attempt ${attempt + 2} after ${delay.toFixed(2)} seconds`
+            `Function ${propertyKey} call ${attempt + 1} failed: ${lastException.message}, retrying attempt ${attempt + 2} after ${delay.toFixed(2)} seconds`,
           );
           // Call callback function
           if (onRetry) {

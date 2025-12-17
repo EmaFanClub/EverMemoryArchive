@@ -13,7 +13,7 @@ describe("OpenAI", () => {
       apiKey,
       "https://generativelanguage.googleapis.com/v1beta/openai/",
       // gemini model
-      "gemini-2.5-flash"
+      "gemini-2.5-flash",
     );
 
     const messages = [

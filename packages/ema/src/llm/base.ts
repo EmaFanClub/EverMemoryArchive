@@ -35,7 +35,7 @@ export abstract class LLMClientBase {
     /**
      * Optional retry configuration
      */
-    protected readonly retryConfig: RetryConfig = new RetryConfig()
+    protected readonly retryConfig: RetryConfig = new RetryConfig(),
   ) {}
 
   /**
@@ -56,7 +56,7 @@ export abstract class LLMClientBase {
    */
   abstract _prepareRequest(
     messages: Message[],
-    tools?: Tool[]
+    tools?: Tool[],
   ): Record<string, unknown>;
 
   /**
@@ -66,6 +66,6 @@ export abstract class LLMClientBase {
    * @returns Tuple of (system_message, api_messages)
    */
   abstract _convertMessages(
-    messages: Message[]
+    messages: Message[],
   ): [string | undefined, Record<string, unknown>[]];
 }
