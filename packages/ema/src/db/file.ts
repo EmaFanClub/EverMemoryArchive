@@ -114,7 +114,12 @@ export class FileDB implements RoleDB {
       return JSON.parse(content) as DatabaseSchema;
     } catch (error) {
       console.error(`Failed to parse database file ${this.dbPath}: ${error}`);
-      return {};
+      const emptyDb: DatabaseSchema = { roles: {} };
+      console.warn(
+        `Resetting database file ${this.dbPath} to an empty state due to parse failure.`,
+      );
+      await this.writeDb(emptyDb);
+      return emptyDb;
     }
   }
 
