@@ -300,7 +300,7 @@ Examples:
             "Optional: Timeout in seconds (default: 120, max: 600). Only applies to foreground commands.",
           default: 120,
         },
-        runInBackground: {
+        run_in_background: {
           type: "boolean",
           description:
             "Optional: Set to true to run the command in the background. Use this for long-running commands like servers. You can monitor output using bash_output tool.",
@@ -482,18 +482,18 @@ export class BashOutputTool extends Tool {
     return {
       type: "object",
       properties: {
-        bashId: {
+        bash_id: {
           type: "string",
           description:
             "The ID of the background shell to retrieve output from. Shell IDs are returned when starting a command with run_in_background=true.",
         },
-        filterStr: {
+        filter_str: {
           type: "string",
           description:
             "Optional regular expression to filter the output lines. Only lines matching this regex will be included in the result. Any lines that do not match will no longer be available to read.",
         },
       },
-      required: ["bashId"],
+      required: ["bash_id"],
     };
   }
 
@@ -566,13 +566,13 @@ export class BashKillTool extends Tool {
     return {
       type: "object",
       properties: {
-        bashId: {
+        bash_id: {
           type: "string",
           description:
             "The ID of the background shell to terminate. Shell IDs are returned when starting a command with run_in_background=true.",
         },
       },
-      required: ["bashId"],
+      required: ["bash_id"],
     };
   }
 

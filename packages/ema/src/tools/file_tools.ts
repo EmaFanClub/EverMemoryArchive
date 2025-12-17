@@ -271,16 +271,16 @@ export class EditTool extends Tool {
           type: "string",
           description: "Absolute or relative path to the file",
         },
-        oldStr: {
+        old_str: {
           type: "string",
           description: "Exact string to find and replace (must be unique in file)",
         },
-        newStr: {
+        new_str: {
           type: "string",
           description: "Replacement string (use for refactoring, renaming, etc.)",
         },
       },
-      required: ["path", "oldStr", "newStr"],
+      required: ["path", "old_str", "new_str"],
     };
   }
 
