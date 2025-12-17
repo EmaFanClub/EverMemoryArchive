@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { BashTool } from '../src/tools/bash_tool';
+import { BashTool } from '../../tools/bash_tool';
 
 describe('BashTool', () => {
   let bashTool: BashTool;

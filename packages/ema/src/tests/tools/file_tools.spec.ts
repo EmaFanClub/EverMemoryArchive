@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, test, beforeEach, afterEach } from "vitest";
 
-import { ReadTool, WriteTool, EditTool, truncateTextByTokens } from "../src/tools/file_tools";
+import { ReadTool, WriteTool, EditTool, truncateTextByTokens } from "../../tools/file_tools";
 
 describe("File Tools", () => {
   let tempDir: string;

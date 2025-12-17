@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SessionNoteTool, RecallNoteTool } from '../src/tools/note_tool';
+import { SessionNoteTool, RecallNoteTool } from '../../tools/note_tool';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 

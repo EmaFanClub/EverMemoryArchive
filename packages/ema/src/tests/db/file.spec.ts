@@ -1,6 +1,6 @@
 import { expect, test, describe, beforeEach } from "vitest";
-import { FileDB, MemFs } from "./file";
-import type { RoleData } from "./base";
+import { FileDB, MemFs } from "../../db/file";
+import type { RoleData } from "../../db/base";
 
 describe("MemFs", () => {
   test("should read empty object when file doesn't exist", async () => {
