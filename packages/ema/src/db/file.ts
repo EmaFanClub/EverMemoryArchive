@@ -102,13 +102,15 @@ export class FileDB implements RoleDB {
 
   /**
    * Reads the database file atomically
+   * todo: db migration
    * @returns Promise resolving to the database schema
    */
   private async readDb(): Promise<DatabaseSchema> {
     const content = await this.fs.read(this.dbPath);
     try {
       return JSON.parse(content) as DatabaseSchema;
-    } catch {
+    } catch (error) {
+      console.error(`Failed to parse database file ${this.dbPath}: ${error}`);
       return {};
     }
   }
