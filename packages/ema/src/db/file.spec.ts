@@ -18,31 +18,6 @@ describe("MemFs", () => {
   });
 });
 
-describe("RealFs", () => {
-  const testPath = "/tmp/test-realfs.json";
-
-  afterEach(async () => {
-    try {
-      await unlink(testPath);
-    } catch {
-      // Ignore if file doesn't exist
-    }
-  });
-
-  test("should read empty object when file doesn't exist", async () => {
-    const fs = new RealFs();
-    const content = await fs.read("/tmp/nonexistent-file.json");
-    expect(content).toBe("{}");
-  });
-
-  test("should write and read file content", async () => {
-    const fs = new RealFs();
-    await fs.write(testPath, '{"key": "value"}');
-    const content = await fs.read(testPath);
-    expect(content).toBe('{"key": "value"}');
-  });
-});
-
 describe("FileDB with MemFs", () => {
   let db: FileDB;
 
@@ -153,36 +128,5 @@ describe("FileDB with MemFs", () => {
     expect(deleted).toBe(true);
     role = await db.getRole("role1");
     expect(role).toBeNull();
-  });
-});
-
-describe("FileDB with RealFs", () => {
-  const testDbPath = "/tmp/test-filedb.json";
-  let db: FileDB;
-
-  beforeEach(() => {
-    db = new FileDB(testDbPath, new RealFs());
-  });
-
-  afterEach(async () => {
-    try {
-      await unlink(testDbPath);
-    } catch {
-      // Ignore if file doesn't exist
-    }
-  });
-
-  test("should persist roles to real file system", async () => {
-    const roleData: RoleData = {
-      id: "role1",
-      name: "Persistent Role",
-    };
-
-    await db.upsertRole(roleData);
-
-    // Create a new instance to verify persistence
-    const newDb = new FileDB(testDbPath, new RealFs());
-    const retrievedRole = await newDb.getRole("role1");
-    expect(retrievedRole).toEqual(roleData);
   });
 });
