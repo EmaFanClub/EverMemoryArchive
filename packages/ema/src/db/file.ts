@@ -3,9 +3,10 @@
  * Provides both real file system and in-memory file system implementations.
  */
 
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { RoleDB, RoleData } from "./base";
+import tmp from "tmp";
 
 /**
  * File system interface for reading and writing files
@@ -46,7 +47,10 @@ export class RealFs implements Fs {
   async write(path: string, content: string): Promise<void> {
     const dir = dirname(path);
     await mkdir(dir, { recursive: true });
-    await writeFile(path, content, "utf-8");
+    const tempFile = tmp.fileSync();
+    await writeFile(tempFile.name, content, "utf-8");
+    await rename(tempFile.name, path);
+    tempFile.removeCallback();
   }
 }
 
@@ -85,7 +89,7 @@ export class FileDB implements RoleDB {
    */
   constructor(
     private readonly dbPath: string = ".data/db.json",
-    private readonly fs: Fs = new RealFs(),
+    private readonly fs: Fs = new RealFs()
   ) {}
 
   /**

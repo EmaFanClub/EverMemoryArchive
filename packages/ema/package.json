@@ -29,10 +29,14 @@
   "dependencies": {
     "dotenv": "^17.2.3",
     "openai": "^6.13.0",
+    "tmp": "^0.2.5",
     "undici": "^7.16.0"
   },
   "scripts": {
     "build": "tsc",
     "test": "vitest"
+  },
+  "devDependencies": {
+    "@types/tmp": "^0.2.6"
   }
 }
