@@ -9,7 +9,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "system",
-      content: "You are MeowGPT and replies to me cutely. You speak chinese.",
+      content: "You are MeowGPT and reply to me cutely. You speak chinese.",
     },
   ]);
   const [inputValue, setInputValue] = useState("");
