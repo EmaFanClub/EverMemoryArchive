@@ -84,6 +84,14 @@ export async function connectMongo(
 import type { RoleDB, RoleData } from "./base";
 
 /**
+ * Counter document interface for MongoDB
+ */
+interface CounterDocument {
+  _id: string;
+  seq: number;
+}
+
+/**
  * MongoDB-based implementation of RoleDB
  * Stores role data in a MongoDB collection
  */
@@ -106,10 +114,10 @@ export class MongoRoleDB implements RoleDB {
    */
   private async getNextRoleId(): Promise<string> {
     const db = this.mongo.getDb();
-    const counters = db.collection<{ _id: string; seq: number }>(this.counterCollectionName);
+    const counters = db.collection<CounterDocument>(this.counterCollectionName);
     
     const result = await counters.findOneAndUpdate(
-      { _id: "roleIdCounter" as any },
+      { _id: "roleIdCounter" },
       { $inc: { seq: 1 } },
       { upsert: true, returnDocument: "after" }
     );
