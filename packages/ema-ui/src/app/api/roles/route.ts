@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     if (!roleId) {
       return new Response(
         JSON.stringify({
-          error: "Role id is required",
+          error: "Role id is required as a query parameter (?id=...)",
         }),
         {
           status: 400,
