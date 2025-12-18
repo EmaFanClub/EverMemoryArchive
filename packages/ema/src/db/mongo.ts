@@ -33,3 +33,22 @@ export interface Mongo {
    */
   close(): Promise<void>;
 }
+
+/**
+ * Connects to the MongoDB database
+ * @param uri - MongoDB connection string
+ * @param dbName - MongoDB database name
+ * @param kind - MongoDB implementation kind
+ * @returns Promise resolving to the MongoDB instance
+ */
+export async function connectMongo(
+  uri: string,
+  dbName: string,
+  kind: "memory" | "remote",
+): Promise<Mongo> {
+  const impl =
+    kind === "memory"
+      ? (await import("./mongo/memory")).MemoryMongo
+      : (await import("./mongo/remote")).RemoteMongo;
+  return new impl(uri, dbName);
+}

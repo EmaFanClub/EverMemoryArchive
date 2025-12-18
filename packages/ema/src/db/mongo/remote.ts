@@ -7,10 +7,10 @@ import { MongoClient, type Db } from "mongodb";
 import type { Mongo } from "../mongo";
 
 /**
- * Real MongoDB implementation
+ * Remote MongoDB implementation
  * Connects to an actual MongoDB instance for production environments
  */
-export class RealMongo implements Mongo {
+export class RemoteMongo implements Mongo {
   private client?: MongoClient;
   private db?: Db;
   private readonly uri: string;
