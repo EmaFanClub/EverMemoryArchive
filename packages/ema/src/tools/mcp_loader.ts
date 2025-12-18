@@ -3,6 +3,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { Client } from "@modelcontextprotocol/sdk/client";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
 import { Tool, ToolResult } from "./base";
 
 /** Wrapper for MCP tools. */
@@ -51,7 +54,7 @@ export class MCPTool extends Tool {
           if ("text" in item) {
             contentParts.push(item.text);
           } else {
-            contentParts.push(String(item));
+            contentParts.push(item.toString());
           }
         }
       }
@@ -102,25 +105,6 @@ class MCPServerConnection {
   async connect(): Promise<boolean> {
     /** Connect to the MCP server using proper async context management. */
     try {
-      // Lazy import to avoid loading unless needed
-      // Using "any" to avoid tight coupling to SDK types; adjust if SDK types change.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const sdk = require("@modelcontextprotocol/sdk");
-
-      const StdioClientTransport =
-        sdk.StdioClientTransport ??
-        sdk.StdioTransport ??
-        sdk.StdioServerTransport ??
-        sdk.stdioClient ??
-        sdk.stdio_client;
-      const Client = sdk.Client ?? sdk.ClientSession ?? sdk.McpClient;
-
-      if (!StdioClientTransport || !Client) {
-        throw new Error(
-          "MCP SDK missing required client transport/session exports",
-        );
-      }
-
       // Prepare transport
       const transport = new StdioClientTransport({
         command: this.command,
@@ -128,7 +112,7 @@ class MCPServerConnection {
         env: Object.keys(this.env).length ? this.env : undefined,
       });
 
-      const session = new Client({
+      const session = new (Client as any)({
         transport,
       });
 
@@ -221,13 +205,15 @@ export async function loadMcpToolsAsync(
    */
   const configFile = path.resolve(configPath);
 
-  if (!fs.existsSync(configFile)) {
+  try {
+    await fs.promises.access(configFile);
+  } catch {
     console.log(`MCP config not found: ${configPath}`);
     return [];
   }
 
   try {
-    const rawConfig = fs.readFileSync(configFile, "utf-8");
+    const rawConfig = await fs.promises.readFile(configFile, "utf-8");
     const config = JSON.parse(rawConfig);
 
     const mcpServers = config?.mcpServers ?? {};
