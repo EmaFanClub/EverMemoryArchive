@@ -1,7 +1,7 @@
 import { OpenAIClient } from "./llm/openai_client";
 import type { Message } from "./schema";
-import { FileDB } from "./db/file";
-import type { RoleData } from "./db/base";
+import { connectMongo, MongoRoleDB } from "./db/mongo";
+import type { RoleData, RoleDB } from "./db/base";
 
 /**
  * The server class for the EverMindAgent.
@@ -10,7 +10,8 @@ import type { RoleData } from "./db/base";
  */
 export class Server {
   private llmClient: OpenAIClient;
-  private roleDB: FileDB;
+  private roleDB!: RoleDB;
+  private initialized: Promise<void>;
 
   constructor() {
     // Initialize OpenAI client with environment variables or defaults
@@ -29,7 +30,34 @@ export class Server {
     }
 
     this.llmClient = new OpenAIClient(apiKey, apiBase, model);
-    this.roleDB = new FileDB();
+    
+    // Initialize MongoDB asynchronously
+    // Use environment variables or defaults for MongoDB connection
+    const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
+    const mongoDbName = process.env.MONGO_DB_NAME || "ema";
+    const mongoKind = (process.env.MONGO_KIND as "memory" | "remote") || "remote";
+    
+    this.initialized = this.initializeDb(mongoUri, mongoDbName, mongoKind);
+  }
+
+  /**
+   * Initializes the MongoDB connection
+   * @param uri - MongoDB connection string
+   * @param dbName - MongoDB database name
+   * @param kind - MongoDB implementation kind (memory or remote)
+   */
+  private async initializeDb(uri: string, dbName: string, kind: "memory" | "remote"): Promise<void> {
+    const mongo = await connectMongo(uri, dbName, kind);
+    await mongo.connect();
+    this.roleDB = new MongoRoleDB(mongo);
+  }
+
+  /**
+   * Ensures the database is initialized before performing operations
+   * @returns Promise that resolves when initialization is complete
+   */
+  private async ensureInitialized(): Promise<void> {
+    await this.initialized;
   }
 
   /**
@@ -89,6 +117,7 @@ export class Server {
    * console.log(roles);
    */
   async listRoles(): Promise<RoleData[]> {
+    await this.ensureInitialized();
     return this.roleDB.listRoles();
   }
 
@@ -106,6 +135,7 @@ export class Server {
    * console.log(role);
    */
   async getRole(roleId: string): Promise<RoleData | null> {
+    await this.ensureInitialized();
     return this.roleDB.getRole(roleId);
   }
 
@@ -122,6 +152,7 @@ export class Server {
    * await server.upsertRole({ id: "role1", name: "Test Role", description: "A test role" });
    */
   async upsertRole(roleData: RoleData): Promise<string> {
+    await this.ensureInitialized();
     // Set createTime if not provided (for new roles)
     if (!roleData.createTime) {
       roleData.createTime = Date.now();
@@ -143,6 +174,7 @@ export class Server {
    * console.log(deleted);
    */
   async deleteRole(roleId: string): Promise<boolean> {
+    await this.ensureInitialized();
     return this.roleDB.deleteRole(roleId);
   }
 }
