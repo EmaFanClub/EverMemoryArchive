@@ -21,7 +21,7 @@ export class MemoryMongo implements Mongo {
    * Creates a new MemoryMongo instance
    * @param dbName - Name of the database (default: test)
    */
-  constructor(dbName: string = "test") {
+  constructor({ dbName }: { dbName: string }) {
     this.dbName = dbName;
   }
 

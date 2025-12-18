@@ -4,7 +4,7 @@
  */
 
 import { MongoClient, type Db } from "mongodb";
-import type { Mongo } from "../mongo";
+import type { CreateMongoArgs, Mongo } from "../mongo";
 
 /**
  * Remote MongoDB implementation
@@ -19,14 +19,11 @@ export class RemoteMongo implements Mongo {
   /**
    * Creates a new RemoteMongo instance
    * @param uri - MongoDB connection string (default: mongodb://localhost:27017)
-   * @param dbName - Name of the database (default: evermindagent)
+   * @param dbName - Name of the database (default: ema)
    */
-  constructor(
-    uri: string = "mongodb://localhost:27017",
-    dbName: string = "evermindagent",
-  ) {
-    this.uri = uri;
-    this.dbName = dbName;
+  constructor({ uri, dbName }: CreateMongoArgs) {
+    this.uri = uri || "mongodb://localhost:27017";
+    this.dbName = dbName || "ema";
   }
 
   /**

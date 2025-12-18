@@ -6,7 +6,35 @@
 import type { Db, MongoClient } from "mongodb";
 
 /**
- * Interface for MongoDB operations
+ * Arguments for creating a MongoDB instance
+ */
+export interface CreateMongoArgs {
+  /**
+   * MongoDB connection string
+   * @default "mongodb://localhost:27017"
+   */
+  uri: string;
+  /**
+   * MongoDB database name
+   * @default "ema"
+   */
+  dbName: string;
+}
+
+/**
+ * MongoDB provider interface
+ */
+export interface MongoProvider {
+  /**
+   * Creates a new MongoDB instance
+   * @param args - Arguments for creating a MongoDB instance
+   * @returns The MongoDB instance
+   */
+  new (args: CreateMongoArgs): Mongo;
+}
+
+/**
+ * A mongo database instance
  */
 export interface Mongo {
   /**
@@ -46,9 +74,9 @@ export async function connectMongo(
   dbName: string,
   kind: "memory" | "remote",
 ): Promise<Mongo> {
-  const impl =
+  const impl: MongoProvider =
     kind === "memory"
       ? (await import("./mongo/memory")).MemoryMongo
       : (await import("./mongo/remote")).RemoteMongo;
-  return new impl(uri, dbName);
+  return new impl({ uri, dbName });
 }
