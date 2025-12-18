@@ -1,0 +1,84 @@
+/**
+ * In-memory MongoDB implementation for development and testing.
+ * Uses mongodb-memory-server to provide a MongoDB instance in memory.
+ */
+
+import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoClient, type Db } from "mongodb";
+import type { Mongo } from "../mongo";
+
+/**
+ * In-memory MongoDB implementation
+ * Uses mongodb-memory-server for development and testing environments
+ */
+export class MemoryMongo implements Mongo {
+  private mongoServer?: MongoMemoryServer;
+  private client?: MongoClient;
+  private db?: Db;
+  private readonly dbName: string;
+
+  /**
+   * Creates a new MemoryMongo instance
+   * @param dbName - Name of the database (default: test)
+   */
+  constructor(dbName: string = "test") {
+    this.dbName = dbName;
+  }
+
+  /**
+   * Connects to the in-memory MongoDB instance
+   * Creates a new MongoMemoryServer if not already started
+   * @returns Promise resolving when connection is established
+   */
+  async connect(): Promise<void> {
+    if (this.client) {
+      return;
+    }
+
+    this.mongoServer = await MongoMemoryServer.create();
+    const uri = this.mongoServer.getUri();
+    this.client = new MongoClient(uri);
+    await this.client.connect();
+    this.db = this.client.db(this.dbName);
+  }
+
+  /**
+   * Gets the MongoDB database instance
+   * @returns The MongoDB database instance
+   * @throws Error if not connected
+   */
+  getDb(): Db {
+    if (!this.db) {
+      throw new Error("MongoDB not connected. Call connect() first.");
+    }
+    return this.db;
+  }
+
+  /**
+   * Gets the MongoDB client instance
+   * @returns The MongoDB client instance
+   * @throws Error if not connected
+   */
+  getClient(): MongoClient {
+    if (!this.client) {
+      throw new Error("MongoDB not connected. Call connect() first.");
+    }
+    return this.client;
+  }
+
+  /**
+   * Closes the MongoDB connection and stops the in-memory server
+   * @returns Promise resolving when connection is closed and server is stopped
+   */
+  async close(): Promise<void> {
+    if (this.client) {
+      await this.client.close();
+      this.client = undefined;
+      this.db = undefined;
+    }
+    if (this.mongoServer) {
+      await this.mongoServer.stop();
+      this.mongoServer = undefined;
+    }
+  }
+}

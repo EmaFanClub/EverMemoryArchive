@@ -29,6 +29,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
     "dotenv": "^17.2.3",
+    "mongodb": "^7.0.0",
+    "mongodb-memory-server": "^11.0.0",
     "openai": "^6.13.0",
     "tmp": "^0.2.5",
     "undici": "^7.16.0"
