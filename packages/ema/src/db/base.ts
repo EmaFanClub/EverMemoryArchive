@@ -36,7 +36,7 @@ export interface Entity {
 }
 
 /**
- * Unix timestamp in microseconds
+ * Unix timestamp in microseconds since the Unix epoch
  */
 export type DbDate = number;
 
@@ -154,10 +154,6 @@ export interface UserEntity extends Entity {
    * The email of the user
    */
   email: string;
-  /**
-   * The password of the user
-   */
-  password: string;
   /**
    * The date and time the user was created
    */
@@ -345,9 +341,9 @@ export interface ConversationMessageDB {
   ): Promise<ConversationMessageEntity[]>;
 
   /**
-   * gets a conversation history by id
+   * gets a conversation message by id
    * @param id - The unique identifier for the conversation message
-   * @returns Promise resolving to the conversation history data or null if not found
+   * @returns Promise resolving to the conversation message data or null if not found
    */
   getConversationMessage(id: string): Promise<ConversationMessageEntity | null>;
 
@@ -434,11 +430,11 @@ export interface ListShortTermMemoriesRequest {
    */
   actorId?: string;
   /**
-   * The date and time to filter short term memories by
+   * Filter short term memories created before the given date and time
    */
   createdBefore?: DbDate;
   /**
-   * The date and time to filter short term memories by
+   * Filter short term memories created after the given date and time
    */
   createdAfter?: DbDate;
 }
@@ -512,11 +508,11 @@ export interface ListLongTermMemoriesRequest {
    */
   actorId?: string;
   /**
-   * The date and time to filter short term memories by
+   * Filter long term memories created before the given date and time
    */
   createdBefore?: DbDate;
   /**
-   * The date and time to filter short term memories by
+   * Filter long term memories created after the given date and time
    */
   createdAfter?: DbDate;
 }
