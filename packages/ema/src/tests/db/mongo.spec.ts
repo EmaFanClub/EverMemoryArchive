@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
-import { connectMongo, MongoRoleDB } from "../../db/mongo";
+import { createMongo, MongoRoleDB } from "../../db/mongo";
 import type { RoleData } from "../../db/base";
 import type { Mongo } from "../../db/mongo";
 
@@ -9,7 +9,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
 
   beforeEach(async () => {
     // Create in-memory MongoDB instance for testing
-    mongo = await connectMongo("", "test", "memory");
+    mongo = await createMongo("", "test", "memory");
     await mongo.connect();
     db = new MongoRoleDB(mongo);
   });
@@ -32,7 +32,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     };
 
     const id = await db.upsertRole(roleData);
-    expect(id).toBe("0");
+    expect(id).toBe(1);
     const retrievedRole = await db.getRole(id);
     expect(retrievedRole).toEqual(roleData);
   });
@@ -45,7 +45,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     };
 
     const id = await db.upsertRole(roleData);
-    expect(id).toBe("0");
+    expect(id).toBe(1);
 
     const updatedRole: RoleData = {
       id,
@@ -67,7 +67,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     };
 
     const id = await db.upsertRole(roleData);
-    expect(id).toBe("0");
+    expect(id).toBe(1);
     const deleted = await db.deleteRole(id);
     expect(deleted).toBe(true);
 
@@ -77,7 +77,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   });
 
   test("should return false when deleting non-existent role", async () => {
-    const deleted = await db.deleteRole("nonexistent");
+    const deleted = await db.deleteRole(123);
     expect(deleted).toBe(false);
   });
 
@@ -89,7 +89,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     };
 
     const id = await db.upsertRole(roleData);
-    expect(id).toBe("0");
+    expect(id).toBe(1);
     const deleted1 = await db.deleteRole(id);
     expect(deleted1).toBe(true);
 
@@ -116,11 +116,11 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     };
 
     const id1 = await db.upsertRole(role1);
-    expect(id1).toBe("0");
+    expect(id1).toBe(1);
     const id2 = await db.upsertRole(role2);
-    expect(id2).toBe("1");
+    expect(id2).toBe(2);
     const id3 = await db.upsertRole(role3);
-    expect(id3).toBe("2");
+    expect(id3).toBe(3);
 
     // Delete role2
     await db.deleteRole(id2);
@@ -133,7 +133,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   });
 
   test("should return null when getting non-existent role", async () => {
-    const role = await db.getRole("nonexistent");
+    const role = await db.getRole(123);
     expect(role).toBeNull();
   });
 
@@ -155,11 +155,11 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     };
 
     const id1 = await db.upsertRole(role1);
-    expect(id1).toBe("0");
+    expect(id1).toBe(1);
     const id2 = await db.upsertRole(role2);
-    expect(id2).toBe("1");
+    expect(id2).toBe(2);
     const id3 = await db.upsertRole(role3);
-    expect(id3).toBe("2");
+    expect(id3).toBe(3);
 
     const roles = await db.listRoles();
     expect(roles).toHaveLength(3);
@@ -176,7 +176,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
       prompt: "This is a test role",
     };
     const id = await db.upsertRole(roleData);
-    expect(id).toBe("0");
+    expect(id).toBe(1);
 
     // Read
     let role = await db.getRole(id);
@@ -209,7 +209,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     };
 
     const id = await db.upsertRole(roleData);
-    expect(id).toBe("0");
+    expect(id).toBe(1);
     let role = await db.getRole(id);
     expect(role?.createTime).toBeDefined();
     expect(role?.deleteTime).toBeUndefined();

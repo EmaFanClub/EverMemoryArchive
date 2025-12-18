@@ -1,6 +1,6 @@
 import { OpenAIClient } from "./llm/openai_client";
 import type { Message } from "./schema";
-import { connectMongo, MongoRoleDB } from "./db/mongo";
+import { createMongo, MongoRoleDB } from "./db/mongo";
 import type { RoleData, RoleDB } from "./db/base";
 
 /**
@@ -30,13 +30,14 @@ export class Server {
     }
 
     this.llmClient = new OpenAIClient(apiKey, apiBase, model);
-    
+
     // Initialize MongoDB asynchronously
     // Use environment variables or defaults for MongoDB connection
     const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
     const mongoDbName = process.env.MONGO_DB_NAME || "ema";
-    const mongoKind = (process.env.MONGO_KIND as "memory" | "remote") || "remote";
-    
+    const mongoKind =
+      (process.env.MONGO_KIND as "memory" | "remote") || "remote";
+
     this.initialized = this.initializeDb(mongoUri, mongoDbName, mongoKind);
   }
 
@@ -46,8 +47,12 @@ export class Server {
    * @param dbName - MongoDB database name
    * @param kind - MongoDB implementation kind (memory or remote)
    */
-  private async initializeDb(uri: string, dbName: string, kind: "memory" | "remote"): Promise<void> {
-    const mongo = await connectMongo(uri, dbName, kind);
+  private async initializeDb(
+    uri: string,
+    dbName: string,
+    kind: "memory" | "remote",
+  ): Promise<void> {
+    const mongo = await createMongo(uri, dbName, kind);
     await mongo.connect();
     this.roleDB = new MongoRoleDB(mongo);
   }
@@ -134,7 +139,7 @@ export class Server {
    * const role = await server.getRole("role1");
    * console.log(role);
    */
-  async getRole(roleId: string): Promise<RoleData | null> {
+  async getRole(roleId: number): Promise<RoleData | null> {
     await this.ensureInitialized();
     return this.roleDB.getRole(roleId);
   }
@@ -151,7 +156,7 @@ export class Server {
    * // Example usage:
    * await server.upsertRole({ id: "role1", name: "Test Role", description: "A test role" });
    */
-  async upsertRole(roleData: RoleData): Promise<string> {
+  async upsertRole(roleData: RoleData): Promise<number> {
     await this.ensureInitialized();
     // Set createTime if not provided (for new roles)
     if (!roleData.createTime) {
@@ -173,7 +178,7 @@ export class Server {
    * const deleted = await server.deleteRole("role1");
    * console.log(deleted);
    */
-  async deleteRole(roleId: string): Promise<boolean> {
+  async deleteRole(roleId: number): Promise<boolean> {
     await this.ensureInitialized();
     return this.roleDB.deleteRole(roleId);
   }

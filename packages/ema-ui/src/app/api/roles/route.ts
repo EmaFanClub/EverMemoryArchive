@@ -14,12 +14,13 @@ export async function GET(request: Request) {
   try {
     const server = getServer();
     const url = new URL(request.url);
-    const roleId = url.searchParams.get("id");
+    const roleId = Number.parseInt(url.searchParams.get("id") ?? "");
 
-    if (!roleId) {
+    if (!roleId || Number.isNaN(roleId)) {
       return new Response(
         JSON.stringify({
-          error: "Role id is required as a query parameter (?id=...)",
+          error:
+            "A valid role id is required as a query parameter (?id=<number>)",
         }),
         {
           status: 400,

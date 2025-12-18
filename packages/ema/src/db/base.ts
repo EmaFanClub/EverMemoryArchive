@@ -7,7 +7,7 @@
  * Represents role data structure
  */
 export interface RoleData {
-  id?: string;
+  id?: number;
   name?: string;
   description?: string;
   prompt?: string;
@@ -30,19 +30,19 @@ export interface RoleDB {
    * @param roleId - The unique identifier for the role
    * @returns Promise resolving to the role data or null if not found
    */
-  getRole(roleId: string): Promise<RoleData | null>;
+  getRole(roleId: number): Promise<RoleData | null>;
 
   /**
    * Inserts or updates a role in the database
    * @param roleData - The role data to upsert
    * @returns Promise resolving to the ID of the created or updated role
    */
-  upsertRole(roleData: RoleData): Promise<string>;
+  upsertRole(roleData: RoleData): Promise<number>;
 
   /**
    * Deletes a role from the database
    * @param roleId - The unique identifier for the role to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
-  deleteRole(roleId: string): Promise<boolean>;
+  deleteRole(roleId: number): Promise<boolean>;
 }
