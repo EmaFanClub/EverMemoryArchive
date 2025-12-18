@@ -179,8 +179,6 @@ export async function PUT(request: Request) {
 
 /**
  * DELETE /api/roles - Delete a role (soft delete)
- * Query params:
- *   - id: Role ID to delete
  */
 export async function DELETE(request: Request) {
   try {
