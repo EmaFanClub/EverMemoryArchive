@@ -6,7 +6,6 @@
 import os from "node:os";
 import { ChildProcess, spawn, type StdioOptions } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
 import { EOL } from "node:os";
 
 import { Tool, ToolResult } from "./base";
@@ -133,23 +132,36 @@ class BackgroundShell {
   async terminate(): Promise<void> {
     /** Terminate the background process. */
     if (this.process.exitCode === null) {
-      this.process.kill("SIGTERM");
+      const gracefulTimeoutMs = 5000;
+      const exitedGracefully = await new Promise<boolean>((resolve) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const onExit = () => {
+          if (timer) clearTimeout(timer);
+          resolve(true);
+        };
 
-      const exitPromise = new Promise<void>((resolve) => {
-        this.process.once("exit", () => resolve());
+        this.process.once("exit", onExit);
+
+        try {
+          this.process.kill("SIGTERM");
+        } catch {
+          // Process may have already exited.
+        }
+
+        timer = setTimeout(() => {
+          this.process.removeListener("exit", onExit);
+          resolve(false);
+        }, gracefulTimeoutMs);
+
+        if (this.process.exitCode !== null) {
+          this.process.removeListener("exit", onExit);
+          if (timer) clearTimeout(timer);
+          resolve(true);
+        }
       });
 
-      try {
-        await Promise.race([
-          exitPromise,
-          delay(5000).then(() => {
-            throw new Error("Graceful termination timeout");
-          }),
-        ]);
-      } catch {
-        if (this.process.exitCode === null) {
-          this.process.kill("SIGKILL");
-        }
+      if (!exitedGracefully && this.process.exitCode === null) {
+        this.process.kill("SIGKILL");
       }
     }
     this.status = "terminated";
