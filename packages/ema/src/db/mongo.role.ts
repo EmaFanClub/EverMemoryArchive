@@ -56,9 +56,7 @@ export class MongoRoleDB implements RoleDB {
     const db = this.mongo.getDb();
     const collection = db.collection<RoleData>(this.collectionName);
 
-    const roles = await collection
-      .find({ deleteTime: { $exists: false } })
-      .toArray();
+    const roles = await collection.find().toArray();
 
     // Remove MongoDB's _id field from the results
     return roles.map(({ _id, ...role }) => role);
@@ -77,11 +75,6 @@ export class MongoRoleDB implements RoleDB {
     const role = await collection.findOne({ id: roleId });
 
     if (!role) {
-      return null;
-    }
-
-    // Return null if role is soft-deleted
-    if (role.deleteTime) {
       return null;
     }
 
@@ -121,7 +114,7 @@ export class MongoRoleDB implements RoleDB {
   }
 
   /**
-   * Soft deletes a role by setting its deleteTime
+   * Hard deletes a role by removing it from the database
    * @param roleId - The unique identifier for the role to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
@@ -132,15 +125,12 @@ export class MongoRoleDB implements RoleDB {
     // Check if role exists and is not already deleted
     const role = await collection.findOne({ id: roleId });
 
-    if (!role || role.deleteTime) {
+    if (!role) {
       return false;
     }
 
-    // Soft delete: set deleteTime instead of removing the role
-    await collection.updateOne(
-      { id: roleId },
-      { $set: { deleteTime: Date.now() } },
-    );
+    // Hard delete: remove the role
+    await collection.deleteOne({ id: roleId });
 
     return true;
   }
