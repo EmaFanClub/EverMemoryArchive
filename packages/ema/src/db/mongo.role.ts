@@ -28,7 +28,7 @@ export class MongoRoleDB implements RoleDB {
 
   /**
    * Gets the next role ID using MongoDB's counter pattern
-   * @returns Promise resolving to the next role ID as a string
+   * @returns Promise resolving to the next role ID as a number
    */
   private async getNextId(kind: string): Promise<number> {
     const db = this.mongo.getDb();
