@@ -34,13 +34,23 @@ export class RealMongo implements Mongo {
    * @returns Promise resolving when connection is established
    */
   async connect(): Promise<void> {
-    if (this.client) {
+    if (this.client && this.db) {
       return;
     }
 
-    this.client = new MongoClient(this.uri);
-    await this.client.connect();
-    this.db = this.client.db(this.dbName);
+    const client = new MongoClient(this.uri);
+    try {
+      await client.connect();
+      this.client = client;
+      this.db = client.db(this.dbName);
+    } catch (error) {
+      try {
+        await client.close();
+      } catch {
+        // Ignore errors during cleanup
+      }
+      throw error;
+    }
   }
 
   /**
