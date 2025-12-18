@@ -17,7 +17,7 @@ export class RemoteMongo implements Mongo {
   private readonly dbName: string;
 
   /**
-   * Creates a new RealMongo instance
+   * Creates a new RemoteMongo instance
    * @param uri - MongoDB connection string (default: mongodb://localhost:27017)
    * @param dbName - Name of the database (default: evermindagent)
    */
