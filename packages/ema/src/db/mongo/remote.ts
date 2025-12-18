@@ -1,5 +1,5 @@
 /**
- * Real MongoDB implementation for production.
+ * Remote MongoDB implementation for production.
  * Connects to an actual MongoDB instance using connection string.
  */
 
