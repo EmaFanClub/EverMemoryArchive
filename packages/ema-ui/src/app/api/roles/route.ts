@@ -14,9 +14,10 @@ export async function GET(request: Request) {
   try {
     const server = getServer();
     const url = new URL(request.url);
-    const roleId = Number.parseInt(url.searchParams.get("id") ?? "");
+    const rawRoleId = url.searchParams.get("id");
+    const roleId = Number.parseInt(rawRoleId ?? "");
 
-    if (!roleId || Number.isNaN(roleId)) {
+    if (rawRoleId == null || Number.isNaN(roleId)) {
       return new Response(
         JSON.stringify({
           error:
