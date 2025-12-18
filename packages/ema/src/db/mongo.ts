@@ -13,12 +13,12 @@ export interface CreateMongoArgs {
    * MongoDB connection string
    * @default "mongodb://localhost:27017"
    */
-  uri: string;
+  uri?: string;
   /**
    * MongoDB database name
    * @default "ema"
    */
-  dbName: string;
+  dbName?: string;
 }
 
 /**

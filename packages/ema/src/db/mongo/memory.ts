@@ -5,7 +5,7 @@
 
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
-import type { Mongo } from "../mongo";
+import type { CreateMongoArgs, Mongo } from "../mongo";
 
 /**
  * In-memory MongoDB implementation
@@ -19,10 +19,10 @@ export class MemoryMongo implements Mongo {
 
   /**
    * Creates a new MemoryMongo instance
-   * @param dbName - Name of the database (default: test)
+   * @param args - Arguments for creating a MemoryMongo instance
    */
-  constructor({ dbName }: { dbName: string }) {
-    this.dbName = dbName;
+  constructor({ dbName }: CreateMongoArgs) {
+    this.dbName = dbName ?? "ema";
   }
 
   /**
