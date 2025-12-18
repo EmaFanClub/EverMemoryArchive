@@ -2,7 +2,7 @@ import { expect, test, describe } from "vitest";
 
 import { OpenAIClient } from "../../llm/openai_client";
 
-describe("OpenAI", () => {
+describe.skip("OpenAI", () => {
   test("should make a simple completion", async () => {
     const apiKey = process.env.GEMINI_API_KEY || "";
     // todo: document that `GEMINI_API_KEY` is required for testing.
