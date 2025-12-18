@@ -13,7 +13,6 @@ export interface RoleData {
   prompt?: string;
   createTime?: number;
   deleteTime?: number;
-  [key: string]: unknown;
 }
 
 /**
