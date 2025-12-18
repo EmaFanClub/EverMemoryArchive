@@ -145,9 +145,7 @@ export class Config {
   static load(): Config {
     const configPath = this.getDefaultConfigPath();
     if (!fs.existsSync(configPath)) {
-      throw new Error(
-        "Configuration file not found. Run scripts/setup-config.sh or place config.yaml in mini_agent/config/.",
-      );
+      throw new Error(`${configPath} file not found.`);
     }
     return this.fromYaml(configPath);
   }
