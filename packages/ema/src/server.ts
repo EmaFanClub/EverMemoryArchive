@@ -1,6 +1,6 @@
 import { OpenAIClient } from "./llm/openai_client";
 import type { Message } from "./schema";
-import { createMongo, MongoRoleDB } from "./db/mongo";
+import { createMongo, MongoRoleDB } from "./db";
 import type { RoleData, RoleDB } from "./db/base";
 
 /**
