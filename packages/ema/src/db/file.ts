@@ -163,7 +163,7 @@ export class FileDB implements RoleDB {
       db.roles = {};
     }
     if (!roleData.name || !roleData.description || !roleData.prompt) {
-      throw new Error("Name, description and prompt are required");
+      throw new Error("name, description, and prompt are required");
     }
     if (!roleData.id) {
       roleData.id = `${db.roleIdCounter++}`;
