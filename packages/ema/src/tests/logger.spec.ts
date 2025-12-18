@@ -40,12 +40,7 @@ describe("AgentLogger", () => {
 
     const logPath = logger.getLogFilePath();
     expect(logPath).toBe(
-      path.join(
-        tempHomeDir,
-        ".ema",
-        "log",
-        "agent_run_20240102_030405.log",
-      ),
+      path.join(tempHomeDir, ".ema", "log", "agent_run_20240102_030405.log"),
     );
 
     const content = fs.readFileSync(logPath as string, "utf-8");
@@ -82,13 +77,7 @@ describe("AgentLogger", () => {
       "stop",
     );
 
-    logger.logToolResult(
-      "bash",
-      { command: "echo 1" },
-      true,
-      "1\n",
-      null,
-    );
+    logger.logToolResult("bash", { command: "echo 1" }, true, "1\n", null);
 
     logger.logToolResult("bash", { command: "bad" }, false, null, "error");
 
@@ -107,9 +96,7 @@ describe("AgentLogger", () => {
     expect(content).toContain('"id": "call_1"');
     expect(content).toContain('"function": {');
     expect(content).toContain('"name": "bash"');
-    expect(content).toMatch(
-      /"arguments":\s*{\s*"command":\s*"echo 1"\s*}/m,
-    );
+    expect(content).toMatch(/"arguments":\s*{\s*"command":\s*"echo 1"\s*}/m);
 
     expect(content).toContain("[3] TOOL_RESULT");
     expect(content).toContain('"tool_name": "bash"');
