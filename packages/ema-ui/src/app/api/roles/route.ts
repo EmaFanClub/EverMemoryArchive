@@ -62,7 +62,7 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/roles - Create a new role
- * Body: RoleData (without id, it will be generated or provided)
+ * Body: RoleData (id optional; an id will be generated if not provided)
  */
 export async function POST(request: Request) {
   try {
