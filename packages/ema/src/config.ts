@@ -241,7 +241,7 @@ export class Config {
    * 3) {package}/config/{filename} in package installation directory
    *
    * @param filename Configuration file name (e.g., "config.yaml", "mcp.json", "system_prompt.md")
-   * @returns Path to found config file, or None if not found
+   * @returns Path to found config file, or null if not found
    */
   static findConfigFile(filename: string): string | null {
     // Priority 1: Development mode - current directory's config/ subdirectory
