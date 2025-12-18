@@ -1,5 +1,7 @@
 import { OpenAIClient } from "./llm/openai_client";
 import type { Message } from "./schema";
+import { FileDB } from "./db/file";
+import type { RoleData } from "./db/base";
 
 /**
  * The server class for the EverMindAgent.
@@ -8,6 +10,7 @@ import type { Message } from "./schema";
  */
 export class Server {
   private llmClient: OpenAIClient;
+  private roleDB: FileDB;
 
   constructor() {
     // Initialize OpenAI client with environment variables or defaults
@@ -26,6 +29,7 @@ export class Server {
     }
 
     this.llmClient = new OpenAIClient(apiKey, apiBase, model);
+    this.roleDB = new FileDB();
   }
 
   /**
@@ -70,5 +74,75 @@ export class Server {
       content: response.content,
       thinking: response.thinking,
     };
+  }
+
+  /**
+   * Lists all roles.
+   *
+   * Exposed as `GET /api/roles/list`.
+   *
+   * @returns Promise<RoleData[]> Array of all roles
+   *
+   * @example
+   * // Example usage:
+   * const roles = await server.listRoles();
+   * console.log(roles);
+   */
+  async listRoles(): Promise<RoleData[]> {
+    return this.roleDB.listRoles();
+  }
+
+  /**
+   * Gets a specific role by ID.
+   *
+   * Exposed as `GET /api/roles?id={roleId}`.
+   *
+   * @param roleId - The unique identifier for the role
+   * @returns Promise<RoleData | null> The role data or null if not found
+   *
+   * @example
+   * // Example usage:
+   * const role = await server.getRole("role1");
+   * console.log(role);
+   */
+  async getRole(roleId: string): Promise<RoleData | null> {
+    return this.roleDB.getRole(roleId);
+  }
+
+  /**
+   * Creates or updates a role.
+   *
+   * Exposed as `POST /api/roles` for create and `PUT /api/roles` for update.
+   *
+   * @param roleData - The role data to create or update
+   * @returns Promise<string> The ID of the created or updated role
+   *
+   * @example
+   * // Example usage:
+   * await server.upsertRole({ id: "role1", name: "Test Role", description: "A test role" });
+   */
+  async upsertRole(roleData: RoleData): Promise<string> {
+    // Set createTime if not provided (for new roles)
+    if (!roleData.createTime) {
+      roleData.createTime = Date.now();
+    }
+    return this.roleDB.upsertRole(roleData);
+  }
+
+  /**
+   * Deletes a role (soft delete).
+   *
+   * Exposed as `DELETE /api/roles`.
+   *
+   * @param roleId - The unique identifier for the role to delete
+   * @returns Promise<boolean> True if deleted, false if not found
+   *
+   * @example
+   * // Example usage:
+   * const deleted = await server.deleteRole("role1");
+   * console.log(deleted);
+   */
+  async deleteRole(roleId: string): Promise<boolean> {
+    return this.roleDB.deleteRole(roleId);
   }
 }

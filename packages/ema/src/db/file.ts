@@ -87,6 +87,7 @@ export class MemFs implements Fs {
  * Database structure stored in JSON file
  */
 interface DatabaseSchema {
+  roleIdCounter: number;
   roles?: Record<string, RoleData>;
 }
 
@@ -116,10 +117,13 @@ export class FileDB implements RoleDB {
   private async readDb(): Promise<DatabaseSchema> {
     const content = await this.fs.read(this.dbPath);
     try {
-      return JSON.parse(content) as DatabaseSchema;
+      const result = JSON.parse(content) as DatabaseSchema;
+      result.roleIdCounter ??= 0;
+      result.roles ??= {};
+      return result;
     } catch (error) {
       console.error(`Failed to parse database file ${this.dbPath}: ${error}`);
-      const emptyDb: DatabaseSchema = { roles: {} };
+      const emptyDb: DatabaseSchema = { roleIdCounter: 0, roles: {} };
       console.warn(
         `Resetting database file ${this.dbPath} to an empty state due to parse failure.`,
       );
@@ -140,21 +144,33 @@ export class FileDB implements RoleDB {
 
   async listRoles(): Promise<RoleData[]> {
     const db = await this.readDb();
-    return Object.values(db.roles ?? {});
+    return Object.values(db.roles ?? {}).filter((role) => !role.deleteTime);
   }
 
   async getRole(roleId: string): Promise<RoleData | null> {
     const db = await this.readDb();
-    return db.roles?.[roleId] ?? null;
+    const role = db.roles?.[roleId] ?? null;
+    // Return null if role is soft-deleted
+    if (role && role.deleteTime) {
+      return null;
+    }
+    return role;
   }
 
-  async upsertRole(roleData: RoleData): Promise<void> {
+  async upsertRole(roleData: RoleData): Promise<string> {
     const db = await this.readDb();
     if (!db.roles) {
       db.roles = {};
     }
+    if (!roleData.name || !roleData.description || !roleData.prompt) {
+      throw new Error("name, description, and prompt are required");
+    }
+    if (!roleData.id) {
+      roleData.id = `${db.roleIdCounter++}`;
+    }
     db.roles[roleData.id] = roleData;
     await this.writeDb(db);
+    return roleData.id;
   }
 
   async deleteRole(roleId: string): Promise<boolean> {
@@ -162,7 +178,12 @@ export class FileDB implements RoleDB {
     if (!db.roles || !db.roles[roleId]) {
       return false;
     }
-    delete db.roles[roleId];
+    // Soft delete: set deleteTime instead of removing the role
+    if (db.roles[roleId].deleteTime) {
+      // Already deleted
+      return false;
+    }
+    db.roles[roleId].deleteTime = Date.now();
     await this.writeDb(db);
     return true;
   }

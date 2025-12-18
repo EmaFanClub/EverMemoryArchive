@@ -29,8 +29,12 @@ export type DbDate = number;
  * Represents role data structure
  */
 export interface RoleData {
-  id: string;
-  [key: string]: unknown;
+  id?: string;
+  name?: string;
+  description?: string;
+  prompt?: string;
+  createTime?: number;
+  deleteTime?: number;
 }
 
 /**
@@ -53,9 +57,9 @@ export interface RoleDB {
   /**
    * Inserts or updates a role in the database
    * @param roleData - The role data to upsert
-   * @returns Promise resolving when the operation completes
+   * @returns Promise resolving to the ID of the created or updated role
    */
-  upsertRole(roleData: RoleData): Promise<void>;
+  upsertRole(roleData: RoleData): Promise<string>;
 
   /**
    * Deletes a role from the database

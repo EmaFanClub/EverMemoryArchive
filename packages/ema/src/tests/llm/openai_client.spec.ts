@@ -1,6 +1,6 @@
-import { expect, test } from "vitest";
+import { expect, test, describe } from "vitest";
 
-import { OpenAIClient } from "./openai_client";
+import { OpenAIClient } from "../../llm/openai_client";
 
 describe("OpenAI", () => {
   test("should make a simple completion", async () => {
