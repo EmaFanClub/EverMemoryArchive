@@ -40,7 +40,11 @@ export class MongoRoleDB implements RoleDB {
       { upsert: true, returnDocument: "after" },
     );
 
-    return result?.seq ?? 0;
+    if (!result || result.seq == null) {
+      throw new Error(`Failed to generate next ID for kind "${kind}"`);
+    }
+
+    return result.seq;
   }
 
   /**
