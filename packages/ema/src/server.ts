@@ -79,7 +79,7 @@ export class Server {
   /**
    * Lists all roles.
    *
-   * Exposed as `GET /api/roles`.
+   * Exposed as `GET /api/roles/list`.
    *
    * @returns Promise<RoleData[]> Array of all roles
    *
