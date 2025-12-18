@@ -76,8 +76,10 @@ class BackgroundShell {
   command: string;
   process: ChildProcess;
   startTime: number;
-  outputLines: string[];
-  lastReadIndex: number;
+  stdoutLines: string[];
+  stderrLines: string[];
+  stdoutLastReadIndex: number;
+  stderrLastReadIndex: number;
   status: "running" | "completed" | "failed" | "terminated" | "error";
   exitCode: number | null;
 
@@ -91,32 +93,47 @@ class BackgroundShell {
     this.command = options.command;
     this.process = options.process;
     this.startTime = options.startTime;
-    this.outputLines = [];
-    this.lastReadIndex = 0;
+    this.stdoutLines = [];
+    this.stderrLines = [];
+    this.stdoutLastReadIndex = 0;
+    this.stderrLastReadIndex = 0;
     this.status = "running";
     this.exitCode = null;
   }
 
-  addOutput(line: string): void {
-    /** Add new output line. */
-    this.outputLines.push(line);
+  addStdout(line: string): void {
+    /** Add new stdout line. */
+    this.stdoutLines.push(line);
   }
 
-  getNewOutput(filterPattern?: string | null): string[] {
+  addStderr(line: string): void {
+    /** Add new stderr line. */
+    this.stderrLines.push(line);
+  }
+
+  getNewOutput(filterPattern?: string | null): {
+    stdoutLines: string[];
+    stderrLines: string[];
+  } {
     /** Get new output since last check, optionally filtered by regex. */
-    const newLines = this.outputLines.slice(this.lastReadIndex);
-    this.lastReadIndex = this.outputLines.length;
+    const stdoutNewLines = this.stdoutLines.slice(this.stdoutLastReadIndex);
+    const stderrNewLines = this.stderrLines.slice(this.stderrLastReadIndex);
+    this.stdoutLastReadIndex = this.stdoutLines.length;
+    this.stderrLastReadIndex = this.stderrLines.length;
 
     if (filterPattern) {
       try {
         const pattern = new RegExp(filterPattern);
-        return newLines.filter((line) => pattern.test(line));
+        return {
+          stdoutLines: stdoutNewLines.filter((line) => pattern.test(line)),
+          stderrLines: stderrNewLines.filter((line) => pattern.test(line)),
+        };
       } catch {
         // Invalid regex, return all lines
       }
     }
 
-    return newLines;
+    return { stdoutLines: stdoutNewLines, stderrLines: stderrNewLines };
   }
 
   updateStatus(isAlive: boolean, exitCode: number | null = null): void {
@@ -199,18 +216,27 @@ class BackgroundShellManager {
     if (!shell) return;
 
     const { process } = shell;
-    const handleData = (chunk: Buffer) => {
+    const handleStdoutData = (chunk: Buffer) => {
       const text = chunk.toString("utf-8");
       const lines = text.split(/\r?\n/);
       lines.forEach((line) => {
         if (line !== "") {
-          shell.addOutput(line);
+          shell.addStdout(line);
+        }
+      });
+    };
+    const handleStderrData = (chunk: Buffer) => {
+      const text = chunk.toString("utf-8");
+      const lines = text.split(/\r?\n/);
+      lines.forEach((line) => {
+        if (line !== "") {
+          shell.addStderr(line);
         }
       });
     };
 
-    process.stdout?.on("data", handleData);
-    process.stderr?.on("data", handleData);
+    process.stdout?.on("data", handleStdoutData);
+    process.stderr?.on("data", handleStderrData);
 
     process.on("close", (code: number | null) => {
       shell.updateStatus(false, code ?? null);
@@ -218,7 +244,7 @@ class BackgroundShellManager {
 
     process.on("error", (err: Error) => {
       shell.status = "error";
-      shell.addOutput(`Monitor error: ${err.message}`);
+      shell.addStderr(`Monitor error: ${err.message}`);
     });
   }
 
@@ -549,13 +575,14 @@ export class BashOutputTool extends Tool {
         });
       }
 
-      const newLines = bgShell.getNewOutput(filterStr);
-      const stdout = newLines.length ? newLines.join("\n") : "";
+      const { stdoutLines, stderrLines } = bgShell.getNewOutput(filterStr);
+      const stdout = stdoutLines.length ? stdoutLines.join("\n") : "";
+      const stderr = stderrLines.length ? stderrLines.join("\n") : "";
 
       return new BashOutputResult({
         success: true,
         stdout,
-        stderr: "", // Background shells combine stdout/stderr
+        stderr,
         exitCode: bgShell.exitCode ?? 0,
         bashId,
       });
@@ -616,15 +643,22 @@ export class BashKillTool extends Tool {
      */
     try {
       const bgShell = BackgroundShellManager.get(bashId);
-      const remainingLines = bgShell ? bgShell.getNewOutput() : [];
+      const remainingOutput = bgShell
+        ? bgShell.getNewOutput()
+        : { stdoutLines: [], stderrLines: [] };
 
       const terminatedShell = await BackgroundShellManager.terminate(bashId);
-      const stdout = remainingLines.length ? remainingLines.join("\n") : "";
+      const stdout = remainingOutput.stdoutLines.length
+        ? remainingOutput.stdoutLines.join("\n")
+        : "";
+      const stderr = remainingOutput.stderrLines.length
+        ? remainingOutput.stderrLines.join("\n")
+        : "";
 
       return new BashOutputResult({
         success: true,
         stdout,
-        stderr: "",
+        stderr,
         exitCode: terminatedShell.exitCode ?? 0,
         bashId,
       });

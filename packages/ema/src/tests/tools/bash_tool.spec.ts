@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { BashTool } from "../../tools/bash_tool";
+import { BashKillTool, BashOutputTool, BashTool } from "../../tools/bash_tool";
 
 describe("BashTool", () => {
   let bashTool: BashTool;
@@ -68,6 +68,44 @@ describe("BashTool", () => {
       expect(result.success).toBe(true);
       expect(result.content).toContain("background");
     });
+
+    it("should separate stdout and stderr for background commands", async () => {
+      const outputTool = new BashOutputTool();
+      const killTool = new BashKillTool();
+
+      const result = await bashTool.execute(
+        `node -e "console.log('out'); console.error('err'); setTimeout(()=>{}, 500)"`,
+        120,
+        true,
+      );
+
+      const bashId = (result as any).bashId as string | null | undefined;
+      expect(bashId).toBeTruthy();
+
+      let collectedStdout = "";
+      let collectedStderr = "";
+      try {
+        for (let attempt = 0; attempt < 20; attempt++) {
+          const outputResult: any = await outputTool.execute(bashId as string);
+          if (outputResult?.stdout)
+            collectedStdout += `${outputResult.stdout}\n`;
+          if (outputResult?.stderr)
+            collectedStderr += `${outputResult.stderr}\n`;
+
+          if (
+            collectedStdout.includes("out") &&
+            collectedStderr.includes("err")
+          )
+            break;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+
+        expect(collectedStdout).toContain("out");
+        expect(collectedStderr).toContain("err");
+      } finally {
+        await killTool.execute(bashId as string);
+      }
+    }, 15000);
   });
 
   describe("output handling", () => {
