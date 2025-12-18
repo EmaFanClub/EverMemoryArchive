@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     if (!body.name || !body.description || !body.prompt) {
       return new Response(
         JSON.stringify({
-          error: "Name, description and prompt are required",
+          error: "name, description, and prompt are required",
         }),
         {
           status: 400,
