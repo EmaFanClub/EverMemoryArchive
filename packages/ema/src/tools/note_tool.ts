@@ -57,31 +57,34 @@ export class SessionNoteTool extends Tool {
     };
   }
 
-  _loadFromFile(): any[] {
+  async _loadFromFile(): Promise<any[]> {
     /** Load notes from file.
      *
      * Returns empty list if file doesn't exist (lazy loading).
      */
-    if (!fs.existsSync(this.memoryFile)) {
-      return [];
-    }
-
     try {
-      const raw = fs.readFileSync(this.memoryFile, "utf-8");
+      const raw = await fs.promises.readFile(this.memoryFile, "utf-8");
       return JSON.parse(raw);
     } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+        return [];
+      }
       return [];
     }
   }
 
-  _saveToFile(notes: any[]): void {
+  async _saveToFile(notes: any[]): Promise<void> {
     /** Save notes to file.
      *
      * Creates parent directory and file if they don't exist (lazy initialization).
      */
     // Ensure parent directory exists when actually saving
-    fs.mkdirSync(path.dirname(this.memoryFile), { recursive: true });
-    fs.writeFileSync(this.memoryFile, JSON.stringify(notes, null, 2), "utf-8");
+    await fs.promises.mkdir(path.dirname(this.memoryFile), { recursive: true });
+    await fs.promises.writeFile(
+      this.memoryFile,
+      JSON.stringify(notes, null, 2),
+      "utf-8",
+    );
   }
 
   async execute(
@@ -99,7 +102,7 @@ export class SessionNoteTool extends Tool {
      */
     try {
       // Load existing notes
-      const notes = this._loadFromFile();
+      const notes = await this._loadFromFile();
 
       // Add new note with timestamp
       const note = {
@@ -110,7 +113,7 @@ export class SessionNoteTool extends Tool {
       notes.push(note);
 
       // Save back to file
-      this._saveToFile(notes);
+      await this._saveToFile(notes);
 
       return new ToolResult({
         success: true,
@@ -174,16 +177,20 @@ export class RecallNoteTool extends Tool {
      *     ToolResult with notes content
      */
     try {
-      if (!fs.existsSync(this.memoryFile)) {
-        return new ToolResult({
-          success: true,
-          content: "No notes recorded yet.",
-        });
+      let notes: any[];
+      try {
+        notes = JSON.parse(
+          await fs.promises.readFile(this.memoryFile, "utf-8"),
+        ) as any[];
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+          return new ToolResult({
+            success: true,
+            content: "No notes recorded yet.",
+          });
+        }
+        throw error;
       }
-
-      const notes = JSON.parse(
-        fs.readFileSync(this.memoryFile, "utf-8"),
-      ) as any[];
 
       if (!notes?.length) {
         return new ToolResult({
