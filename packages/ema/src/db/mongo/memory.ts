@@ -35,11 +35,41 @@ export class MemoryMongo implements Mongo {
       return;
     }
 
-    this.mongoServer = await MongoMemoryServer.create();
-    const uri = this.mongoServer.getUri();
-    this.client = new MongoClient(uri);
-    await this.client.connect();
-    this.db = this.client.db(this.dbName);
+    let mongoServer: MongoMemoryServer | undefined;
+    let client: MongoClient | undefined;
+
+    try {
+      mongoServer = await MongoMemoryServer.create();
+      const uri = mongoServer.getUri();
+      client = new MongoClient(uri);
+      await client.connect();
+
+      this.mongoServer = mongoServer;
+      this.client = client;
+      this.db = client.db(this.dbName);
+    } catch (error) {
+      if (client) {
+        try {
+          await client.close();
+        } catch {
+          // ignore close errors during cleanup
+        }
+      }
+
+      if (mongoServer) {
+        try {
+          await mongoServer.stop();
+        } catch {
+          // ignore stop errors during cleanup
+        }
+      }
+
+      this.client = undefined;
+      this.db = undefined;
+      this.mongoServer = undefined;
+
+      throw error;
+    }
   }
 
   /**
