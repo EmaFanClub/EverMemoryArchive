@@ -74,6 +74,10 @@ export async function createMongo(
   dbName: string,
   kind: "memory" | "remote",
 ): Promise<Mongo> {
+  if (!["memory", "remote"].includes(kind)) {
+    throw new Error(`Invalid kind: ${kind}. Must be "memory" or "remote".`);
+  }
+
   const impl: MongoProvider =
     kind === "memory"
       ? (await import("./mongo/memory")).MemoryMongo
