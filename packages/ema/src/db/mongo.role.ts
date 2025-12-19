@@ -17,6 +17,7 @@ export class MongoRoleDB implements RoleDB {
   private readonly mongo: Mongo;
   private readonly collectionName = "roles";
   private readonly counterCollectionName = "counters";
+  collections: string[] = [this.collectionName, this.counterCollectionName];
 
   /**
    * Creates a new MongoRoleDB instance
