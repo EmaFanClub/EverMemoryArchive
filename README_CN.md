@@ -17,6 +17,19 @@
 pnpm install
 ```
 
+### 环境变量配置
+
+将 `.env.example` 文件复制为 `.env` 并填写您的 API 密钥：
+
+```bash
+cp .env.example .env
+```
+
+LLM 功能需要以下变量：
+- `GEMINI_API_KEY`: 您的 Gemini 或 OpenAI 兼容的 API 密钥。
+- `GEMINI_API_BASE`: API 基础地址（默认为 Google Gemini API）。
+- `GEMINI_MODEL`: 使用的模型名称（例如 `gemini-3-flash-preview`）。
+
 运行或开发应用：
 
 ```bash

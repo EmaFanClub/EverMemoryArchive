@@ -16,6 +16,19 @@ English | [中文](./README_CN.md)
 pnpm install
 ```
 
+### Environment Variables
+
+Copy the `.env.example` file to `.env` and fill in your API keys:
+
+```bash
+cp .env.example .env
+```
+
+The following variables are required for LLM functionality:
+- `GEMINI_API_KEY`: Your Gemini or OpenAI-compatible API key.
+- `GEMINI_API_BASE`: API base URL (defaults to Google Gemini API).
+- `GEMINI_MODEL`: The model name to use (e.g., `gemini-3-flash-preview`).
+
 Run or develop application:
 
 ```bash
