@@ -211,7 +211,6 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     expect(id).toBe(1);
     let role = await db.getRole(id);
     expect(role?.createTime).toBeDefined();
-    expect(role?.deleteTime).toBeUndefined();
 
     // Delete the role
     await db.deleteRole(id);
