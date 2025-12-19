@@ -2,37 +2,26 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-let mockHomeDir = "";
-
-vi.mock("node:os", async () => {
-  const actual = await vi.importActual<typeof import("node:os")>("node:os");
-  return {
-    ...actual,
-    homedir: () => mockHomeDir,
-  };
-});
-
 describe("AgentLogger", () => {
   let AgentLogger: typeof import("../logger").AgentLogger;
-  let tempHomeDir: string;
   let logger: import("../logger").AgentLogger;
+  let tempLogDir: string;
 
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2024, 0, 2, 3, 4, 5, 6));
 
-    tempHomeDir = fs.mkdtempSync(
-      path.join(process.cwd(), "tmp-ema-logger-home-"),
+    tempLogDir = fs.mkdtempSync(
+      path.join(process.cwd(), "tmp-ema-logger-logs-"),
     );
-    mockHomeDir = tempHomeDir;
 
     ({ AgentLogger } = await import("../logger"));
-    logger = new AgentLogger();
+    logger = new AgentLogger(tempLogDir);
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    fs.rmSync(tempHomeDir, { recursive: true, force: true });
+    fs.rmSync(tempLogDir, { recursive: true, force: true });
   });
 
   it("creates new run log file with header", async () => {
@@ -40,7 +29,7 @@ describe("AgentLogger", () => {
 
     const logPath = logger.getLogFilePath();
     expect(logPath).toBe(
-      path.join(tempHomeDir, ".ema", "log", "agent_run_20240102_030405.log"),
+      path.join(tempLogDir, "agent_run_20240102_030405.log"),
     );
 
     const content = fs.readFileSync(logPath as string, "utf-8");

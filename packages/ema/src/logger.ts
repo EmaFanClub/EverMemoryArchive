@@ -1,7 +1,6 @@
 /** Agent run logger */
 
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 
 import type { Message, ToolCall } from "./schema";
@@ -17,7 +16,7 @@ export class AgentLogger {
   /**
    * Log directory path.
    *
-   * Logs are stored in `~/.ema/log/` directory.
+   * Logs are stored in `packages/ema/logs/` directory under current working dir.
    */
   private readonly logDir: string;
 
@@ -34,10 +33,10 @@ export class AgentLogger {
   /**
    * Initialize logger
    *
-   * Logs are stored in `~/.ema/log/` directory.
+   * Logs are stored in `packages/ema/logs/` directory under current working dir by default.
    */
-  constructor() {
-    this.logDir = path.join(os.homedir(), ".ema", "log");
+  constructor(logDir?: string) {
+    this.logDir = logDir ?? path.join(process.cwd(), "packages", "ema", "logs");
     this.logFile = null;
     this.logIndex = 0;
   }
