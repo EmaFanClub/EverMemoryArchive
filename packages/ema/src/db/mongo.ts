@@ -5,7 +5,13 @@
 
 import type { Db, MongoClient } from "mongodb";
 
+/**
+ * Interface for getting all the collection names being accessed
+ */
 export interface MongoCollectionGetter {
+  /**
+   * The collection names being accessed
+   */
   collections: string[];
 }
 
