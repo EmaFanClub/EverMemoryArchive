@@ -149,7 +149,7 @@ export class ContextManager {
               totalTokens += encoding.encode(JSON.stringify(block)).length;
             }
           }
-        } 
+        }
 
         if (msg.thinking) {
           totalTokens += encoding.encode(msg.thinking).length;
