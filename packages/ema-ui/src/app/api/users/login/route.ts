@@ -6,7 +6,7 @@ import { getServer } from "../../shared-server";
 
 export async function GET(request: Request) {
   // For example, fetch data from your DB here
-  const server = getServer();
+  const server = await getServer();
   const user = server.login();
   return new Response(JSON.stringify(user), {
     status: 200,

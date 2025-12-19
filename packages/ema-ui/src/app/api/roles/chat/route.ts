@@ -7,7 +7,7 @@ import { getServer } from "../../shared-server";
 
 export async function POST(request: Request) {
   try {
-    const server = getServer();
+    const server = await getServer();
     const body = await request.json();
     const messages = body.messages;
 

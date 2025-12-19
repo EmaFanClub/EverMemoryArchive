@@ -10,9 +10,9 @@ let serverInstance: Server | undefined;
  * Gets or creates the shared server instance.
  * @returns The shared Server instance
  */
-export function getServer(): Server {
+export async function getServer(): Promise<Server> {
   if (!serverInstance) {
-    serverInstance = new Server();
+    serverInstance = await Server.create();
   }
   return serverInstance;
 }

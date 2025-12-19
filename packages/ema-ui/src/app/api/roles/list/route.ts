@@ -10,7 +10,7 @@ import { getServer } from "../../shared-server";
  */
 export async function GET() {
   try {
-    const server = getServer();
+    const server = await getServer();
 
     // List all roles
     const roles = await server.listRoles();
