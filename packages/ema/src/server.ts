@@ -19,11 +19,8 @@ export class Server {
   private llmClient: OpenAIClient;
   private mongo!: Mongo;
   private roleDB!: RoleDB & MongoCollectionGetter;
-  private fs: Fs;
 
-  private constructor() {
-    this.fs = new RealFs();
-
+  private constructor(private readonly fs: Fs) {
     // Initialize OpenAI client with environment variables or defaults
     const apiKey =
       process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "";
@@ -42,10 +39,10 @@ export class Server {
     this.llmClient = new OpenAIClient(apiKey, apiBase, model);
   }
 
-  static async create(): Promise<Server> {
+  static async create(fs: Fs = new RealFs()): Promise<Server> {
     const isDev = process.env.NODE_ENV === "development";
 
-    const server = new Server();
+    const server = new Server(fs);
 
     // Initialize MongoDB asynchronously
     // Use environment variables or defaults for MongoDB connection
