@@ -61,6 +61,7 @@ class ContextManager:
         system_prompt: str,
         llm_client: LLMClient,
         tools: list[Tool],
+        workspace_dir: str,
         token_limit: int = 80000,
     ):
         """Initialize context manager.
@@ -69,17 +70,31 @@ class ContextManager:
             system_prompt: System prompt for the conversation
             llm_client: LLM client for summary generation
             tools: List of available tools
+            workspace_dir: Workspace directory path
             token_limit: Maximum token count before summarization
         """
-        self.system_prompt = system_prompt
         self.llm_client = llm_client
+
+        # Workspace handling and prompt enrichment
+        self.workspace_dir = Path(workspace_dir)
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
+        if "Current Workspace" not in system_prompt:
+            system_prompt = (
+                system_prompt
+                + f"\n\n## Current Workspace\nYou are currently working in: `{self.workspace_dir.absolute()}`\nAll relative paths will be resolved relative to this directory."
+            )
+
+        self.system_prompt = system_prompt
         self.token_limit = token_limit
 
         # Initialize message history with system prompt
-        self.messages: list[Message] = [Message(role="system", content=system_prompt)]
+        self.messages: list[Message] = [
+            Message(role="system", content=self.system_prompt)
+        ]
 
         # Store tools
         self.tools: list[Tool] = tools
+        self.tool_dict: dict[str, Tool] = {tool.name: tool for tool in tools}
 
         # Token usage tracking
         self.api_total_tokens: int = 0
@@ -412,27 +427,14 @@ class Agent:
             token_limit: Token limit for context management
         """
         self.llm = llm_client
-        self.tool_dict = {tool.name: tool for tool in tools}
         self.max_steps = max_steps
-        self.workspace_dir = Path(workspace_dir)
-
-        # Ensure workspace exists
-        self.workspace_dir.mkdir(parents=True, exist_ok=True)
-
-        # Inject workspace information into system prompt if not already present
-        if "Current Workspace" not in system_prompt:
-            workspace_info = (
-                f"\n\n## Current Workspace\n"
-                f"You are currently working in: `{self.workspace_dir.absolute()}`\n"
-                f"All relative paths will be resolved relative to this directory."
-            )
-            system_prompt = system_prompt + workspace_info
 
         # Initialize context manager with tools
         self.context_manager = ContextManager(
             system_prompt=system_prompt,
             llm_client=llm_client,
-            tools=list(self.tool_dict.values()),
+            tools=tools,
+            workspace_dir=workspace_dir,
             token_limit=token_limit,
         )
 
@@ -561,7 +563,7 @@ class Agent:
                     print(f"   {Colors.DIM}{line}{Colors.RESET}")
 
                 # Execute tool
-                if function_name not in self.tool_dict:
+                if function_name not in self.context_manager.tool_dict:
                     result = ToolResult(
                         success=False,
                         content="",
@@ -569,7 +571,7 @@ class Agent:
                     )
                 else:
                     try:
-                        tool = self.tool_dict[function_name]
+                        tool = self.context_manager.tool_dict[function_name]
                         result = await tool.execute(**arguments)
                     except Exception as e:
                         # Catch all exceptions during tool execution, convert to failed ToolResult
