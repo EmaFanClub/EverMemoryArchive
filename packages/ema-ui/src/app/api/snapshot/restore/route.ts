@@ -20,9 +20,14 @@ export async function POST(request: Request) {
   const server = await getServer();
   const body = await request.json();
   const name = body.name || "default";
-  await server.restoreFromSnapshot(name);
-  return new Response(JSON.stringify({ message: "Snapshot restored" }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  const restored = await server.restoreFromSnapshot(name);
+  return new Response(
+    JSON.stringify({
+      message: restored ? "Snapshot restored" : "Snapshot not found",
+    }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 }

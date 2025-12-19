@@ -85,13 +85,23 @@ export class Server {
     this.roleDB = new MongoRoleDB(this.mongo);
   }
 
+  private snapshotPath(name: string): string {
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+      throw new Error(
+        `Invalid snapshot name: ${name}. Only letters, numbers, underscores, and hyphens are allowed.`,
+      );
+    }
+
+    return `.data/mongo-snapshots/${name}.json`;
+  }
+
   /**
    * Takes a snapshot of the MongoDB database and writes it to a file.
    * @param name - The name of the snapshot
    * @returns Promise<{ fileName: string }> The file name of the snapshot
    */
   async snapshot(name: string): Promise<{ fileName: string }> {
-    const fileName = `.data/mongo-snapshots/${name}.json`;
+    const fileName = this.snapshotPath(name);
     const snapshot = await this.mongo.snapshot([this.roleDB]);
     await this.fs.write(fileName, JSON.stringify(snapshot, null, 1));
     return {
@@ -105,7 +115,7 @@ export class Server {
    * @returns Promise<boolean> True if the snapshot was restored, false if not found
    */
   async restoreFromSnapshot(name: string): Promise<boolean> {
-    const fileName = `.data/mongo-snapshots/${name}.json`;
+    const fileName = this.snapshotPath(name);
     if (!(await this.fs.exists(fileName))) {
       return false;
     }
