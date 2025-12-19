@@ -1,5 +1,11 @@
-import { config } from "dotenv";
+import { loadEnvFile } from "node:process";
 import { defineConfig } from "vitest/config";
+
+try {
+  loadEnvFile("../../.env");
+} catch {
+  // .env file might not exist
+}
 
 export default defineConfig({
   test: {
@@ -8,9 +14,6 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       exclude: ["**/tests/**"],
-    },
-    env: {
-      ...(config({ path: "../../.env" }).parsed || {}),
     },
     testTimeout: 60000,
   },

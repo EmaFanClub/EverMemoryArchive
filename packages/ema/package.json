@@ -29,7 +29,6 @@
   "dependencies": {
     "string-width": "^7.2.0",
     "@modelcontextprotocol/sdk": "^1.25.1",
-    "dotenv": "^17.2.3",
     "mongodb": "^7.0.0",
     "mongodb-memory-server": "^11.0.0",
     "openai": "^6.13.0",

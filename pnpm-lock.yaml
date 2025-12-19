@@ -47,9 +47,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.1
         version: 1.25.1(hono@4.11.1)(zod@4.2.1)
-      dotenv:
-        specifier: ^17.2.3
-        version: 17.2.3
       mongodb:
         specifier: ^7.0.0
         version: 7.0.0
@@ -88,6 +85,9 @@ importers:
         specifier: 19.2.1
         version: 19.2.1(react@19.2.1)
     devDependencies:
+      '@next/env':
+        specifier: ^16.1.0
+        version: 16.1.0
       '@types/node':
         specifier: ^20
         version: 20.19.27
@@ -585,6 +585,9 @@ packages:
 
   '@next/env@16.0.10':
     resolution: {integrity: sha512-8tuaQkyDVgeONQ1MeT9Mkk8pQmZapMKFh5B+OrFUlG3rVmYTXcXlBetBgTurKXGaIZvkoqRT9JL5K3phXcgang==}
+
+  '@next/env@16.1.0':
+    resolution: {integrity: sha512-Dd23XQeFHmhf3KBW76leYVkejHlCdB7erakC2At2apL1N08Bm+dLYNP+nNHh0tzUXfPQcNcXiQyacw0PG4Fcpw==}
 
   '@next/eslint-plugin-next@16.0.10':
     resolution: {integrity: sha512-b2NlWN70bbPLmfyoLvvidPKWENBYYIe017ZGUpElvQjDytCWgxPJx7L9juxHt0xHvNVA08ZHJdOyhGzon/KJuw==}
@@ -1386,10 +1389,6 @@ packages:
     resolution: {integrity: sha512-yxJ2mFy/sibVQlu5qHjOkf9J3K6zgmCxgJ94u2EdvDOV09H+32LtRswEcUsmUWN72pVLOEnTSRaIVVzVQgS0dg==}
     engines: {node: '>=8'}
     deprecated: Use your platform's native DOMException instead
-
-  dotenv@17.2.3:
-    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
-    engines: {node: '>=12'}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -3449,6 +3448,8 @@ snapshots:
 
   '@next/env@16.0.10': {}
 
+  '@next/env@16.1.0': {}
+
   '@next/eslint-plugin-next@16.0.10':
     dependencies:
       fast-glob: 3.3.1
@@ -4186,8 +4187,6 @@ snapshots:
     dependencies:
       webidl-conversions: 5.0.0
     optional: true
-
-  dotenv@17.2.3: {}
 
   dunder-proto@1.0.1:
     dependencies:
