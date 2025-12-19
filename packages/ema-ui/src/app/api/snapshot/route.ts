@@ -1,5 +1,9 @@
 import { getServer } from "../shared-server";
 
+/**
+ * POST /api/snapshot - Take a snapshot of the MongoDB database
+ * Body: { name: string = "default" }
+ */
 export async function POST(request: Request) {
   if (process.env.NODE_ENV !== "development") {
     return new Response(
