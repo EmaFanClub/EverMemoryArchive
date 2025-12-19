@@ -11,29 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import yaml from "js-yaml";
 
-export class RetryConfig {
-  /** Retry configuration */
-
-  enabled: boolean;
-  maxRetries: number;
-  initialDelay: number;
-  maxDelay: number;
-  exponentialBase: number;
-
-  constructor({
-    enabled = true,
-    maxRetries = 3,
-    initialDelay = 1.0,
-    maxDelay = 60.0,
-    exponentialBase = 2.0,
-  }: Partial<RetryConfig> = {}) {
-    this.enabled = enabled;
-    this.maxRetries = maxRetries;
-    this.initialDelay = initialDelay;
-    this.maxDelay = maxDelay;
-    this.exponentialBase = exponentialBase;
-  }
-}
+import { RetryConfig } from "./retry";
 
 export class LLMConfig {
   /** LLM configuration */
@@ -181,13 +159,13 @@ export class Config {
 
     // Parse retry configuration
     const retryData = data.retry ?? {};
-    const retryConfig = new RetryConfig({
-      enabled: retryData.enabled,
-      maxRetries: retryData.max_retries,
-      initialDelay: retryData.initial_delay,
-      maxDelay: retryData.max_delay,
-      exponentialBase: retryData.exponential_base,
-    });
+    const retryConfig = new RetryConfig(
+      retryData.enabled,
+      retryData.max_retries,
+      retryData.initial_delay,
+      retryData.max_delay,
+      retryData.exponential_base,
+    );
 
     const llmConfig = new LLMConfig({
       apiKey: data.api_key,
