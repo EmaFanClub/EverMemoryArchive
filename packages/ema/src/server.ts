@@ -39,7 +39,7 @@ export class Server {
     const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
     const mongoDbName = process.env.MONGO_DB_NAME || "ema";
     const mongoKind =
-      (process.env.MONGO_KIND as "memory" | "remote") || "remote";
+      (process.env.MONGO_KIND as "memory" | "remote") || "memory";
 
     await server.initializeDb(mongoUri, mongoDbName, mongoKind);
     return server;
