@@ -256,8 +256,11 @@ export class OpenAIClient extends LLMClientBase {
         )
       : this._makeApiRequest.bind(this);
 
-    const response = await executor(requestParams.apiMessages, requestParams.tools);
-    
+    const response = await executor(
+      requestParams.apiMessages,
+      requestParams.tools,
+    );
+
     return this._parseResponse(response);
   }
 }
