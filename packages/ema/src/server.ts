@@ -40,7 +40,7 @@ export class Server {
   }
 
   static async create(fs: Fs = new RealFs()): Promise<Server> {
-    const isDev = process.env.NODE_ENV === "development";
+    const isDev = ["development", "test"].includes(process.env.NODE_ENV || "");
 
     const server = new Server(fs);
 
@@ -63,6 +63,20 @@ export class Server {
       }
     }
 
+    return server;
+  }
+
+  // todo: replace this api with `create(config, fs)` in future.
+  /**
+   * Creates a Server instance with a pre-configured MongoDB instance for testing.
+   * @param fs - File system implementation
+   * @param mongo - MongoDB instance
+   * @returns Promise resolving to the Server instance
+   */
+  static async createWithMongo(fs: Fs, mongo: Mongo): Promise<Server> {
+    const server = new Server(fs);
+    server.mongo = mongo;
+    server.roleDB = new MongoRoleDB(mongo);
     return server;
   }
 
