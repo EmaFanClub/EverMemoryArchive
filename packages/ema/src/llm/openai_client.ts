@@ -4,7 +4,7 @@
 
 import type { Tool } from "./base";
 import { LLMClientBase } from "./base";
-import { RetryConfig } from "../retry";
+import { RetryConfig, wrapWithRetry } from "../retry";
 import type { Message, LLMResponse } from "../schema";
 import { OpenAI } from "openai";
 import { ProxyAgent, fetch } from "undici";
@@ -246,24 +246,18 @@ export class OpenAIClient extends LLMClientBase {
    */
   async generate(messages: Message[], tools?: Tool[]): Promise<LLMResponse> {
     const requestParams = this._prepareRequest(messages, tools);
-    if (this.retryConfig.enabled) {
-      //             # Applies retry logic
-      //             retry_decorator = asyncRetry(config=self.retry_config, on_retry=self.retry_callback)
-      //             api_call = retry_decorator(self._makeApiRequest)
-      //             response = await api_call(
-      //                 request_params["api_messages"],
-      //                 request_params["tools"],
-      //             )
-      //   const retryDecorator = asyncRetry(this.retryConfig, this.retryCallback);
-      //   const apiCall = retryDecorator(this._makeApiRequest);
-      //   const response = await apiCall(requestParams);
-      //   return this._parseResponse(response);
-      console.warn("Retry is not implemented");
-    }
-    const response = await this._makeApiRequest(
-      requestParams.apiMessages,
-      requestParams.tools,
-    );
+
+    // Make API request (with optional retry)
+    const executor = this.retryConfig.enabled
+      ? wrapWithRetry(
+          this._makeApiRequest.bind(this),
+          this.retryConfig,
+          this.retryCallback,
+        )
+      : this._makeApiRequest.bind(this);
+
+    const response = await executor(requestParams.apiMessages, requestParams.tools);
+    
     return this._parseResponse(response);
   }
 }

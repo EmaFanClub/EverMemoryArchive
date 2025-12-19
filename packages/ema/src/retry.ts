@@ -116,3 +116,18 @@ export function asyncRetry(
     return descriptor;
   };
 }
+
+/**
+ * Wrap a standalone async function with retry logic (non-decorator usage).
+ * Useful when you want a callable instead of applying a class method decorator.
+ */
+export function wrapWithRetry<T extends (...args: any[]) => Promise<any>>(
+  fn: T,
+  config: RetryConfig = new RetryConfig(),
+  onRetry?: (exception: Error, attempt: number) => void,
+): T {
+  const decorator = asyncRetry(config, onRetry);
+  const descriptor: PropertyDescriptor = { value: fn };
+  const wrappedDescriptor = decorator({}, "wrapped", descriptor) ?? descriptor;
+  return (wrappedDescriptor.value ?? fn) as T;
+}
