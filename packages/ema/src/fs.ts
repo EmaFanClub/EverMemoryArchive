@@ -69,3 +69,23 @@ export class RealFs implements Fs {
     }
   }
 }
+
+/**
+ * In-memory file system implementation
+ * Stores files in memory for testing purposes
+ */
+export class MemFs implements Fs {
+  private files: Map<string, string> = new Map();
+
+  async exists(path: string): Promise<boolean> {
+    return this.files.has(path);
+  }
+
+  async read(path: string): Promise<string> {
+    return this.files.get(path) ?? "{}";
+  }
+
+  async write(path: string, content: string): Promise<void> {
+    this.files.set(path, content);
+  }
+}
