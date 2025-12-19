@@ -370,9 +370,13 @@ export class ContextManager {
 
 /** Single agent with basic tools and MCP support. */
 export class Agent {
+  /** LLM client used by the agent to generate responses. */
   llm: LLMClientBase;
+  /** Configuration for the agent and underlying LLM. */
   config: Config;
+  /** Manages conversation context, history, and available tools. */
   contextManager: ContextManager;
+  /** Logger instance used for agent-related logging. */
   logger: AgentLogger;
 
   constructor(
