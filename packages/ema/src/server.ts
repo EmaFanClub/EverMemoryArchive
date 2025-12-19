@@ -1,7 +1,14 @@
 import { OpenAIClient } from "./llm/openai_client";
 import type { Message } from "./schema";
-import { createMongo, MongoRoleDB } from "./db";
+import {
+  createMongo,
+  Mongo,
+  MongoRoleDB,
+  type MongoCollectionGetter,
+} from "./db";
 import type { RoleData, RoleDB } from "./db/base";
+import type { Fs } from "./fs";
+import { RealFs } from "./fs";
 
 /**
  * The server class for the EverMindAgent.
@@ -10,9 +17,13 @@ import type { RoleData, RoleDB } from "./db/base";
  */
 export class Server {
   private llmClient: OpenAIClient;
-  private roleDB!: RoleDB;
+  private mongo!: Mongo;
+  private roleDB!: RoleDB & MongoCollectionGetter;
+  private fs: Fs;
 
   private constructor() {
+    this.fs = new RealFs();
+
     // Initialize OpenAI client with environment variables or defaults
     const apiKey =
       process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "";
@@ -32,6 +43,8 @@ export class Server {
   }
 
   static async create(): Promise<Server> {
+    const isDev = process.env.NODE_ENV === "development";
+
     const server = new Server();
 
     // Initialize MongoDB asynchronously
@@ -39,9 +52,20 @@ export class Server {
     const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
     const mongoDbName = process.env.MONGO_DB_NAME || "ema";
     const mongoKind =
-      (process.env.MONGO_KIND as "memory" | "remote") || "memory";
+      (process.env.MONGO_KIND as "memory" | "remote") ||
+      (isDev ? "memory" : "remote");
 
     await server.initializeDb(mongoUri, mongoDbName, mongoKind);
+
+    if (isDev) {
+      const restored = await server.restoreFromSnapshot("default");
+      if (!restored) {
+        console.error("Failed to restore snapshot 'default'");
+      } else {
+        console.log("Snapshot 'default' restored");
+      }
+    }
+
     return server;
   }
 
@@ -56,9 +80,28 @@ export class Server {
     dbName: string,
     kind: "memory" | "remote",
   ): Promise<void> {
-    const mongo = await createMongo(uri, dbName, kind);
-    await mongo.connect();
-    this.roleDB = new MongoRoleDB(mongo);
+    this.mongo = await createMongo(uri, dbName, kind);
+    await this.mongo.connect();
+    this.roleDB = new MongoRoleDB(this.mongo);
+  }
+
+  async snapshot(name: string): Promise<{ fileName: string }> {
+    const fileName = `.data/mongo-snapshots/${name}.json`;
+    const snapshot = await this.mongo.snapshot([this.roleDB]);
+    await this.fs.write(fileName, JSON.stringify(snapshot, null, 1));
+    return {
+      fileName,
+    };
+  }
+
+  async restoreFromSnapshot(name: string): Promise<boolean> {
+    const fileName = `.data/mongo-snapshots/${name}.json`;
+    if (!(await this.fs.exists(fileName))) {
+      return false;
+    }
+    const snapshot = await this.fs.read(fileName);
+    await this.mongo.restoreFromSnapshot(JSON.parse(snapshot));
+    return true;
   }
 
   /**

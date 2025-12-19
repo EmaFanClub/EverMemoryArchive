@@ -4,26 +4,27 @@
  */
 
 import { MongoClient, type Db } from "mongodb";
-import type { CreateMongoArgs, Mongo } from "../mongo";
+import type { CreateMongoArgs } from "../mongo";
+import { Mongo } from "../mongo";
 
 /**
  * Remote MongoDB implementation
  * Connects to an actual MongoDB instance for production environments
  */
-export class RemoteMongo implements Mongo {
+export class RemoteMongo extends Mongo {
+  readonly canSetSnapshot: boolean = false;
+
   private client?: MongoClient;
-  private db?: Db;
   private readonly uri: string;
-  private readonly dbName: string;
 
   /**
    * Creates a new RemoteMongo instance
    * @param uri - MongoDB connection string (default: mongodb://localhost:27017)
    * @param dbName - Name of the database (default: ema)
    */
-  constructor({ uri, dbName }: CreateMongoArgs) {
+  constructor({ uri, dbName = "ema" }: CreateMongoArgs) {
+    super(dbName);
     this.uri = uri || "mongodb://localhost:27017";
-    this.dbName = dbName || "ema";
   }
 
   /**
@@ -31,7 +32,7 @@ export class RemoteMongo implements Mongo {
    * @returns Promise resolving when connection is established
    */
   async connect(): Promise<void> {
-    if (this.client && this.db) {
+    if (this.client) {
       return;
     }
 
@@ -39,7 +40,6 @@ export class RemoteMongo implements Mongo {
     try {
       await client.connect();
       this.client = client;
-      this.db = client.db(this.dbName);
     } catch (error) {
       try {
         await client.close();
@@ -56,10 +56,7 @@ export class RemoteMongo implements Mongo {
    * @throws Error if not connected
    */
   getDb(): Db {
-    if (!this.db) {
-      throw new Error("MongoDB not connected. Call connect() first.");
-    }
-    return this.db;
+    return this.client!.db(this.dbName);
   }
 
   /**
@@ -82,7 +79,6 @@ export class RemoteMongo implements Mongo {
     if (this.client) {
       await this.client.close();
       this.client = undefined;
-      this.db = undefined;
     }
   }
 }

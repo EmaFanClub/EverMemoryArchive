@@ -5,24 +5,25 @@
 
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
-import type { CreateMongoArgs, Mongo } from "../mongo";
+import type { CreateMongoArgs } from "../mongo";
+import { Mongo } from "../mongo";
 
 /**
  * In-memory MongoDB implementation
  * Uses mongodb-memory-server for development and testing environments
  */
-export class MemoryMongo implements Mongo {
+export class MemoryMongo extends Mongo {
+  readonly canSetSnapshot: boolean = true;
+
   private mongoServer?: MongoMemoryServer;
   private client?: MongoClient;
-  private db?: Db;
-  private readonly dbName: string;
 
   /**
    * Creates a new MemoryMongo instance
    * @param args - Arguments for creating a MemoryMongo instance
    */
-  constructor({ dbName }: CreateMongoArgs) {
-    this.dbName = dbName ?? "ema";
+  constructor({ dbName = "ema" }: CreateMongoArgs) {
+    super(dbName);
   }
 
   /**
@@ -46,7 +47,6 @@ export class MemoryMongo implements Mongo {
 
       this.mongoServer = mongoServer;
       this.client = client;
-      this.db = client.db(this.dbName);
     } catch (error) {
       if (client) {
         try {
@@ -65,7 +65,6 @@ export class MemoryMongo implements Mongo {
       }
 
       this.client = undefined;
-      this.db = undefined;
       this.mongoServer = undefined;
 
       throw error;
@@ -78,10 +77,7 @@ export class MemoryMongo implements Mongo {
    * @throws Error if not connected
    */
   getDb(): Db {
-    if (!this.db) {
-      throw new Error("MongoDB not connected. Call connect() first.");
-    }
-    return this.db;
+    return this.client!.db(this.dbName);
   }
 
   /**
@@ -104,7 +100,6 @@ export class MemoryMongo implements Mongo {
     if (this.client) {
       await this.client.close();
       this.client = undefined;
-      this.db = undefined;
     }
     if (this.mongoServer) {
       await this.mongoServer.stop();

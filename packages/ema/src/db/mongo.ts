@@ -5,6 +5,10 @@
 
 import type { Db, MongoClient } from "mongodb";
 
+export interface MongoCollectionGetter {
+  collections: string[];
+}
+
 /**
  * Arguments for creating a MongoDB instance
  */
@@ -36,30 +40,69 @@ export interface MongoProvider {
 /**
  * A mongo database instance
  */
-export interface Mongo {
+export abstract class Mongo {
+  abstract readonly canSetSnapshot: boolean;
+
+  constructor(protected readonly dbName: string) {}
+
   /**
    * Gets the MongoDB database instance
    * @returns The MongoDB database instance
    */
-  getDb(): Db;
+  abstract getDb(): Db;
 
   /**
    * Gets the MongoDB client instance
    * @returns The MongoDB client instance
    */
-  getClient(): MongoClient;
+  abstract getClient(): MongoClient;
 
   /**
    * Connects to the MongoDB database
    * @returns Promise resolving when connection is established
    */
-  connect(): Promise<void>;
+  abstract connect(): Promise<void>;
 
   /**
    * Closes the MongoDB connection
    * @returns Promise resolving when connection is closed
    */
-  close(): Promise<void>;
+  abstract close(): Promise<void>;
+
+  async snapshot(dbs: MongoCollectionGetter[]): Promise<unknown> {
+    const collections = Array.from(
+      new Set<string>(dbs.flatMap((db) => db.collections)),
+    ).sort();
+
+    const client = this.getClient();
+    return await client.withSession(async (session) => {
+      const snapshot: Record<string, unknown[]> = {};
+      const db = client.db(this.dbName);
+      for (const name of collections) {
+        snapshot[name] = await db.collection(name).find().toArray();
+      }
+      return snapshot;
+    });
+  }
+
+  async restoreFromSnapshot(snapshotData: unknown): Promise<void> {
+    if (!this.canSetSnapshot) {
+      throw new Error("MongoDB cannot set snapshot.");
+    }
+
+    const snapshot = snapshotData as Record<string, any[]>;
+
+    const client = this.getClient();
+    return await client.withSession(async (session) => {
+      const db = client.db(this.dbName);
+      for (const name of Object.keys(snapshot)) {
+        await db.collection(name).deleteMany();
+        if (snapshot[name] instanceof Array && snapshot[name].length > 0) {
+          await db.collection(name).insertMany(snapshot[name]);
+        }
+      }
+    });
+  }
 }
 
 /**
