@@ -36,7 +36,7 @@ export interface Entity {
 }
 
 /**
- * Unix timestamp in microseconds since the Unix epoch
+ * Unix timestamp in milliseconds since the Unix epoch
  */
 export type DbDate = number;
 
