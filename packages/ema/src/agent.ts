@@ -5,6 +5,8 @@ import { get_encoding, Tiktoken } from "@dqbd/tiktoken";
 import stringWidth from "string-width";
 
 import type { LLMClientBase } from "./llm/base";
+import { OpenAIClient } from "./llm/openai_client";
+import { Config } from "./config";
 import { AgentLogger } from "./logger";
 import { RetryExhaustedError } from "./retry";
 import type { LLMResponse, Message } from "./schema";
@@ -344,27 +346,31 @@ export class ContextManager {
 /** Single agent with basic tools and MCP support. */
 export class Agent {
   llm: LLMClientBase;
-  maxSteps: number;
+  config: Config;
   contextManager: ContextManager;
   logger: AgentLogger;
 
   constructor(
-    llmClient: LLMClientBase,
+    config: Config,
     systemPrompt: string,
     tools: Tool[],
-    maxSteps: number = 50,
-    workspaceDir: string = "./workspace",
     tokenLimit: number = 80000,
   ) {
-    this.llm = llmClient;
-    this.maxSteps = maxSteps;
+    this.config = config;
+
+    this.llm = new OpenAIClient(
+      this.config.llm.apiKey,
+      this.config.llm.apiBase,
+      this.config.llm.model,
+      this.config.llm.retry,
+    );
 
     // Initialize context manager with tools
     this.contextManager = new ContextManager(
       systemPrompt,
-      llmClient,
+      this.llm,
       tools,
-      workspaceDir,
+      this.config.agent.workspaceDir,
       tokenLimit,
     );
 
@@ -380,15 +386,16 @@ export class Agent {
     //   `${Colors.DIM}📝 Log file: ${this.logger.getLogFilePath()}${Colors.RESET}`,
     // );
 
+    const maxSteps = this.config.agent.maxSteps;
     let step = 0;
 
-    while (step < this.maxSteps) {
+    while (step < maxSteps) {
       // Check and summarize message history to prevent context overflow
       await this.contextManager.summarizeMessages();
 
       // Step header with proper width calculation
       const BOX_WIDTH = 58;
-      const stepText = `${Colors.BOLD}${Colors.BRIGHT_CYAN}💭 Step ${step + 1}/${this.maxSteps}${Colors.RESET}`;
+      const stepText = `${Colors.BOLD}${Colors.BRIGHT_CYAN}💭 Step ${step + 1}/${maxSteps}${Colors.RESET}`;
       const stepDisplayWidth = stringWidth(stepText);
       const padding = Math.max(0, BOX_WIDTH - 1 - stepDisplayWidth); // -1 for leading space
 
@@ -551,7 +558,7 @@ export class Agent {
     }
 
     // Max steps reached
-    const errorMsg = `Task couldn't be completed after ${this.maxSteps} steps.`;
+    const errorMsg = `Task couldn't be completed after ${maxSteps} steps.`;
     console.log(`\n${Colors.BRIGHT_YELLOW}⚠️  ${errorMsg}${Colors.RESET}`);
     return errorMsg;
   }
