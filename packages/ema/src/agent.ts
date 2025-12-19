@@ -316,14 +316,20 @@ export class ContextManager {
     let summaryContent = `Round ${roundNum} execution process:\n\n`;
     for (const msg of messages) {
       if (msg.role === "assistant") {
-        const contentText = msg.content;
+        const contentText =
+          typeof msg.content === "string"
+            ? msg.content
+            : JSON.stringify(msg.content);
         summaryContent += `Assistant: ${contentText}\n`;
         if (msg.tool_calls) {
           const toolNames = msg.tool_calls.map((tc) => tc.function.name);
           summaryContent += `  → Called tools: ${toolNames.join(", ")}\n`;
         }
       } else if (msg.role === "tool") {
-        const resultPreview = msg.content;
+        const resultPreview =
+          typeof msg.content === "string"
+            ? msg.content
+            : JSON.stringify(msg.content);
         summaryContent += `  ← Tool returned: ${resultPreview}...\n`;
       }
     }
