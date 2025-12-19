@@ -140,7 +140,16 @@ export class ContextManager {
       let totalTokens = 0;
 
       for (const msg of this.messages) {
-        totalTokens += encoding.encode(msg.content).length;
+        const content = msg.content;
+        if (typeof content === "string") {
+          totalTokens += encoding.encode(content).length;
+        } else if (Array.isArray(content)) {
+          for (const block of content as unknown[]) {
+            if (typeof block === "object" && block !== null) {
+              totalTokens += encoding.encode(JSON.stringify(block)).length;
+            }
+          }
+        } 
 
         if (msg.thinking) {
           totalTokens += encoding.encode(msg.thinking).length;
@@ -169,7 +178,17 @@ export class ContextManager {
   estimateTokensFallback(): number {
     let totalChars = 0;
     for (const msg of this.messages) {
-      totalChars += msg.content.length;
+      const content = msg.content;
+      if (typeof content === "string") {
+        totalChars += content.length;
+      } else if (Array.isArray(content)) {
+        for (const block of content as unknown[]) {
+          if (typeof block === "object" && block !== null) {
+            totalChars += JSON.stringify(block).length;
+          }
+        }
+      }
+
       if (msg.thinking) {
         totalChars += msg.thinking.length;
       }
