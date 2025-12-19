@@ -35,8 +35,8 @@ describe("AgentLogger", () => {
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
   });
 
-  it("creates new run log file with header", () => {
-    logger.startNewRun();
+  it("creates new run log file with header", async () => {
+    await logger.startNewRun();
 
     const logPath = logger.getLogFilePath();
     expect(logPath).toBe(
@@ -48,10 +48,10 @@ describe("AgentLogger", () => {
     expect(content).toContain("Agent Run Log - 2024-01-02 03:04:05");
   });
 
-  it("logs request/response/tool results with expected JSON keys and indexes", () => {
-    logger.startNewRun();
+  it("logs request/response/tool results with expected JSON keys and indexes", async () => {
+    await logger.startNewRun();
 
-    logger.logRequest(
+    await logger.logRequest(
       [
         { role: "user", content: "hi" },
         {
@@ -64,7 +64,7 @@ describe("AgentLogger", () => {
       [{ name: "bash" }],
     );
 
-    logger.logResponse(
+    await logger.logResponse(
       "done",
       "response thinking",
       [
@@ -77,9 +77,21 @@ describe("AgentLogger", () => {
       "stop",
     );
 
-    logger.logToolResult("bash", { command: "echo 1" }, true, "1\n", null);
+    await logger.logToolResult(
+      "bash",
+      { command: "echo 1" },
+      true,
+      "1\n",
+      null,
+    );
 
-    logger.logToolResult("bash", { command: "bad" }, false, null, "error");
+    await logger.logToolResult(
+      "bash",
+      { command: "bad" },
+      false,
+      null,
+      "error",
+    );
 
     const logPath = logger.getLogFilePath() as string;
     const content = fs.readFileSync(logPath, "utf-8");

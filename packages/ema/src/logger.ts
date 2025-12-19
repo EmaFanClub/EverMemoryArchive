@@ -1,6 +1,6 @@
 /** Agent run logger */
 
-import * as fs from "node:fs";
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 
@@ -38,7 +38,6 @@ export class AgentLogger {
    */
   constructor() {
     this.logDir = path.join(os.homedir(), ".ema", "log");
-    fs.mkdirSync(this.logDir, { recursive: true });
     this.logFile = null;
     this.logIndex = 0;
   }
@@ -46,7 +45,9 @@ export class AgentLogger {
   /**
    * Start new run, create new log file.
    */
-  startNewRun(): void {
+  async startNewRun(): Promise<void> {
+    await this.ensureLogDir();
+
     const timestamp = this.formatFilenameTimestamp(new Date());
     const logFilename = `agent_run_${timestamp}.log`;
     this.logFile = path.join(this.logDir, logFilename);
@@ -58,7 +59,7 @@ export class AgentLogger {
       `Agent Run Log - ${this.formatTimestampSeconds(now)}\n` +
       `${"=".repeat(80)}\n\n`;
 
-    fs.writeFileSync(this.logFile, header, { encoding: "utf-8" });
+    await fs.writeFile(this.logFile, header, { encoding: "utf-8" });
   }
 
   /**
@@ -70,7 +71,7 @@ export class AgentLogger {
   logRequest(
     messages: Message[],
     tools: Array<{ name: string }> | null = null,
-  ): void {
+  ): Promise<void> {
     this.logIndex += 1;
 
     const requestData: {
@@ -110,7 +111,7 @@ export class AgentLogger {
     let content = "LLM Request:\n\n";
     content += JSON.stringify(requestData, null, 2);
 
-    this.writeLog("REQUEST", content);
+    return this.writeLog("REQUEST", content);
   }
 
   /**
@@ -126,7 +127,7 @@ export class AgentLogger {
     thinking: string | null = null,
     toolCalls: ToolCall[] | null = null,
     finishReason: string | null = null,
-  ): void {
+  ): Promise<void> {
     this.logIndex += 1;
 
     const responseData: Record<string, unknown> = {
@@ -148,7 +149,7 @@ export class AgentLogger {
     let logContent = "LLM Response:\n\n";
     logContent += JSON.stringify(responseData, null, 2);
 
-    this.writeLog("RESPONSE", logContent);
+    return this.writeLog("RESPONSE", logContent);
   }
 
   /**
@@ -166,7 +167,7 @@ export class AgentLogger {
     resultSuccess: boolean,
     resultContent: string | null = null,
     resultError: string | null = null,
-  ): void {
+  ): Promise<void> {
     this.logIndex += 1;
 
     const toolResultData: Record<string, unknown> = {
@@ -184,7 +185,7 @@ export class AgentLogger {
     let content = "Tool Execution:\n\n";
     content += JSON.stringify(toolResultData, null, 2);
 
-    this.writeLog("TOOL_RESULT", content);
+    return this.writeLog("TOOL_RESULT", content);
   }
 
   /**
@@ -200,7 +201,7 @@ export class AgentLogger {
    * @param logType - Log type (REQUEST, RESPONSE, TOOL_RESULT).
    * @param content - Log content.
    */
-  private writeLog(logType: string, content: string): void {
+  private async writeLog(logType: string, content: string): Promise<void> {
     if (this.logFile === null) {
       return;
     }
@@ -213,7 +214,11 @@ export class AgentLogger {
       `${"-".repeat(80)}\n` +
       `${content}\n`;
 
-    fs.appendFileSync(this.logFile, entry, { encoding: "utf-8" });
+    await fs.appendFile(this.logFile, entry, { encoding: "utf-8" });
+  }
+
+  private ensureLogDir(): Promise<void> {
+    return fs.mkdir(this.logDir, { recursive: true }).then(() => {});
   }
 
   private formatFilenameTimestamp(date: Date): string {
