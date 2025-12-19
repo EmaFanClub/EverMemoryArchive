@@ -11,32 +11,34 @@
  * - Fully decoupled, non-invasive to business code
  */
 export class RetryConfig {
-  constructor(
-    /**
-     * Whether to enable retry mechanism
-     */
-    public enabled: boolean = true,
-    /**
-     * Maximum number of retries
-     */
-    public maxRetries: number = 3,
-    /**
-     * Initial delay time (seconds)
-     */
-    public initialDelay: number = 1.0,
-    /**
-     * Maximum delay time (seconds)
-     */
-    public maxDelay: number = 60.0,
-    /**
-     * Exponential backoff base
-     */
-    public exponentialBase: number = 2.0,
-    /**
-     * Tuple of retryable exception types
-     */
-    public retryableExceptions: Array<typeof Error> = [Error],
-  ) {}
+  /** Whether to enable retry mechanism */
+  enabled: boolean;
+  /** Maximum number of retries */
+  maxRetries: number;
+  /** Initial delay time (seconds) */
+  initialDelay: number;
+  /** Maximum delay time (seconds) */
+  maxDelay: number;
+  /** Exponential backoff base */
+  exponentialBase: number;
+  /** Retryable exception types */
+  retryableExceptions: Array<typeof Error>;
+
+  constructor({
+    enabled = true,
+    maxRetries = 3,
+    initialDelay = 1.0,
+    maxDelay = 60.0,
+    exponentialBase = 2.0,
+    retryableExceptions = [Error],
+  }: Partial<RetryConfig> = {}) {
+    this.enabled = enabled;
+    this.maxRetries = maxRetries;
+    this.initialDelay = initialDelay;
+    this.maxDelay = maxDelay;
+    this.exponentialBase = exponentialBase;
+    this.retryableExceptions = retryableExceptions;
+  }
 
   /**
    * Calculate delay time (exponential backoff)

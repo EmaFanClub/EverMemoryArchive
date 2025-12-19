@@ -159,13 +159,13 @@ export class Config {
 
     // Parse retry configuration
     const retryData = data.retry ?? {};
-    const retryConfig = new RetryConfig(
-      retryData.enabled,
-      retryData.max_retries,
-      retryData.initial_delay,
-      retryData.max_delay,
-      retryData.exponential_base,
-    );
+    const retryConfig = new RetryConfig({
+      enabled: retryData.enabled,
+      maxRetries: retryData.max_retries,
+      initialDelay: retryData.initial_delay,
+      maxDelay: retryData.max_delay,
+      exponentialBase: retryData.exponential_base,
+    });
 
     const llmConfig = new LLMConfig({
       apiKey: data.api_key,
