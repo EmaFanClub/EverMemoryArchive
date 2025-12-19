@@ -1,5 +1,5 @@
 /**
- * Database interfaces for EverMindAgent.
+ * Database interfaces for EverMemoryArchive.
  *
  * + We associate roles with prompt and assets.
  * + We can clone roles to create actor entities. Each actor entity has a unique state, such as memory buffer.
