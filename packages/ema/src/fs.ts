@@ -3,7 +3,7 @@ import { dirname } from "path";
 import tmp from "tmp";
 
 /**
- * File system interface for reading and writing files
+ * File system interface
  */
 export interface Fs {
   /**
