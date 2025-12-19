@@ -85,6 +85,11 @@ export class Server {
     this.roleDB = new MongoRoleDB(this.mongo);
   }
 
+  /**
+   * Takes a snapshot of the MongoDB database and writes it to a file.
+   * @param name - The name of the snapshot
+   * @returns Promise<{ fileName: string }> The file name of the snapshot
+   */
   async snapshot(name: string): Promise<{ fileName: string }> {
     const fileName = `.data/mongo-snapshots/${name}.json`;
     const snapshot = await this.mongo.snapshot([this.roleDB]);
@@ -94,6 +99,11 @@ export class Server {
     };
   }
 
+  /**
+   * Restores the MongoDB database from the snapshot file.
+   * @param name - The name of the snapshot
+   * @returns Promise<boolean> True if the snapshot was restored, false if not found
+   */
   async restoreFromSnapshot(name: string): Promise<boolean> {
     const fileName = `.data/mongo-snapshots/${name}.json`;
     if (!(await this.fs.exists(fileName))) {

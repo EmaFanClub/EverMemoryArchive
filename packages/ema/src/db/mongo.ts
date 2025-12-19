@@ -69,6 +69,11 @@ export abstract class Mongo {
    */
   abstract close(): Promise<void>;
 
+  /**
+   * Takes a snapshot of the MongoDB database and returns the snapshot data.
+   * @param dbs - The MongoDB database instances
+   * @returns Promise<unknown> The snapshot data
+   */
   async snapshot(dbs: MongoCollectionGetter[]): Promise<unknown> {
     const collections = Array.from(
       new Set<string>(dbs.flatMap((db) => db.collections)),
@@ -85,6 +90,11 @@ export abstract class Mongo {
     });
   }
 
+  /**
+   * Restores the MongoDB database from the snapshot data.
+   * @param snapshotData - The snapshot data
+   * @returns Promise resolving when the restore is complete
+   */
   async restoreFromSnapshot(snapshotData: unknown): Promise<void> {
     if (!this.canSetSnapshot) {
       throw new Error("MongoDB cannot set snapshot.");
