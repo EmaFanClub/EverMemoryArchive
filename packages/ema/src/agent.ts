@@ -375,10 +375,10 @@ export class Agent {
   /** Execute agent loop until task is complete or max steps reached. */
   async run(): Promise<string> {
     // Start new run, initialize log file
-    await this.logger.startNewRun();
-    console.log(
-      `${Colors.DIM}📝 Log file: ${this.logger.getLogFilePath()}${Colors.RESET}`,
-    );
+    // await this.logger.startNewRun();
+    // console.log(
+    //   `${Colors.DIM}📝 Log file: ${this.logger.getLogFilePath()}${Colors.RESET}`,
+    // );
 
     let step = 0;
 
@@ -399,10 +399,10 @@ export class Agent {
       console.log(`${Colors.DIM}╰${"─".repeat(BOX_WIDTH)}╯${Colors.RESET}`);
 
       // Log LLM request
-      await this.logger.logRequest(
-        this.contextManager.context.messages,
-        this.contextManager.context.tools,
-      );
+      // await this.logger.logRequest(
+      //   this.contextManager.context.messages,
+      //   this.contextManager.context.tools,
+      // );
 
       // Call LLM with context from context manager
       let response: LLMResponse;
@@ -432,12 +432,12 @@ export class Agent {
       this.contextManager.updateApiTokens(response);
 
       // Log LLM response
-      await this.logger.logResponse(
-        response.content,
-        response.thinking ?? null,
-        response.tool_calls ?? null,
-        response.finish_reason ?? null,
-      );
+      // await this.logger.logResponse(
+      //   response.content,
+      //   response.thinking ?? null,
+      //   response.tool_calls ?? null,
+      //   response.finish_reason ?? null,
+      // );
 
       // Add assistant message to context
       this.contextManager.addAssistantMessage(response);
@@ -519,13 +519,13 @@ export class Agent {
         }
 
         // Log tool execution result
-        await this.logger.logToolResult(
-          functionName,
-          callArgs,
-          result.success,
-          result.success ? result.content : null,
-          result.success ? null : result.error,
-        );
+        // await this.logger.logToolResult(
+        //   functionName,
+        //   callArgs,
+        //   result.success,
+        //   result.success ? result.content : null,
+        //   result.success ? null : result.error,
+        // );
 
         // Print result
         if (result.success) {
