@@ -86,7 +86,7 @@ export abstract class Mongo {
     ).sort();
 
     const client = this.getClient();
-    return await client.withSession(async (session) => {
+    return await client.withSession(async () => {
       const snapshot: Record<string, unknown[]> = {};
       const db = client.db(this.dbName);
       for (const name of collections) {
@@ -109,7 +109,7 @@ export abstract class Mongo {
     const snapshot = snapshotData as Record<string, any[]>;
 
     const client = this.getClient();
-    return await client.withSession(async (session) => {
+    return await client.withSession(async () => {
       const db = client.db(this.dbName);
       for (const name of Object.keys(snapshot)) {
         await db.collection(name).deleteMany();
