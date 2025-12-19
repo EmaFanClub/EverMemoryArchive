@@ -1,5 +1,9 @@
 import { getServer } from "../../shared-server";
 
+/**
+ * POST /api/snapshot/restore - Restore a snapshot of the MongoDB database by name
+ * Body: { name: string = "default" }
+ */
 export async function POST(request: Request) {
   if (process.env.NODE_ENV !== "development") {
     return new Response(
@@ -15,7 +19,7 @@ export async function POST(request: Request) {
 
   const server = await getServer();
   const body = await request.json();
-  const name = body.name || "quick";
+  const name = body.name || "default";
   await server.restoreFromSnapshot(name);
   return new Response(JSON.stringify({ message: "Snapshot restored" }), {
     status: 200,
