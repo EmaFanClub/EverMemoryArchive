@@ -55,17 +55,17 @@ export class MongoRoleDB implements RoleDB {
   /**
    * Inserts or updates a role in the database
    * If the role doesn't have an ID, a new one is generated
-   * @param roleData - The role data to upsert
+   * @param entity - The role data to upsert
    * @returns Promise resolving to the ID of the created or updated role
    * @throws Error if name, description, or prompt are missing
    */
-  async upsertRole(roleData: RoleEntity): Promise<number> {
-    if (!roleData.name || !roleData.description || !roleData.prompt) {
+  async upsertRole(entity: RoleEntity): Promise<number> {
+    if (!entity.name || !entity.description || !entity.prompt) {
       throw new Error("name, description, and prompt are required");
     }
 
-    roleData.updatedAt = Date.now();
-    return upsertEntity(this.mongo, this.$cn, roleData);
+    entity.updatedAt = Date.now();
+    return upsertEntity(this.mongo, this.$cn, entity);
   }
 
   /**
