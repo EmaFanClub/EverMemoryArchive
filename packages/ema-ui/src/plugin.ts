@@ -13,7 +13,12 @@ export async function loadPlugins(server: Server): Promise<void> {
    * @example
    * EMA_PLUGINS=qq,discord
    */
-  const enabledPlugins = new Set(process.env.EMA_PLUGINS?.split(",") ?? []);
+  const enabledPlugins = new Set(
+    (process.env.EMA_PLUGINS ?? "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => name.length > 0),
+  );
 
   await Promise.all(
     getPluginModules().map(async (name: string) => {
