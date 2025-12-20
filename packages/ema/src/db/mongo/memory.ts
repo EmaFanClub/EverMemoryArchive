@@ -13,7 +13,7 @@ import { Mongo } from "../mongo";
  * Uses mongodb-memory-server for development and testing environments
  */
 export class MemoryMongo extends Mongo {
-  readonly canSetSnapshot: boolean = true;
+  readonly isSnapshotSupported: boolean = true;
 
   private mongoServer?: MongoMemoryServer;
   private client?: MongoClient;

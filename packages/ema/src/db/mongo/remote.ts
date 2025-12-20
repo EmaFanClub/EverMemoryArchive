@@ -12,7 +12,7 @@ import { Mongo } from "../mongo";
  * Connects to an actual MongoDB instance for production environments
  */
 export class RemoteMongo extends Mongo {
-  readonly canSetSnapshot: boolean = false;
+  readonly isSnapshotSupported: boolean = false;
 
   private client?: MongoClient;
   private readonly uri: string;

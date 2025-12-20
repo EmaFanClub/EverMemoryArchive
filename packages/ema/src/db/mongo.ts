@@ -47,7 +47,7 @@ export interface MongoProvider {
  * A mongo database instance
  */
 export abstract class Mongo {
-  abstract readonly canSetSnapshot: boolean;
+  abstract readonly isSnapshotSupported: boolean;
 
   constructor(protected readonly dbName: string) {}
 
@@ -101,7 +101,7 @@ export abstract class Mongo {
    * @returns Promise resolving when the restore is complete
    */
   async restoreFromSnapshot(snapshotData: unknown): Promise<void> {
-    if (!this.canSetSnapshot) {
+    if (!this.isSnapshotSupported) {
       throw new Error("MongoDB cannot set snapshot.");
     }
 
