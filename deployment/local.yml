@@ -39,6 +39,3 @@ services:
 networks:
   ema-network:
     driver: bridge
-
-volumes:
-  mongodb_data:
