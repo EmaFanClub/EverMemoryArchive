@@ -4,10 +4,27 @@ import {
   createMongo,
   Mongo,
   MongoRoleDB,
+  MongoActorDB,
+  MongoUserDB,
+  MongoUserOwnActorDB,
+  MongoConversationDB,
+  MongoConversationMessageDB,
+  MongoShortTermMemoryDB,
+  MongoLongTermMemoryDB,
   type MongoCollectionGetter,
 } from "./db";
 import { utilCollections } from "./db/mongo.util";
-import type { RoleEntity, RoleDB } from "./db/base";
+import type {
+  RoleEntity,
+  RoleDB,
+  ActorDB,
+  UserDB,
+  UserOwnActorDB,
+  ConversationDB,
+  ConversationMessageDB,
+  ShortTermMemoryDB,
+  LongTermMemoryDB,
+} from "./db/base";
 import type { Fs } from "./fs";
 import { RealFs } from "./fs";
 
@@ -18,8 +35,15 @@ import { RealFs } from "./fs";
  */
 export class Server {
   private llmClient: OpenAIClient;
-  private mongo!: Mongo;
-  private roleDB!: RoleDB & MongoCollectionGetter;
+  mongo!: Mongo;
+  roleDB!: RoleDB & MongoCollectionGetter;
+  actorDB!: ActorDB & MongoCollectionGetter;
+  userDB!: UserDB & MongoCollectionGetter;
+  userOwnActorDB!: UserOwnActorDB & MongoCollectionGetter;
+  conversationDB!: ConversationDB & MongoCollectionGetter;
+  conversationMessageDB!: ConversationMessageDB & MongoCollectionGetter;
+  shortTermMemoryDB!: ShortTermMemoryDB & MongoCollectionGetter;
+  longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter;
 
   private constructor(private readonly fs: Fs) {
     // Initialize OpenAI client with environment variables or defaults
@@ -43,8 +67,6 @@ export class Server {
   static async create(fs: Fs = new RealFs()): Promise<Server> {
     const isDev = ["development", "test"].includes(process.env.NODE_ENV || "");
 
-    const server = new Server(fs);
-
     // Initialize MongoDB asynchronously
     // Use environment variables or defaults for MongoDB connection
     const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
@@ -53,7 +75,10 @@ export class Server {
       (process.env.MONGO_KIND as "memory" | "remote") ||
       (isDev ? "memory" : "remote");
 
-    await server.initializeDb(mongoUri, mongoDbName, mongoKind);
+    const mongo = await createMongo(mongoUri, mongoDbName, mongoKind);
+    await mongo.connect();
+
+    const server = Server.createWithMongo(fs, mongo);
 
     if (isDev) {
       const restored = await server.restoreFromSnapshot("default");
@@ -74,27 +99,18 @@ export class Server {
    * @param mongo - MongoDB instance
    * @returns Promise resolving to the Server instance
    */
-  static async createWithMongo(fs: Fs, mongo: Mongo): Promise<Server> {
+  static createWithMongo(fs: Fs, mongo: Mongo): Server {
     const server = new Server(fs);
     server.mongo = mongo;
     server.roleDB = new MongoRoleDB(mongo);
+    server.actorDB = new MongoActorDB(mongo);
+    server.userDB = new MongoUserDB(mongo);
+    server.userOwnActorDB = new MongoUserOwnActorDB(mongo);
+    server.conversationDB = new MongoConversationDB(mongo);
+    server.conversationMessageDB = new MongoConversationMessageDB(mongo);
+    server.shortTermMemoryDB = new MongoShortTermMemoryDB(mongo);
+    server.longTermMemoryDB = new MongoLongTermMemoryDB(mongo);
     return server;
-  }
-
-  /**
-   * Initializes the MongoDB connection
-   * @param uri - MongoDB connection string
-   * @param dbName - MongoDB database name
-   * @param kind - MongoDB implementation kind (memory or remote)
-   */
-  private async initializeDb(
-    uri: string,
-    dbName: string,
-    kind: "memory" | "remote",
-  ): Promise<void> {
-    this.mongo = await createMongo(uri, dbName, kind);
-    await this.mongo.connect();
-    this.roleDB = new MongoRoleDB(this.mongo);
   }
 
   private snapshotPath(name: string): string {
@@ -117,7 +133,17 @@ export class Server {
   async snapshot(name: string): Promise<{ fileName: string }> {
     const fileName = this.snapshotPath(name);
 
-    const dbs = [utilCollections, this.roleDB];
+    const dbs = [
+      utilCollections,
+      this.roleDB,
+      this.actorDB,
+      this.userDB,
+      this.userOwnActorDB,
+      this.conversationDB,
+      this.conversationMessageDB,
+      this.shortTermMemoryDB,
+      this.longTermMemoryDB,
+    ];
     const collections = new Set<string>(dbs.flatMap((db) => db.collections));
 
     const snapshot = await this.mongo.snapshot(Array.from(collections));

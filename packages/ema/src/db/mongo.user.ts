@@ -10,6 +10,10 @@ export class MongoUserDB implements UserDB {
   private readonly mongo: Mongo;
   /** collection name */
   private readonly $cn = "users";
+  /**
+   * The collection names being accessed
+   */
+  collections: string[] = [this.$cn];
 
   /**
    * Creates a new MongoUserDB instance

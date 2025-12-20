@@ -10,6 +10,10 @@ export class MongoActorDB implements ActorDB {
   private readonly mongo: Mongo;
   /** collection name for actors */
   private readonly $cn = "actors";
+  /**
+   * The collection names being accessed
+   */
+  collections: string[] = [this.$cn];
 
   /**
    * Creates a new MongoActorDB instance

@@ -1,7 +1,7 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
 import { Server } from "./server";
 import { MemFs } from "./fs";
-import type { RoleData } from "./db";
+import type { RoleEntity } from "./db";
 import { createMongo, type Mongo } from "./db";
 
 describe("Server", () => {
@@ -33,15 +33,15 @@ describe("Server with MemFs and snapshot functions", () => {
   });
 
   test("should start from empty db", async () => {
-    const server = await Server.createWithMongo(fs, mongo);
+    const server = Server.createWithMongo(fs, mongo);
     const roles = await server.listRoles();
     expect(roles).toEqual([]);
   });
 
   test("should insert roles", async () => {
-    const server = await Server.createWithMongo(fs, mongo);
+    const server = Server.createWithMongo(fs, mongo);
 
-    const role1: RoleData = {
+    const role1: RoleEntity = {
       name: "Role 1",
       description: "Description 1",
       prompt: "Prompt 1",
@@ -58,9 +58,9 @@ describe("Server with MemFs and snapshot functions", () => {
   });
 
   test("should save snapshot with roles [r1]", async () => {
-    const server = await Server.createWithMongo(fs, mongo);
+    const server = Server.createWithMongo(fs, mongo);
 
-    const role1: RoleData = {
+    const role1: RoleEntity = {
       name: "Role 1",
       description: "Description 1",
       prompt: "Prompt 1",
@@ -84,15 +84,15 @@ describe("Server with MemFs and snapshot functions", () => {
   });
 
   test("should save snapshot with roles [r2, r3]", async () => {
-    const server = await Server.createWithMongo(fs, mongo);
+    const server = Server.createWithMongo(fs, mongo);
 
-    const role2: RoleData = {
+    const role2: RoleEntity = {
       name: "Role 2",
       description: "Description 2",
       prompt: "Prompt 2",
     };
 
-    const role3: RoleData = {
+    const role3: RoleEntity = {
       name: "Role 3",
       description: "Description 3",
       prompt: "Prompt 3",
@@ -120,9 +120,9 @@ describe("Server with MemFs and snapshot functions", () => {
   });
 
   test("should restore from snapshot containing roles [r1]", async () => {
-    const server = await Server.createWithMongo(fs, mongo);
+    const server = Server.createWithMongo(fs, mongo);
 
-    const role1: RoleData = {
+    const role1: RoleEntity = {
       name: "Role 1",
       description: "Description 1",
       prompt: "Prompt 1",
@@ -148,7 +148,7 @@ describe("Server with MemFs and snapshot functions", () => {
   });
 
   test("should return false when restoring from non-existent snapshot", async () => {
-    const server = await Server.createWithMongo(fs, mongo);
+    const server = Server.createWithMongo(fs, mongo);
     const restored = await server.restoreFromSnapshot("non-existent-snapshot");
     expect(restored).toBe(false);
   });

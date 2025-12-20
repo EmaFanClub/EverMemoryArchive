@@ -14,6 +14,10 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
   private readonly mongo: Mongo;
   /** collection name for conversation messages */
   private readonly $cn = "conversation_messages";
+  /**
+   * The collection names being accessed
+   */
+  collections: string[] = [this.$cn];
 
   /**
    * Creates a new MongoConversationMessageDB instance

@@ -14,6 +14,10 @@ export class MongoLongTermMemoryDB implements LongTermMemoryDB {
   private readonly mongo: Mongo;
   /** collection name */
   private readonly $cn = "long_term_memories";
+  /**
+   * The collection names being accessed
+   */
+  collections: string[] = [this.$cn];
 
   /**
    * Creates a new MongoLongTermMemoryDB instance

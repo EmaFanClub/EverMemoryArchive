@@ -14,6 +14,10 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
   private readonly mongo: Mongo;
   /** collection name */
   private readonly $cn = "short_term_memories";
+  /**
+   * The collection names being accessed
+   */
+  collections: string[] = [this.$cn];
 
   /**
    * Creates a new MongoShortTermMemoryDB instance

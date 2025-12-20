@@ -14,6 +14,10 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
   private readonly mongo: Mongo;
   /** collection name */
   private readonly $cn = "user_own_actors";
+  /**
+   * The collection names being accessed
+   */
+  collections: string[] = [this.$cn];
 
   /**
    * Creates a new MongoUserOwnActorDB instance
