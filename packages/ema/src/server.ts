@@ -37,6 +37,7 @@ import { ActorWorker } from "./actor";
 import { AgendaScheduler } from "./scheduler";
 import { createJobHandlers } from "./scheduler/jobs";
 import { MemoryManager } from "./memory/manager";
+import type { EmaPlugin } from "./plugin";
 
 /**
  * The server class for the EverMemoryArchive.
@@ -65,6 +66,12 @@ export class Server {
     MongoCollectionGetter;
   scheduler!: AgendaScheduler;
   memoryManager!: MemoryManager;
+
+  /**
+   * The plugins of the server.
+   * @type {Record<string, EmaPlugin>}
+   */
+  public plugins: Record<string, EmaPlugin> = {};
 
   private constructor(
     private readonly fs: Fs,

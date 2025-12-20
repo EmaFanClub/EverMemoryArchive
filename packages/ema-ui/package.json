@@ -21,6 +21,9 @@
     "react-dom": "19.2.1",
     "thread-stream": "^4.0.0"
   },
+  "peerDependencies": {
+    "ema-plugin-qq": "workspace:*"
+  },
   "devDependencies": {
     "@next/env": "^16.1.0",
     "@types/node": "^20",
