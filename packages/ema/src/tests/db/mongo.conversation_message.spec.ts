@@ -25,71 +25,71 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
 
   test("should add a conversation message", async () => {
     const messageData: ConversationMessageEntity = {
-      id: "msg-1",
-      conversationId: "conv-1",
+      id: 1,
+      conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
 
     await db.addConversationMessage(messageData);
-    const retrievedMessage = await db.getConversationMessage(messageData.id);
+    const retrievedMessage = await db.getConversationMessage(1);
     expect(retrievedMessage).toEqual(messageData);
   });
 
   test("should delete a conversation message", async () => {
     const messageData: ConversationMessageEntity = {
-      id: "msg-1",
-      conversationId: "conv-1",
+      id: 1,
+      conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
 
     await db.addConversationMessage(messageData);
-    const deleted = await db.deleteConversationMessage(messageData.id);
+    const deleted = await db.deleteConversationMessage(1);
     expect(deleted).toBe(true);
 
-    const retrievedMessage = await db.getConversationMessage(messageData.id);
+    const retrievedMessage = await db.getConversationMessage(1);
     expect(retrievedMessage).toBeNull();
   });
 
   test("should return false when deleting non-existent message", async () => {
-    const deleted = await db.deleteConversationMessage("non-existent");
+    const deleted = await db.deleteConversationMessage(999);
     expect(deleted).toBe(false);
   });
 
   test("should return false when deleting already deleted message", async () => {
     const messageData: ConversationMessageEntity = {
-      id: "msg-1",
-      conversationId: "conv-1",
+      id: 1,
+      conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
 
     await db.addConversationMessage(messageData);
-    const deleted1 = await db.deleteConversationMessage(messageData.id);
+    const deleted1 = await db.deleteConversationMessage(1);
     expect(deleted1).toBe(true);
 
     // Try to delete again
-    const deleted2 = await db.deleteConversationMessage(messageData.id);
+    const deleted2 = await db.deleteConversationMessage(1);
     expect(deleted2).toBe(false);
   });
 
   test("should not list deleted messages", async () => {
     const msg1: ConversationMessageEntity = {
-      id: "msg-1",
-      conversationId: "conv-1",
+      id: 1,
+      conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
     const msg2: ConversationMessageEntity = {
-      id: "msg-2",
-      conversationId: "conv-1",
+      id: 2,
+      conversationId: 1,
       message: { role: "assistant", content: "Hi there!" },
       createdAt: Date.now(),
     };
     const msg3: ConversationMessageEntity = {
-      id: "msg-3",
-      conversationId: "conv-2",
+      id: 3,
+      conversationId: 2,
       message: { role: "user", content: "How are you?" },
       createdAt: Date.now(),
     };
@@ -99,36 +99,36 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     await db.addConversationMessage(msg3);
 
     // Delete msg2
-    await db.deleteConversationMessage(msg2.id);
+    await db.deleteConversationMessage(2);
 
     const messages = await db.listConversationMessages({});
     expect(messages).toHaveLength(2);
     expect(messages).toContainEqual(msg1);
     expect(messages).toContainEqual(msg3);
-    expect(messages).not.toContainEqual(expect.objectContaining({ id: msg2.id }));
+    expect(messages).not.toContainEqual(expect.objectContaining({ id: 2 }));
   });
 
   test("should return null when getting non-existent message", async () => {
-    const message = await db.getConversationMessage("non-existent");
+    const message = await db.getConversationMessage(999);
     expect(message).toBeNull();
   });
 
   test("should list messages filtered by conversationId", async () => {
     const msg1: ConversationMessageEntity = {
-      id: "msg-1",
-      conversationId: "conv-1",
+      id: 1,
+      conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
     const msg2: ConversationMessageEntity = {
-      id: "msg-2",
-      conversationId: "conv-1",
+      id: 2,
+      conversationId: 1,
       message: { role: "assistant", content: "Hi there!" },
       createdAt: Date.now(),
     };
     const msg3: ConversationMessageEntity = {
-      id: "msg-3",
-      conversationId: "conv-2",
+      id: 3,
+      conversationId: 2,
       message: { role: "user", content: "How are you?" },
       createdAt: Date.now(),
     };
@@ -138,7 +138,7 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     await db.addConversationMessage(msg3);
 
     const messages = await db.listConversationMessages({
-      conversationId: "conv-1",
+      conversationId: 1,
     });
     expect(messages).toHaveLength(2);
     expect(messages).toContainEqual(msg1);
@@ -147,14 +147,14 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
 
   test("should handle messages with different content types", async () => {
     const msg1: ConversationMessageEntity = {
-      id: "msg-1",
-      conversationId: "conv-1",
+      id: 1,
+      conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
     const msg2: ConversationMessageEntity = {
-      id: "msg-2",
-      conversationId: "conv-1",
+      id: 2,
+      conversationId: 1,
       message: {
         role: "assistant",
         content: "Hi there!",
@@ -163,8 +163,8 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
       createdAt: Date.now(),
     };
     const msg3: ConversationMessageEntity = {
-      id: "msg-3",
-      conversationId: "conv-1",
+      id: 3,
+      conversationId: 1,
       message: {
         role: "assistant",
         content: "Let me help you",
@@ -184,7 +184,7 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     await db.addConversationMessage(msg3);
 
     const messages = await db.listConversationMessages({
-      conversationId: "conv-1",
+      conversationId: 1,
     });
     expect(messages).toHaveLength(3);
     expect(messages).toContainEqual(msg1);
@@ -195,21 +195,21 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
   test("should handle CRD operations in sequence", async () => {
     // Create (Add)
     const messageData: ConversationMessageEntity = {
-      id: "msg-1",
-      conversationId: "conv-1",
+      id: 1,
+      conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
     await db.addConversationMessage(messageData);
 
     // Read
-    let message = await db.getConversationMessage(messageData.id);
+    let message = await db.getConversationMessage(1);
     expect(message).toEqual(messageData);
 
     // Delete
-    const deleted = await db.deleteConversationMessage(messageData.id);
+    const deleted = await db.deleteConversationMessage(1);
     expect(deleted).toBe(true);
-    message = await db.getConversationMessage(messageData.id);
+    message = await db.getConversationMessage(1);
     expect(message).toBeNull();
   });
 });

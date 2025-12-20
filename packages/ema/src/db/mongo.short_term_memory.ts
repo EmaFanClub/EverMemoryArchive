@@ -4,6 +4,7 @@ import type {
   ListShortTermMemoriesRequest,
 } from "./base";
 import type { Mongo } from "./mongo";
+import { upsertEntity, deleteEntity } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of ShortTermMemoryDB
@@ -58,16 +59,10 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
   /**
    * Appends a short term memory to the database
    * @param entity - The short term memory to append
-   * @returns Promise resolving when the operation completes
+   * @returns Promise resolving to the ID of the created memory
    */
-  async appendShortTermMemory(entity: ShortTermMemoryEntity): Promise<void> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<ShortTermMemoryEntity>(
-      this.collectionName,
-    );
-
-    // Insert the memory
-    await collection.insertOne(entity);
+  async appendShortTermMemory(entity: ShortTermMemoryEntity): Promise<number> {
+    return upsertEntity(this.mongo, this.collectionName, entity, "short_term_memory");
   }
 
   /**
@@ -75,22 +70,7 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
    * @param id - The unique identifier for the short term memory to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
-  async deleteShortTermMemory(id: string): Promise<boolean> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<ShortTermMemoryEntity>(
-      this.collectionName,
-    );
-
-    // Check if memory exists
-    const memory = await collection.findOne({ id });
-
-    if (!memory) {
-      return false;
-    }
-
-    // Delete the memory
-    await collection.deleteOne({ id });
-
-    return true;
+  async deleteShortTermMemory(id: number): Promise<boolean> {
+    return deleteEntity(this.mongo, this.collectionName, id);
   }
 }

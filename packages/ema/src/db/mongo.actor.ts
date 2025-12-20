@@ -1,5 +1,6 @@
 import type { ActorDB, ActorEntity } from "./base";
 import type { Mongo } from "./mongo";
+import { upsertEntity, deleteEntity } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of ActorDB
@@ -36,7 +37,7 @@ export class MongoActorDB implements ActorDB {
    * @param id - The unique identifier for the actor
    * @returns Promise resolving to the actor data or null if not found
    */
-  async getActor(id: string): Promise<ActorEntity | null> {
+  async getActor(id: number): Promise<ActorEntity | null> {
     const db = this.mongo.getDb();
     const collection = db.collection<ActorEntity>(this.collectionName);
 
@@ -54,14 +55,10 @@ export class MongoActorDB implements ActorDB {
   /**
    * Inserts or updates an actor in the database
    * @param entity - The actor data to upsert
-   * @returns Promise resolving when the operation completes
+   * @returns Promise resolving to the ID of the created or updated actor
    */
-  async upsertActor(entity: ActorEntity): Promise<void> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<ActorEntity>(this.collectionName);
-
-    // Upsert the actor (update if exists, insert if not)
-    await collection.updateOne({ id: entity.id }, { $set: entity }, { upsert: true });
+  async upsertActor(entity: ActorEntity): Promise<number> {
+    return upsertEntity(this.mongo, this.collectionName, entity, "actor");
   }
 
   /**
@@ -69,20 +66,7 @@ export class MongoActorDB implements ActorDB {
    * @param id - The unique identifier for the actor to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
-  async deleteActor(id: string): Promise<boolean> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<ActorEntity>(this.collectionName);
-
-    // Check if actor exists
-    const actor = await collection.findOne({ id });
-
-    if (!actor) {
-      return false;
-    }
-
-    // Delete the actor
-    await collection.deleteOne({ id });
-
-    return true;
+  async deleteActor(id: number): Promise<boolean> {
+    return deleteEntity(this.mongo, this.collectionName, id);
   }
 }

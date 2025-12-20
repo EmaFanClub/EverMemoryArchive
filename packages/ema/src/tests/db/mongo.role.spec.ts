@@ -1,6 +1,6 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
 import { createMongo, MongoRoleDB } from "../../db";
-import type { Mongo, RoleData } from "../../db";
+import type { Mongo, RoleEntity } from "../../db";
 
 describe("MongoRoleDB with in-memory MongoDB", () => {
   let mongo: Mongo;
@@ -24,7 +24,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   });
 
   test("should create a role", async () => {
-    const roleData: RoleData = {
+    const roleData: RoleEntity = {
       name: "Test Role",
       description: "A test role",
       prompt: "This is a test role",
@@ -37,7 +37,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   });
 
   test("should update an existing role", async () => {
-    const roleData: RoleData = {
+    const roleData: RoleEntity = {
       name: "Test Role",
       description: "This is a test role",
       prompt: "This is a test role",
@@ -46,7 +46,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     const id = await db.upsertRole(roleData);
     expect(id).toBe(1);
 
-    const updatedRole: RoleData = {
+    const updatedRole: RoleEntity = {
       id,
       name: "Updated Role",
       description: "Updated description",
@@ -59,7 +59,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   });
 
   test("should soft delete a role", async () => {
-    const roleData: RoleData = {
+    const roleData: RoleEntity = {
       name: "Test Role",
       description: "This is a test role",
       prompt: "This is a test role",
@@ -81,7 +81,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   });
 
   test("should return false when deleting already deleted role", async () => {
-    const roleData: RoleData = {
+    const roleData: RoleEntity = {
       name: "Test Role",
       description: "This is a test role",
       prompt: "This is a test role",
@@ -98,17 +98,17 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   });
 
   test("should not list soft-deleted roles", async () => {
-    const role1: RoleData = {
+    const role1: RoleEntity = {
       name: "Role 1",
       description: "Description 1",
       prompt: "This is a test role",
     };
-    const role2: RoleData = {
+    const role2: RoleEntity = {
       name: "Role 2",
       description: "Description 2",
       prompt: "This is a test role",
     };
-    const role3: RoleData = {
+    const role3: RoleEntity = {
       name: "Role 3",
       description: "Description 3",
       prompt: "This is a test role",
@@ -137,17 +137,17 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   });
 
   test("should list multiple roles", async () => {
-    const role1: RoleData = {
+    const role1: RoleEntity = {
       name: "Role 1",
       description: "Description 1",
       prompt: "This is a test role",
     };
-    const role2: RoleData = {
+    const role2: RoleEntity = {
       name: "Role 2",
       description: "Description 2",
       prompt: "This is a test role",
     };
-    const role3: RoleData = {
+    const role3: RoleEntity = {
       name: "Role 3",
       description: "Description 3",
       prompt: "This is a test role",
@@ -169,7 +169,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
 
   test("should handle CRUD operations in sequence", async () => {
     // Create
-    const roleData: RoleData = {
+    const roleData: RoleEntity = {
       name: "Test Role",
       description: "This is a test role",
       prompt: "This is a test role",
@@ -182,7 +182,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     expect(role).toEqual(roleData);
 
     // Update
-    const updatedRole: RoleData = {
+    const updatedRole: RoleEntity = {
       id,
       name: "Updated Role",
       description: "Updated description",
@@ -200,7 +200,7 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   });
 
   test("should set createTime and deleteTime correctly", async () => {
-    const roleData: RoleData = {
+    const roleData: RoleEntity = {
       name: "Test Role",
       description: "A test role",
       prompt: "This is a test role",

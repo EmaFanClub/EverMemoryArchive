@@ -4,6 +4,7 @@ import type {
   ListLongTermMemoriesRequest,
 } from "./base";
 import type { Mongo } from "./mongo";
+import { upsertEntity, deleteEntity } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of LongTermMemoryDB
@@ -56,14 +57,10 @@ export class MongoLongTermMemoryDB implements LongTermMemoryDB {
   /**
    * Appends a long term memory to the database
    * @param entity - The long term memory to append
-   * @returns Promise resolving when the operation completes
+   * @returns Promise resolving to the ID of the created memory
    */
-  async appendLongTermMemory(entity: LongTermMemoryEntity): Promise<void> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<LongTermMemoryEntity>(this.collectionName);
-
-    // Insert the memory
-    await collection.insertOne(entity);
+  async appendLongTermMemory(entity: LongTermMemoryEntity): Promise<number> {
+    return upsertEntity(this.mongo, this.collectionName, entity, "long_term_memory");
   }
 
   /**
@@ -71,20 +68,7 @@ export class MongoLongTermMemoryDB implements LongTermMemoryDB {
    * @param id - The unique identifier for the long term memory to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
-  async deleteLongTermMemory(id: string): Promise<boolean> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<LongTermMemoryEntity>(this.collectionName);
-
-    // Check if memory exists
-    const memory = await collection.findOne({ id });
-
-    if (!memory) {
-      return false;
-    }
-
-    // Delete the memory
-    await collection.deleteOne({ id });
-
-    return true;
+  async deleteLongTermMemory(id: number): Promise<boolean> {
+    return deleteEntity(this.mongo, this.collectionName, id);
   }
 }

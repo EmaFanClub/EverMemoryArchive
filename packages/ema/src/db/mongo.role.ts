@@ -1,13 +1,6 @@
-import type { RoleDB, RoleData } from "./base";
+import type { RoleDB, RoleEntity } from "./base";
 import type { Mongo } from "./mongo";
-
-/**
- * Counter document interface for MongoDB
- */
-interface CounterDocument {
-  _id: string;
-  seq: number;
-}
+import { upsertEntity, deleteEntity } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of RoleDB
@@ -16,11 +9,10 @@ interface CounterDocument {
 export class MongoRoleDB implements RoleDB {
   private readonly mongo: Mongo;
   private readonly collectionName = "roles";
-  private readonly counterCollectionName = "counters";
   /**
    * The collection names being accessed
    */
-  collections: string[] = [this.collectionName, this.counterCollectionName];
+  collections: string[] = [this.collectionName];
 
   /**
    * Creates a new MongoRoleDB instance
@@ -31,34 +23,12 @@ export class MongoRoleDB implements RoleDB {
   }
 
   /**
-   * Gets the next role ID using MongoDB's counter pattern
-   * @returns Promise resolving to the next role ID as a number
-   */
-  private async getNextId(kind: string): Promise<number> {
-    const db = this.mongo.getDb();
-    const counters = db.collection<CounterDocument>(this.counterCollectionName);
-
-    const result = await counters.findOneAndUpdate(
-      { _id: kind },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: "after" },
-    );
-
-    if (!result || result.seq == null) {
-      throw new Error(`Failed to generate next ID for kind "${kind}"`);
-    }
-
-    return result.seq;
-  }
-
-  /**
    * Lists all roles in the database
-   * Excludes soft-deleted roles (those with deleteTime set)
    * @returns Promise resolving to an array of role data
    */
-  async listRoles(): Promise<RoleData[]> {
+  async listRoles(): Promise<RoleEntity[]> {
     const db = this.mongo.getDb();
-    const collection = db.collection<RoleData>(this.collectionName);
+    const collection = db.collection<RoleEntity>(this.collectionName);
 
     const roles = await collection.find().toArray();
 
@@ -68,13 +38,12 @@ export class MongoRoleDB implements RoleDB {
 
   /**
    * Gets a specific role by ID
-   * Returns null if the role doesn't exist or is soft-deleted
    * @param roleId - The unique identifier for the role
    * @returns Promise resolving to the role data or null if not found
    */
-  async getRole(roleId: number): Promise<RoleData | null> {
+  async getRole(roleId: number): Promise<RoleEntity | null> {
     const db = this.mongo.getDb();
-    const collection = db.collection<RoleData>(this.collectionName);
+    const collection = db.collection<RoleEntity>(this.collectionName);
 
     const role = await collection.findOne({ id: roleId });
 
@@ -94,48 +63,20 @@ export class MongoRoleDB implements RoleDB {
    * @returns Promise resolving to the ID of the created or updated role
    * @throws Error if name, description, or prompt are missing
    */
-  async upsertRole(roleData: RoleData): Promise<number> {
+  async upsertRole(roleData: RoleEntity): Promise<number> {
     if (!roleData.name || !roleData.description || !roleData.prompt) {
       throw new Error("name, description, and prompt are required");
     }
 
-    const db = this.mongo.getDb();
-    const collection = db.collection<RoleData>(this.collectionName);
-
-    // Generate ID if not provided
-    if (!roleData.id) {
-      roleData.id = await this.getNextId("role");
-    }
-
-    // Upsert the role (update if exists, insert if not)
-    await collection.updateOne(
-      { id: roleData.id },
-      { $set: roleData },
-      { upsert: true },
-    );
-
-    return roleData.id;
+    return upsertEntity(this.mongo, this.collectionName, roleData, "role");
   }
 
   /**
-   * Hard deletes a role by removing it from the database
+   * Deletes a role from the database
    * @param roleId - The unique identifier for the role to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteRole(roleId: number): Promise<boolean> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<RoleData>(this.collectionName);
-
-    // Check if role exists and is not already deleted
-    const role = await collection.findOne({ id: roleId });
-
-    if (!role) {
-      return false;
-    }
-
-    // Hard delete: remove the role
-    await collection.deleteOne({ id: roleId });
-
-    return true;
+    return deleteEntity(this.mongo, this.collectionName, roleId);
   }
 }

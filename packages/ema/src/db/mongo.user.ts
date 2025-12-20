@@ -1,5 +1,6 @@
 import type { UserDB, UserEntity } from "./base";
 import type { Mongo } from "./mongo";
+import { upsertEntity, deleteEntity } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of UserDB
@@ -22,7 +23,7 @@ export class MongoUserDB implements UserDB {
    * @param id - The unique identifier for the user
    * @returns Promise resolving to the user data or null if not found
    */
-  async getUser(id: string): Promise<UserEntity | null> {
+  async getUser(id: number): Promise<UserEntity | null> {
     const db = this.mongo.getDb();
     const collection = db.collection<UserEntity>(this.collectionName);
 
@@ -40,14 +41,10 @@ export class MongoUserDB implements UserDB {
   /**
    * Inserts or updates a user in the database
    * @param entity - The user data to upsert
-   * @returns Promise resolving when the operation completes
+   * @returns Promise resolving to the ID of the created or updated user
    */
-  async upsertUser(entity: UserEntity): Promise<void> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<UserEntity>(this.collectionName);
-
-    // Upsert the user (update if exists, insert if not)
-    await collection.updateOne({ id: entity.id }, { $set: entity }, { upsert: true });
+  async upsertUser(entity: UserEntity): Promise<number> {
+    return upsertEntity(this.mongo, this.collectionName, entity, "user");
   }
 
   /**
@@ -55,20 +52,7 @@ export class MongoUserDB implements UserDB {
    * @param id - The unique identifier for the user to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
-  async deleteUser(id: string): Promise<boolean> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<UserEntity>(this.collectionName);
-
-    // Check if user exists
-    const user = await collection.findOne({ id });
-
-    if (!user) {
-      return false;
-    }
-
-    // Delete the user
-    await collection.deleteOne({ id });
-
-    return true;
+  async deleteUser(id: number): Promise<boolean> {
+    return deleteEntity(this.mongo, this.collectionName, id);
   }
 }

@@ -6,7 +6,8 @@ import {
   MongoRoleDB,
   type MongoCollectionGetter,
 } from "./db";
-import type { RoleData, RoleDB } from "./db/base";
+import { utilCollections } from "./db/mongo.util";
+import type { RoleEntity, RoleDB } from "./db/base";
 import type { Fs } from "./fs";
 import { RealFs } from "./fs";
 
@@ -116,7 +117,7 @@ export class Server {
   async snapshot(name: string): Promise<{ fileName: string }> {
     const fileName = this.snapshotPath(name);
 
-    const dbs = [this.roleDB];
+    const dbs = [utilCollections, this.roleDB];
     const collections = new Set<string>(dbs.flatMap((db) => db.collections));
 
     const snapshot = await this.mongo.snapshot(Array.from(collections));
@@ -190,14 +191,14 @@ export class Server {
    *
    * Exposed as `GET /api/roles/list`.
    *
-   * @returns Promise<RoleData[]> Array of all roles
+   * @returns Promise<RoleEntity[]> Array of all roles
    *
    * @example
    * // Example usage:
    * const roles = await server.listRoles();
    * console.log(roles);
    */
-  async listRoles(): Promise<RoleData[]> {
+  async listRoles(): Promise<RoleEntity[]> {
     return this.roleDB.listRoles();
   }
 
@@ -207,14 +208,14 @@ export class Server {
    * Exposed as `GET /api/roles?id={roleId}`.
    *
    * @param roleId - The unique identifier for the role
-   * @returns Promise<RoleData | null> The role data or null if not found
+   * @returns Promise<RoleEntity | null> The role data or null if not found
    *
    * @example
    * // Example usage:
    * const role = await server.getRole("role1");
    * console.log(role);
    */
-  async getRole(roleId: number): Promise<RoleData | null> {
+  async getRole(roleId: number): Promise<RoleEntity | null> {
     return this.roleDB.getRole(roleId);
   }
 
@@ -230,7 +231,7 @@ export class Server {
    * // Example usage:
    * await server.upsertRole({ id: "role1", name: "Test Role", description: "A test role" });
    */
-  async upsertRole(roleData: RoleData): Promise<number> {
+  async upsertRole(roleData: RoleEntity): Promise<number> {
     // Set createTime if not provided (for new roles)
     if (!roleData.createTime) {
       roleData.createTime = Date.now();

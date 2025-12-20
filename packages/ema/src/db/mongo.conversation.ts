@@ -4,6 +4,7 @@ import type {
   ListConversationsRequest,
 } from "./base";
 import type { Mongo } from "./mongo";
+import { upsertEntity, deleteEntity } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of ConversationDB
@@ -52,7 +53,7 @@ export class MongoConversationDB implements ConversationDB {
    * @param id - The unique identifier for the conversation
    * @returns Promise resolving to the conversation data or null if not found
    */
-  async getConversation(id: string): Promise<ConversationEntity | null> {
+  async getConversation(id: number): Promise<ConversationEntity | null> {
     const db = this.mongo.getDb();
     const collection = db.collection<ConversationEntity>(this.collectionName);
 
@@ -70,14 +71,10 @@ export class MongoConversationDB implements ConversationDB {
   /**
    * Inserts or updates a conversation in the database
    * @param entity - The conversation data to upsert
-   * @returns Promise resolving when the operation completes
+   * @returns Promise resolving to the ID of the created or updated conversation
    */
-  async upsertConversation(entity: ConversationEntity): Promise<void> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<ConversationEntity>(this.collectionName);
-
-    // Upsert the conversation (update if exists, insert if not)
-    await collection.updateOne({ id: entity.id }, { $set: entity }, { upsert: true });
+  async upsertConversation(entity: ConversationEntity): Promise<number> {
+    return upsertEntity(this.mongo, this.collectionName, entity, "conversation");
   }
 
   /**
@@ -85,20 +82,7 @@ export class MongoConversationDB implements ConversationDB {
    * @param id - The unique identifier for the conversation to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
-  async deleteConversation(id: string): Promise<boolean> {
-    const db = this.mongo.getDb();
-    const collection = db.collection<ConversationEntity>(this.collectionName);
-
-    // Check if conversation exists
-    const conversation = await collection.findOne({ id });
-
-    if (!conversation) {
-      return false;
-    }
-
-    // Delete the conversation
-    await collection.deleteOne({ id });
-
-    return true;
+  async deleteConversation(id: number): Promise<boolean> {
+    return deleteEntity(this.mongo, this.collectionName, id);
   }
 }

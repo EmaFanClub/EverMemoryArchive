@@ -20,7 +20,7 @@ describe("MongoUserDB with in-memory MongoDB", () => {
 
   test("should create a user", async () => {
     const userData: UserEntity = {
-      id: "user-1",
+      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",
@@ -30,13 +30,13 @@ describe("MongoUserDB with in-memory MongoDB", () => {
     };
 
     await db.upsertUser(userData);
-    const retrievedUser = await db.getUser(userData.id);
+    const retrievedUser = await db.getUser(1);
     expect(retrievedUser).toEqual(userData);
   });
 
   test("should update an existing user", async () => {
     const userData: UserEntity = {
-      id: "user-1",
+      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",
@@ -55,13 +55,13 @@ describe("MongoUserDB with in-memory MongoDB", () => {
     };
 
     await db.upsertUser(updatedUser);
-    const retrievedUser = await db.getUser(userData.id);
+    const retrievedUser = await db.getUser(1);
     expect(retrievedUser).toEqual(updatedUser);
   });
 
   test("should delete a user", async () => {
     const userData: UserEntity = {
-      id: "user-1",
+      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",
@@ -71,21 +71,21 @@ describe("MongoUserDB with in-memory MongoDB", () => {
     };
 
     await db.upsertUser(userData);
-    const deleted = await db.deleteUser(userData.id);
+    const deleted = await db.deleteUser(1);
     expect(deleted).toBe(true);
 
-    const retrievedUser = await db.getUser(userData.id);
+    const retrievedUser = await db.getUser(1);
     expect(retrievedUser).toBeNull();
   });
 
   test("should return false when deleting non-existent user", async () => {
-    const deleted = await db.deleteUser("non-existent");
+    const deleted = await db.deleteUser(999);
     expect(deleted).toBe(false);
   });
 
   test("should return false when deleting already deleted user", async () => {
     const userData: UserEntity = {
-      id: "user-1",
+      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",
@@ -95,23 +95,23 @@ describe("MongoUserDB with in-memory MongoDB", () => {
     };
 
     await db.upsertUser(userData);
-    const deleted1 = await db.deleteUser(userData.id);
+    const deleted1 = await db.deleteUser(1);
     expect(deleted1).toBe(true);
 
     // Try to delete again
-    const deleted2 = await db.deleteUser(userData.id);
+    const deleted2 = await db.deleteUser(1);
     expect(deleted2).toBe(false);
   });
 
   test("should return null when getting non-existent user", async () => {
-    const user = await db.getUser("non-existent");
+    const user = await db.getUser(999);
     expect(user).toBeNull();
   });
 
   test("should handle CRUD operations in sequence", async () => {
     // Create
     const userData: UserEntity = {
-      id: "user-1",
+      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",
@@ -122,7 +122,7 @@ describe("MongoUserDB with in-memory MongoDB", () => {
     await db.upsertUser(userData);
 
     // Read
-    let user = await db.getUser(userData.id);
+    let user = await db.getUser(1);
     expect(user).toEqual(userData);
 
     // Update
@@ -132,13 +132,13 @@ describe("MongoUserDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
     await db.upsertUser(updatedUser);
-    user = await db.getUser(userData.id);
+    user = await db.getUser(1);
     expect(user).toEqual(updatedUser);
 
     // Delete
-    const deleted = await db.deleteUser(userData.id);
+    const deleted = await db.deleteUser(1);
     expect(deleted).toBe(true);
-    user = await db.getUser(userData.id);
+    user = await db.getUser(1);
     expect(user).toBeNull();
   });
 });

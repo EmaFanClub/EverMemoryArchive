@@ -25,13 +25,13 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
 
   test("should append a short term memory", async () => {
     const memoryData: ShortTermMemoryEntity = {
-      id: "mem-1",
+      id: 1,
       kind: "day",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS",
       statement: "Test statement",
       createdAt: Date.now(),
-      messages: ["msg-1", "msg-2"],
+      messages: [1, 2],
     };
 
     await db.appendShortTermMemory(memoryData);
@@ -42,17 +42,17 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
 
   test("should delete a short term memory", async () => {
     const memoryData: ShortTermMemoryEntity = {
-      id: "mem-1",
+      id: 1,
       kind: "day",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS",
       statement: "Test statement",
       createdAt: Date.now(),
-      messages: ["msg-1", "msg-2"],
+      messages: [1, 2],
     };
 
     await db.appendShortTermMemory(memoryData);
-    const deleted = await db.deleteShortTermMemory(memoryData.id);
+    const deleted = await db.deleteShortTermMemory(1);
     expect(deleted).toBe(true);
 
     const memories = await db.listShortTermMemories({});
@@ -60,64 +60,64 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
   });
 
   test("should return false when deleting non-existent memory", async () => {
-    const deleted = await db.deleteShortTermMemory("non-existent");
+    const deleted = await db.deleteShortTermMemory(999);
     expect(deleted).toBe(false);
   });
 
   test("should return false when deleting already deleted memory", async () => {
     const memoryData: ShortTermMemoryEntity = {
-      id: "mem-1",
+      id: 1,
       kind: "day",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS",
       statement: "Test statement",
       createdAt: Date.now(),
-      messages: ["msg-1", "msg-2"],
+      messages: [1, 2],
     };
 
     await db.appendShortTermMemory(memoryData);
-    const deleted1 = await db.deleteShortTermMemory(memoryData.id);
+    const deleted1 = await db.deleteShortTermMemory(1);
     expect(deleted1).toBe(true);
 
     // Try to delete again
-    const deleted2 = await db.deleteShortTermMemory(memoryData.id);
+    const deleted2 = await db.deleteShortTermMemory(1);
     expect(deleted2).toBe(false);
   });
 
   test("should list memories filtered by actorId", async () => {
     const mem1: ShortTermMemoryEntity = {
-      id: "mem-1",
+      id: 1,
       kind: "day",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 1",
       statement: "Test statement 1",
       createdAt: Date.now(),
-      messages: ["msg-1"],
+      messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: "mem-2",
+      id: 2,
       kind: "month",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 2",
       statement: "Test statement 2",
       createdAt: Date.now(),
-      messages: ["msg-2"],
+      messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: "mem-3",
+      id: 3,
       kind: "year",
-      actorId: "actor-2",
+      actorId: 2,
       os: "Test OS 3",
       statement: "Test statement 3",
       createdAt: Date.now(),
-      messages: ["msg-3"],
+      messages: [3],
     };
 
     await db.appendShortTermMemory(mem1);
     await db.appendShortTermMemory(mem2);
     await db.appendShortTermMemory(mem3);
 
-    const memories = await db.listShortTermMemories({ actorId: "actor-1" });
+    const memories = await db.listShortTermMemories({ actorId: 1 });
     expect(memories).toHaveLength(2);
     expect(memories).toContainEqual(mem1);
     expect(memories).toContainEqual(mem2);
@@ -126,31 +126,31 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by createdBefore", async () => {
     const now = Date.now();
     const mem1: ShortTermMemoryEntity = {
-      id: "mem-1",
+      id: 1,
       kind: "day",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 1",
       statement: "Test statement 1",
       createdAt: now - 1000,
-      messages: ["msg-1"],
+      messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: "mem-2",
+      id: 2,
       kind: "month",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 2",
       statement: "Test statement 2",
       createdAt: now,
-      messages: ["msg-2"],
+      messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: "mem-3",
+      id: 3,
       kind: "year",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 3",
       statement: "Test statement 3",
       createdAt: now + 1000,
-      messages: ["msg-3"],
+      messages: [3],
     };
 
     await db.appendShortTermMemory(mem1);
@@ -166,31 +166,31 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by createdAfter", async () => {
     const now = Date.now();
     const mem1: ShortTermMemoryEntity = {
-      id: "mem-1",
+      id: 1,
       kind: "day",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 1",
       statement: "Test statement 1",
       createdAt: now - 1000,
-      messages: ["msg-1"],
+      messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: "mem-2",
+      id: 2,
       kind: "month",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 2",
       statement: "Test statement 2",
       createdAt: now,
-      messages: ["msg-2"],
+      messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: "mem-3",
+      id: 3,
       kind: "year",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 3",
       statement: "Test statement 3",
       createdAt: now + 1000,
-      messages: ["msg-3"],
+      messages: [3],
     };
 
     await db.appendShortTermMemory(mem1);
@@ -206,31 +206,31 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by createdBefore and createdAfter", async () => {
     const now = Date.now();
     const mem1: ShortTermMemoryEntity = {
-      id: "mem-1",
+      id: 1,
       kind: "day",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 1",
       statement: "Test statement 1",
       createdAt: now - 2000,
-      messages: ["msg-1"],
+      messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: "mem-2",
+      id: 2,
       kind: "month",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 2",
       statement: "Test statement 2",
       createdAt: now,
-      messages: ["msg-2"],
+      messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: "mem-3",
+      id: 3,
       kind: "year",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 3",
       statement: "Test statement 3",
       createdAt: now + 2000,
-      messages: ["msg-3"],
+      messages: [3],
     };
 
     await db.appendShortTermMemory(mem1);
@@ -248,31 +248,31 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by actorId and time range", async () => {
     const now = Date.now();
     const mem1: ShortTermMemoryEntity = {
-      id: "mem-1",
+      id: 1,
       kind: "day",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 1",
       statement: "Test statement 1",
       createdAt: now,
-      messages: ["msg-1"],
+      messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: "mem-2",
+      id: 2,
       kind: "month",
-      actorId: "actor-2",
+      actorId: 2,
       os: "Test OS 2",
       statement: "Test statement 2",
       createdAt: now,
-      messages: ["msg-2"],
+      messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: "mem-3",
+      id: 3,
       kind: "year",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS 3",
       statement: "Test statement 3",
       createdAt: now + 2000,
-      messages: ["msg-3"],
+      messages: [3],
     };
 
     await db.appendShortTermMemory(mem1);
@@ -280,7 +280,7 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     await db.appendShortTermMemory(mem3);
 
     const memories = await db.listShortTermMemories({
-      actorId: "actor-1",
+      actorId: 1,
       createdBefore: now + 1000,
     });
     expect(memories).toHaveLength(1);
@@ -289,38 +289,38 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
 
   test("should handle different memory kinds", async () => {
     const mem1: ShortTermMemoryEntity = {
-      id: "mem-1",
+      id: 1,
       kind: "day",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS",
       statement: "Daily memory",
       createdAt: Date.now(),
-      messages: ["msg-1"],
+      messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: "mem-2",
+      id: 2,
       kind: "month",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS",
       statement: "Monthly memory",
       createdAt: Date.now(),
-      messages: ["msg-2"],
+      messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: "mem-3",
+      id: 3,
       kind: "year",
-      actorId: "actor-1",
+      actorId: 1,
       os: "Test OS",
       statement: "Yearly memory",
       createdAt: Date.now(),
-      messages: ["msg-3"],
+      messages: [3],
     };
 
     await db.appendShortTermMemory(mem1);
     await db.appendShortTermMemory(mem2);
     await db.appendShortTermMemory(mem3);
 
-    const memories = await db.listShortTermMemories({ actorId: "actor-1" });
+    const memories = await db.listShortTermMemories({ actorId: 1 });
     expect(memories).toHaveLength(3);
     expect(memories.find((m) => m.kind === "day")).toBeDefined();
     expect(memories.find((m) => m.kind === "month")).toBeDefined();

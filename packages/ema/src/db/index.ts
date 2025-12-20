@@ -1,6 +1,7 @@
 export * from "./base";
 
 export * from "./mongo";
+export * from "./mongo.util";
 export * from "./mongo.role";
 export * from "./mongo.actor";
 export * from "./mongo.user";
