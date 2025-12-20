@@ -55,14 +55,9 @@ export class RealFs implements Fs {
   async write(path: string, content: string): Promise<void> {
     const dir = dirname(path);
     await fs.mkdir(dir, { recursive: true });
-    const tempFile = tmp.fileSync();
-    try {
-      await fs.writeFile(tempFile.name, content, "utf-8");
-      await fs.copyFile(tempFile.name, path);
-      await fs.unlink(tempFile.name);
-    } finally {
-      tempFile.removeCallback();
-    }
+    const tmpFileName = `${path}.tmp`;
+    await fs.writeFile(tmpFileName, content, "utf-8");
+    await fs.rename(tmpFileName, path);
   }
 }
 
