@@ -25,7 +25,6 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
 
   test("should add a conversation message", async () => {
     const messageData: ConversationMessageEntity = {
-      id: 1,
       conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
@@ -38,7 +37,6 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
 
   test("should delete a conversation message", async () => {
     const messageData: ConversationMessageEntity = {
-      id: 1,
       conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
@@ -59,7 +57,6 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
 
   test("should return false when deleting already deleted message", async () => {
     const messageData: ConversationMessageEntity = {
-      id: 1,
       conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
@@ -76,19 +73,16 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
 
   test("should not list deleted messages", async () => {
     const msg1: ConversationMessageEntity = {
-      id: 1,
       conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
     const msg2: ConversationMessageEntity = {
-      id: 2,
       conversationId: 1,
       message: { role: "assistant", content: "Hi there!" },
       createdAt: Date.now(),
     };
     const msg3: ConversationMessageEntity = {
-      id: 3,
       conversationId: 2,
       message: { role: "user", content: "How are you?" },
       createdAt: Date.now(),
@@ -115,19 +109,16 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
 
   test("should list messages filtered by conversationId", async () => {
     const msg1: ConversationMessageEntity = {
-      id: 1,
       conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
     const msg2: ConversationMessageEntity = {
-      id: 2,
       conversationId: 1,
       message: { role: "assistant", content: "Hi there!" },
       createdAt: Date.now(),
     };
     const msg3: ConversationMessageEntity = {
-      id: 3,
       conversationId: 2,
       message: { role: "user", content: "How are you?" },
       createdAt: Date.now(),
@@ -147,13 +138,11 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
 
   test("should handle messages with different content types", async () => {
     const msg1: ConversationMessageEntity = {
-      id: 1,
       conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),
     };
     const msg2: ConversationMessageEntity = {
-      id: 2,
       conversationId: 1,
       message: {
         role: "assistant",
@@ -163,7 +152,6 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
       createdAt: Date.now(),
     };
     const msg3: ConversationMessageEntity = {
-      id: 3,
       conversationId: 1,
       message: {
         role: "assistant",
@@ -195,7 +183,6 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
   test("should handle CRD operations in sequence", async () => {
     // Create (Add)
     const messageData: ConversationMessageEntity = {
-      id: 1,
       conversationId: 1,
       message: { role: "user", content: "Hello" },
       createdAt: Date.now(),

@@ -25,7 +25,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
 
   test("should append a long term memory", async () => {
     const memoryData: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -44,7 +43,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
 
   test("should delete a long term memory", async () => {
     const memoryData: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -70,7 +68,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
 
   test("should return false when deleting already deleted memory", async () => {
     const memoryData: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -92,7 +89,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
 
   test("should list memories filtered by actorId", async () => {
     const mem1: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -103,7 +99,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: LongTermMemoryEntity = {
-      id: 2,
       actorId: 1,
       index0: "category2",
       index1: "subcategory2",
@@ -114,7 +109,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: LongTermMemoryEntity = {
-      id: 3,
       actorId: 2,
       index0: "category1",
       index1: "subcategory1",
@@ -138,7 +132,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by createdBefore", async () => {
     const now = Date.now();
     const mem1: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -149,7 +142,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: LongTermMemoryEntity = {
-      id: 2,
       actorId: 1,
       index0: "category2",
       index1: "subcategory2",
@@ -160,7 +152,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: LongTermMemoryEntity = {
-      id: 3,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -184,7 +175,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by createdAfter", async () => {
     const now = Date.now();
     const mem1: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -195,7 +185,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: LongTermMemoryEntity = {
-      id: 2,
       actorId: 1,
       index0: "category2",
       index1: "subcategory2",
@@ -206,7 +195,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: LongTermMemoryEntity = {
-      id: 3,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -230,7 +218,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by createdBefore and createdAfter", async () => {
     const now = Date.now();
     const mem1: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -241,7 +228,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: LongTermMemoryEntity = {
-      id: 2,
       actorId: 1,
       index0: "category2",
       index1: "subcategory2",
@@ -252,7 +238,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: LongTermMemoryEntity = {
-      id: 3,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -278,7 +263,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by actorId and time range", async () => {
     const now = Date.now();
     const mem1: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -289,7 +273,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: LongTermMemoryEntity = {
-      id: 2,
       actorId: 2,
       index0: "category2",
       index1: "subcategory2",
@@ -300,7 +283,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: LongTermMemoryEntity = {
-      id: 3,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -325,7 +307,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
 
   test("should handle memories with multiple keywords", async () => {
     const mem1: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
@@ -347,7 +328,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
 
   test("should handle memories with different index hierarchies", async () => {
     const mem1: LongTermMemoryEntity = {
-      id: 1,
       actorId: 1,
       index0: "work",
       index1: "meetings",
@@ -358,7 +338,6 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: LongTermMemoryEntity = {
-      id: 2,
       actorId: 1,
       index0: "personal",
       index1: "family",

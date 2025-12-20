@@ -25,7 +25,6 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
   test("should create an actor", async () => {
     const actorData: ActorEntity = {
-      id: 1,
       roleId: 1,
       memoryBuffer: [],
       updatedAt: Date.now(),
@@ -38,7 +37,6 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
   test("should update an existing actor", async () => {
     const actorData: ActorEntity = {
-      id: 1,
       roleId: 1,
       memoryBuffer: [],
       updatedAt: Date.now(),
@@ -59,7 +57,6 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
   test("should delete an actor", async () => {
     const actorData: ActorEntity = {
-      id: 1,
       roleId: 1,
       memoryBuffer: [],
       updatedAt: Date.now(),
@@ -80,7 +77,6 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
   test("should return false when deleting already deleted actor", async () => {
     const actorData: ActorEntity = {
-      id: 1,
       roleId: 1,
       memoryBuffer: [],
       updatedAt: Date.now(),
@@ -97,19 +93,16 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
   test("should not list deleted actors", async () => {
     const actor1: ActorEntity = {
-      id: 1,
       roleId: 1,
       memoryBuffer: [],
       updatedAt: Date.now(),
     };
     const actor2: ActorEntity = {
-      id: 2,
       roleId: 1,
       memoryBuffer: [],
       updatedAt: Date.now(),
     };
     const actor3: ActorEntity = {
-      id: 3,
       roleId: 2,
       memoryBuffer: [],
       updatedAt: Date.now(),
@@ -136,19 +129,16 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
   test("should list multiple actors", async () => {
     const actor1: ActorEntity = {
-      id: 1,
       roleId: 1,
       memoryBuffer: [],
       updatedAt: Date.now(),
     };
     const actor2: ActorEntity = {
-      id: 2,
       roleId: 1,
       memoryBuffer: [{ role: "user", content: "Hello" }],
       updatedAt: Date.now(),
     };
     const actor3: ActorEntity = {
-      id: 3,
       roleId: 2,
       memoryBuffer: [
         { role: "user", content: "Hello" },
@@ -171,7 +161,6 @@ describe("MongoActorDB with in-memory MongoDB", () => {
   test("should handle CRUD operations in sequence", async () => {
     // Create
     const actorData: ActorEntity = {
-      id: 1,
       roleId: 1,
       memoryBuffer: [],
       updatedAt: Date.now(),

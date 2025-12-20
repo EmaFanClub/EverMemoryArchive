@@ -25,7 +25,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
 
   test("should create a conversation", async () => {
     const conversationData: ConversationEntity = {
-      id: 1,
       name: "Test Conversation",
       actorId: 1,
       userId: 1,
@@ -40,7 +39,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
 
   test("should update an existing conversation", async () => {
     const conversationData: ConversationEntity = {
-      id: 1,
       name: "Test Conversation",
       actorId: 1,
       userId: 1,
@@ -63,7 +61,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
 
   test("should delete a conversation", async () => {
     const conversationData: ConversationEntity = {
-      id: 1,
       name: "Test Conversation",
       actorId: 1,
       userId: 1,
@@ -86,7 +83,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
 
   test("should return false when deleting already deleted conversation", async () => {
     const conversationData: ConversationEntity = {
-      id: 1,
       name: "Test Conversation",
       actorId: 1,
       userId: 1,
@@ -105,7 +101,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
 
   test("should not list deleted conversations", async () => {
     const conv1: ConversationEntity = {
-      id: 1,
       name: "Conversation 1",
       actorId: 1,
       userId: 1,
@@ -113,7 +108,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
     const conv2: ConversationEntity = {
-      id: 2,
       name: "Conversation 2",
       actorId: 1,
       userId: 1,
@@ -121,7 +115,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
     const conv3: ConversationEntity = {
-      id: 3,
       name: "Conversation 3",
       actorId: 2,
       userId: 1,
@@ -152,7 +145,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
 
   test("should list conversations filtered by actorId", async () => {
     const conv1: ConversationEntity = {
-      id: 1,
       name: "Conversation 1",
       actorId: 1,
       userId: 1,
@@ -160,7 +152,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
     const conv2: ConversationEntity = {
-      id: 2,
       name: "Conversation 2",
       actorId: 1,
       userId: 2,
@@ -168,7 +159,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
     const conv3: ConversationEntity = {
-      id: 3,
       name: "Conversation 3",
       actorId: 2,
       userId: 1,
@@ -188,7 +178,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
 
   test("should list conversations filtered by userId", async () => {
     const conv1: ConversationEntity = {
-      id: 1,
       name: "Conversation 1",
       actorId: 1,
       userId: 1,
@@ -196,7 +185,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
     const conv2: ConversationEntity = {
-      id: 2,
       name: "Conversation 2",
       actorId: 1,
       userId: 2,
@@ -204,7 +192,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
     const conv3: ConversationEntity = {
-      id: 3,
       name: "Conversation 3",
       actorId: 2,
       userId: 1,
@@ -224,7 +211,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
 
   test("should list conversations filtered by both actorId and userId", async () => {
     const conv1: ConversationEntity = {
-      id: 1,
       name: "Conversation 1",
       actorId: 1,
       userId: 1,
@@ -232,7 +218,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
     const conv2: ConversationEntity = {
-      id: 2,
       name: "Conversation 2",
       actorId: 1,
       userId: 2,
@@ -240,7 +225,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
     const conv3: ConversationEntity = {
-      id: 3,
       name: "Conversation 3",
       actorId: 2,
       userId: 1,
@@ -263,7 +247,6 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
   test("should handle CRUD operations in sequence", async () => {
     // Create
     const conversationData: ConversationEntity = {
-      id: 1,
       name: "Test Conversation",
       actorId: 1,
       userId: 1,

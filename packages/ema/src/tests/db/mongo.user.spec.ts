@@ -20,7 +20,6 @@ describe("MongoUserDB with in-memory MongoDB", () => {
 
   test("should create a user", async () => {
     const userData: UserEntity = {
-      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",
@@ -36,7 +35,6 @@ describe("MongoUserDB with in-memory MongoDB", () => {
 
   test("should update an existing user", async () => {
     const userData: UserEntity = {
-      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",
@@ -61,7 +59,6 @@ describe("MongoUserDB with in-memory MongoDB", () => {
 
   test("should delete a user", async () => {
     const userData: UserEntity = {
-      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",
@@ -85,7 +82,6 @@ describe("MongoUserDB with in-memory MongoDB", () => {
 
   test("should return false when deleting already deleted user", async () => {
     const userData: UserEntity = {
-      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",
@@ -111,7 +107,6 @@ describe("MongoUserDB with in-memory MongoDB", () => {
   test("should handle CRUD operations in sequence", async () => {
     // Create
     const userData: UserEntity = {
-      id: 1,
       name: "Test User",
       description: "A test user",
       avatar: "https://example.com/avatar.png",

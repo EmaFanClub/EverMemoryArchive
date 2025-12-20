@@ -25,7 +25,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
 
   test("should append a short term memory", async () => {
     const memoryData: ShortTermMemoryEntity = {
-      id: 1,
       kind: "day",
       actorId: 1,
       os: "Test OS",
@@ -42,7 +41,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
 
   test("should delete a short term memory", async () => {
     const memoryData: ShortTermMemoryEntity = {
-      id: 1,
       kind: "day",
       actorId: 1,
       os: "Test OS",
@@ -66,7 +64,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
 
   test("should return false when deleting already deleted memory", async () => {
     const memoryData: ShortTermMemoryEntity = {
-      id: 1,
       kind: "day",
       actorId: 1,
       os: "Test OS",
@@ -86,7 +83,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
 
   test("should list memories filtered by actorId", async () => {
     const mem1: ShortTermMemoryEntity = {
-      id: 1,
       kind: "day",
       actorId: 1,
       os: "Test OS 1",
@@ -95,7 +91,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: 2,
       kind: "month",
       actorId: 1,
       os: "Test OS 2",
@@ -104,7 +99,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: 3,
       kind: "year",
       actorId: 2,
       os: "Test OS 3",
@@ -126,7 +120,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by createdBefore", async () => {
     const now = Date.now();
     const mem1: ShortTermMemoryEntity = {
-      id: 1,
       kind: "day",
       actorId: 1,
       os: "Test OS 1",
@@ -135,7 +128,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: 2,
       kind: "month",
       actorId: 1,
       os: "Test OS 2",
@@ -144,7 +136,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: 3,
       kind: "year",
       actorId: 1,
       os: "Test OS 3",
@@ -166,7 +157,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by createdAfter", async () => {
     const now = Date.now();
     const mem1: ShortTermMemoryEntity = {
-      id: 1,
       kind: "day",
       actorId: 1,
       os: "Test OS 1",
@@ -175,7 +165,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: 2,
       kind: "month",
       actorId: 1,
       os: "Test OS 2",
@@ -184,7 +173,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: 3,
       kind: "year",
       actorId: 1,
       os: "Test OS 3",
@@ -206,7 +194,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by createdBefore and createdAfter", async () => {
     const now = Date.now();
     const mem1: ShortTermMemoryEntity = {
-      id: 1,
       kind: "day",
       actorId: 1,
       os: "Test OS 1",
@@ -215,7 +202,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: 2,
       kind: "month",
       actorId: 1,
       os: "Test OS 2",
@@ -224,7 +210,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: 3,
       kind: "year",
       actorId: 1,
       os: "Test OS 3",
@@ -248,7 +233,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
   test("should list memories filtered by actorId and time range", async () => {
     const now = Date.now();
     const mem1: ShortTermMemoryEntity = {
-      id: 1,
       kind: "day",
       actorId: 1,
       os: "Test OS 1",
@@ -257,7 +241,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: 2,
       kind: "month",
       actorId: 2,
       os: "Test OS 2",
@@ -266,7 +249,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: 3,
       kind: "year",
       actorId: 1,
       os: "Test OS 3",
@@ -289,7 +271,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
 
   test("should handle different memory kinds", async () => {
     const mem1: ShortTermMemoryEntity = {
-      id: 1,
       kind: "day",
       actorId: 1,
       os: "Test OS",
@@ -298,7 +279,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
-      id: 2,
       kind: "month",
       actorId: 1,
       os: "Test OS",
@@ -307,7 +287,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
-      id: 3,
       kind: "year",
       actorId: 1,
       os: "Test OS",
