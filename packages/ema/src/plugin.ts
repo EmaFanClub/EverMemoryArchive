@@ -5,11 +5,11 @@ export interface EmaPluginModule {
 }
 
 export interface EmaPluginProvider {
+  name: string;
   new (server: Server): EmaPlugin;
 }
 
 export interface EmaPlugin {
-  name: string;
   start(): Promise<void>;
 
   // Web API
