@@ -1,0 +1,92 @@
+import type {
+  UserOwnActorDB,
+  UserOwnActorRelation,
+  ListUserOwnActorRelationsRequest,
+} from "./base";
+import type { Mongo } from "./mongo";
+
+/**
+ * MongoDB-based implementation of UserOwnActorDB
+ * Stores user own actor relations in a MongoDB collection
+ */
+export class MongoUserOwnActorDB implements UserOwnActorDB {
+  private readonly mongo: Mongo;
+  private readonly collectionName = "user_own_actors";
+
+  /**
+   * Creates a new MongoUserOwnActorDB instance
+   * @param mongo - MongoDB instance to use for database operations
+   */
+  constructor(mongo: Mongo) {
+    this.mongo = mongo;
+  }
+
+  /**
+   * Lists user own actor relations by user id or actor id
+   * @param req - The request to list user own actor relations
+   * @returns Promise resolving to an array of user own actor relation data
+   */
+  async listUserOwnActorRelations(
+    req: ListUserOwnActorRelationsRequest,
+  ): Promise<UserOwnActorRelation[]> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<UserOwnActorRelation>(this.collectionName);
+
+    // Build filter based on request
+    const filter: any = {};
+    if (req.userId) {
+      filter.userId = req.userId;
+    }
+    if (req.actorId) {
+      filter.actorId = req.actorId;
+    }
+
+    const relations = await collection.find(filter).toArray();
+
+    // Remove MongoDB's _id field from the results
+    return relations.map(({ _id, ...relation }) => relation);
+  }
+
+  /**
+   * Adds an actor to a user
+   * @param entity - The user own actor relation data to add
+   * @returns Promise resolving to true if added, false if already exists
+   */
+  async addActorToUser(entity: UserOwnActorRelation): Promise<boolean> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<UserOwnActorRelation>(this.collectionName);
+
+    // Check if relation already exists
+    const existing = await collection.findOne({
+      userId: entity.userId,
+      actorId: entity.actorId,
+    });
+
+    if (existing) {
+      return false;
+    }
+
+    // Insert the relation
+    await collection.insertOne(entity);
+
+    return true;
+  }
+
+  /**
+   * Removes an actor from a user
+   * @param entity - The user own actor relation data to remove
+   * @returns Promise resolving to true if removed, false if not found
+   */
+  async removeActorFromUser(entity: UserOwnActorRelation): Promise<boolean> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<UserOwnActorRelation>(this.collectionName);
+
+    // Delete the relation
+    const result = await collection.deleteOne({
+      userId: entity.userId,
+      actorId: entity.actorId,
+    });
+
+    return result.deletedCount > 0;
+  }
+}
