@@ -36,14 +36,14 @@ export class MongoRoleDB implements RoleDB {
 
   /**
    * Gets a specific role by ID
-   * @param roleId - The unique identifier for the role
+   * @param id - The unique identifier for the role
    * @returns Promise resolving to the role data or null if not found
    */
-  async getRole(roleId: number): Promise<RoleEntity | null> {
+  async getRole(id: number): Promise<RoleEntity | null> {
     const db = this.mongo.getDb();
     const collection = db.collection<RoleEntity>(this.$cn);
 
-    const role = await collection.findOne({ id: roleId });
+    const role = await collection.findOne({ id });
 
     if (!role) {
       return null;
@@ -73,7 +73,7 @@ export class MongoRoleDB implements RoleDB {
    * @param id - The unique identifier for the role to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
-  async deleteRole(roleId: number): Promise<boolean> {
-    return deleteEntity(this.mongo, this.$cn, roleId);
+  async deleteRole(id: number): Promise<boolean> {
+    return deleteEntity(this.mongo, this.$cn, id);
   }
 }
