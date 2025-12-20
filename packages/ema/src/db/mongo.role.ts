@@ -70,7 +70,7 @@ export class MongoRoleDB implements RoleDB {
 
   /**
    * Deletes a role from the database
-   * @param roleId - The unique identifier for the role to delete
+   * @param id - The unique identifier for the role to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteRole(roleId: number): Promise<boolean> {
