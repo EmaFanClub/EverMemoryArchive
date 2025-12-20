@@ -14,7 +14,7 @@ export function omitMongoId<T extends { _id?: any }>(
   entity: T,
 ): Omit<T, "_id"> {
   const { _id, ...rest } = entity;
-  return rest as T;
+  return rest;
 }
 
 /**
