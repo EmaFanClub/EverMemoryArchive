@@ -13,6 +13,25 @@ services:
     networks:
       - ema-network
 
+  # napcat:
+  #   image: mlikiowa/napcat-docker:latest
+  #   container_name: napcat
+  #   restart: always
+  #   network_mode: bridge
+  #   # mac_address: 02:42:ac:11:00:02 # 添加MAC地址固化配置
+
+  #   environment:
+  #     - NAPCAT_UID=${NAPCAT_UID}
+  #     - NAPCAT_GID=${NAPCAT_GID}
+
+  #   ports:
+  #     - 3001:3001
+  #     - 6099:6099
+
+  #   volumes:
+  #     - ../.data/napcat/config:/app/napcat/config
+  #     - ../.data/ntqq:/app/.config/QQ
+
   app:
     build:
       context: ..

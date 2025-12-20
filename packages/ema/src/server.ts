@@ -28,6 +28,7 @@ import type {
 } from "./db/base";
 import type { Fs } from "./fs";
 import { RealFs } from "./fs";
+import type { EmaPlugin } from "./plugin";
 
 /**
  * The server class for the EverMemoryArchive.
@@ -44,6 +45,12 @@ export class Server {
   conversationMessageDB!: ConversationMessageDB & MongoCollectionGetter;
   shortTermMemoryDB!: ShortTermMemoryDB & MongoCollectionGetter;
   longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter;
+
+  /**
+   * The plugins of the server.
+   * @type {Record<string, EmaPlugin>}
+   */
+  public plugins: Record<string, EmaPlugin> = {};
 
   private constructor(
     private readonly fs: Fs,

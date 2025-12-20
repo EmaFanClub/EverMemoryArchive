@@ -1,0 +1,25 @@
+{
+  "name": "ema-plugin-qq",
+  "version": "0.1.0",
+  "type": "module",
+  "keywords": [
+    "qq"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EmaFanClub/EverMemoryArchive.git",
+    "directory": "packages/ema-qq"
+  },
+  "bugs": {
+    "url": "https://github.com/EmaFanClub/EverMemoryArchive/issues"
+  },
+  "dependencies": {
+    "ema": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}
