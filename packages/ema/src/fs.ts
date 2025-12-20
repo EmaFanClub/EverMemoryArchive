@@ -57,13 +57,9 @@ export class RealFs implements Fs {
     await fs.mkdir(dir, { recursive: true });
     const tempFile = tmp.fileSync();
     try {
-      // todo: The temporary file is not being created in the same directory as the target file.
-      // The tmp.fileSync() creates the temporary file in the system's temp directory,
-      // which could be on a different filesystem.
-      // This violates the atomic rename operation requirement since rename() is only atomic
-      // when both files are on the same filesystem.
       await fs.writeFile(tempFile.name, content, "utf-8");
-      await fs.rename(tempFile.name, path);
+      await fs.copyFile(tempFile.name, path);
+      await fs.unlink(tempFile.name);
     } finally {
       tempFile.removeCallback();
     }
