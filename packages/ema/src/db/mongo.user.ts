@@ -47,6 +47,7 @@ export class MongoUserDB implements UserDB {
    * @returns Promise resolving to the ID of the created or updated user
    */
   async upsertUser(entity: UserEntity): Promise<number> {
+    entity.updatedAt = Date.now();
     return upsertEntity(this.mongo, this.$cn, entity);
   }
 

@@ -80,6 +80,7 @@ export class MongoConversationDB implements ConversationDB {
    * @returns Promise resolving to the ID of the created or updated conversation
    */
   async upsertConversation(entity: ConversationEntity): Promise<number> {
+    entity.updatedAt = Date.now();
     return upsertEntity(this.mongo, this.$cn, entity);
   }
 

@@ -1,3 +1,4 @@
+import type { Entity } from "./base";
 import type { Mongo, MongoCollectionGetter } from "./mongo";
 
 const counterCollectionName = "counters";
@@ -56,7 +57,7 @@ export async function getNextId(mongo: Mongo, kind: string): Promise<number> {
  * @param entity - The entity to upsert (must have an id field)
  * @returns Promise resolving to the ID of the created or updated entity
  */
-export async function upsertEntity<T extends { id?: number }>(
+export async function upsertEntity<T extends Entity>(
   mongo: Mongo,
   collectionName: string,
   entity: T,
@@ -67,10 +68,20 @@ export async function upsertEntity<T extends { id?: number }>(
   // Generate ID if not provided
   if (entity.id === undefined || entity.id === null) {
     entity.id = await getNextId(mongo, collectionName);
+    // Set create time if not provided
+    if (!entity.createdAt) {
+      entity.createdAt = Date.now();
+    }
   } else if (typeof entity.id !== "number") {
     throw new Error("id must be a number");
   } else if (entity.id <= 0) {
     throw new Error("id must be a positive number");
+  } else {
+    if (!entity.createdAt) {
+      // todo: as any?
+      const existingEntity = await collection.findOne({ id: entity.id } as any);
+      entity.createdAt = existingEntity?.createdAt ?? Date.now();
+    }
   }
 
   // Upsert the entity (update if exists, insert if not)

@@ -58,6 +58,7 @@ export class MongoActorDB implements ActorDB {
    * @returns Promise resolving to the ID of the created or updated actor
    */
   async upsertActor(entity: ActorEntity): Promise<number> {
+    entity.updatedAt = Date.now();
     return upsertEntity(this.mongo, this.$cn, entity);
   }
 

@@ -258,10 +258,6 @@ export class Server {
    * await server.upsertRole({ id: "role1", name: "Test Role", description: "A test role" });
    */
   async upsertRole(roleData: RoleEntity): Promise<number> {
-    // Set createTime if not provided (for new roles)
-    if (!roleData.createTime) {
-      roleData.createTime = Date.now();
-    }
     return this.roleDB.upsertRole(roleData);
   }
 

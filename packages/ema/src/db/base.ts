@@ -31,8 +31,18 @@
 
 import type { Message } from "../schema";
 
+/**
+ * Represents an entity in the database
+ */
 export interface Entity {
+  /**
+   * The unique identifier for the entity
+   */
   id?: number;
+  /**
+   * The date and time the user was created
+   */
+  createdAt?: DbDate;
 }
 
 /**
@@ -44,10 +54,22 @@ export type DbDate = number;
  * Represents role data structure
  */
 export interface RoleEntity extends Entity {
+  /**
+   * The name of the role
+   */
   name?: string;
+  /**
+   * The description of the role
+   */
   description?: string;
+  /**
+   * The prompt of the role
+   */
   prompt?: string;
-  createTime?: number;
+  /**
+   * The date and time the user was last updated
+   */
+  updatedAt?: DbDate;
 }
 
 /**
@@ -97,7 +119,7 @@ export interface ActorEntity extends Entity {
   /**
    * The date and time the actor was last updated
    */
-  updatedAt: DbDate;
+  updatedAt?: DbDate;
 }
 
 /**
@@ -153,13 +175,9 @@ export interface UserEntity extends Entity {
    */
   email: string;
   /**
-   * The date and time the user was created
-   */
-  createdAt: DbDate;
-  /**
    * The date and time the user was last updated
    */
-  updatedAt: DbDate;
+  updatedAt?: DbDate;
 }
 
 /**
@@ -254,13 +272,9 @@ export interface ConversationEntity extends Entity {
    */
   userId: number;
   /**
-   * The date and time the conversation was created
-   */
-  createdAt: DbDate;
-  /**
    * The date and time the conversation was last updated
    */
-  updatedAt: DbDate;
+  updatedAt?: DbDate;
 }
 
 /**
@@ -320,10 +334,6 @@ export interface ConversationMessageEntity extends Entity {
    * The message
    */
   message: Message;
-  /**
-   * The date and time the message was created
-   */
-  createdAt: DbDate;
 }
 
 /**
@@ -387,10 +397,6 @@ export interface ShortTermMemoryEntity extends Entity {
    * The statement when the actor saw the messages.
    */
   statement: string;
-  /**
-   * The date and time the conversation was created
-   */
-  createdAt: DbDate;
   /**
    * The messages ids facilitating the short term memory, for debugging purpose.
    */
@@ -465,10 +471,6 @@ export interface LongTermMemoryEntity extends Entity {
    * The statement when the actor saw the messages.
    */
   statement: string;
-  /**
-   * The date and time the conversation was created
-   */
-  createdAt: DbDate;
   /**
    * The messages ids facilitating the long term memory, for debugging purpose.
    */

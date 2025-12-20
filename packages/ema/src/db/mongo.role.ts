@@ -64,6 +64,7 @@ export class MongoRoleDB implements RoleDB {
       throw new Error("name, description, and prompt are required");
     }
 
+    roleData.updatedAt = Date.now();
     return upsertEntity(this.mongo, this.$cn, roleData);
   }
 
