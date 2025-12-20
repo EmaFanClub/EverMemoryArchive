@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { EventEmitter } from "node:events";
 
 import { get_encoding, Tiktoken } from "@dqbd/tiktoken";
-import stringWidth from "string-width";
 
 import type { LLMClientBase } from "./llm/base";
 import { OpenAIClient } from "./llm/openai_client";
@@ -12,33 +12,105 @@ import { RetryExhaustedError } from "./retry";
 import type { LLMResponse, Message } from "./schema";
 import { Tool, ToolResult } from "./tools/base";
 
-/** ANSI color codes for terminal output. */
-class Colors {
-  /** Reset color. */
-  static readonly RESET = "\u001b[0m";
-  /** Bold text. */
-  static readonly BOLD = "\u001b[1m";
-  /** Dim text. */
-  static readonly DIM = "\u001b[2m";
+const AgentEventDefs = {
+  /* Emitted when token estimation falls back to the simple method. */
+  tokenEstimationFallbacked: {} as { error: Error },
+  /* Emitted to notify about message summarization steps. */
+  summarizeMessagesStarted: {} as {
+    localEstimatedTokens: number;
+    apiReportedTokens: number;
+    tokenLimit: number;
+  },
+  /* Emitted to notify about message summarization completion. */
+  summarizeMessagesFinished: {} as {
+    ok: boolean;
+    msg: string;
+    oldTokens?: number;
+    newTokens?: number;
+    userMessageCount?: number;
+    summaryCount?: number;
+  },
+  /* Emitted to provide notices during the summarization process. */
+  createSummaryFinished: {} as {
+    ok: boolean;
+    msg: string;
+    roundNum: number;
+    summaryText?: string;
+    error?: Error;
+  },
+  /* Emitted at the start of each agent step. */
+  stepStarted: {} as { stepNumber: number; maxSteps: number },
+  /* Emitted when the agent finished a run. */
+  runFinished: {} as { ok: boolean; msg: string; error?: Error },
+  /* Emitted when an LLM response is received. */
+  llmResponseReceived: {} as { response: LLMResponse },
+  /* Emitted when a tool call is started. */
+  toolCallStarted: {} as {
+    toolCallId: string;
+    functionName: string;
+    callArgs: Record<string, unknown>;
+  },
+  /* Emitted when a tool call is finished. */
+  toolCallFinished: {} as {
+    ok: boolean;
+    toolCallId: string;
+    functionName: string;
+    result: ToolResult;
+  },
+} as const;
 
-  // Foreground colors
-  static readonly RED = "\u001b[31m";
-  static readonly GREEN = "\u001b[32m";
-  static readonly YELLOW = "\u001b[33m";
-  static readonly BLUE = "\u001b[34m";
-  static readonly MAGENTA = "\u001b[35m";
-  static readonly CYAN = "\u001b[36m";
+type AgentEventNames = keyof typeof AgentEventDefs;
 
-  // Bright colors
-  static readonly BRIGHT_BLACK = "\u001b[90m";
-  static readonly BRIGHT_RED = "\u001b[91m";
-  static readonly BRIGHT_GREEN = "\u001b[92m";
-  static readonly BRIGHT_YELLOW = "\u001b[93m";
-  static readonly BRIGHT_BLUE = "\u001b[94m";
-  static readonly BRIGHT_MAGENTA = "\u001b[95m";
-  static readonly BRIGHT_CYAN = "\u001b[96m";
-  static readonly BRIGHT_WHITE = "\u001b[97m";
-}
+export type AgentEventsEmitter = {
+  emit<K extends AgentEventNames>(
+    event: K,
+    payload: (typeof AgentEventDefs)[K],
+  ): boolean;
+  on<K extends AgentEventNames>(
+    event: K,
+    handler: (payload: (typeof AgentEventDefs)[K]) => void,
+  ): AgentEventsEmitter;
+  off<K extends AgentEventNames>(
+    event: K,
+    handler: (payload: (typeof AgentEventDefs)[K]) => void,
+  ): AgentEventsEmitter;
+  once<K extends AgentEventNames>(
+    event: K,
+    handler: (payload: (typeof AgentEventDefs)[K]) => void,
+  ): AgentEventsEmitter;
+};
+
+export const AgentEvents = Object.fromEntries(
+  Object.keys(AgentEventDefs).map((key) => [key, key]),
+) as { [K in keyof typeof AgentEventDefs]: K };
+
+// /** ANSI color codes for terminal output. */
+// class Colors {
+//   /** Reset color. */
+//   static readonly RESET = "\u001b[0m";
+//   /** Bold text. */
+//   static readonly BOLD = "\u001b[1m";
+//   /** Dim text. */
+//   static readonly DIM = "\u001b[2m";
+
+//   // Foreground colors
+//   static readonly RED = "\u001b[31m";
+//   static readonly GREEN = "\u001b[32m";
+//   static readonly YELLOW = "\u001b[33m";
+//   static readonly BLUE = "\u001b[34m";
+//   static readonly MAGENTA = "\u001b[35m";
+//   static readonly CYAN = "\u001b[36m";
+
+//   // Bright colors
+//   static readonly BRIGHT_BLACK = "\u001b[90m";
+//   static readonly BRIGHT_RED = "\u001b[91m";
+//   static readonly BRIGHT_GREEN = "\u001b[92m";
+//   static readonly BRIGHT_YELLOW = "\u001b[93m";
+//   static readonly BRIGHT_BLUE = "\u001b[94m";
+//   static readonly BRIGHT_MAGENTA = "\u001b[95m";
+//   static readonly BRIGHT_CYAN = "\u001b[96m";
+//   static readonly BRIGHT_WHITE = "\u001b[97m";
+// }
 
 /** Conversation context container. */
 export interface Context {
@@ -54,6 +126,7 @@ export class ContextManager {
   workspaceDir: string;
   systemPrompt: string;
   tokenLimit: number;
+  events: AgentEventsEmitter;
   tools: Tool[];
   toolDict: Map<string, Tool>;
   messages: Message[];
@@ -66,8 +139,10 @@ export class ContextManager {
     tools: Tool[],
     workspaceDir: string,
     tokenLimit: number = 80000,
+    events: AgentEventsEmitter,
   ) {
     this.llmClient = llmClient;
+    this.events = events;
 
     // Workspace handling and prompt enrichment
     this.workspaceDir = path.resolve(workspaceDir);
@@ -165,9 +240,12 @@ export class ContextManager {
 
       return totalTokens;
     } catch (error) {
-      console.warn(
-        `Token estimation fallback due to error: ${(error as Error).message}`,
-      );
+      // console.warn(
+      //   `Token estimation fallback due to error: ${(error as Error).message}`,
+      // );
+      this.events.emit(AgentEvents.tokenEstimationFallbacked, {
+        error: error as Error,
+      });
       return this.estimateTokensFallback();
     } finally {
       encoding?.free();
@@ -233,13 +311,19 @@ export class ContextManager {
       return;
     }
 
-    console.log(
-      `\n${Colors.BRIGHT_YELLOW}📊 Token usage - Local estimate: ${estimatedTokens}, ` +
-        `API reported: ${this.apiTotalTokens}, Limit: ${this.tokenLimit}${Colors.RESET}`,
-    );
-    console.log(
-      `${Colors.BRIGHT_YELLOW}🔄 Triggering message history summarization...${Colors.RESET}`,
-    );
+    // console.log(
+    //   `\n${Colors.BRIGHT_YELLOW}📊 Token usage - Local estimate: ${estimatedTokens}, ` +
+    //     `API reported: ${this.apiTotalTokens}, Limit: ${this.tokenLimit}${Colors.RESET}`,
+    // );
+    // console.log(
+    //   `${Colors.BRIGHT_YELLOW}🔄 Triggering message history summarization...${Colors.RESET}`,
+    // );
+
+    this.events.emit(AgentEvents.summarizeMessagesStarted, {
+      localEstimatedTokens: estimatedTokens,
+      apiReportedTokens: this.apiTotalTokens,
+      tokenLimit: this.tokenLimit,
+    });
 
     // Find all user message indices (skip system prompt)
     const userIndices = this.messages
@@ -249,9 +333,13 @@ export class ContextManager {
 
     // Need at least 1 user message to perform summary
     if (userIndices.length < 1) {
-      console.log(
-        `${Colors.BRIGHT_YELLOW}⚠️  Insufficient messages, cannot summarize${Colors.RESET}`,
-      );
+      // console.log(
+      //   `${Colors.BRIGHT_YELLOW}⚠️  Insufficient messages, cannot summarize${Colors.RESET}`,
+      // );
+      this.events.emit(AgentEvents.summarizeMessagesFinished, {
+        ok: false,
+        msg: "Insufficient messages, cannot summarize.",
+      });
       return;
     }
 
@@ -295,15 +383,32 @@ export class ContextManager {
     this.skipNextTokenCheck = true;
 
     const newTokens = this.estimateTokens();
-    console.log(
-      `${Colors.BRIGHT_GREEN}✓ Summary completed, local tokens: ${estimatedTokens} → ${newTokens}${Colors.RESET}`,
-    );
-    console.log(
-      `${Colors.DIM}  Structure: system + ${userIndices.length} user messages + ${summaryCount} summaries${Colors.RESET}`,
-    );
-    console.log(
-      `${Colors.DIM}  Note: API token count will update on next LLM call${Colors.RESET}`,
-    );
+    // console.log(
+    //   `${Colors.BRIGHT_GREEN}✓ Summary completed, local tokens: ${estimatedTokens} → ${newTokens}${Colors.RESET}`,
+    // );
+    // console.log(
+    //   `${Colors.DIM}  Structure: system + ${userIndices.length} user messages + ${summaryCount} summaries${Colors.RESET}`,
+    // );
+    // console.log(
+    //   `${Colors.DIM}  Note: API token count will update on next LLM call${Colors.RESET}`,
+    // );
+    // this.events.emit(AgentEvents.summarizeMessagesNotice, {
+    //   content: `${Colors.BRIGHT_GREEN}✓ Summary completed, local tokens: ${estimatedTokens} → ${newTokens}${Colors.RESET}`
+    // });
+    // this.events.emit(AgentEvents.summarizeMessagesNotice, {
+    //   content: `${Colors.DIM}  Structure: system + ${userIndices.length} user messages + ${summaryCount} summaries${Colors.RESET}`
+    // });
+    // this.events.emit(AgentEvents.summarizeMessagesNotice, {
+    //   content: `${Colors.DIM}  Note: API token count will update on next LLM call${Colors.RESET}`
+    // });
+    this.events.emit(AgentEvents.summarizeMessagesFinished, {
+      ok: true,
+      msg: "Summary completed and API token count will update on next LLM call.",
+      oldTokens: estimatedTokens,
+      newTokens: newTokens,
+      userMessageCount: userIndices.length,
+      summaryCount: summaryCount,
+    });
   }
 
   /** Create summary for one execution round. */
@@ -349,14 +454,26 @@ export class ContextManager {
       ]);
 
       const summaryText = response.content;
-      console.log(
-        `${Colors.BRIGHT_GREEN}✓ Summary for round ${roundNum} generated successfully${Colors.RESET}`,
-      );
+      // console.log(
+      //   `${Colors.BRIGHT_GREEN}✓ Summary for round ${roundNum} generated successfully${Colors.RESET}`,
+      // );
+      this.events.emit(AgentEvents.createSummaryFinished, {
+        ok: true,
+        msg: "Summary generation succeeded.",
+        roundNum: roundNum,
+        summaryText: summaryText,
+      });
       return summaryText;
     } catch (error) {
-      console.log(
-        `${Colors.BRIGHT_RED}✗ Summary generation failed for round ${roundNum}: ${(error as Error).message}${Colors.RESET}`,
-      );
+      // console.log(
+      //   `${Colors.BRIGHT_RED}✗ Summary generation failed for round ${roundNum}: ${(error as Error).message}${Colors.RESET}`,
+      // );
+      this.events.emit(AgentEvents.createSummaryFinished, {
+        ok: false,
+        msg: "Summary generation failed.",
+        roundNum: roundNum,
+        error: error as Error,
+      });
       // Use simple text summary on failure
       return summaryContent;
     }
@@ -374,6 +491,8 @@ export class Agent {
   llm: LLMClientBase;
   /** Configuration for the agent and underlying LLM. */
   config: Config;
+  /** Event emitter for agent lifecycle notifications. */
+  events: AgentEventsEmitter;
   /** Manages conversation context, history, and available tools. */
   contextManager: ContextManager;
   /** Logger instance used for agent-related logging. */
@@ -386,6 +505,7 @@ export class Agent {
     tokenLimit: number = 80000,
   ) {
     this.config = config;
+    this.events = new EventEmitter() as AgentEventsEmitter;
 
     this.llm = new OpenAIClient(
       this.config.llm.apiKey,
@@ -401,6 +521,7 @@ export class Agent {
       tools,
       this.config.agent.workspaceDir,
       tokenLimit,
+      this.events,
     );
 
     // Initialize logger
@@ -423,16 +544,20 @@ export class Agent {
       await this.contextManager.summarizeMessages();
 
       // Step header with proper width calculation
-      const BOX_WIDTH = 58;
-      const stepText = `${Colors.BOLD}${Colors.BRIGHT_CYAN}💭 Step ${step + 1}/${maxSteps}${Colors.RESET}`;
-      const stepDisplayWidth = stringWidth(stepText);
-      const padding = Math.max(0, BOX_WIDTH - 1 - stepDisplayWidth); // -1 for leading space
+      // const BOX_WIDTH = 58;
+      // const stepText = `${Colors.BOLD}${Colors.BRIGHT_CYAN}💭 Step ${step + 1}/${maxSteps}${Colors.RESET}`;
+      // const stepDisplayWidth = stringWidth(stepText);
+      // const padding = Math.max(0, BOX_WIDTH - 1 - stepDisplayWidth); // -1 for leading space
 
-      console.log(`${Colors.DIM}╭${"─".repeat(BOX_WIDTH)}╮${Colors.RESET}`);
-      console.log(
-        `${Colors.DIM}│${Colors.RESET} ${stepText}${" ".repeat(padding)}${Colors.DIM}│${Colors.RESET}`,
-      );
-      console.log(`${Colors.DIM}╰${"─".repeat(BOX_WIDTH)}╯${Colors.RESET}`);
+      // console.log(`${Colors.DIM}╭${"─".repeat(BOX_WIDTH)}╮${Colors.RESET}`);
+      // console.log(
+      //   `${Colors.DIM}│${Colors.RESET} ${stepText}${" ".repeat(padding)}${Colors.DIM}│${Colors.RESET}`,
+      // );
+      // console.log(`${Colors.DIM}╰${"─".repeat(BOX_WIDTH)}╯${Colors.RESET}`);
+      this.events.emit(AgentEvents.stepStarted, {
+        stepNumber: step + 1,
+        maxSteps: maxSteps,
+      });
 
       // Log LLM request
       // await this.logger.logRequest(
@@ -447,20 +572,33 @@ export class Agent {
           this.contextManager.context.messages,
           this.contextManager.context.tools,
         );
+        this.events.emit(AgentEvents.llmResponseReceived, {
+          response: response,
+        });
       } catch (error) {
         if (error instanceof RetryExhaustedError) {
           const errorMsg =
             `LLM call failed after ${error.attempts} retries\n` +
             `Last error: ${String(error.lastException)}`;
-          console.log(
-            `\n${Colors.BRIGHT_RED}❌ Retry failed:${Colors.RESET} ${errorMsg}`,
-          );
+          // console.log(
+          //   `\n${Colors.BRIGHT_RED}❌ Retry failed:${Colors.RESET} ${errorMsg}`,
+          // );
+          this.events.emit(AgentEvents.runFinished, {
+            ok: false,
+            msg: `LLM call failed after ${error.attempts} retries.`,
+            error: error as RetryExhaustedError,
+          });
           return errorMsg;
         }
         const errorMsg = `LLM call failed: ${(error as Error).message}`;
-        console.log(
-          `\n${Colors.BRIGHT_RED}❌ Error:${Colors.RESET} ${errorMsg}`,
-        );
+        // console.log(
+        //   `\n${Colors.BRIGHT_RED}❌ Error:${Colors.RESET} ${errorMsg}`,
+        // );
+        this.events.emit(AgentEvents.runFinished, {
+          ok: false,
+          msg: `LLM call failed.`,
+          error: error as Error,
+        });
         return errorMsg;
       }
 
@@ -479,23 +617,27 @@ export class Agent {
       this.contextManager.addAssistantMessage(response);
 
       // Print thinking if present
-      if (response.thinking) {
-        console.log(
-          `\n${Colors.BOLD}${Colors.MAGENTA}🧠 Thinking:${Colors.RESET}`,
-        );
-        console.log(`${Colors.DIM}${response.thinking}${Colors.RESET}`);
-      }
+      // if (response.thinking) {
+      //   console.log(
+      //     `\n${Colors.BOLD}${Colors.MAGENTA}🧠 Thinking:${Colors.RESET}`,
+      //   );
+      //   console.log(`${Colors.DIM}${response.thinking}${Colors.RESET}`);
+      // }
 
-      // Print assistant response
-      if (response.content) {
-        console.log(
-          `\n${Colors.BOLD}${Colors.BRIGHT_BLUE}🤖 Assistant:${Colors.RESET}`,
-        );
-        console.log(`${response.content}`);
-      }
+      // // Print assistant response
+      // if (response.content) {
+      //   console.log(
+      //     `\n${Colors.BOLD}${Colors.BRIGHT_BLUE}🤖 Assistant:${Colors.RESET}`,
+      //   );
+      //   console.log(`${response.content}`);
+      // }
 
       // Check if task is complete (no tool calls)
       if (!response.tool_calls || response.tool_calls.length === 0) {
+        this.events.emit(AgentEvents.runFinished, {
+          ok: true,
+          msg: response.content,
+        });
         return response.content;
       }
 
@@ -506,24 +648,29 @@ export class Agent {
         const callArgs = toolCall.function.arguments as Record<string, unknown>;
 
         // Tool call header
-        console.log(
-          `\n${Colors.BRIGHT_YELLOW}🔧 Tool Call:${Colors.RESET} ` +
-            `${Colors.BOLD}${Colors.CYAN}${functionName}${Colors.RESET}`,
-        );
+        // console.log(
+        //   `\n${Colors.BRIGHT_YELLOW}🔧 Tool Call:${Colors.RESET} ` +
+        //     `${Colors.BOLD}${Colors.CYAN}${functionName}${Colors.RESET}`,
+        // );
 
         // Arguments (formatted display)
-        console.log(`${Colors.DIM}   Arguments:${Colors.RESET}`);
+        // console.log(`${Colors.DIM}   Arguments:${Colors.RESET}`);
         // Truncate each argument value to avoid overly long output
-        const truncatedArgs: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(callArgs)) {
-          const valueStr = String(value);
-          truncatedArgs[key] =
-            valueStr.length > 200 ? `${valueStr.slice(0, 200)}...` : value;
-        }
-        const argsJson = JSON.stringify(truncatedArgs, null, 2);
-        for (const line of argsJson.split("\n")) {
-          console.log(`   ${Colors.DIM}${line}${Colors.RESET}`);
-        }
+        // const truncatedArgs: Record<string, unknown> = {};
+        // for (const [key, value] of Object.entries(callArgs)) {
+        //   const valueStr = String(value);
+        //   truncatedArgs[key] =
+        //     valueStr.length > 200 ? `${valueStr.slice(0, 200)}...` : value;
+        // }
+        // const argsJson = JSON.stringify(truncatedArgs, null, 2);
+        // for (const line of argsJson.split("\n")) {
+        //   console.log(`   ${Colors.DIM}${line}${Colors.RESET}`);
+        // }
+        this.events.emit(AgentEvents.toolCallStarted, {
+          toolCallId: toolCallId,
+          functionName: functionName,
+          callArgs: callArgs,
+        });
 
         // Execute tool
         let result: ToolResult;
@@ -565,18 +712,30 @@ export class Agent {
 
         // Print result
         if (result.success) {
-          let resultText = result.content;
-          if (resultText.length > 300) {
-            resultText = `${resultText.slice(0, 300)}${Colors.DIM}...${Colors.RESET}`;
-          }
-          console.log(
-            `${Colors.BRIGHT_GREEN}✓ Result:${Colors.RESET} ${resultText}`,
-          );
+          // let resultText = result.content;
+          // if (resultText.length > 300) {
+          //   resultText = `${resultText.slice(0, 300)}${Colors.DIM}...${Colors.RESET}`;
+          // }
+          // console.log(
+          //   `${Colors.BRIGHT_GREEN}✓ Result:${Colors.RESET} ${resultText}`,
+          // );
+          this.events.emit(AgentEvents.toolCallFinished, {
+            ok: true,
+            toolCallId: toolCallId,
+            functionName: functionName,
+            result: result,
+          });
         } else {
-          console.log(
-            `${Colors.BRIGHT_RED}✗ Error:${Colors.RESET} ` +
-              `${Colors.RED}${result.error}${Colors.RESET}`,
-          );
+          // console.log(
+          //   `${Colors.BRIGHT_RED}✗ Error:${Colors.RESET} ` +
+          //     `${Colors.RED}${result.error}${Colors.RESET}`,
+          // );
+          this.events.emit(AgentEvents.toolCallFinished, {
+            ok: false,
+            toolCallId: toolCallId,
+            functionName: functionName,
+            result: result,
+          });
         }
 
         // Add tool result message to context
@@ -588,7 +747,12 @@ export class Agent {
 
     // Max steps reached
     const errorMsg = `Task couldn't be completed after ${maxSteps} steps.`;
-    console.log(`\n${Colors.BRIGHT_YELLOW}⚠️  ${errorMsg}${Colors.RESET}`);
+    // console.log(`\n${Colors.BRIGHT_YELLOW}⚠️  ${errorMsg}${Colors.RESET}`);
+    this.events.emit(AgentEvents.runFinished, {
+      ok: false,
+      msg: errorMsg,
+      error: new Error(errorMsg),
+    });
     return errorMsg;
   }
 
