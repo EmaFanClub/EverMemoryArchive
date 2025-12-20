@@ -558,7 +558,7 @@ export class Agent {
   }
 
   /** Execute agent loop until task is complete or max steps reached. */
-  async run(): Promise<string> {
+  async run(): Promise<void> {
     // Start new run, initialize log file
     // await this.logger.startNewRun();
     // console.log(
@@ -617,9 +617,9 @@ export class Agent {
             msg: `LLM call failed after ${error.attempts} retries.`,
             error: error as RetryExhaustedError,
           });
-          return errorMsg;
+          return;
         }
-        const errorMsg = `LLM call failed: ${(error as Error).message}`;
+        // const errorMsg = `LLM call failed: ${(error as Error).message}`;
         // console.log(
         //   `\n${Colors.BRIGHT_RED}❌ Error:${Colors.RESET} ${errorMsg}`,
         // );
@@ -628,7 +628,7 @@ export class Agent {
           msg: `LLM call failed.`,
           error: error as Error,
         });
-        return errorMsg;
+        return;
       }
 
       // Update API reported token usage in context manager
@@ -667,7 +667,7 @@ export class Agent {
           ok: true,
           msg: response.content,
         });
-        return response.content;
+        return;
       }
 
       // Execute tool calls
@@ -782,7 +782,7 @@ export class Agent {
       msg: errorMsg,
       error: new Error(errorMsg),
     });
-    return errorMsg;
+    return;
   }
 
   /** Get message history. */
