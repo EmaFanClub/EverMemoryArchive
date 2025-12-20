@@ -50,11 +50,10 @@ export async function getNextId(mongo: Mongo, kind: string): Promise<number> {
 
 /**
  * Upserts an entity in a MongoDB collection
- * Generates an ID if not provided
+ * Generates an ID based on the collection name if not provided
  * @param mongo - MongoDB instance to use for database operations
  * @param collectionName - The name of the collection
  * @param entity - The entity to upsert (must have an id field)
- * @param kind - The kind of entity for ID generation (e.g., "role", "actor")
  * @returns Promise resolving to the ID of the created or updated entity
  */
 export async function upsertEntity<T extends { id?: number }>(
