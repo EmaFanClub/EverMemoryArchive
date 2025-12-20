@@ -103,7 +103,9 @@ export class Server {
       );
     }
 
-    return `.data/mongo-snapshots/${name}.json`;
+    // TODO: use config.ts to load data root
+    const dataRoot = process.env.DATA_ROOT || ".data";
+    return `${dataRoot}/mongo-snapshots/${name}.json`;
   }
 
   /**
