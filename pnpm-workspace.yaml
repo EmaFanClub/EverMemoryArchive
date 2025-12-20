@@ -1,2 +1,8 @@
 packages:
-  - "packages/*"
+  - packages/*
+
+onlyBuiltDependencies:
+  - esbuild
+  - mongodb-memory-server
+  - sharp
+  - unrs-resolver

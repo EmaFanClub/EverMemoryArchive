@@ -172,7 +172,7 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
           {
             id: "call-1",
             type: "function",
-            function: { name: "search", arguments: '{"query": "test"}' },
+            function: { name: "search", arguments: { query: "test" } },
           },
         ],
       },
