@@ -8,7 +8,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/EmaFanClub/EverMemoryArchive.git",
-    "directory": "packages/ema-qq"
+    "directory": "packages/ema-plugin-qq"
   },
   "bugs": {
     "url": "https://github.com/EmaFanClub/EverMemoryArchive/issues"
