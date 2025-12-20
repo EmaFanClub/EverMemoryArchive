@@ -55,11 +55,11 @@ export class RealFs implements Fs {
   async write(path: string, content: string): Promise<void> {
     const dir = dirname(path);
     await fs.mkdir(dir, { recursive: true });
-    // Posix and recent windows 10 ensures that `rename` operation is atomic if the source and destination are on the
+    // Posix and recent windows 10 ensure that `rename` operation is atomic if the source and destination are on the
     // same filesystem.
     //
     // We don't write to `/tmp` because in some environments like GitHub codespace, `/tmp` is not on the same filesystem
-    // as the `dir` directory. Therefore, we write to `${path}.tmp` to ensure that the file is written atomically.
+    // as the `dir` directory. Therefore, we write to `${path}.tmp` to ensure that the file is renamed atomically.
     const tmpFileName = `${path}.tmp`;
     await fs.writeFile(tmpFileName, content, "utf-8");
     await fs.rename(tmpFileName, path);
