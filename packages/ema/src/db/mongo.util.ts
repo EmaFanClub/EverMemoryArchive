@@ -65,8 +65,12 @@ export async function upsertEntity<T extends { id?: number }>(
   const collection = db.collection<T>(collectionName);
 
   // Generate ID if not provided
-  if (!entity.id) {
+  if (entity.id === undefined || entity.id === null) {
     entity.id = await getNextId(mongo, collectionName);
+  } else if (typeof entity.id !== "number") {
+    throw new Error("id must be a number");
+  } else if (entity.id <= 0) {
+    throw new Error("id must be a positive number");
   }
 
   // Upsert the entity (update if exists, insert if not)
