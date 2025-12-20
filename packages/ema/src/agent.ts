@@ -22,26 +22,39 @@ const AgentEventDefs = {
     tokenLimit: number;
   },
   /* Emitted to notify about message summarization completion. */
-  summarizeMessagesFinished: {} as {
-    ok: boolean;
-    msg: string;
-    oldTokens?: number;
-    newTokens?: number;
-    userMessageCount?: number;
-    summaryCount?: number;
-  },
+  summarizeMessagesFinished: {} as
+    | {
+        ok: true;
+        msg: string;
+        oldTokens: number;
+        newTokens: number;
+        userMessageCount: number;
+        summaryCount: number;
+      }
+    | {
+        ok: false;
+        msg: string;
+      },
   /* Emitted to provide notices during the summarization process. */
-  createSummaryFinished: {} as {
-    ok: boolean;
-    msg: string;
-    roundNum: number;
-    summaryText?: string;
-    error?: Error;
-  },
+  createSummaryFinished: {} as
+    | {
+        ok: true;
+        msg: string;
+        roundNum: number;
+        summaryText: string;
+      }
+    | {
+        ok: false;
+        msg: string;
+        roundNum: number;
+        error: Error;
+      },
   /* Emitted at the start of each agent step. */
   stepStarted: {} as { stepNumber: number; maxSteps: number },
   /* Emitted when the agent finished a run. */
-  runFinished: {} as { ok: boolean; msg: string; error?: Error },
+  runFinished: {} as
+    | { ok: true; msg: string }
+    | { ok: false; msg: string; error: Error },
   /* Emitted when an LLM response is received. */
   llmResponseReceived: {} as { response: LLMResponse },
   /* Emitted when a tool call is started. */
@@ -61,24 +74,40 @@ const AgentEventDefs = {
 
 type AgentEventNames = keyof typeof AgentEventDefs;
 
-export type AgentEventsEmitter = {
+export class AgentEventsEmitter {
+  private readonly emitter = new EventEmitter();
+
   emit<K extends AgentEventNames>(
     event: K,
     payload: (typeof AgentEventDefs)[K],
-  ): boolean;
+  ): boolean {
+    return this.emitter.emit(event, payload);
+  }
+
   on<K extends AgentEventNames>(
     event: K,
     handler: (payload: (typeof AgentEventDefs)[K]) => void,
-  ): AgentEventsEmitter;
+  ): AgentEventsEmitter {
+    this.emitter.on(event, handler);
+    return this;
+  }
+
   off<K extends AgentEventNames>(
     event: K,
     handler: (payload: (typeof AgentEventDefs)[K]) => void,
-  ): AgentEventsEmitter;
+  ): AgentEventsEmitter {
+    this.emitter.off(event, handler);
+    return this;
+  }
+
   once<K extends AgentEventNames>(
     event: K,
     handler: (payload: (typeof AgentEventDefs)[K]) => void,
-  ): AgentEventsEmitter;
-};
+  ): AgentEventsEmitter {
+    this.emitter.once(event, handler);
+    return this;
+  }
+}
 
 export const AgentEvents = Object.fromEntries(
   Object.keys(AgentEventDefs).map((key) => [key, key]),
@@ -505,7 +534,7 @@ export class Agent {
     tokenLimit: number = 80000,
   ) {
     this.config = config;
-    this.events = new EventEmitter() as AgentEventsEmitter;
+    this.events = new AgentEventsEmitter();
 
     this.llm = new OpenAIClient(
       this.config.llm.apiKey,
