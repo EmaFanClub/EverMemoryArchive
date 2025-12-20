@@ -43,9 +43,11 @@ describe("MongoUserDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
 
-    await db.upsertUser(userData);
+    const id = await db.upsertUser(userData);
+    expect(id).toBe(1);
 
     const updatedUser: UserEntity = {
+      id,
       ...userData,
       name: "Updated User",
       description: "Updated description",

@@ -199,18 +199,17 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     expect(role).toBeNull();
   });
 
-  test("should set createTime and deleteTime correctly", async () => {
+  test("should set createTime and delete correctly", async () => {
     const roleData: RoleEntity = {
       name: "Test Role",
       description: "A test role",
       prompt: "This is a test role",
-      createTime: Date.now(),
     };
 
     const id = await db.upsertRole(roleData);
     expect(id).toBe(1);
     let role = await db.getRole(id);
-    expect(role?.createTime).toBeDefined();
+    expect(role?.createdAt).toBeDefined();
 
     // Delete the role
     await db.deleteRole(id);

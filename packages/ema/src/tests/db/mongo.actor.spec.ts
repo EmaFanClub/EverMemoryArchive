@@ -42,9 +42,11 @@ describe("MongoActorDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
 
-    await db.upsertActor(actorData);
+    const id = await db.upsertActor(actorData);
+    expect(id).toBe(1);
 
     const updatedActor: ActorEntity = {
+      id,
       ...actorData,
       memoryBuffer: [{ role: "user", content: "Hello" }],
       updatedAt: Date.now(),

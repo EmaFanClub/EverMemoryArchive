@@ -46,9 +46,11 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       updatedAt: Date.now(),
     };
 
-    await db.upsertConversation(conversationData);
+    const id = await db.upsertConversation(conversationData);
+    expect(id).toBe(1);
 
     const updatedConversation: ConversationEntity = {
+      id,
       ...conversationData,
       name: "Updated Conversation",
       updatedAt: Date.now(),
