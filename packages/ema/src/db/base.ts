@@ -40,7 +40,7 @@ export interface Entity {
    */
   id?: number;
   /**
-   * The date and time the user was created
+   * The date and time the entity was created
    */
   createdAt?: DbDate;
 }
