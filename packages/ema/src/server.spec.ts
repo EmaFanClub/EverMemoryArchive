@@ -15,6 +15,7 @@ describe("Server", () => {
   });
 });
 
+// TODO: There's no test coverage for error cases in the snapshot/restore functionality, such as invalid snapshot names, I/O errors, or corrupt snapshot files.
 describe("Server with MemFs and snapshot functions", () => {
   let fs: MemFs;
   let mongo: Mongo;
