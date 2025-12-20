@@ -37,9 +37,15 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
     // Build filter based on request
     const filter: any = {};
     if (req.userId) {
+      if (typeof req.userId !== "number") {
+        throw new Error("userId must be a number");
+      }
       filter.userId = req.userId;
     }
     if (req.actorId) {
+      if (typeof req.actorId !== "number") {
+        throw new Error("actorId must be a number");
+      }
       filter.actorId = req.actorId;
     }
 

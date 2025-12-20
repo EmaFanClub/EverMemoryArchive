@@ -37,6 +37,9 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     // Build filter based on request
     const filter: any = {};
     if (req.conversationId) {
+      if (typeof req.conversationId !== "number") {
+        throw new Error("conversationId must be a number");
+      }
       filter.conversationId = req.conversationId;
     }
 

@@ -37,6 +37,9 @@ export class MongoLongTermMemoryDB implements LongTermMemoryDB {
     // Build filter based on request
     const filter: any = {};
     if (req.actorId) {
+      if (typeof req.actorId !== "number") {
+        throw new Error("actorId must be a number");
+      }
       filter.actorId = req.actorId;
     }
     if (req.createdBefore !== undefined || req.createdAfter !== undefined) {
