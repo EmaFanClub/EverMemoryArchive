@@ -1,5 +1,4 @@
 import type { EmaPluginModule, Server } from "ema";
-import * as path from "path";
 import * as fs from "fs";
 
 /**
@@ -21,23 +20,38 @@ export async function loadPlugins(server: Server): Promise<void> {
   );
 
   await Promise.all(
-    getPluginModules().map(async (name: string) => {
-      if (!enabledPlugins.has(name)) {
-        return;
-      }
-      const m = await import(`ema-plugin-${name}`);
-      const plugin = new m.Plugin(server);
+    getPluginModules()
+      .filter((name) => enabledPlugins.has(name))
+      .map(async (name: string) => {
+        try {
+          const m: EmaPluginModule = await import(`ema-plugin-${name}`);
+          if (m.Plugin.name in server.plugins) {
+            throw new Error(`Plugin ${m.Plugin.name} already loaded`);
+          }
 
-      if (plugin.name in server.plugins) {
-        throw new Error(`Plugin ${plugin.name} already loaded`);
-      }
+          const plugin = new m.Plugin(server);
 
-      server.plugins[plugin.name] = plugin;
-    }),
+          server.plugins[m.Plugin.name] = plugin;
+        } catch (error) {
+          console.error(`Failed to load plugin package "${name}":`, error);
+          return;
+        }
+      }),
   );
 
-  const plugins = Object.values(server.plugins);
-  await Promise.all(plugins.map((plugin) => plugin?.start()));
+  const plugins = Object.entries(server.plugins);
+  await Promise.all(
+    plugins.map(async ([name, plugin]) => {
+      if (!plugin) {
+        return;
+      }
+      try {
+        return await plugin.start();
+      } catch (error) {
+        console.error(`Failed to start plugin "${name}":`, error);
+      }
+    }),
+  );
 }
 
 /**
