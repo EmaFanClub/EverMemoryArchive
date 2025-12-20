@@ -32,7 +32,7 @@
 import type { Message } from "../schema";
 
 export interface Entity {
-  id: string;
+  id?: number;
 }
 
 /**
@@ -43,8 +43,7 @@ export type DbDate = number;
 /**
  * Represents role data structure
  */
-export interface RoleData {
-  id?: number;
+export interface RoleEntity extends Entity {
   name?: string;
   description?: string;
   prompt?: string;
@@ -59,28 +58,28 @@ export interface RoleDB {
    * Lists all roles in the database
    * @returns Promise resolving to an array of role data
    */
-  listRoles(): Promise<RoleData[]>;
+  listRoles(): Promise<RoleEntity[]>;
 
   /**
    * Gets a specific role by ID
-   * @param roleId - The unique identifier for the role
+   * @param id - The unique identifier for the role
    * @returns Promise resolving to the role data or null if not found
    */
-  getRole(roleId: number): Promise<RoleData | null>;
+  getRole(id: number): Promise<RoleEntity | null>;
 
   /**
    * Inserts or updates a role in the database
-   * @param roleData - The role data to upsert
+   * @param entity - The role data to upsert
    * @returns Promise resolving to the ID of the created or updated role
    */
-  upsertRole(roleData: RoleData): Promise<number>;
+  upsertRole(entity: RoleEntity): Promise<number>;
 
   /**
    * Deletes a role from the database
-   * @param roleId - The unique identifier for the role to delete
+   * @param id - The unique identifier for the role to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
-  deleteRole(roleId: number): Promise<boolean>;
+  deleteRole(id: number): Promise<boolean>;
 }
 
 /**
