@@ -4,7 +4,7 @@ import type {
   ListConversationsRequest,
 } from "./base";
 import type { Mongo } from "./mongo";
-import { upsertEntity, deleteEntity } from "./mongo.util";
+import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of ConversationDB
@@ -12,7 +12,8 @@ import { upsertEntity, deleteEntity } from "./mongo.util";
  */
 export class MongoConversationDB implements ConversationDB {
   private readonly mongo: Mongo;
-  private readonly collectionName = "conversations";
+  /** collection name */
+  private readonly $cn = "conversations";
 
   /**
    * Creates a new MongoConversationDB instance
@@ -31,21 +32,24 @@ export class MongoConversationDB implements ConversationDB {
     req: ListConversationsRequest,
   ): Promise<ConversationEntity[]> {
     const db = this.mongo.getDb();
-    const collection = db.collection<ConversationEntity>(this.collectionName);
+    const collection = db.collection<ConversationEntity>(this.$cn);
 
     // Build filter based on request
     const filter: any = {};
     if (req.actorId) {
+      if (typeof req.actorId !== "number") {
+        throw new Error("actorId must be a number");
+      }
       filter.actorId = req.actorId;
     }
     if (req.userId) {
+      if (typeof req.userId !== "number") {
+        throw new Error("userId must be a number");
+      }
       filter.userId = req.userId;
     }
 
-    const conversations = await collection.find(filter).toArray();
-
-    // Remove MongoDB's _id field from the results
-    return conversations.map(({ _id, ...conversation }) => conversation);
+    return (await collection.find(filter).toArray()).map(omitMongoId);
   }
 
   /**
@@ -55,7 +59,7 @@ export class MongoConversationDB implements ConversationDB {
    */
   async getConversation(id: number): Promise<ConversationEntity | null> {
     const db = this.mongo.getDb();
-    const collection = db.collection<ConversationEntity>(this.collectionName);
+    const collection = db.collection<ConversationEntity>(this.$cn);
 
     const conversation = await collection.findOne({ id });
 
@@ -63,9 +67,7 @@ export class MongoConversationDB implements ConversationDB {
       return null;
     }
 
-    // Remove MongoDB's _id field from the result
-    const { _id, ...conversationData } = conversation;
-    return conversationData;
+    return omitMongoId(conversation);
   }
 
   /**
@@ -74,7 +76,7 @@ export class MongoConversationDB implements ConversationDB {
    * @returns Promise resolving to the ID of the created or updated conversation
    */
   async upsertConversation(entity: ConversationEntity): Promise<number> {
-    return upsertEntity(this.mongo, this.collectionName, entity, "conversation");
+    return upsertEntity(this.mongo, this.$cn, entity);
   }
 
   /**
@@ -83,6 +85,6 @@ export class MongoConversationDB implements ConversationDB {
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteConversation(id: number): Promise<boolean> {
-    return deleteEntity(this.mongo, this.collectionName, id);
+    return deleteEntity(this.mongo, this.$cn, id);
   }
 }

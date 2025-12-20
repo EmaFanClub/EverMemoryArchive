@@ -4,6 +4,7 @@ import type {
   ListUserOwnActorRelationsRequest,
 } from "./base";
 import type { Mongo } from "./mongo";
+import { omitMongoId } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of UserOwnActorDB
@@ -11,7 +12,8 @@ import type { Mongo } from "./mongo";
  */
 export class MongoUserOwnActorDB implements UserOwnActorDB {
   private readonly mongo: Mongo;
-  private readonly collectionName = "user_own_actors";
+  /** collection name */
+  private readonly $cn = "user_own_actors";
 
   /**
    * Creates a new MongoUserOwnActorDB instance
@@ -30,7 +32,7 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
     req: ListUserOwnActorRelationsRequest,
   ): Promise<UserOwnActorRelation[]> {
     const db = this.mongo.getDb();
-    const collection = db.collection<UserOwnActorRelation>(this.collectionName);
+    const collection = db.collection<UserOwnActorRelation>(this.$cn);
 
     // Build filter based on request
     const filter: any = {};
@@ -41,10 +43,7 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
       filter.actorId = req.actorId;
     }
 
-    const relations = await collection.find(filter).toArray();
-
-    // Remove MongoDB's _id field from the results
-    return relations.map(({ _id, ...relation }) => relation);
+    return (await collection.find(filter).toArray()).map(omitMongoId);
   }
 
   /**
@@ -54,7 +53,7 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
    */
   async addActorToUser(entity: UserOwnActorRelation): Promise<boolean> {
     const db = this.mongo.getDb();
-    const collection = db.collection<UserOwnActorRelation>(this.collectionName);
+    const collection = db.collection<UserOwnActorRelation>(this.$cn);
 
     // Check if relation already exists
     const existing = await collection.findOne({
@@ -67,7 +66,7 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
     }
 
     // Insert the relation
-    await collection.insertOne(entity);
+    await collection.insertOne({ ...entity });
 
     return true;
   }
@@ -79,7 +78,7 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
    */
   async removeActorFromUser(entity: UserOwnActorRelation): Promise<boolean> {
     const db = this.mongo.getDb();
-    const collection = db.collection<UserOwnActorRelation>(this.collectionName);
+    const collection = db.collection<UserOwnActorRelation>(this.$cn);
 
     // Delete the relation
     const result = await collection.deleteOne({

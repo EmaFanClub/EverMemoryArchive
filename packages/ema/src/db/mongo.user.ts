@@ -1,6 +1,6 @@
 import type { UserDB, UserEntity } from "./base";
 import type { Mongo } from "./mongo";
-import { upsertEntity, deleteEntity } from "./mongo.util";
+import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of UserDB
@@ -8,7 +8,8 @@ import { upsertEntity, deleteEntity } from "./mongo.util";
  */
 export class MongoUserDB implements UserDB {
   private readonly mongo: Mongo;
-  private readonly collectionName = "users";
+  /** collection name */
+  private readonly $cn = "users";
 
   /**
    * Creates a new MongoUserDB instance
@@ -25,7 +26,7 @@ export class MongoUserDB implements UserDB {
    */
   async getUser(id: number): Promise<UserEntity | null> {
     const db = this.mongo.getDb();
-    const collection = db.collection<UserEntity>(this.collectionName);
+    const collection = db.collection<UserEntity>(this.$cn);
 
     const user = await collection.findOne({ id });
 
@@ -33,9 +34,7 @@ export class MongoUserDB implements UserDB {
       return null;
     }
 
-    // Remove MongoDB's _id field from the result
-    const { _id, ...userData } = user;
-    return userData;
+    return omitMongoId(user);
   }
 
   /**
@@ -44,7 +43,7 @@ export class MongoUserDB implements UserDB {
    * @returns Promise resolving to the ID of the created or updated user
    */
   async upsertUser(entity: UserEntity): Promise<number> {
-    return upsertEntity(this.mongo, this.collectionName, entity, "user");
+    return upsertEntity(this.mongo, this.$cn, entity);
   }
 
   /**
@@ -53,6 +52,6 @@ export class MongoUserDB implements UserDB {
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteUser(id: number): Promise<boolean> {
-    return deleteEntity(this.mongo, this.collectionName, id);
+    return deleteEntity(this.mongo, this.$cn, id);
   }
 }

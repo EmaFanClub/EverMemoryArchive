@@ -6,6 +6,18 @@ export const utilCollections: MongoCollectionGetter = {
 };
 
 /**
+ * Omits the MongoDB _id field from an entity
+ * @param entity - The entity to omit the _id field from
+ * @returns The entity with the _id field omitted
+ */
+export function omitMongoId<T extends { _id?: any }>(
+  entity: T,
+): Omit<T, "_id"> {
+  const { _id, ...rest } = entity;
+  return rest as T;
+}
+
+/**
  * Counter document interface for MongoDB
  */
 interface CounterDocument {
@@ -49,14 +61,13 @@ export async function upsertEntity<T extends { id?: number }>(
   mongo: Mongo,
   collectionName: string,
   entity: T,
-  kind: string,
 ): Promise<number> {
   const db = mongo.getDb();
   const collection = db.collection<T>(collectionName);
 
   // Generate ID if not provided
   if (!entity.id) {
-    entity.id = await getNextId(mongo, kind);
+    entity.id = await getNextId(mongo, collectionName);
   }
 
   // Upsert the entity (update if exists, insert if not)

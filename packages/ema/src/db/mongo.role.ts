@@ -1,6 +1,6 @@
 import type { RoleDB, RoleEntity } from "./base";
 import type { Mongo } from "./mongo";
-import { upsertEntity, deleteEntity } from "./mongo.util";
+import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of RoleDB
@@ -8,11 +8,12 @@ import { upsertEntity, deleteEntity } from "./mongo.util";
  */
 export class MongoRoleDB implements RoleDB {
   private readonly mongo: Mongo;
-  private readonly collectionName = "roles";
+  /** collection name */
+  private readonly $cn = "roles";
   /**
    * The collection names being accessed
    */
-  collections: string[] = [this.collectionName];
+  collections: string[] = [this.$cn];
 
   /**
    * Creates a new MongoRoleDB instance
@@ -28,12 +29,9 @@ export class MongoRoleDB implements RoleDB {
    */
   async listRoles(): Promise<RoleEntity[]> {
     const db = this.mongo.getDb();
-    const collection = db.collection<RoleEntity>(this.collectionName);
+    const collection = db.collection<RoleEntity>(this.$cn);
 
-    const roles = await collection.find().toArray();
-
-    // Remove MongoDB's _id field from the results
-    return roles.map(({ _id, ...role }) => role);
+    return (await collection.find().toArray()).map(omitMongoId);
   }
 
   /**
@@ -43,7 +41,7 @@ export class MongoRoleDB implements RoleDB {
    */
   async getRole(roleId: number): Promise<RoleEntity | null> {
     const db = this.mongo.getDb();
-    const collection = db.collection<RoleEntity>(this.collectionName);
+    const collection = db.collection<RoleEntity>(this.$cn);
 
     const role = await collection.findOne({ id: roleId });
 
@@ -51,9 +49,7 @@ export class MongoRoleDB implements RoleDB {
       return null;
     }
 
-    // Remove MongoDB's _id field from the result
-    const { _id, ...roleData } = role;
-    return roleData;
+    return omitMongoId(role);
   }
 
   /**
@@ -68,7 +64,7 @@ export class MongoRoleDB implements RoleDB {
       throw new Error("name, description, and prompt are required");
     }
 
-    return upsertEntity(this.mongo, this.collectionName, roleData, "role");
+    return upsertEntity(this.mongo, this.$cn, roleData);
   }
 
   /**
@@ -77,6 +73,6 @@ export class MongoRoleDB implements RoleDB {
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteRole(roleId: number): Promise<boolean> {
-    return deleteEntity(this.mongo, this.collectionName, roleId);
+    return deleteEntity(this.mongo, this.$cn, roleId);
   }
 }

@@ -1,6 +1,6 @@
 import type { ActorDB, ActorEntity } from "./base";
 import type { Mongo } from "./mongo";
-import { upsertEntity, deleteEntity } from "./mongo.util";
+import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of ActorDB
@@ -8,7 +8,8 @@ import { upsertEntity, deleteEntity } from "./mongo.util";
  */
 export class MongoActorDB implements ActorDB {
   private readonly mongo: Mongo;
-  private readonly collectionName = "actors";
+  /** collection name for actors */
+  private readonly $cn = "actors";
 
   /**
    * Creates a new MongoActorDB instance
@@ -24,12 +25,9 @@ export class MongoActorDB implements ActorDB {
    */
   async listActors(): Promise<ActorEntity[]> {
     const db = this.mongo.getDb();
-    const collection = db.collection<ActorEntity>(this.collectionName);
+    const collection = db.collection<ActorEntity>(this.$cn);
 
-    const actors = await collection.find().toArray();
-
-    // Remove MongoDB's _id field from the results
-    return actors.map(({ _id, ...actor }) => actor);
+    return (await collection.find().toArray()).map(omitMongoId);
   }
 
   /**
@@ -39,7 +37,7 @@ export class MongoActorDB implements ActorDB {
    */
   async getActor(id: number): Promise<ActorEntity | null> {
     const db = this.mongo.getDb();
-    const collection = db.collection<ActorEntity>(this.collectionName);
+    const collection = db.collection<ActorEntity>(this.$cn);
 
     const actor = await collection.findOne({ id });
 
@@ -47,9 +45,7 @@ export class MongoActorDB implements ActorDB {
       return null;
     }
 
-    // Remove MongoDB's _id field from the result
-    const { _id, ...actorData } = actor;
-    return actorData;
+    return omitMongoId(actor);
   }
 
   /**
@@ -58,7 +54,7 @@ export class MongoActorDB implements ActorDB {
    * @returns Promise resolving to the ID of the created or updated actor
    */
   async upsertActor(entity: ActorEntity): Promise<number> {
-    return upsertEntity(this.mongo, this.collectionName, entity, "actor");
+    return upsertEntity(this.mongo, this.$cn, entity);
   }
 
   /**
@@ -67,6 +63,6 @@ export class MongoActorDB implements ActorDB {
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteActor(id: number): Promise<boolean> {
-    return deleteEntity(this.mongo, this.collectionName, id);
+    return deleteEntity(this.mongo, this.$cn, id);
   }
 }

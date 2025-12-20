@@ -4,7 +4,7 @@ import type {
   ListConversationMessagesRequest,
 } from "./base";
 import type { Mongo } from "./mongo";
-import { upsertEntity, deleteEntity } from "./mongo.util";
+import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of ConversationMessageDB
@@ -12,7 +12,8 @@ import { upsertEntity, deleteEntity } from "./mongo.util";
  */
 export class MongoConversationMessageDB implements ConversationMessageDB {
   private readonly mongo: Mongo;
-  private readonly collectionName = "conversation_messages";
+  /** collection name for conversation messages */
+  private readonly $cn = "conversation_messages";
 
   /**
    * Creates a new MongoConversationMessageDB instance
@@ -31,9 +32,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     req: ListConversationMessagesRequest,
   ): Promise<ConversationMessageEntity[]> {
     const db = this.mongo.getDb();
-    const collection = db.collection<ConversationMessageEntity>(
-      this.collectionName,
-    );
+    const collection = db.collection<ConversationMessageEntity>(this.$cn);
 
     // Build filter based on request
     const filter: any = {};
@@ -41,10 +40,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       filter.conversationId = req.conversationId;
     }
 
-    const messages = await collection.find(filter).toArray();
-
-    // Remove MongoDB's _id field from the results
-    return messages.map(({ _id, ...message }) => message);
+    return (await collection.find(filter).toArray()).map(omitMongoId);
   }
 
   /**
@@ -56,9 +52,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     id: number,
   ): Promise<ConversationMessageEntity | null> {
     const db = this.mongo.getDb();
-    const collection = db.collection<ConversationMessageEntity>(
-      this.collectionName,
-    );
+    const collection = db.collection<ConversationMessageEntity>(this.$cn);
 
     const message = await collection.findOne({ id });
 
@@ -66,9 +60,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       return null;
     }
 
-    // Remove MongoDB's _id field from the result
-    const { _id, ...messageData } = message;
-    return messageData;
+    return omitMongoId(message);
   }
 
   /**
@@ -76,8 +68,10 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
    * @param entity - The conversation message to add
    * @returns Promise resolving to the ID of the created message
    */
-  async addConversationMessage(entity: ConversationMessageEntity): Promise<number> {
-    return upsertEntity(this.mongo, this.collectionName, entity, "conversation_message");
+  async addConversationMessage(
+    entity: ConversationMessageEntity,
+  ): Promise<number> {
+    return upsertEntity(this.mongo, this.$cn, entity);
   }
 
   /**
@@ -86,6 +80,6 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteConversationMessage(id: number): Promise<boolean> {
-    return deleteEntity(this.mongo, this.collectionName, id);
+    return deleteEntity(this.mongo, this.$cn, id);
   }
 }

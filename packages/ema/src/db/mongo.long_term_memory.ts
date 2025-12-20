@@ -4,7 +4,7 @@ import type {
   ListLongTermMemoriesRequest,
 } from "./base";
 import type { Mongo } from "./mongo";
-import { upsertEntity, deleteEntity } from "./mongo.util";
+import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of LongTermMemoryDB
@@ -12,7 +12,8 @@ import { upsertEntity, deleteEntity } from "./mongo.util";
  */
 export class MongoLongTermMemoryDB implements LongTermMemoryDB {
   private readonly mongo: Mongo;
-  private readonly collectionName = "long_term_memories";
+  /** collection name */
+  private readonly $cn = "long_term_memories";
 
   /**
    * Creates a new MongoLongTermMemoryDB instance
@@ -31,7 +32,7 @@ export class MongoLongTermMemoryDB implements LongTermMemoryDB {
     req: ListLongTermMemoriesRequest,
   ): Promise<LongTermMemoryEntity[]> {
     const db = this.mongo.getDb();
-    const collection = db.collection<LongTermMemoryEntity>(this.collectionName);
+    const collection = db.collection<LongTermMemoryEntity>(this.$cn);
 
     // Build filter based on request
     const filter: any = {};
@@ -48,10 +49,7 @@ export class MongoLongTermMemoryDB implements LongTermMemoryDB {
       }
     }
 
-    const memories = await collection.find(filter).toArray();
-
-    // Remove MongoDB's _id field from the results
-    return memories.map(({ _id, ...memory }) => memory);
+    return (await collection.find(filter).toArray()).map(omitMongoId);
   }
 
   /**
@@ -60,7 +58,7 @@ export class MongoLongTermMemoryDB implements LongTermMemoryDB {
    * @returns Promise resolving to the ID of the created memory
    */
   async appendLongTermMemory(entity: LongTermMemoryEntity): Promise<number> {
-    return upsertEntity(this.mongo, this.collectionName, entity, "long_term_memory");
+    return upsertEntity(this.mongo, this.$cn, entity);
   }
 
   /**
@@ -69,6 +67,6 @@ export class MongoLongTermMemoryDB implements LongTermMemoryDB {
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteLongTermMemory(id: number): Promise<boolean> {
-    return deleteEntity(this.mongo, this.collectionName, id);
+    return deleteEntity(this.mongo, this.$cn, id);
   }
 }

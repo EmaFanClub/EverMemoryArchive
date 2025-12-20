@@ -4,7 +4,7 @@ import type {
   ListShortTermMemoriesRequest,
 } from "./base";
 import type { Mongo } from "./mongo";
-import { upsertEntity, deleteEntity } from "./mongo.util";
+import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
 
 /**
  * MongoDB-based implementation of ShortTermMemoryDB
@@ -12,7 +12,8 @@ import { upsertEntity, deleteEntity } from "./mongo.util";
  */
 export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
   private readonly mongo: Mongo;
-  private readonly collectionName = "short_term_memories";
+  /** collection name */
+  private readonly $cn = "short_term_memories";
 
   /**
    * Creates a new MongoShortTermMemoryDB instance
@@ -31,9 +32,7 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
     req: ListShortTermMemoriesRequest,
   ): Promise<ShortTermMemoryEntity[]> {
     const db = this.mongo.getDb();
-    const collection = db.collection<ShortTermMemoryEntity>(
-      this.collectionName,
-    );
+    const collection = db.collection<ShortTermMemoryEntity>(this.$cn);
 
     // Build filter based on request
     const filter: any = {};
@@ -50,10 +49,7 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
       }
     }
 
-    const memories = await collection.find(filter).toArray();
-
-    // Remove MongoDB's _id field from the results
-    return memories.map(({ _id, ...memory }) => memory);
+    return (await collection.find(filter).toArray()).map(omitMongoId);
   }
 
   /**
@@ -62,7 +58,7 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
    * @returns Promise resolving to the ID of the created memory
    */
   async appendShortTermMemory(entity: ShortTermMemoryEntity): Promise<number> {
-    return upsertEntity(this.mongo, this.collectionName, entity, "short_term_memory");
+    return upsertEntity(this.mongo, this.$cn, entity);
   }
 
   /**
@@ -71,6 +67,6 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteShortTermMemory(id: number): Promise<boolean> {
-    return deleteEntity(this.mongo, this.collectionName, id);
+    return deleteEntity(this.mongo, this.$cn, id);
   }
 }
