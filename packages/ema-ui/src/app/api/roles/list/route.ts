@@ -13,7 +13,7 @@ export async function GET() {
     const server = await getServer();
 
     // List all roles
-    const roles = await server.listRoles();
+    const roles = await server.roleDB.listRoles();
     return new Response(JSON.stringify(roles), {
       status: 200,
       headers: { "Content-Type": "application/json" },

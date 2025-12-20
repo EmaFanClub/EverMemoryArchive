@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       );
     }
     // Get specific role
-    const role = await server.getRole(roleId);
+    const role = await server.roleDB.getRole(roleId);
     if (!role) {
       return new Response(
         JSON.stringify({
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const id = await server.upsertRole(body);
+    const id = await server.roleDB.upsertRole(body);
 
     return new Response(
       JSON.stringify({
@@ -141,7 +141,7 @@ export async function PUT(request: Request) {
     }
 
     // Check if role exists
-    const existingRole = await server.getRole(body.id);
+    const existingRole = await server.roleDB.getRole(body.id);
     if (!existingRole) {
       return new Response(
         JSON.stringify({
@@ -154,7 +154,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    const id = await server.upsertRole(body);
+    const id = await server.roleDB.upsertRole(body);
 
     return new Response(
       JSON.stringify({
@@ -200,7 +200,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const deleted = await server.deleteRole(roleId);
+    const deleted = await server.roleDB.deleteRole(roleId);
 
     if (!deleted) {
       return new Response(
