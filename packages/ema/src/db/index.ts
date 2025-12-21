@@ -9,3 +9,5 @@ export * from "./mongo.conversation";
 export * from "./mongo.conversation_message";
 export * from "./mongo.short_term_memory";
 export * from "./mongo.long_term_memory";
+
+export * from "./lance.long_term_memory";

@@ -1,3 +1,5 @@
+import * as lancedb from "@lancedb/lancedb";
+
 import { OpenAIClient } from "./llm/openai_client";
 import { Config } from "./config";
 import type { Message } from "./schema";
@@ -13,11 +15,11 @@ import {
   MongoShortTermMemoryDB,
   MongoLongTermMemoryDB,
   type MongoCollectionGetter,
-  MongoVectorMemorySearcher,
+  MongoMemorySearchAdaptor,
+  LanceVectorMemorySearcher,
 } from "./db";
 import { utilCollections } from "./db/mongo.util";
 import type {
-  RoleEntity,
   RoleDB,
   ActorDB,
   UserDB,
@@ -29,6 +31,7 @@ import type {
 } from "./db/base";
 import type { Fs } from "./fs";
 import { RealFs } from "./fs";
+import * as path from "node:path";
 
 /**
  * The server class for the EverMemoryArchive.
@@ -36,7 +39,10 @@ import { RealFs } from "./fs";
 export class Server {
   config: Config;
   private llmClient: OpenAIClient;
+
   mongo!: Mongo;
+  lancedb!: lancedb.Connection;
+
   roleDB!: RoleDB & MongoCollectionGetter;
   actorDB!: ActorDB & MongoCollectionGetter;
   userDB!: UserDB & MongoCollectionGetter;
@@ -45,7 +51,7 @@ export class Server {
   conversationMessageDB!: ConversationMessageDB & MongoCollectionGetter;
   shortTermMemoryDB!: ShortTermMemoryDB & MongoCollectionGetter;
   longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter;
-  longTermMemoryVectorSearcher!: MongoVectorMemorySearcher &
+  longTermMemoryVectorSearcher!: MongoMemorySearchAdaptor &
     MongoCollectionGetter;
 
   private constructor(
@@ -82,7 +88,10 @@ export class Server {
     );
     await mongo.connect();
 
-    const server = Server.createWithMongo(fs, mongo, config);
+    const databaseDir = path.join(process.env.DATA_ROOT || ".data", "lancedb");
+    const lance = await lancedb.connect(databaseDir);
+
+    const server = Server.createSync(fs, mongo, lance, config);
 
     if (isDev) {
       const restored = await server.restoreFromSnapshot("default");
@@ -104,9 +113,10 @@ export class Server {
    * @param mongo - MongoDB instance
    * @returns Promise resolving to the Server instance
    */
-  static createWithMongo(
+  static createSync(
     fs: Fs,
     mongo: Mongo,
+    lance: lancedb.Connection,
     config: Config = Config.load(),
   ): Server {
     const server = new Server(fs, config);
@@ -118,7 +128,10 @@ export class Server {
     server.conversationDB = new MongoConversationDB(mongo);
     server.conversationMessageDB = new MongoConversationMessageDB(mongo);
     server.shortTermMemoryDB = new MongoShortTermMemoryDB(mongo);
-    server.longTermMemoryVectorSearcher = new MongoVectorMemorySearcher(mongo);
+    server.longTermMemoryVectorSearcher = new LanceVectorMemorySearcher(
+      mongo,
+      lance,
+    );
     server.longTermMemoryDB = new MongoLongTermMemoryDB(mongo, [
       server.longTermMemoryVectorSearcher,
     ]);
