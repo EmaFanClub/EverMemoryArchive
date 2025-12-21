@@ -181,6 +181,7 @@ class LongTermMemoryGeminiEmbeddingEngine implements LongTermMemoryEmbeddingEngi
       model: "gemini-embedding-001",
       contents: embeddingContent,
       config: {
+        // todo: find the best task type.
         taskType: "RETRIEVAL_QUERY",
         outputDimensionality: dim,
       },
