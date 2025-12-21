@@ -539,6 +539,7 @@ export class Agent {
       this.config.llm.apiBase,
       this.config.llm.model,
       this.config.llm.retry,
+      this.config.system.httpsProxy,
     );
 
     // Initialize context manager with tools

@@ -38,11 +38,13 @@ export class OpenAIClient extends LLMClientBase {
      * Optional retry configuration
      */
     retryConfig?: RetryConfig,
+    /**
+     * Optional proxy URL
+     */
+    proxyUrl?: string,
   ) {
     super(apiKey, apiBase, model, retryConfig);
-    // Uses proxy if HTTPS_PROXY or https_proxy is set
-    const https_proxy =
-      process.env.HTTPS_PROXY || process.env.https_proxy || "";
+    const https_proxy = proxyUrl || "";
     console.log(`[OpenAIClient] apiBase: ${apiBase}`);
     const dispatcher = https_proxy ? new ProxyAgent(https_proxy) : undefined;
     this.client = new OpenAI({
