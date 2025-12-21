@@ -7,17 +7,17 @@ import {
   MongoLongTermMemorySearcher,
 } from "../../db";
 import type { Mongo } from "../../db";
-import { ActorBroker } from "../../actor";
+import { ActorWorker } from "../../actor";
 
 describe("MemorySkill", () => {
   let mongo: Mongo;
-  let db: ActorBroker;
+  let db: ActorWorker;
 
   beforeEach(async () => {
     // Create in-memory MongoDB instance for testing
     mongo = await createMongo("", "test", "memory");
     await mongo.connect();
-    db = new ActorBroker(
+    db = new ActorWorker(
       1,
       new MongoActorDB(mongo),
       new MongoShortTermMemoryDB(mongo),

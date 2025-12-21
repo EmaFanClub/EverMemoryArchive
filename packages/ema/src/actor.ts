@@ -10,9 +10,11 @@ import type {
   SearchActorMemoryResult,
   ShortTermMemory,
   LongTermMemory,
+  ActorStateStorage,
+  ActorMemory,
 } from "./skills/memory";
 
-export class ActorBroker {
+export class ActorWorker implements ActorStateStorage, ActorMemory {
   constructor(
     private readonly actorId: number,
     private readonly actorDB: ActorDB,
@@ -20,6 +22,27 @@ export class ActorBroker {
     private readonly longTermMemoryDB: LongTermMemoryDB,
     private readonly longTermMemorySearcher: LongTermMemorySearcher,
   ) {}
+
+  /**
+   * A low-level function to step the actor.
+   * Currently, we ensure that the actor processes the input sequentially.
+   *
+   * @param input - The input to the actor.
+   * @example
+   * ```ts
+   * // infinite loop of REPL
+   * for(;;) {
+   *   const line = prompt("YOU > ");
+   *   const input: ActorInput = {
+   *     parts: [{ type: "text", context: line }],
+   *   };
+   *   await this.work(input);
+   * }
+   * ```
+   */
+  async work(input: ActorInput) {
+    throw new Error("Not implemented");
+  }
 
   async getState(): Promise<ActorState> {
     const actor = await this.actorDB.getActor(this.actorId);
@@ -67,4 +90,13 @@ export class ActorBroker {
       ...item,
     });
   }
+}
+
+export interface ActorInput {
+  parts: ActorTextInput[];
+}
+
+export interface ActorTextInput {
+  type: "text";
+  context: string;
 }
