@@ -1,5 +1,9 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
-import { createMongo, MongoLongTermMemoryDB } from "../../db";
+import {
+  createMongo,
+  MongoLongTermMemoryDB,
+  MongoVectorMemorySearcher,
+} from "../../db";
 import type { Mongo, LongTermMemoryEntity } from "../../db";
 
 describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
@@ -355,5 +359,45 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
     expect(memories).toHaveLength(2);
     expect(memories.find((m) => m.index0 === "work")).toBeDefined();
     expect(memories.find((m) => m.index0 === "personal")).toBeDefined();
+  });
+});
+
+const describeLLM = describe.runIf(process.env.ENABLE_LLM_TESTS === "true");
+describeLLM("MongoVectorMemorySearcher with in-memory MongoDB", () => {
+  let mongo: Mongo;
+  let db: MongoLongTermMemoryDB;
+  let indexer: MongoVectorMemorySearcher;
+
+  beforeEach(async () => {
+    // Create in-memory MongoDB instance for testing
+    mongo = await createMongo("", "test", "memory");
+    await mongo.connect();
+    indexer = new MongoVectorMemorySearcher(mongo);
+    db = new MongoLongTermMemoryDB(mongo, [indexer]);
+
+    await indexer.createIndices();
+  });
+
+  afterEach(async () => {
+    // Clean up: close MongoDB connection
+    await mongo.close();
+  });
+
+  test("should search long term memories", async () => {
+    const memories = await indexer.searchLongTermMemories({
+      actorId: 1,
+    });
+    expect(memories).toEqual([]);
+  });
+
+  const paintVector: number[] = [];
+
+  test("should search long term memories with index0", async () => {
+    const embedding = await indexer.createEmbedding({
+      index0: "绘画",
+      index1: "水墨画",
+      keywords: ["山水画", "花鸟画"],
+    });
+    expect(embedding).toEqual(paintVector);
   });
 });

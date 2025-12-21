@@ -13,6 +13,7 @@ import {
   MongoShortTermMemoryDB,
   MongoLongTermMemoryDB,
   type MongoCollectionGetter,
+  MongoVectorMemorySearcher,
 } from "./db";
 import { utilCollections } from "./db/mongo.util";
 import type {
@@ -44,6 +45,8 @@ export class Server {
   conversationMessageDB!: ConversationMessageDB & MongoCollectionGetter;
   shortTermMemoryDB!: ShortTermMemoryDB & MongoCollectionGetter;
   longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter;
+  longTermMemoryVectorSearcher!: MongoVectorMemorySearcher &
+    MongoCollectionGetter;
 
   private constructor(
     private readonly fs: Fs,
@@ -90,6 +93,8 @@ export class Server {
       }
     }
 
+    await server.longTermMemoryVectorSearcher.createIndices();
+
     return server;
   }
 
@@ -113,7 +118,10 @@ export class Server {
     server.conversationDB = new MongoConversationDB(mongo);
     server.conversationMessageDB = new MongoConversationMessageDB(mongo);
     server.shortTermMemoryDB = new MongoShortTermMemoryDB(mongo);
-    server.longTermMemoryDB = new MongoLongTermMemoryDB(mongo);
+    server.longTermMemoryVectorSearcher = new MongoVectorMemorySearcher(mongo);
+    server.longTermMemoryDB = new MongoLongTermMemoryDB(mongo, [
+      server.longTermMemoryVectorSearcher,
+    ]);
     return server;
   }
 
@@ -146,6 +154,7 @@ export class Server {
       this.conversationMessageDB,
       this.shortTermMemoryDB,
       this.longTermMemoryDB,
+      this.longTermMemoryVectorSearcher,
     ];
     const collections = new Set<string>(dbs.flatMap((db) => db.collections));
 

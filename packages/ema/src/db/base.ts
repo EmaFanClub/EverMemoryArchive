@@ -525,6 +525,18 @@ export interface ListLongTermMemoriesRequest {
 }
 
 /**
+ * Interface for a long term memory indexer
+ */
+export interface LongTermMemoryIndexer {
+  /**
+   * Indexes a long term memory
+   * @param entity - The long term memory to index
+   * @returns Promise resolving to void
+   */
+  indexLongTermMemory(entity: LongTermMemoryEntity): Promise<void>;
+}
+
+/**
  * Interface for long term memory searcher
  */
 export interface LongTermMemorySearcher {
@@ -542,7 +554,7 @@ export interface SearchLongTermMemoriesRequest {
   /**
    * The actor ID to filter long term memories by
    */
-  actorId?: number;
+  actorId: number;
   /**
    * The 0-index to search, a.k.a. 一级分类
    */
@@ -555,4 +567,8 @@ export interface SearchLongTermMemoriesRequest {
    * The keywords to search
    */
   keywords?: string[];
+  /**
+   * The limit of the number of long term memories to return
+   */
+  limit?: number;
 }
