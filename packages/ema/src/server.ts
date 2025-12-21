@@ -48,7 +48,6 @@ export class Server {
 
   /**
    * The plugins of the server.
-   * @type {Record<string, EmaPlugin>}
    */
   public plugins: Record<string, EmaPlugin> = {};
 
