@@ -34,7 +34,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * for(;;) {
    *   const line = prompt("YOU > ");
    *   const input: ActorInput = {
-   *     parts: [{ type: "text", context: line }],
+   *     message: { type: "text", content: line },
    *   };
    *   await this.work(input);
    * }
@@ -92,11 +92,15 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   }
 }
 
+/**
+ * The input to the actor.
+ */
 export interface ActorInput {
-  parts: ActorTextInput[];
+  message: ActorTextInput;
+  additionalInputs?: ActorTextInput[];
 }
 
 export interface ActorTextInput {
   type: "text";
-  context: string;
+  content: string;
 }
