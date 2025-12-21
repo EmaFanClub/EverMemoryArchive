@@ -27,7 +27,7 @@ function formatJson(value: unknown): string {
 }
 
 /** Minimal interactive runner for the TypeScript Agent. */
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   // Load configuration (uses built-in search order).
   const config = Config.load();
 
@@ -174,8 +174,3 @@ function attachEventLogging(agent: Agent): void {
     }
   });
 }
-
-main().catch((err) => {
-  console.error("Fatal error in run_agent:", err);
-  process.exit(1);
-});

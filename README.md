@@ -1,14 +1,14 @@
 # EverMemoryArchive
+
 ![Logo](./resources/logo.png)
 
 English | [中文](./README_CN.md)
 
 **EverMemoryArchive** represents Ema Fan Club's initiative to imbue agents with continuously evolving personalities via long-term memory mechanisms. Our goal is to build AI companions that truly understand you—functioning as versatile assistants for daily operations while serving as empathetic partners attuned to your emotional landscape.
 
-
 ## Framework
-![framework](./resources/framework2025-12-17.png)
 
+![framework](./resources/framework2025-12-17.png)
 
 ## Getting Started
 
@@ -25,6 +25,7 @@ cp .env.example .env
 ```
 
 The following variables are required for LLM functionality:
+
 - `GEMINI_API_KEY`: Your Gemini or OpenAI-compatible API key.
 - `GEMINI_API_BASE`: API base URL (defaults to Google Gemini API).
 - `GEMINI_MODEL`: The model name to use (e.g., `gemini-3-flash-preview`).
@@ -32,9 +33,18 @@ The following variables are required for LLM functionality:
 Run or develop application:
 
 ```bash
+pnpm build
 pnpm start
 # or
 pnpm dev
+```
+
+### CLI
+
+You can run the ema agent via CLI. Run the CLI with the following command to get usages.
+
+```bash
+pnpm -s cli
 ```
 
 ## Contributing

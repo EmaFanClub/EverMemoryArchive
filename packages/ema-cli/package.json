@@ -1,0 +1,27 @@
+{
+  "name": "ema-cli",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "misc/**/*.js",
+    "client.d.ts",
+    "types"
+  ],
+  "dependencies": {
+    "clipanion": "4.0.0-rc.4",
+    "ema": "workspace:*",
+    "undici": "^7.16.0"
+  }
+}

@@ -7,6 +7,7 @@
   "main": "index.js",
   "scripts": {
     "start": "pnpm --filter ema-ui start",
+    "cli": "exec tsx packages/ema-cli/src/main.ts",
     "dev": "pnpm --filter ema-ui dev",
     "test": "pnpm test:main run",
     "test:watch": "pnpm test:main",
