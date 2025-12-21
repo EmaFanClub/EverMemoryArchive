@@ -42,6 +42,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * ```
    */
   async work(input: ActorInput) {
+    // TODO: implement actor stepping logic
     throw new Error("Not implemented");
   }
 
