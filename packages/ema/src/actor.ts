@@ -1,6 +1,7 @@
 // import type { Message } from "../schema";
+import type { A } from "vitest/dist/chunks/environment.d.cL3nLXbE.js";
 import { Agent } from "./agent";
-import type { AgentEventsEmitter } from "./agent";
+import type { AgentEventName, AgentEventContent } from "./agent";
 import type {
   ActorDB,
   LongTermMemoryDB,
@@ -44,15 +45,25 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * }
    * ```
    */
-  async work(input: ActorInput) {
+  async work(inputs: ActorInputs) {
     // TODO: implement actor stepping logic
-    throw new Error("Not implemented");
+    if (inputs.length === 0) {
+      throw new Error("No inputs provided");
+    }
+    if (inputs.length > 1 || inputs[0].type !== "text") {
+      throw new Error("Only single text input is supported currently");
+    }
+    const input = inputs[0] as ActorTextInput;
+    while (true) {
+      this.actor.contextManager.addUserMessage(input.content); // add user input to context
+      await this.actor.run();
+    }
   }
 
   /**
    * hold recent events
    */
-  recentEvents: ActorEvent[] = [];
+  recentEvents: ActorEvents = [];
   subscribe(cb: (response: ActorResponse) => void) {
     cb({
       state: "idle",
@@ -114,39 +125,45 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   }
 }
 
+/**
+ * The response from the actor.
+ */
 interface ActorResponse {
   state: "running" | "idle";
-  events: ActorEvent[];
+  events: ActorEvents;
 }
-
-type ActorEvent = ActorMessage | ActorTokenUsage;
 
 /**
  * The actor sends a message.
  */
+export type ActorEvents = ActorEvent[];
+
+export type ActorEvent = ActorMessage | AgentEvent;
+
 interface ActorMessage {
-  kind: "message";
+  type: "message";
   content: string;
 }
 
-/**
- * The actor used tokens (for debugging).
- */
-interface ActorTokenUsage {
-  kind: "tokenUsage";
-  inputTokens: number;
-  outputTokens: number;
+interface AgentEvent {
+  type: AgentEventName;
+  content: AgentEventContent<AgentEventName>;
 }
 
 /**
  * The input to the actor.
  */
-export interface ActorInput {
-  message: ActorTextInput;
-  additionalInputs?: ActorTextInput[];
-}
+export type ActorInputs = ActorInput[];
+
+export type ActorInput = ActorTextInput | ActorOtherInput;
 
 export interface ActorTextInput {
   type: "text";
   content: string;
+}
+
+// Facilitate the extension of other types of input
+export interface ActorOtherInput {
+  type: "other";
+  content: any;
 }

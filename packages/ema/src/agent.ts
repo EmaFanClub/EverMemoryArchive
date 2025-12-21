@@ -73,37 +73,43 @@ const AgentEventDefs = {
   },
 } as const;
 
-type AgentEventNames = keyof typeof AgentEventDefs;
+export type AgentEventName = keyof typeof AgentEventDefs;
+
+export type AgentEventContents = {
+  [K in AgentEventName]: (typeof AgentEventDefs)[K];
+};
+
+export type AgentEventContent<K extends AgentEventName = AgentEventName> = (typeof AgentEventDefs)[K];
 
 export class AgentEventsEmitter {
   private readonly emitter = new EventEmitter();
 
-  emit<K extends AgentEventNames>(
+  emit<K extends AgentEventName>(
     event: K,
-    payload: (typeof AgentEventDefs)[K],
+    content: AgentEventContent<K>,
   ): boolean {
-    return this.emitter.emit(event, payload);
+    return this.emitter.emit(event, content);
   }
 
-  on<K extends AgentEventNames>(
+  on<K extends AgentEventName>(
     event: K,
-    handler: (payload: (typeof AgentEventDefs)[K]) => void,
+    handler: (content: AgentEventContent<K>) => void,
   ): AgentEventsEmitter {
     this.emitter.on(event, handler);
     return this;
   }
 
-  off<K extends AgentEventNames>(
+  off<K extends AgentEventName>(
     event: K,
-    handler: (payload: (typeof AgentEventDefs)[K]) => void,
+    handler: (content: AgentEventContent<K>) => void,
   ): AgentEventsEmitter {
     this.emitter.off(event, handler);
     return this;
   }
 
-  once<K extends AgentEventNames>(
+  once<K extends AgentEventName>(
     event: K,
-    handler: (payload: (typeof AgentEventDefs)[K]) => void,
+    handler: (content: AgentEventContent<K>) => void,
   ): AgentEventsEmitter {
     this.emitter.once(event, handler);
     return this;
@@ -112,7 +118,7 @@ export class AgentEventsEmitter {
 
 export const AgentEvents = Object.fromEntries(
   Object.keys(AgentEventDefs).map((key) => [key, key]),
-) as { [K in keyof typeof AgentEventDefs]: K };
+) as { [K in AgentEventName]: K };
 
 // /** ANSI color codes for terminal output. */
 // class Colors {
