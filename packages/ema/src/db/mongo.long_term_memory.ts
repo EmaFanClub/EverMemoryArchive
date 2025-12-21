@@ -1,5 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
-
 import type {
   LongTermMemoryDB,
   LongTermMemoryEntity,
@@ -77,6 +75,7 @@ export class MongoLongTermMemoryDB implements LongTermMemoryDB {
       const id = await upsertEntity(this.mongo, this.$cn, entity);
       const newEntity = { ...entity, id };
       for (const indexer of this.indexers) {
+        // todo: if there are multiple indexers, we need to rollback all of them if any of them fail.
         await indexer.indexLongTermMemory(newEntity);
       }
       return id;
