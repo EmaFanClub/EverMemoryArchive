@@ -39,7 +39,7 @@ EMA_PLUGINS=qq
 ```ts
 import type { EmaPluginProvider, Server } from "ema";
 export const Plugin: EmaPluginProvider = class {
-  name = "QQ";
+  static name = "QQ";
   constructor(private readonly server: Server) {}
   start(): Promise<void> {
     console.log("[ema-qq] started", !!this.server.chat);

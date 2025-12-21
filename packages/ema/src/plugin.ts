@@ -26,7 +26,7 @@ export interface EmaPluginProvider {
    * @example
    * ```typescript
    * export const Plugin: EmaPluginProvider = class {
-   *   name = "MyPlugin";
+   *   static name = "MyPlugin";
    * };
    * ```
    */
