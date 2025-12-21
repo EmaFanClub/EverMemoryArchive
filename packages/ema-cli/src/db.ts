@@ -1,6 +1,9 @@
 import { Command, Option } from "clipanion";
 import { fetch } from "undici";
 
+/**
+ * Base command for snapshot (server) commands
+ */
 abstract class SnapshotCommand extends Command {
   port = Option.String(`-p,--port`);
   address = Option.String(`-a,--addr`);
@@ -17,6 +20,13 @@ abstract class SnapshotCommand extends Command {
   }
 }
 
+/**
+ * Convenience function for CLI to POST a JSON body to a URL
+ *
+ * @param url - The URL to post to
+ * @param body - The JSON body to post
+ * @returns The response from the server
+ */
 const post = async (url: string, body: Record<string, unknown>) => {
   try {
     return await fetch(url, {
