@@ -1,4 +1,3 @@
-// import type { Message } from "../schema";
 import type { Config } from "./config";
 import { Agent, AgentEvents } from "./agent";
 import type { AgentEventName, AgentEventContent } from "./agent";
