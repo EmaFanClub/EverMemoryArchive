@@ -42,7 +42,7 @@ export class ActorWorker {
   /** Cached agent state for the latest run. */
   private agentState: AgentState | null = null;
   /** Queue of pending actor input batches. */
-  private queue: BufferMessage[] = [];
+  private queue: [any, BufferMessage][] = [];
   /** Promise for the current agent run. */
   private currentRunPromise: Promise<void> | null = null;
   /** Ensures queue processing runs serially. */
@@ -95,7 +95,9 @@ export class ActorWorker {
    * }
    * ```
    */
-  async work(inputs: ActorInputs, addToBuffer: boolean = true): Promise<void> {
+  async work(payload: ActorInputs, addToBuffer: boolean = true): Promise<void> {
+    const { metadata, inputs } = payload;
+    console.log("work", inputs);
     // TODO: implement actor stepping logic
     if (inputs.length === 0) {
       throw new Error("No inputs provided");
@@ -112,7 +114,7 @@ export class ActorWorker {
     });
     const bufferMessage = bufferMessageFromUser(this.userId, inputs);
     this.logger.debug(`Received input when [${this.currentStatus}].`, inputs);
-    this.queue.push(bufferMessage);
+    this.queue.push([metadata, bufferMessage]);
 
     if (addToBuffer) {
       this.enqueueBufferWrite(bufferMessage);
@@ -177,7 +179,9 @@ export class ActorWorker {
     try {
       while (this.queue.length > 0) {
         this.setStatus("preparing");
-        const batches = this.queue.splice(0, this.queue.length);
+        const batchPacks = this.queue.splice(0, this.queue.length);
+        const metadataList = batchPacks.map((pack) => pack[0]);
+        const batches = batchPacks.map((pack) => pack[1]);
         if (
           this.agentState &&
           !checkCompleteMessages(this.agentState.messages)
@@ -234,7 +238,7 @@ export class ActorWorker {
           };
         }
         this.setStatus("running");
-        this.currentRunPromise = this.agent.runWithState(this.agentState);
+        this.currentRunPromise = this.agent.runWithState(metadataList, this.agentState);
         try {
           await this.currentRunPromise;
         } finally {
@@ -272,7 +276,11 @@ export class ActorWorker {
 /**
  * A batch of actor inputs in one request.
  */
-export type ActorInputs = InputContent[];
+export interface ActorInputs {
+  metadata?: any;
+  inputs: InputContent[];
+}
+
 
 /**
  * The status of the actor.
@@ -292,11 +300,11 @@ export interface ActorMessageEvent {
 /**
  * A agent from the agent.
  */
-export interface ActorAgentEvent {
+export interface ActorAgentEvent<K extends AgentEventName = AgentEventName> {
   /** The kind of the event. */
-  kind: AgentEventName;
+  kind: K;
   /** The content of the message. */
-  content: AgentEventUnion;
+  content: AgentEvent<K>;
 }
 
 /**
@@ -347,9 +355,9 @@ export function isAgentEvent<K extends AgentEventName | undefined>(
   event: ActorEventUnion,
   kind?: K,
 ): event is ActorAgentEvent &
-  (K extends AgentEventName
-    ? { kind: K; content: AgentEvent<K> }
-    : ActorAgentEvent) {
+(K extends AgentEventName
+  ? { kind: K; content: AgentEvent<K> }
+  : ActorAgentEvent) {
   if (!event) return false;
   if (event.kind === "message") return false;
   return kind ? event.kind === kind : true;
