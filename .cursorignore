@@ -1,0 +1,23 @@
+# --- Security & Credentials ---
+.env*
+!.env.example
+*.pem
+*.key
+*.cert
+*_credentials.json
+secrets/
+config/private/
+
+# --- Agent Memory & Database ---
+chroma_db/
+lancedb/
+*.sqlite3
+*.db
+logs/
+history/
+sessions/
+
+# --- System/Cache ---
+__pycache__/
+.venv/
+.git/

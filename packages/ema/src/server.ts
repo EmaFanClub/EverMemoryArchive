@@ -1,4 +1,5 @@
 import { OpenAIClient } from "./llm/openai_client";
+import { Config } from "./config";
 import type { Message } from "./schema";
 import {
   createMongo,
@@ -30,10 +31,9 @@ import { RealFs } from "./fs";
 
 /**
  * The server class for the EverMemoryArchive.
- * todo: document what specific env are read.
- * todo: read all of the env in config.ts
  */
 export class Server {
+  config: Config;
   private llmClient: OpenAIClient;
   mongo!: Mongo;
   roleDB!: RoleDB & MongoCollectionGetter;
@@ -45,40 +45,41 @@ export class Server {
   shortTermMemoryDB!: ShortTermMemoryDB & MongoCollectionGetter;
   longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter;
 
-  private constructor(private readonly fs: Fs) {
-    // Initialize OpenAI client with environment variables or defaults
-    const apiKey =
-      process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "";
-    const apiBase =
-      process.env.OPENAI_API_BASE ||
-      process.env.GEMINI_API_BASE ||
-      "https://generativelanguage.googleapis.com/v1beta/openai/";
-    const model =
-      process.env.OPENAI_MODEL ||
-      process.env.GEMINI_MODEL ||
-      "gemini-2.5-flash";
+  private constructor(
+    private readonly fs: Fs,
+    config: Config,
+  ) {
+    this.config = config;
+    const { apiKey, apiBase, model, retry } = config.llm;
+
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY or GEMINI_API_KEY env is not set");
     }
 
-    this.llmClient = new OpenAIClient(apiKey, apiBase, model);
+    this.llmClient = new OpenAIClient(
+      apiKey,
+      apiBase,
+      model,
+      retry,
+      config.system.httpsProxy,
+    );
   }
 
-  static async create(fs: Fs = new RealFs()): Promise<Server> {
+  static async create(
+    fs: Fs = new RealFs(),
+    config: Config = Config.load(),
+  ): Promise<Server> {
     const isDev = ["development", "test"].includes(process.env.NODE_ENV || "");
 
     // Initialize MongoDB asynchronously
-    // Use environment variables or defaults for MongoDB connection
-    const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
-    const mongoDbName = process.env.MONGO_DB_NAME || "ema";
-    const mongoKind =
-      (process.env.MONGO_KIND as "memory" | "remote") ||
-      (isDev ? "memory" : "remote");
-
-    const mongo = await createMongo(mongoUri, mongoDbName, mongoKind);
+    const mongo = await createMongo(
+      config.mongo.uri,
+      config.mongo.dbName,
+      config.mongo.kind,
+    );
     await mongo.connect();
 
-    const server = Server.createWithMongo(fs, mongo);
+    const server = Server.createWithMongo(fs, mongo, config);
 
     if (isDev) {
       const restored = await server.restoreFromSnapshot("default");
@@ -92,15 +93,18 @@ export class Server {
     return server;
   }
 
-  // todo: replace this api with `create(config, fs)` in future.
   /**
    * Creates a Server instance with a pre-configured MongoDB instance for testing.
    * @param fs - File system implementation
    * @param mongo - MongoDB instance
    * @returns Promise resolving to the Server instance
    */
-  static createWithMongo(fs: Fs, mongo: Mongo): Server {
-    const server = new Server(fs);
+  static createWithMongo(
+    fs: Fs,
+    mongo: Mongo,
+    config: Config = Config.load(),
+  ): Server {
+    const server = new Server(fs, config);
     server.mongo = mongo;
     server.roleDB = new MongoRoleDB(mongo);
     server.actorDB = new MongoActorDB(mongo);
@@ -120,8 +124,7 @@ export class Server {
       );
     }
 
-    // TODO: use config.ts to load data root
-    const dataRoot = process.env.DATA_ROOT || ".data";
+    const dataRoot = this.config.system.dataRoot;
     return `${dataRoot}/mongo-snapshots/${name}.json`;
   }
 

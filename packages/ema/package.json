@@ -30,6 +30,7 @@
     "js-tiktoken": "^1.0.21",
     "string-width": "^7.2.0",
     "@modelcontextprotocol/sdk": "^1.25.1",
+    "js-yaml": "^4.1.0",
     "mongodb": "^7.0.0",
     "mongodb-memory-server": "^11.0.0",
     "openai": "^6.13.0",
@@ -41,6 +42,7 @@
     "test": "vitest"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/tmp": "^0.2.6"
   }
 }

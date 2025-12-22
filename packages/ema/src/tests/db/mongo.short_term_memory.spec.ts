@@ -11,7 +11,7 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     mongo = await createMongo("", "test", "memory");
     await mongo.connect();
     db = new MongoShortTermMemoryDB(mongo);
-  });
+  }, 60000);
 
   afterEach(async () => {
     // Clean up: close MongoDB connection

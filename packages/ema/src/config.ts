@@ -14,6 +14,46 @@ import yaml from "js-yaml";
 import { RetryConfig } from "./retry";
 import type { Tool } from "./tools/base";
 
+export class MongoConfig {
+  /** MongoDB configuration */
+  uri: string;
+  dbName: string;
+  kind: "memory" | "remote";
+
+  constructor({
+    uri = process.env.MONGO_URI || "mongodb://localhost:27017",
+    dbName = process.env.MONGO_DB_NAME || "ema",
+    kind,
+  }: Partial<MongoConfig> = {}) {
+    this.uri = uri;
+    this.dbName = dbName;
+    if (kind) {
+      this.kind = kind;
+    } else {
+      const isDev = ["development", "test"].includes(
+        process.env.NODE_ENV || "",
+      );
+      this.kind =
+        (process.env.MONGO_KIND as "memory" | "remote") ||
+        (isDev ? "memory" : "remote");
+    }
+  }
+}
+
+export class SystemConfig {
+  /** System configuration */
+  dataRoot: string;
+  httpsProxy: string;
+
+  constructor({
+    dataRoot = process.env.DATA_ROOT || ".data",
+    httpsProxy = process.env.HTTPS_PROXY || process.env.https_proxy || "",
+  }: Partial<SystemConfig> = {}) {
+    this.dataRoot = dataRoot;
+    this.httpsProxy = httpsProxy;
+  }
+}
+
 export class LLMConfig {
   /** LLM configuration */
 
@@ -24,9 +64,13 @@ export class LLMConfig {
   retry: RetryConfig;
 
   constructor({
-    apiKey,
-    apiBase = "https://generativelanguage.googleapis.com/v1beta/openai/",
-    model = "gemini-2.5-flash",
+    apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "",
+    apiBase = process.env.OPENAI_API_BASE ||
+      process.env.GEMINI_API_BASE ||
+      "https://generativelanguage.googleapis.com/v1beta/openai/",
+    model = process.env.OPENAI_MODEL ||
+      process.env.GEMINI_MODEL ||
+      "gemini-2.5-flash",
     provider = "openai",
     retry = new RetryConfig(),
   }: {
@@ -106,19 +150,27 @@ export class Config {
   llm: LLMConfig;
   agent: AgentConfig;
   tools: ToolsConfig;
+  mongo: MongoConfig;
+  system: SystemConfig;
 
   constructor({
     llm,
     agent,
     tools,
+    mongo,
+    system,
   }: {
     llm: LLMConfig;
     agent: AgentConfig;
     tools: ToolsConfig;
+    mongo: MongoConfig;
+    system: SystemConfig;
   }) {
     this.llm = llm;
     this.agent = agent;
     this.tools = tools;
+    this.mongo = mongo;
+    this.system = system;
   }
 
   /**
@@ -131,7 +183,14 @@ export class Config {
       fs.mkdirSync(path.dirname(configPath), { recursive: true });
       fs.writeFileSync(configPath, defaultContent, "utf-8");
     }
-    return this.fromYaml(configPath);
+    // Fallback to defaults (which use environment variables)
+    return new Config({
+      llm: new LLMConfig({ apiKey: "" }), // apiKey will be populated from env in constructor if empty here, or remain empty
+      agent: new AgentConfig(),
+      tools: new ToolsConfig(),
+      mongo: new MongoConfig(),
+      system: new SystemConfig(),
+    });
   }
 
   /**
@@ -154,13 +213,10 @@ export class Config {
       throw new Error("Configuration file is empty");
     }
 
-    // Parse LLM configuration
-    if (!("api_key" in data)) {
-      throw new Error("Configuration file missing required field: api_key");
-    }
-
-    if (!data.api_key || data.api_key === "YOUR_API_KEY_HERE") {
-      throw new Error("Please configure a valid API Key");
+    // Check API Key if provided in YAML, otherwise rely on Env
+    let apiKey = data.api_key;
+    if (apiKey === "YOUR_API_KEY_HERE") {
+      apiKey = ""; // Will fallback to env in LLMConfig constructor if empty string passed? No, constructor uses default param.
     }
 
     // Parse retry configuration
@@ -174,7 +230,7 @@ export class Config {
     });
 
     const llmConfig = new LLMConfig({
-      apiKey: data.api_key,
+      apiKey: apiKey || undefined, // undefined triggers default value in constructor
       apiBase: data.api_base,
       model: data.model,
       provider: data.provider,
@@ -201,10 +257,27 @@ export class Config {
       mcpConfigPath: toolsData.mcp_config_path,
     });
 
+    // Parse Mongo configuration
+    const mongoData = data.mongo ?? {};
+    const mongoConfig = new MongoConfig({
+      uri: mongoData.uri,
+      dbName: mongoData.db_name,
+      kind: mongoData.kind,
+    });
+
+    // Parse System configuration
+    const systemData = data.system ?? {};
+    const systemConfig = new SystemConfig({
+      dataRoot: systemData.data_root,
+      httpsProxy: systemData.https_proxy,
+    });
+
     return new Config({
       llm: llmConfig,
       agent: agentConfig,
       tools: toolsConfig,
+      mongo: mongoConfig,
+      system: systemConfig,
     });
   }
 

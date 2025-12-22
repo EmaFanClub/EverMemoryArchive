@@ -27,7 +27,8 @@ venv/
 ENV/
 env/
 .venv
-.env
+.env*
+!.env.example
 
 # IDE
 .vscode/*
@@ -64,3 +65,7 @@ docs/assets/preview.html
 claude.md
 
 .agent_memory.json
+
+
+# local scripts
+update.sh

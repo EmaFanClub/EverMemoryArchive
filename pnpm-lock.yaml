@@ -49,6 +49,9 @@ importers:
       js-tiktoken:
         specifier: ^1.0.21
         version: 1.0.21
+      js-yaml:
+        specifier: ^4.1.0
+        version: 4.1.1
       mongodb:
         specifier: ^7.0.0
         version: 7.0.0
@@ -68,6 +71,9 @@ importers:
         specifier: ^7.16.0
         version: 7.16.0
     devDependencies:
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
       '@types/tmp':
         specifier: ^0.2.6
         version: 0.2.6
