@@ -36,6 +36,7 @@ describe("MemorySkill", () => {
     mongo = await createMongo("", "test", "memory");
     await mongo.connect();
     worker = new ActorWorker(
+      Config.load(),
       1,
       new MongoActorDB(mongo),
       new MongoShortTermMemoryDB(mongo),
