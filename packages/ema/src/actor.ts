@@ -18,18 +18,31 @@ import type {
 } from "./skills/memory";
 import { OpenAIClient } from "./llm/openai_client";
 
+/**
+ * A facade of the actor functionalities between the server (system) and the agent (actor).
+ */
 export class ActorWorker implements ActorStateStorage, ActorMemory {
+  /** The agent instance. */
   private readonly agent: Agent;
+  /** The subscribers of the actor. */
   private readonly subscribers = new Set<(response: ActorResponse) => void>();
+  /** The current status of the actor. */
   private currentStatus: ActorStatus = "idle";
+  /** The event stream of the actor. */
   private eventStream = new EventHistory();
 
   constructor(
+    /** The config of the actor. */
     private readonly config: Config,
+    /** The ID of the actor. */
     private readonly actorId: number,
+    /** The database of the actor. */
     private readonly actorDB: ActorDB,
+    /** The database of the short-term memory. */
     private readonly shortTermMemoryDB: ShortTermMemoryDB,
+    /** The database of the long-term memory. */
     private readonly longTermMemoryDB: LongTermMemoryDB,
+    /** The searcher of the long-term memory. */
     private readonly longTermMemorySearcher: LongTermMemorySearcher,
   ) {
     const llm = new OpenAIClient(
