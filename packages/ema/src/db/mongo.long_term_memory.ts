@@ -5,6 +5,8 @@ import type {
   LongTermMemorySearcher,
   LongTermMemoryIndexer,
   SearchLongTermMemoriesRequest,
+  CreatedField,
+  DbDate,
 } from "./base";
 import type { Mongo } from "./mongo";
 import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
@@ -136,13 +138,22 @@ export abstract class MongoMemorySearchAdaptor implements LongTermMemorySearcher
 
   async searchLongTermMemories(
     req: SearchLongTermMemoriesRequest,
-  ): Promise<LongTermMemoryEntity[]> {
+  ): Promise<(LongTermMemoryEntity & CreatedField)[]> {
     const idResults = await this.doSearch(req);
 
     // Convert ids to long term memory entities
     const db = this.mongo.getDb();
     const collection = db.collection<LongTermMemoryEntity>(this.$cn);
     const results = await collection.find({ id: { $in: idResults } }).toArray();
-    return results.map(omitMongoId);
+    return results.map(omitMongoId).map(checkCreatedField);
   }
+}
+
+function checkCreatedField<T extends { createdAt?: DbDate }>(
+  entity: T,
+): T & CreatedField {
+  if (!entity.createdAt) {
+    throw new Error("createdAt is required");
+  }
+  return entity as T & CreatedField;
 }
