@@ -11,8 +11,10 @@ import { ActorWorker } from "../../actor";
 import { Config } from "../../config";
 import * as lancedb from "@lancedb/lancedb";
 
-const describeLLM = describe.runIf(!!process.env.GEMINI_API_KEY?.trim());
-console.log("GEMINI_API_KEY", process.env.GEMINI_API_KEY);
+const describeLLM = describe.runIf(
+  !!process.env.GEMINI_API_KEY?.trim() &&
+    process.env.GEMINI_API_KEY !== "DUMMY_KEY",
+);
 describeLLM("MemorySkill", () => {
   const { shouldSkip, skipReason } = (() => {
     try {
