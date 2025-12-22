@@ -38,7 +38,12 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
       this.config.llm.model,
       this.config.llm.retry,
     );
-    this.agent = new Agent(config, llm, config.systemPrompt, config.baseTools);
+    this.agent = new Agent(
+      config.agent,
+      llm,
+      config.systemPrompt,
+      config.baseTools,
+    );
   }
 
   /**
