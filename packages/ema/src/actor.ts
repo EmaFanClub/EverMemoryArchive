@@ -68,9 +68,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * // infinite loop of REPL
    * for(;;) {
    *   const line = prompt("YOU > ");
-   *   const input: ActorInput = {
-   *     message: { type: "text", content: line },
-   *   };
+   *   const input: ActorInput = { kind: "text", content: line };
    *   await this.work([input]);
    * }
    * ```
@@ -80,7 +78,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     if (inputs.length === 0) {
       throw new Error("No inputs provided");
     }
-    if (inputs.length > 1 || inputs[0].type !== "text") {
+    if (inputs.length > 1 || inputs[0].kind !== "text") {
       throw new Error("Only single text input is supported currently");
     }
     const input = inputs[0] as ActorTextInput;
@@ -241,13 +239,13 @@ export type ActorInput = ActorTextInput | ActorOtherInput;
  * The text input to the actor.
  */
 export interface ActorTextInput {
-  type: "text";
+  kind: "text";
   content: string;
 }
 
 // Facilitate the extension of other types of input
 export interface ActorOtherInput {
-  type: "other";
+  kind: "other";
   content: any;
 }
 

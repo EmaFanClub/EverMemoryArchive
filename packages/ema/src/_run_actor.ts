@@ -118,7 +118,7 @@ async function main(): Promise<void> {
     if (userInput === "/exit" || userInput === "/quit") {
       break;
     }
-    await actor.work([{ type: "text", content: userInput }]);
+    await actor.work([{ kind: "text", content: userInput }]);
   }
 
   rl.close();
