@@ -1,0 +1,25 @@
+services:
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    container_name: napcat
+    restart: always
+    # mac_address: 02:42:ac:11:00:02 # 添加MAC地址固化配置
+    environment:
+      - NAPCAT_UID=${NAPCAT_UID}
+      - NAPCAT_GID=${NAPCAT_GID}
+
+    ports:
+      - 3001:3001
+      - 6096:6096
+      - 6097:6097
+      - 6099:6099
+
+    volumes:
+      - ../.data/napcat/config:/app/napcat/config
+      - ../.data/ntqq:/app/.config/QQ
+    networks:
+      - ema-network
+
+networks:
+  ema-network:
+    driver: bridge
