@@ -22,7 +22,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   private readonly agent: Agent;
   private readonly subscribers = new Set<(response: ActorResponse) => void>();
   private currentStatus: ActorStatus = "idle";
-  private recentEvents: ActorEvents = [];
+  private eventStream = new EventStream();
 
   constructor(
     private readonly config: Config,
@@ -64,8 +64,6 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * ```
    */
   async work(inputs: ActorInputs) {
-    // start a new run with a fresh event list
-    this.recentEvents = [];
     // TODO: implement actor stepping logic
     if (inputs.length === 0) {
       throw new Error("No inputs provided");
@@ -108,7 +106,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   public subscribe(cb: (response: ActorResponse) => void) {
     cb({
       status: this.currentStatus,
-      events: this.recentEvents,
+      events: this.eventStream.pastEvents(),
     });
     this.subscribers.add(cb);
   }
@@ -118,14 +116,17 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   }
 
   private broadcast(status: ActorStatus) {
-    this.currentStatus = status;
+    const response: ActorResponse = {
+      status: (this.currentStatus = status),
+      events: this.eventStream.advance(),
+    };
     for (const cb of this.subscribers) {
-      cb({ status, events: this.recentEvents });
+      cb({ ...response });
     }
   }
 
   private emitEvent(event: ActorEvent) {
-    this.recentEvents.push(event);
+    this.eventStream.push(event);
     this.broadcast("running");
   }
 
@@ -181,6 +182,24 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
 }
 
 /**
+ * The input to the actor.
+ */
+export type ActorInputs = ActorInput[];
+
+export type ActorInput = ActorTextInput | ActorOtherInput;
+
+export interface ActorTextInput {
+  type: "text";
+  content: string;
+}
+
+// Facilitate the extension of other types of input
+export interface ActorOtherInput {
+  type: "other";
+  content: any;
+}
+
+/**
  * The response from the actor.
  */
 interface ActorResponse {
@@ -208,19 +227,28 @@ interface AgentEvent {
 }
 
 /**
- * The input to the actor.
+ * A stream of actor events.
  */
-export type ActorInputs = ActorInput[];
+class EventStream {
+  /** The index of the current event. */
+  eventIdx = 0;
+  /** The list of events. */
+  events: ActorEvent[] = [];
 
-export type ActorInput = ActorTextInput | ActorOtherInput;
+  /** Push an event to the stream. */
+  push(event: ActorEvent) {
+    this.events.push(event);
+  }
 
-export interface ActorTextInput {
-  type: "text";
-  content: string;
-}
+  /** Advance the stream to the next event. */
+  advance() {
+    const events = this.events.slice(this.eventIdx);
+    this.eventIdx += events.length;
+    return events;
+  }
 
-// Facilitate the extension of other types of input
-export interface ActorOtherInput {
-  type: "other";
-  content: any;
+  /** Get the past events. */
+  pastEvents() {
+    return this.events.slice(0, this.eventIdx);
+  }
 }
