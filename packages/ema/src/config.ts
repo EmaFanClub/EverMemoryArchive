@@ -210,7 +210,7 @@ export class Config {
     const llmData = data.llm ?? {};
 
     // Parse retry configuration
-    const retryData = llmData.retry ?? data.retry ?? {};
+    const retryData = llmData.retry ?? {};
     const retryConfig = new RetryConfig({
       enabled: retryData.enabled,
       maxRetries: retryData.max_retries,
