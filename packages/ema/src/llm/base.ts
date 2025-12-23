@@ -40,7 +40,7 @@ export abstract class LLMClient {
     if (!apiKey) {
       throw new Error("LLM API key is required.");
     }
-    console.log(apiKey);
+    // console.log(apiKey);
   }
 
   /**
