@@ -386,11 +386,11 @@ export class Config {
       mongo: {
         uri: mongoConfig.uri,
         db_name: mongoConfig.dbName,
-        kind: mongoConfig.kind, 
+        kind: mongoConfig.kind,
       },
       system: {
         data_root: systemConfig.dataRoot,
-        https_proxy: systemConfig.httpsProxy, 
+        https_proxy: systemConfig.httpsProxy,
       },
     });
   }
