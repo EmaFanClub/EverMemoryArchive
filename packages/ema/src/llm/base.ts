@@ -36,7 +36,12 @@ export abstract class LLMClient {
      * Optional retry configuration
      */
     protected readonly retryConfig: RetryConfig = new RetryConfig(),
-  ) {}
+  ) {
+    if (!apiKey) {
+      throw new Error("LLM API key is required.");
+    }
+    console.log(apiKey);
+  }
 
   /**
    * Generates response from LLM.

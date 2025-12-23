@@ -179,18 +179,12 @@ export class Config {
   static load(): Config {
     const configPath = this.getDefaultConfigPath();
     if (!fs.existsSync(configPath)) {
-      const defaultContent = this.getDefaultConfigContent();
+      const defaultConfig = this.getDefaultConfig();
+      const defaultContent = this.getConfigYAMLContent(defaultConfig);
       fs.mkdirSync(path.dirname(configPath), { recursive: true });
       fs.writeFileSync(configPath, defaultContent, "utf-8");
     }
-    // Fallback to defaults (which use environment variables)
-    return new Config({
-      llm: new LLMConfig({ apiKey: "" }), // apiKey will be populated from env in constructor if empty here, or remain empty
-      agent: new AgentConfig(),
-      tools: new ToolsConfig(),
-      mongo: new MongoConfig(),
-      system: new SystemConfig(),
-    });
+    return this.fromYaml(configPath);
   }
 
   /**
@@ -201,7 +195,7 @@ export class Config {
    * @throws Error Configuration file does not exist
    * @throws Error Invalid configuration format or missing required fields
    */
-  static fromYaml(configPath: string): Config {
+  private static fromYaml(configPath: string): Config {
     if (!fs.existsSync(configPath)) {
       throw new Error(`Configuration file does not exist: ${configPath}`);
     }
@@ -213,14 +207,10 @@ export class Config {
       throw new Error("Configuration file is empty");
     }
 
-    // Check API Key if provided in YAML, otherwise rely on Env
-    let apiKey = data.api_key;
-    if (apiKey === "YOUR_API_KEY_HERE") {
-      apiKey = ""; // Will fallback to env in LLMConfig constructor if empty string passed? No, constructor uses default param.
-    }
+    const llmData = data.llm ?? {};
 
     // Parse retry configuration
-    const retryData = data.retry ?? {};
+    const retryData = llmData.retry ?? data.retry ?? {};
     const retryConfig = new RetryConfig({
       enabled: retryData.enabled,
       maxRetries: retryData.max_retries,
@@ -230,19 +220,20 @@ export class Config {
     });
 
     const llmConfig = new LLMConfig({
-      apiKey: apiKey || undefined, // undefined triggers default value in constructor
-      apiBase: data.api_base,
-      model: data.model,
-      provider: data.provider,
+      apiKey: llmData.api_key || undefined, // undefined triggers default value in constructor
+      apiBase: llmData.api_base,
+      model: llmData.model,
+      provider: llmData.provider,
       retry: retryConfig,
     });
 
     // Parse Agent configuration
+    const agentData = data.agent ?? {};
     const agentConfig = new AgentConfig({
-      maxSteps: data.max_steps,
-      workspaceDir: data.workspace_dir,
-      systemPromptFile: data.system_prompt_file,
-      tokenLimit: data.token_limit,
+      maxSteps: agentData.max_steps,
+      workspaceDir: agentData.workspace_dir,
+      systemPromptFile: agentData.system_prompt_file,
+      tokenLimit: agentData.token_limit,
     });
 
     // Parse tools configuration
@@ -347,31 +338,59 @@ export class Config {
     return path.join(this.getPackageDir(), "config", "config.yaml");
   }
 
-  private static getDefaultConfigContent(): string {
+  private static getDefaultConfig(): Config {
+    return new Config({
+      llm: new LLMConfig({ apiKey: "" }),
+      agent: new AgentConfig(),
+      tools: new ToolsConfig(),
+      mongo: new MongoConfig(),
+      system: new SystemConfig(),
+    });
+  }
+
+  private static getConfigYAMLContent(config: Config): string {
+    const llmConfig = config.llm;
+    const agentConfig = config.agent;
+    const toolsConfig = config.tools;
+    const mongoConfig = config.mongo;
+    const systemConfig = config.system;
     return yaml.dump({
-      api_key: "YOUR_API_KEY_HERE",
-      api_base: "https://generativelanguage.googleapis.com/v1beta/openai/",
-      model: "gemini-2.5-flash",
-      provider: "openai",
-      retry: {
-        enabled: true,
-        max_retries: 3,
-        initial_delay: 1000,
-        max_delay: 10000,
-        exponential_base: 2,
+      llm: {
+        api_key: llmConfig.apiKey,
+        api_base: llmConfig.apiBase,
+        model: llmConfig.model,
+        provider: llmConfig.provider,
+        retry: {
+          enabled: llmConfig.retry.enabled,
+          max_retries: llmConfig.retry.maxRetries,
+          initial_delay: llmConfig.retry.initialDelay,
+          max_delay: llmConfig.retry.maxDelay,
+          exponential_base: llmConfig.retry.exponentialBase,
+        },
       },
-      max_steps: 50,
-      workspace_dir: "./workspace",
-      system_prompt_file: "system_prompt.md",
-      token_limit: 80000,
+      agent: {
+        max_steps: agentConfig.maxSteps,
+        workspace_dir: agentConfig.workspaceDir,
+        system_prompt_file: agentConfig.systemPromptFile,
+        token_limit: agentConfig.tokenLimit,
+      },
       tools: {
-        enable_file_tools: true,
-        enable_bash: true,
-        enable_note: true,
-        enable_skills: true,
-        skills_dir: "./skills",
-        enable_mcp: true,
-        mcp_config_path: "mcp.json",
+        enable_file_tools: toolsConfig.enableFileTools,
+        enable_bash: toolsConfig.enableBash,
+        enable_note: toolsConfig.enableNote,
+        enable_skills: toolsConfig.enableSkills,
+        skills_dir: toolsConfig.skillsDir,
+        enable_mcp: toolsConfig.enableMcp,
+        mcp_config_path: toolsConfig.mcpConfigPath,
+      },
+      mongo: {
+        uri: mongoConfig.uri,
+        db_name: mongoConfig.dbName,
+        kind: mongoConfig.kind, 
+      },
+      system: {
+        data_root: systemConfig.dataRoot,
+        https_proxy: systemConfig.httpsProxy, 
       },
     });
   }
