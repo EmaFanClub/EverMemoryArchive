@@ -55,15 +55,25 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 10.16.1
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Load MongoDB binary cache
+        id: cache-mongodb-binaries
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: node-mongodb-24
+
+      - name: Install MongoDB
+        run: npx tsx scripts/install-mongo.ts
+        working-directory: packages/ema
 
       - name: Run Vitest
         env:
