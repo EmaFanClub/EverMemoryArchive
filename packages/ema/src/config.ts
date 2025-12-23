@@ -195,7 +195,7 @@ export class Config {
    * @throws Error Configuration file does not exist
    * @throws Error Invalid configuration format or missing required fields
    */
-  private static fromYaml(configPath: string): Config {
+  static fromYaml(configPath: string): Config {
     if (!fs.existsSync(configPath)) {
       throw new Error(`Configuration file does not exist: ${configPath}`);
     }
