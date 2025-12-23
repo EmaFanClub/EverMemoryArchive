@@ -6,7 +6,6 @@ import { describe, expect, test } from "vitest";
 
 import { Config } from "../config";
 
-// @ts-ignore
 import configTestData from "./config_test.yaml?raw";
 
 describe("Config", () => {
