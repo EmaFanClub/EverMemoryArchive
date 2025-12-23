@@ -1,0 +1,10 @@
+llm:
+  api_key: "test-api-key"
+  api_base: "https://example.com/v1/"
+  model: "test-model"
+  provider: "openai"
+  retry:
+    enabled: false
+    max_retries: 5
+tools:
+  enable_bash: false
