@@ -5,6 +5,8 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { Config } from "../config";
+// @ts-ignore
+import configTestData from "./config_test.yaml?raw";
 
 import configTestData from "./config_test.yaml?raw";
 
