@@ -21,11 +21,11 @@ const ActorSseRequest = k.type({
  *
  * Returns a SSE stream of actor events.
  */
-export const GET = getQuery(ActorSseRequest)(async (body) => {
+export const GET = getQuery(ActorSseRequest)(async (query) => {
   const server = await getServer();
   const actor = await server.getActor(
-    Number.parseInt(body.userId),
-    Number.parseInt(body.actorId),
+    Number.parseInt(query.userId),
+    Number.parseInt(query.actorId),
   );
   const encoder = new TextEncoder();
   /* The handle to unsubscribe from the actor events. */
