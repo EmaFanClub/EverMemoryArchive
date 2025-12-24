@@ -5,6 +5,9 @@ loadEnvConfig(`${process.cwd()}/../../`);
 
 const nextConfig: NextConfig = {
   /* config options here */
+
+  // https://github.com/vercel/next.js/issues/85371
+  serverExternalPackages: ["@lancedb/lancedb"],
 };
 
 export default nextConfig;
