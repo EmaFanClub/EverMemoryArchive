@@ -1,7 +1,7 @@
 import { getServer } from "../../shared-server";
 
 /**
- * POST /api/snapshot/restore - Restore a snapshot of the MongoDB database by name
+ * POST /api/snapshot/restore - Restores a snapshot of the MongoDB database by name
  * Body: { name: string = "default" }
  */
 export async function POST(request: Request) {

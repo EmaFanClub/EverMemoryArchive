@@ -6,7 +6,7 @@
 import { getServer } from "../shared-server";
 
 /**
- * GET /api/roles - Get a specific role
+ * GET /api/roles - Gets a specific role
  * Query params:
  *   - id: Role ID to fetch a specific role
  */

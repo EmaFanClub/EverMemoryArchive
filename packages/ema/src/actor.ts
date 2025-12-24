@@ -73,7 +73,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * }
    * ```
    */
-  async work(inputs: ActorInputs) {
+  async work(inputs: ActorInput[]) {
     // TODO: implement actor stepping logic
     if (inputs.length === 0) {
       throw new Error("No inputs provided");
@@ -229,41 +229,42 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
 }
 
 /**
- * The input to the actor.
+ * The input to the actor, including text, image, audio, video, etc.
  */
-export type ActorInputs = ActorInput[];
-
-export type ActorInput = ActorTextInput | ActorOtherInput;
+export type ActorInput = ActorTextInput;
 
 /**
  * The text input to the actor.
  */
 export interface ActorTextInput {
+  /**
+   * The kind of the input.
+   */
   kind: "text";
+  /**
+   * The content of the input.
+   */
   content: string;
-}
-
-// Facilitate the extension of other types of input
-export interface ActorOtherInput {
-  kind: "other";
-  content: any;
 }
 
 /**
  * The response from the actor.
  */
-interface ActorResponse {
+export interface ActorResponse {
+  /** A short status text of the actor. */
   status: ActorStatus;
-  events: ActorEvents;
+  /** The events from the actor. */
+  events: ActorEvent[];
 }
 
-type ActorStatus = "running" | "idle";
+/**
+ * The status of the actor.
+ */
+export type ActorStatus = "running" | "idle";
 
 /**
  * A event from the actor.
  */
-export type ActorEvents = ActorEvent[];
-
 export type ActorEvent = ActorMessage | AgentEvent;
 
 /**

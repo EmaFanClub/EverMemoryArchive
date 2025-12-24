@@ -32,11 +32,14 @@ import type {
 import type { Fs } from "./fs";
 import { RealFs } from "./fs";
 import * as path from "node:path";
+import { ActorWorker } from "./actor";
 
 /**
  * The server class for the EverMemoryArchive.
  */
 export class Server {
+  actors: Map<number, ActorWorker> = new Map();
+
   config: Config;
   private llmClient: OpenAIClient;
 
@@ -212,6 +215,30 @@ export class Server {
       name: "alice",
       email: "alice@example.com",
     };
+  }
+
+  /**
+   * Gets an actor by user ID and actor ID.
+   * @param userId - The user ID
+   * @param actorId - The actor ID
+   * @returns Promise<Actor> The actor
+   */
+  async getActor(_userId: number, actorId: number): Promise<ActorWorker> {
+    // todo: use userId to authorize request.
+
+    let actor = this.actors.get(actorId);
+    if (!actor) {
+      actor = new ActorWorker(
+        this.config,
+        actorId,
+        this.actorDB,
+        this.shortTermMemoryDB,
+        this.longTermMemoryDB,
+        this.longTermMemoryVectorSearcher,
+      );
+      this.actors.set(actorId, actor);
+    }
+    return actor;
   }
 
   /**

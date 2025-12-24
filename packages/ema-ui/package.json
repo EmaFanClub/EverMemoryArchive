@@ -9,16 +9,17 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "arktype": "^2.1.29",
+    "ema": "workspace:*",
     "next": "16.0.10",
     "react": "19.2.1",
-    "react-dom": "19.2.1",
-    "ema": "workspace:*"
+    "react-dom": "19.2.1"
   },
   "devDependencies": {
+    "@next/env": "^16.1.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@next/env": "^16.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
     "typescript": "^5"
