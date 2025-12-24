@@ -13,23 +13,26 @@ const ActorSseRequest = k.type({
   actorId: "string.numeric",
 });
 
-export const GET = getQuery(ActorSseRequest)(async (body, req) => {
+/**
+ * GET /api/actor/sse - Subscribes to actor events
+ * Query params:
+ *   - userId: User ID
+ *   - actorId: Actor ID
+ *
+ * Returns a SSE stream of actor events.
+ */
+export const GET = getQuery(ActorSseRequest)(async (body) => {
   const server = await getServer();
   const actor = await server.getActor(
     Number.parseInt(body.userId),
     Number.parseInt(body.actorId),
   );
   const encoder = new TextEncoder();
+  /* The handle to unsubscribe from the actor events. */
   let subscribe: (response: ActorResponse) => void;
 
   const customReadable = new ReadableStream({
     start(controller) {
-      // interval = setInterval(() => {
-      //   const message = new Date().toLocaleString();
-      //   // actor
-      //   controller.enqueue(encoder.encode(`data: ${message}\n\n`));
-      // }, 1000);
-
       actor.subscribe(
         (subscribe = (response) => {
           controller.enqueue(

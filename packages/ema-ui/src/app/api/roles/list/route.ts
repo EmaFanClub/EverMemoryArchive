@@ -6,7 +6,7 @@
 import { getServer } from "../../shared-server";
 
 /**
- * GET /api/roles/list - List all roles
+ * GET /api/roles/list - Lists all roles
  */
 export async function GET() {
   try {

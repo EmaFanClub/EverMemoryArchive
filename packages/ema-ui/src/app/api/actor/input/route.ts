@@ -18,6 +18,15 @@ const ActorInputRequest = k.type({
   inputs: ActorInput.array(),
 });
 
+/**
+ * POST /api/actor/input - Sends input to actor
+ * Body:
+ *   - userId: User ID
+ *   - actorId: Actor ID
+ *   - inputs: Array of inputs
+ *
+ * Returns a success response.
+ */
 export const POST = postBody(ActorInputRequest)(async (body) => {
   const server = await getServer();
   const actor = await server.getActor(body.userId, body.actorId);

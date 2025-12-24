@@ -1,7 +1,7 @@
 import { getServer } from "../shared-server";
 
 /**
- * POST /api/snapshot - Take a snapshot of the MongoDB database
+ * POST /api/snapshot - Takes a snapshot of the MongoDB database
  * Body: { name: string = "default" }
  */
 export async function POST(request: Request) {
