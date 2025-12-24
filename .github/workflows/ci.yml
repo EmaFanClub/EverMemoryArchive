@@ -75,6 +75,9 @@ jobs:
         run: npx tsx scripts/install-mongo.ts
         working-directory: packages/ema
 
+      - name: Build Application
+        run: pnpm build
+
       - name: Run Vitest
         env:
           GEMINI_API_KEY: "DUMMY_KEY"
