@@ -2,36 +2,59 @@
 
 import { useState, useEffect } from "react";
 import styles from "./page.module.css";
-import type { Message } from "ema";
+import type { Message, ActorEvent } from "ema";
 
 // todo: consider adding tests for this component to verify message state management
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "system",
-      content: "You are MeowGPT and reply to me cutely. You speak chinese.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // TODO: refactor chat page to use new API.
-  // use /api/actor/input to send message.
-  // use /api/actor/sse to subscribe events.
+  // Set up SSE connection to subscribe to actor events
   useEffect(() => {
-    fetch("/api/actor/input", {
-      method: "POST",
-      body: JSON.stringify({
-        userId: 1,
-        actorId: 1,
-        inputs: [{ kind: "text", content: "你好。" }],
-      }),
-    });
-    // push message
-
     const eventSource = new EventSource("/api/actor/sse?userId=1&actorId=1");
+
     eventSource.onmessage = (event) => {
-      console.log(event.data);
+      try {
+        const response = JSON.parse(event.data);
+
+        // Process events from the actor
+        if (response.events && Array.isArray(response.events)) {
+          response.events.forEach((evt: ActorEvent) => {
+            console.log("evt", evt);
+
+            const content = evt.content;
+            // Handles LLM response which contains the assistant's message
+            if (
+              evt.type === "runFinished" &&
+              typeof content === "object" &&
+              "msg" in content
+            ) {
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: content.msg },
+              ]);
+            }
+          });
+        }
+
+        // Update loading state based on actor status
+        if (response.status === "idle") {
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error("Error parsing SSE event:", error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("SSE connection error:", error);
+      eventSource.close();
+    };
+
+    // Cleanup on unmount (EventSource.close() is safe to call multiple times)
+    return () => {
+      eventSource.close();
     };
   }, []);
 
@@ -51,47 +74,39 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
-      // Call the chat API
-      const response = await fetch("/api/roles/chat", {
+      // Send input to actor using the new API
+      const response = await fetch("/api/actor/input", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          messages: updatedMessages,
+          userId: 1,
+          actorId: 1,
+          inputs: [{ kind: "text", content: userMessage.content }],
         }),
       });
 
       if (!response.ok) {
         throw new Error(
-          `Failed to get response: ${response.status} ${response.statusText}`,
+          `Failed to send message: ${response.status} ${response.statusText}`,
         );
       }
 
-      const data = await response.json();
-
-      // Add assistant response to conversation
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.content,
-      };
-
-      setMessages([...updatedMessages, assistantMessage]);
+      // Response will come through SSE, so we don't need to process it here
+      // Note: isLoading remains true until SSE event with status 'idle' arrives
     } catch (error) {
       console.error("Error:", error);
-      // Optionally add error message to chat
+      // Add error message to chat
       const errorMessage: Message = {
         role: "assistant",
         content: "Sorry, I encountered an error. Please try again.",
       };
       setMessages([...updatedMessages, errorMessage]);
-    } finally {
+      // Reset loading state since no SSE event will come if the request failed
       setIsLoading(false);
     }
   };
-
-  // Filter out system message for display
-  const displayMessages = messages.filter((msg) => msg.role !== "system");
 
   return (
     <div className={styles.container}>
@@ -100,13 +115,13 @@ export default function ChatPage() {
       </div>
 
       <div className={styles.chatArea}>
-        {displayMessages.length === 0 ? (
+        {messages.length === 0 ? (
           <div className={styles.emptyState}>
             Start a conversation with MeowGPT
           </div>
         ) : (
           <div className={styles.messages}>
-            {displayMessages.map((message, index) => (
+            {messages.map((message, index) => (
               // Consider adding a unique identifier to each message (e.g., timestamp or UUID) and use that as the key instead.
               <div
                 key={index}
