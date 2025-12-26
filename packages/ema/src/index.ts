@@ -1,3 +1,9 @@
+/**
+ * This is the core package of the EverMemoryArchive.
+ *
+ * @module ema
+ */
+
 export * from "./server";
 export * from "./schema";
 export * from "./config";
