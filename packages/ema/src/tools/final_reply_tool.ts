@@ -13,18 +13,15 @@ export class LLMReply {
     properties: {
       think: {
         type: "string",
-        description:
-          "内心独白/心里想法，语气可口语化，不直接说给对方听",
+        description: "内心独白/心里想法，语气可口语化，不直接说给对方听",
       },
       expression: {
         type: "string",
-        description:
-          "脸部/表情（文字描述），可带情绪色彩",
+        description: "脸部/表情（文字描述），可带情绪色彩",
       },
       action: {
         type: "string",
-        description:
-          "当下执行的动作（贴近生活的描述）",
+        description: "当下执行的动作（贴近生活的描述）",
       },
       response: {
         type: "string",
@@ -52,7 +49,7 @@ export class FinalReplyTool extends Tool {
 
   get description(): string {
     return (
-      "最终输出内容的格式化工具，确保回复内容为特定的JSON格式。" + 
+      "最终输出内容的格式化工具，确保回复内容为特定的JSON格式。" +
       "包含think, expression, action, response四个字段，分别表示内心独白、表情、动作和对用户的回复。" +
       "此工具即为最终回复，必须单独调用，调用后也不应再调用其他工具和回复其他信息。"
     );
