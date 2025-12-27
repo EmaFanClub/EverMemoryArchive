@@ -746,6 +746,9 @@ export class Agent {
             functionName: functionName,
             result: result,
           });
+          if (functionName === "final_reply" && result.success) {
+            result.content = "Reply generated.";
+          }
         } else {
           // console.log(
           //   `${Colors.BRIGHT_RED}✗ Error:${Colors.RESET} ` +

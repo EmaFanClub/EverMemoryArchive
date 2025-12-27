@@ -91,8 +91,8 @@ export class OpenAIClient extends LLMClient {
    */
   private _convertTools(tools: Tool[]): any[] {
     return tools.map((tool) => {
-      if ("to_openai_schema" in tool) {
-        return tool.to_openai_schema();
+      if ("toOpenaiSchema" in tool) {
+        return tool.toOpenaiSchema();
       } else if (tool.type === "function") {
         return tool;
       } else if (

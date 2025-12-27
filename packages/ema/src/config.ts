@@ -13,6 +13,7 @@ import yaml from "js-yaml";
 
 import { RetryConfig } from "./retry";
 import type { Tool } from "./tools/base";
+import { FinalReplyTool } from "./tools";
 
 export class MongoConfig {
   /** MongoDB configuration */
@@ -284,7 +285,7 @@ export class Config {
 
   // TODO: populate with concrete tool instances when tool wiring is ready.
   get baseTools(): Tool[] {
-    return [];
+    return [new FinalReplyTool()];
   }
 
   /**
