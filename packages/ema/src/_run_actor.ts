@@ -97,11 +97,21 @@ async function main(): Promise<void> {
   );
 
   actor.subscribe((response) => {
-    console.log("\n=== Received Actor Event ===");
-    const last = response.events.at(-1);
-    console.log(
-      `status = ${response.status} | type = ${last ? last.type : "none"} | recentEventsLength = ${response.events.length}`,
-    );
+    console.log("\n=== Actor Update ===");
+    console.log(`status: ${response.status}`);
+    if (!response.events.length) {
+      console.log("no new events");
+      return;
+    }
+    response.events.forEach((evt, idx) => {
+      if (evt.type === "message") {
+        console.log(`[${idx}] message: ${evt.content}`);
+      } else {
+        const detail = JSON.stringify(evt.content, null, 2);
+        console.log(`[${idx}] agent.${evt.type}:`);
+        console.log(detail);
+      }
+    });
   });
 
   const rl = readline.createInterface({ input, output });
@@ -119,6 +129,10 @@ async function main(): Promise<void> {
       break;
     }
     await actor.work([{ kind: "text", content: userInput }]);
+    console.log(
+      "\n[Context Messages]",
+      JSON.stringify(actor.agent.contextManager.context.messages, null, 2),
+    );
   }
 
   rl.close();

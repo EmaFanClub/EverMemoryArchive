@@ -22,7 +22,7 @@ import { OpenAIClient } from "./llm/openai_client";
  */
 export class ActorWorker implements ActorStateStorage, ActorMemory {
   /** The agent instance. */
-  private readonly agent: Agent;
+  public readonly agent: Agent;
   /** The subscribers of the actor. */
   private readonly subscribers = new Set<(response: ActorResponse) => void>();
   /** The current status of the actor. */
