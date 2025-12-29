@@ -1,7 +1,3 @@
-// "docs:dev": "scripts/docs.js dev",
-// "docs:build": "scripts/docs.js build",
-// "docs:gen": "typedoc packages/ema/src/index.ts --tsconfig packages/ema/tsconfig.json --plugin typedoc-plugin-markdown --plugin typedoc-vitepress-theme --out docs/api/docs",
-
 import { execSync } from 'child_process';
 
 function docsGen() {
