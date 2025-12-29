@@ -17,8 +17,8 @@
     "build": "pnpm --filter ema-ui build",
     "build:main": "pnpm --filter ema build",
     "test:main": "pnpm --filter ema test",
-    "format": "prettier --write \"packages/**/*.{js,jsx,ts,tsx,json,css}\"",
-    "format:check": "prettier --check \"packages/**/*.{js,jsx,ts,tsx,json,css}\""
+    "format": "prettier --write \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\"",
+    "format:check": "prettier --check \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\""
   },
   "keywords": [],
   "packageManager": "pnpm@10.16.1",
@@ -35,6 +35,7 @@
     "typedoc-vitepress-theme": "^1.1.2",
     "typescript": "~5.9.0",
     "vite": "^7.1.11",
+    "vitepress": "^1.6.4",
     "vitest": "^3.2.4"
   }
 }

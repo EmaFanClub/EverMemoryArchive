@@ -45,7 +45,7 @@ export default {
     '/playground',
     // ignore all localhost links
     /^https?:\/\/localhost/,
-    // ignore all links include "/repl/""
+    // ignore all links that include "/repl/"
     /\/repl\//,
   ]
 };
