@@ -101,12 +101,18 @@ importers:
 
   packages/ema-ui:
     dependencies:
+      '@lancedb/lancedb':
+        specifier: ^0.23.0
+        version: 0.23.0(apache-arrow@18.1.0)
       arktype:
         specifier: ^2.1.29
         version: 2.1.29
       ema:
         specifier: workspace:*
         version: link:../ema
+      mongodb:
+        specifier: ^7.0.0
+        version: 7.0.0
       next:
         specifier: 16.0.10
         version: 16.0.10(@babel/core@7.28.5)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
@@ -3232,6 +3238,7 @@ packages:
 
   whatwg-encoding@1.0.5:
     resolution: {integrity: sha512-b5lim54JOPN9HtzvK9HFXvBma/rnfFeqsic0hSpjtDbVxR3dJKLc+KB4V6GgiGOvl7CY/KNh8rxSo9DKQrnUEw==}
+    deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
   whatwg-mimetype@2.3.0:
     resolution: {integrity: sha512-M4yMwr6mAnQz76TbJm914+gPpB/nCwvZbJU28cUD6dR004SAxDLOOSUaB1JDRqLtaOV/vi0IC5lEAGFgrjGv/g==}
