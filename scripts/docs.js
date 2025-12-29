@@ -1,8 +1,9 @@
 import { execSync } from 'child_process';
-
+import { globSync } from 'fs';
 function docsGen() {
     execSync('typedoc --entryPoints packages/ema/src/index.ts  --entryPoints packages/ema/src/db/index.ts  --entryPoints packages/ema/src/skills/index.ts --tsconfig packages/ema/tsconfig.json --out docs/core');
-    execSync('typedoc --entryPoints packages/ema-ui/src/app/api/**/*.ts --tsconfig packages/ema-ui/tsconfig.json --out docs/http');
+    const routes = globSync('packages/ema-ui/src/app/api/**/route.ts').map(it => `--entryPoints ${it}`);
+    execSync(`typedoc ${routes.join(' ')} --tsconfig packages/ema-ui/tsconfig.json --out docs/http`);
 }
 
 function docsDev() {

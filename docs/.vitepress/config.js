@@ -51,8 +51,9 @@ export default {
 };
 
 function flatHttpSidebar(sidebar) {
+  const routes = [];
   walk([], sidebar);
-  return sidebar;
+  return routes;
   function walk(path, items) {
     for (const item of items) {
       if (item.text === 'route') {
@@ -64,6 +65,7 @@ function flatHttpSidebar(sidebar) {
         for (const endpoint of item.items) {
           endpoint.text = `${item.text}@${endpoint.text}`;
         }
+        routes.push(item);
       } else {
         if (item.items) {
           walk([...path, item.text], item.items);
