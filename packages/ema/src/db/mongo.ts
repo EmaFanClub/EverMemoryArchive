@@ -81,7 +81,7 @@ export abstract class Mongo {
   /**
    * Takes a snapshot of the collections and returns the snapshot data.
    * @param collections - The collection names to snapshot
-   * @returns Promise<unknown> The snapshot data
+   * @returns The snapshot data
    */
   async snapshot(collections: string[]): Promise<unknown> {
     const client = this.getClient();

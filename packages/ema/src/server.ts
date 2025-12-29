@@ -156,7 +156,7 @@ export class Server {
   /**
    * Takes a snapshot of the MongoDB database and writes it to a file.
    * @param name - The name of the snapshot
-   * @returns Promise<{ fileName: string }> The file name of the snapshot
+   * @returns The file name of the snapshot
    */
   async snapshot(name: string): Promise<{ fileName: string }> {
     const fileName = this.snapshotPath(name);
@@ -185,7 +185,7 @@ export class Server {
   /**
    * Restores the MongoDB database from the snapshot file.
    * @param name - The name of the snapshot
-   * @returns Promise<boolean> True if the snapshot was restored, false if not found
+   * @returns True if the snapshot was restored, false if not found
    */
   async restoreFromSnapshot(name: string): Promise<boolean> {
     const fileName = this.snapshotPath(name);
@@ -221,7 +221,7 @@ export class Server {
    * Gets an actor by user ID and actor ID.
    * @param userId - The user ID
    * @param actorId - The actor ID
-   * @returns Promise<Actor> The actor
+   * @returns The actor
    */
   async getActor(_userId: number, actorId: number): Promise<ActorWorker> {
     // todo: use userId to authorize request.
@@ -247,7 +247,7 @@ export class Server {
    * Exposed as `POST /api/roles/chat`.
    *
    * @param messages - Array of conversation messages
-   * @returns Promise<{ content: string, thinking?: string }> The LLM response
+   * @returns The LLM response
    *
    * @example
    * // Example usage:
