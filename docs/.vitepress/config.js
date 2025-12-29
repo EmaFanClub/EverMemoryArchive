@@ -29,13 +29,13 @@ export default {
         ],
       },
       {
-        text: "Http APIs",
+        text: "HTTP Endpoints",
         items: [
           {
             text: "Guide",
             link: "/http",
           },
-          ...httpSidebar,
+          ...flatHttpSidebar(httpSidebar),
         ],
       }
     ],
@@ -49,3 +49,26 @@ export default {
     /\/repl\//,
   ]
 };
+
+function flatHttpSidebar(sidebar) {
+  walk([], sidebar);
+  return sidebar;
+  function walk(path, items) {
+    for (const item of items) {
+      if (item.text === 'route') {
+        if (item.items.length !== 1) {
+          throw new Error(`Route ${item.text} must have exactly one item`);
+        }
+        item.text = `api/${path.join('/')}`;
+        item.items = item.items[0].items;
+        for (const endpoint of item.items) {
+          endpoint.text = `${item.text}@${endpoint.text}`;
+        }
+      } else {
+        if (item.items) {
+          walk([...path, item.text], item.items);
+        }
+      }
+    }
+  }
+}
