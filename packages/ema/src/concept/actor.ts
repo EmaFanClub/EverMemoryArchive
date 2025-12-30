@@ -4,10 +4,32 @@ import { EventEmitter } from "node:events";
  * You can use {@link ActorClient} APIs to communicate with the actor.
  * The actors are the core components of the system. They are responsible for taking user inputs and generating outputs.
  * Each actor holds resources, such as LLM memory, tools, database storage, etc.
+ *
+ * - Receive inputs from the user by {@link ActorClient.addInputs}.
+ * - Subscribe to the actor's events by {@link ActorClient.events}.
+ *   - See output events ({@link ActorClientEventMap.output}).
+ *
+ * @example
+ * ```ts
+ * // Add inputs to the actor.
+ * const actor: ActorClient;
+ * actor.addInputs([{ kind: "text", content: "Hello, world!" }]);
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Subscribe to the actor's output events.
+ * const actor: ActorClient;
+ * actor.events.on("output", (event) => {
+ *   if (event.kind === "message") {
+ *     console.log(event.content);
+ *   }
+ * });
+ * ```
  */
 export interface ActorClient {
   /**
-   * The event source of the actor client.
+   * The event source of the actor client. See {@link ActorEventSource} for more details.
    */
   events: EventEmitter<ActorClientEventMap> & ActorEventSource;
 
@@ -24,7 +46,7 @@ export interface ActorClient {
  */
 export interface ActorClientEventMap {
   /**
-   * Emitted when the actor has processed the input and generated the output.
+   * Emit {@link ActorMessageEvent} when the actor has processed the input and generated the output.
    */
   output: ActorMessageEvent[];
 }
@@ -72,7 +94,7 @@ export interface ActorMessageEvent {
 /**
  * The event source for the actor client.
  */
-interface ActorEventSource extends EventEmitter<ActorClientEventMap> {
+export interface ActorEventSource {
   /**
    * Subscribes to the actor's output ({@link ActorEvent}).
    * @param event - The event to subscribe to.
@@ -101,3 +123,10 @@ interface ActorEventSource extends EventEmitter<ActorClientEventMap> {
    */
   emit(event: "output", ...data: ActorMessageEvent[]): boolean;
 }
+
+import type { Expect, Is } from "../types";
+
+type Cases = [
+  // EventEmitter<ActorClientEventMap> must be a subtype of ActorEventSource.
+  Expect<Is<EventEmitter<ActorClientEventMap>, ActorEventSource>>,
+];
