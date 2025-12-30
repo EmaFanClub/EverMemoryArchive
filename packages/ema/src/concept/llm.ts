@@ -1,7 +1,7 @@
 import type { Message, LLMResponse } from "../schema";
 
 /**
- * {@link LLMClient} is a stateless client for the LLM, holding a physical network connection to the LLM.
+ * {@link EmaLLMClient} is a stateless client for the LLM, holding a physical network connection to the LLM.
  *
  * TODO: remove mini-agent's LLMClient definition.
  */
