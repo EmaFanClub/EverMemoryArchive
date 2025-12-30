@@ -1,268 +1,193 @@
-/**
- * OpenAI LLM client implementation.
- */
+import OpenAI from "openai";
+import type { ClientOptions } from "openai";
+import { LLMClientBase } from "./base";
+import type { SchemaAdapter } from "../schema";
+import type {
+  Content,
+  LLMResponse,
+  Message,
+  ModelMessage,
+  ToolCall,
+  ToolMessage,
+  UserMessage,
+} from "../schema";
+import type { Tool } from "../tools/base";
+import { wrapWithRetry } from "../retry";
+import { LLMConfig } from "../config";
 
-import type { Tool } from "./base";
-import { LLMClient } from "./base";
-import { RetryConfig, wrapWithRetry } from "../retry";
-import type { Message, LLMResponse } from "../schema";
-import { OpenAI } from "openai";
-import { ProxyAgent, fetch } from "undici";
-// import { asyncRetry } from "../retry";
-
-/**
- * LLM client using OpenAI's protocol.
- *
- * This client uses the official OpenAI SDK and supports:
- * - Reasoning content (via reasoning_split=True)
- * - Tool calling
- * - Retry logic
- */
-export class OpenAIClient extends LLMClient {
+/** OpenAI-compatible client that adapts EMA schema to Chat Completions. */
+export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
   private readonly client: OpenAI;
 
-  constructor(
-    /**
-     * API key for authentication
-     */
-    apiKey: string,
-    /**
-     * Base URL for the API
-     */
-    apiBase: string,
-    /**
-     * Model name to use
-     */
-    model: string,
-    /**
-     * Optional retry configuration
-     */
-    retryConfig?: RetryConfig,
-    /**
-     * Optional proxy URL
-     */
-    proxyUrl?: string,
-  ) {
-    super(apiKey, apiBase, model, retryConfig);
-    const https_proxy = proxyUrl || "";
-    console.log(`[OpenAIClient] apiBase: ${apiBase}`);
-    const dispatcher = https_proxy ? new ProxyAgent(https_proxy) : undefined;
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: apiBase,
-      ...(https_proxy
-        ? {
-            fetch: (input: any, init: any) => {
-              init.dispatcher = dispatcher;
-              return fetch(input, init) as any;
-            },
-          }
-        : {}),
-    });
+  constructor(config: LLMConfig) {
+    super(config);
+    const options: ClientOptions = {
+      apiKey: config.apiKey,
+      baseURL: config.apiBase,
+    };
+    this.client = new OpenAI(options);
   }
 
-  /**
-   * Executes API request (core method that can be retried).
-   *
-   * @param apiMessages - List of messages in OpenAI format
-   * @param tools - Optional list of tools
-   * @returns OpenAI ChatCompletion response (full response including usage)
-   */
-  async _makeApiRequest(
-    apiMessages: Record<string, unknown>[],
-    tools?: Tool[],
-  ): Promise<any> {
-    return this.client.chat.completions.create({
-      model: this.model,
-      messages: apiMessages as any,
-      tools: tools ? this._convertTools(tools) : undefined,
-      // todo: Platforms' behaviors vary. For example, Minimax requires a extra_body={"reasoning_split": True} and use reasoning_details. Ollama use reasoning.
-      // Enable reasoning_split to separate thinking content
-      //@ts-ignore
-      // reasoning_split: true,
-    });
-  }
-
-  /**
-   * Converts tools to OpenAI format.
-   *
-   * @param tools - List of Tool objects or dicts
-   * @returns List of tools in OpenAI dict format
-   */
-  private _convertTools(tools: Tool[]): any[] {
-    return tools.map((tool) => {
-      if ("to_openai_schema" in tool) {
-        return tool.to_openai_schema();
-      } else if (tool.type === "function") {
-        return tool;
-      } else if (
-        "name" in tool &&
-        "description" in tool &&
-        "input_schema" in tool
-      ) {
-        // Assume it's in Anthropic format, convert to OpenAI
-        return {
+  /** Map EMA message shape to OpenAI chat format. */
+  adaptMessageToAPI(message: Message): Record<string, unknown> {
+    if (message.role === "user") {
+      const userMessage = message as UserMessage;
+      return {
+        role: "user",
+        content: userMessage.contents.map((content) => ({
+          type: "text",
+          text: content.text,
+        })),
+      };
+    }
+    if (message.role === "model") {
+      const modelMessage = message as ModelMessage;
+      const content = modelMessage.contents.map((item) => ({
+        type: "text",
+        text: item.text,
+      }));
+      const toolCalls = (modelMessage.toolCalls ?? []).map(
+        (toolCall, index) => ({
+          id: toolCall.id ?? `call_${index}`,
           type: "function",
           function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.input_schema,
+            name: toolCall.name,
+            arguments: JSON.stringify(toolCall.args ?? {}),
           },
-        };
-      } else {
-        throw new Error(`Unsupported tool type: ${typeof tool}`);
-      }
-    });
+        }),
+      );
+      return {
+        role: "assistant",
+        content,
+        tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+      };
+    }
+    if (message.role === "tool") {
+      const toolMessage = message as ToolMessage;
+      return {
+        role: "tool",
+        tool_call_id: toolMessage.id ?? toolMessage.name,
+        content: JSON.stringify(toolMessage.result),
+      };
+    }
+    throw new Error(`Unsupported message: ${message}`);
   }
 
-  /**
-   * Parses OpenAI response into LLMResponse.
-   *
-   * @param response - OpenAI ChatCompletion response (full response object)
-   * @returns LLMResponse object
-   */
-  _parseResponse(response: any): LLMResponse {
-    // Gets message from response
-    const message = response.choices[0].message;
-    // Extracts text content
-    const textContent = message.content || "";
-
-    // Extracts thinking content from reasoning_details
-    const thinkingContent =
-      message.reasoning_details?.map((detail: any) => detail.text)?.join("") ||
-      "";
-    // Extracts tool calls
-    const toolCalls = message.tool_calls?.map((toolCall: any) => ({
-      id: toolCall.id,
+  /** Map tool definition to OpenAI tool schema. */
+  adaptToolToAPI(tool: Tool): Record<string, unknown> {
+    return {
       type: "function",
       function: {
-        name: toolCall.function.name,
-        // todo: handle exception on malformed JSON string (may be caused by network errors).
-        // Parses arguments from JSON string
-        arguments: JSON.parse(toolCall.function.arguments),
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
       },
-    }));
-    // Extracts token usage from response
-    const usage = response.usage
-      ? {
-          prompt_tokens: response.usage.prompt_tokens || 0,
-          completion_tokens: response.usage.completion_tokens || 0,
-          total_tokens: response.usage.total_tokens || 0,
-        }
-      : undefined;
-    return {
-      content: textContent,
-      thinking: thinkingContent ?? undefined,
-      tool_calls: toolCalls,
-      // OpenAI doesn't provide finish_reason in the message
-      finish_reason: "stop",
-      usage: usage,
     };
   }
 
-  /**
-   * Converts internal messages to OpenAI format.
-   * Note: OpenAI includes system message in the messages array
-   *
-   * @param messages - List of internal Message objects
-   * @returns Tuple of (system_message, api_messages)
-   */
-  _convertMessages(
-    messages: Message[],
-  ): [string | undefined, Record<string, unknown>[]] {
-    const apiMessages = messages.map((message) => {
-      if (message.role === "system") {
-        // OpenAI includes system message in messages array
-        return {
-          role: "system",
-          content: message.content,
-        };
-      } else if (message.role === "user") {
-        // For user messages
-        return {
-          role: "user",
-          content: message.content,
-        };
-      } else if (message.role === "assistant") {
-        // For assistant messages
-        return {
-          role: "assistant",
-          content: message.content,
-          tool_calls: message.tool_calls?.map((toolCall) => ({
-            id: toolCall.id,
-            type: "function",
-            function: {
-              name: toolCall.function.name,
-              arguments: JSON.stringify(toolCall.function.arguments),
-            },
-          })),
-          // IMPORTANT: Adds reasoning_details if thinking is present
-          // This is CRITICAL for Interleaved Thinking to work properly!
-          // The complete response_message (including reasoning_details) must be
-          // preserved in Message History and passed back to the model in the next turn.
-          // This ensures the model's chain of thought is not interrupted.
-          // Adds reasoning details if present
-          reasoning_details: message.thinking
-            ? [{ text: message.thinking }]
-            : undefined,
-        };
-      } else if (message.role === "tool") {
-        // For tool result messages
-        return {
-          role: "tool",
-          tool_call_id: message.tool_call_id,
-          content: message.content,
-        };
-      } else {
-        throw new Error(`Unsupported message role: ${message.role}`);
-      }
-    });
-    return [undefined, apiMessages];
+  /** Convert a batch of EMA messages. */
+  adaptMessages(messages: Message[]): Record<string, unknown>[] {
+    return messages.map((message) => this.adaptMessageToAPI(message));
   }
 
-  /**
-   * Prepares the request for OpenAI API.
-   *
-   * @param messages - List of conversation messages
-   * @param tools - Optional list of available tools
-   * @returns Dictionary containing request parameters
-   */
-  _prepareRequest(
+  /** Convert a batch of tools. */
+  adaptTools(tools: Tool[]): Record<string, unknown>[] {
+    return tools.map((tool) => this.adaptToolToAPI(tool));
+  }
+
+  /** Normalize OpenAI response into EMA schema. */
+  adaptResponseFromAPI(response: any): LLMResponse {
+    const choice = response.choices?.[0];
+    if (!choice?.message) {
+      throw new Error("Invalid OpenAI response: missing message");
+    }
+
+    const apiMessage = choice.message;
+    const contents: Content[] = [];
+    if (Array.isArray(apiMessage.content)) {
+      for (const part of apiMessage.content) {
+        if (part?.type === "text" && typeof part.text === "string") {
+          contents.push({ type: "text", text: part.text });
+        }
+      }
+    } else if (typeof apiMessage.content === "string") {
+      contents.push({ type: "text", text: apiMessage.content });
+    }
+
+    const toolCalls: ToolCall[] = [];
+    if (Array.isArray(apiMessage.tool_calls)) {
+      for (const call of apiMessage.tool_calls) {
+        if (call.function) {
+          let parsedArgs: Record<string, unknown> = {};
+          try {
+            parsedArgs =
+              typeof call.function.arguments === "string"
+                ? JSON.parse(call.function.arguments)
+                : (call.function.arguments as Record<string, unknown>);
+          } catch (error) {
+            console.warn(
+              `Failed to parse tool call arguments: ${call.function.arguments}`,
+            );
+          }
+          toolCalls.push({
+            id: call.id,
+            name: call.function.name,
+            args: parsedArgs ?? {},
+          });
+        }
+      }
+    }
+
+    const modelMessage: ModelMessage = {
+      role: "model",
+      contents,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    };
+
+    return {
+      message: modelMessage,
+      finishReason: choice.finish_reason ?? "",
+      totalTokens: response.usage.total_tokens,
+    };
+  }
+
+  /** Execute a Chat Completions request. */
+  makeApiRequest(
+    apiMessages: Record<string, unknown>[],
+    apiTools?: Record<string, unknown>[],
+    systemPrompt?: string,
+  ): Promise<any> {
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...apiMessages,
+    ];
+
+    return this.client.chat.completions.create({
+      model: this.config.model,
+      messages: messages as any[],
+      tools: apiTools as any[],
+    });
+  }
+
+  /** Public generate entrypoint matching LLMClientBase. */
+  async generate(
     messages: Message[],
     tools?: Tool[],
-  ): { apiMessages: Record<string, unknown>[]; tools?: Tool[] } {
-    // TODO: Why does mini-agent ignore systemMessage?
-    const [systemMessage, apiMessages] = this._convertMessages(messages);
-    return {
-      apiMessages,
-      tools,
-    };
-  }
+    systemPrompt?: string,
+  ): Promise<LLMResponse> {
+    const apiMessages = this.adaptMessages(messages);
+    const apiTools = tools ? this.adaptTools(tools) : undefined;
 
-  /**
-   * Generates response from OpenAI LLM.
-   *
-   * @param messages - List of conversation messages
-   * @param tools - Optional list of available tools
-   * @returns LLMResponse containing the generated content
-   */
-  async generate(messages: Message[], tools?: Tool[]): Promise<LLMResponse> {
-    const requestParams = this._prepareRequest(messages, tools);
-
-    // Make API request (with optional retry)
-    const executor = this.retryConfig.enabled
+    const executor = this.config.retry.enabled
       ? wrapWithRetry(
-          this._makeApiRequest.bind(this),
-          this.retryConfig,
+          this.makeApiRequest.bind(this),
+          this.config.retry,
           this.retryCallback,
         )
-      : this._makeApiRequest.bind(this);
+      : this.makeApiRequest.bind(this);
 
-    const response = await executor(
-      requestParams.apiMessages,
-      requestParams.tools,
-    );
+    const response = await executor(apiMessages, apiTools, systemPrompt);
 
-    return this._parseResponse(response);
+    return this.adaptResponseFromAPI(response);
   }
 }

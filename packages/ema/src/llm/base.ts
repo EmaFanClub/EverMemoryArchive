@@ -3,11 +3,9 @@
  * regardless of the underlying API protocol (Anthropic, OpenAI, etc.).
  */
 
-import { RetryConfig } from "../retry";
+import type { Tool } from "../tools/base";
+import { LLMConfig } from "../config";
 import type { Message, LLMResponse } from "../schema";
-
-// TODO: definition of tools.
-export type Tool = any;
 
 /**
  * Abstract base class for LLM clients.
@@ -15,61 +13,25 @@ export type Tool = any;
  * This class defines the interface that all LLM clients must implement,
  * regardless of the underlying API protocol (Anthropic, OpenAI, etc.).
  */
-export abstract class LLMClient {
+export abstract class LLMClientBase {
   retryCallback: ((exception: Error, attempt: number) => void) | undefined =
     undefined;
 
-  constructor(
-    /**
-     * API key for authentication
-     */
-    protected readonly apiKey: string,
-    /**
-     * Base URL for the API
-     */
-    protected readonly apiBase: string,
-    /**
-     * Model name to use
-     */
-    protected readonly model: string,
-    /**
-     * Optional retry configuration
-     */
-    protected readonly retryConfig: RetryConfig = new RetryConfig(),
-  ) {
-    if (!apiKey) {
-      throw new Error("LLM API key is required.");
-    }
-  }
+  constructor(readonly config: LLMConfig) {}
 
-  /**
-   * Generates response from LLM.
-   *
-   * @param messages - List of conversation messages
-   * @param tools - Optional list of Tool objects or dicts
-   * @returns LLMResponse containing the generated content, thinking, and tool calls
-   */
-  abstract generate(messages: Message[], tools?: Tool[]): Promise<LLMResponse>;
+  abstract adaptTools(tools: Tool[]): Record<string, unknown>[];
 
-  /**
-   * Prepares the request payload for the API.
-   *
-   * @param messages - List of conversation messages
-   * @param tools - Optional list of Tool objects or dicts
-   * @returns Dictionary containing the request payload
-   */
-  abstract _prepareRequest(
+  abstract adaptMessages(messages: Message[]): Record<string, unknown>[];
+
+  abstract makeApiRequest(
+    apiMessages: Record<string, unknown>[],
+    apiTools?: Record<string, unknown>[],
+    systemPrompt?: string,
+  ): Promise<any>;
+
+  abstract generate(
     messages: Message[],
     tools?: Tool[],
-  ): Record<string, unknown>;
-
-  /**
-   * Converts internal message format to API-specific format.
-   *
-   * @param messages - List of internal Message objects
-   * @returns Tuple of (system_message, api_messages)
-   */
-  abstract _convertMessages(
-    messages: Message[],
-  ): [string | undefined, Record<string, unknown>[]];
+    systemPrompt?: string,
+  ): Promise<LLMResponse>;
 }
