@@ -14,7 +14,7 @@ import type {
   LongTermMemory,
   ActorStateStorage,
   ActorMemory,
-} from "./skills/memory";
+} from "./concept";
 import { OpenAIClient } from "./llm/openai_client";
 
 /**
