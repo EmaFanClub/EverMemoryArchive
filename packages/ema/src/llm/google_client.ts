@@ -134,7 +134,7 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
     return {
       message: modelMessage,
       finishReason: response.candidates[0].finishReason,
-      totalTokens: response.usageMetadata.totalTokenCount,
+      totalTokens: response.usageMetadata?.totalTokenCount,
     };
   }
 
