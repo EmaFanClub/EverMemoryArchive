@@ -593,7 +593,6 @@ export class Agent {
           response: response,
         });
       } catch (error) {
-        console.log(error);
         if (error instanceof RetryExhaustedError) {
           const errorMsg =
             `LLM call failed after ${error.attempts} retries\n` +
