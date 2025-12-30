@@ -157,10 +157,9 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
     apiTools?: Record<string, unknown>[],
     systemPrompt?: string,
   ): Promise<any> {
-    const messages = [
-      { role: "system", content: systemPrompt },
-      ...apiMessages,
-    ];
+    const messages = systemPrompt
+      ? [{ role: "system", content: systemPrompt }, ...apiMessages]
+      : apiMessages;
 
     return this.client.chat.completions.create({
       model: this.config.model,
