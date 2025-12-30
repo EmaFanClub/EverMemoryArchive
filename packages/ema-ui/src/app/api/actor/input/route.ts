@@ -35,6 +35,9 @@ const ActorInputRequest = k.type({
  * // Send text input to actor
  * const response = await fetch("/api/actor/input", {
  *   method: "POST",
+ *   headers: {
+ *     "Content-Type": "application/json",
+ *   },
  *   body: JSON.stringify({
  *     userId: 1,
  *     actorId: 1,
