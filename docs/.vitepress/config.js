@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const preCode = code.querySelector('pre code');
     if (preCode) {
       const codeText = preCode.textContent;
-      const randomId = Math.random().toString(36).substring(2, 15);
+      const randomId = "mermaid-" + Math.random().toString(36).substring(2, 15);
       const {svg} = await mermaid.render(randomId, codeText);
       code.innerHTML = svg;
     }
