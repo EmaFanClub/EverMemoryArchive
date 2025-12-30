@@ -27,18 +27,19 @@
     "types"
   ],
   "dependencies": {
-    "js-tiktoken": "^1.0.21",
     "@google/genai": "^1.34.0",
     "@lancedb/lancedb": "^0.23.0",
     "@modelcontextprotocol/sdk": "^1.25.1",
-    "js-yaml": "^4.1.0",
     "apache-arrow": "^18.1.0",
+    "js-tiktoken": "^1.0.21",
+    "js-yaml": "^4.1.0",
     "mongodb": "^7.0.0",
     "mongodb-memory-server": "^11.0.0",
     "openai": "^6.13.0",
     "string-width": "^7.2.0",
     "tmp": "^0.2.5",
-    "undici": "^7.16.0"
+    "undici": "^7.16.0",
+    "zod": "^4.2.1"
   },
   "scripts": {
     "build": "tsc",

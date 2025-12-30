@@ -1,6 +1,6 @@
 import * as lancedb from "@lancedb/lancedb";
 
-import { OpenAIClient } from "./llm/openai_client";
+import { LLMClient } from "./llm";
 import { Config } from "./config";
 import type { Message } from "./schema";
 import {
@@ -41,7 +41,7 @@ export class Server {
   actors: Map<number, ActorWorker> = new Map();
 
   config: Config;
-  private llmClient: OpenAIClient;
+  private llmClient: LLMClient;
 
   mongo!: Mongo;
   lancedb!: lancedb.Connection;
@@ -68,13 +68,7 @@ export class Server {
       throw new Error("OPENAI_API_KEY or GEMINI_API_KEY env is not set");
     }
 
-    this.llmClient = new OpenAIClient(
-      apiKey,
-      apiBase,
-      model,
-      retry,
-      config.system.httpsProxy,
-    );
+    this.llmClient = new LLMClient(config.llm);
   }
 
   static async create(
@@ -259,9 +253,6 @@ export class Server {
    */
   async chat(messages: Message[]) {
     const response = await this.llmClient.generate(messages);
-    return {
-      content: response.content,
-      thinking: response.thinking,
-    };
+    return response;
   }
 }

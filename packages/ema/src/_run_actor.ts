@@ -1,6 +1,7 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-
+import { AgentEvents, type AgentEventContent } from "./agent";
+import { ToolResult } from "./tools/base";
 import { Config } from "./config";
 import type {
   ActorDB,
@@ -97,11 +98,13 @@ async function main(): Promise<void> {
   );
 
   actor.subscribe((response) => {
-    console.log("\n=== Received Actor Event ===");
     const last = response.events.at(-1);
-    console.log(
-      `status = ${response.status} | type = ${last ? last.type : "none"} | recentEventsLength = ${response.events.length}`,
-    );
+    if (last?.type === AgentEvents.runFinished) {
+      console.log(
+        "[run Finished] ",
+        (last.content as AgentEventContent<"runFinished">).msg,
+      );
+    }
   });
 
   const rl = readline.createInterface({ input, output });

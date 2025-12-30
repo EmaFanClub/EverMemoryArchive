@@ -1,10 +1,8 @@
-/** Base tool classes. */
-
 /** Tool execution result. */
 export class ToolResult {
   success: boolean;
-  content: string;
-  error: string | null;
+  content?: string;
+  error?: string;
 
   constructor(options: {
     success: boolean;
@@ -12,8 +10,8 @@ export class ToolResult {
     error?: string | null;
   }) {
     this.success = options.success;
-    this.content = options.content ?? "";
-    this.error = options.error ?? null;
+    this.content = options.content ?? undefined;
+    this.error = options.error ?? undefined;
   }
 }
 
@@ -30,25 +28,4 @@ export abstract class Tool {
 
   /** Execute the tool with arbitrary arguments. */
   abstract execute(...args: any[]): Promise<ToolResult>;
-
-  /** Convert tool to Anthropic tool schema. */
-  toSchema(): Record<string, any> {
-    return {
-      name: this.name,
-      description: this.description,
-      input_schema: this.parameters,
-    };
-  }
-
-  /** Convert tool to OpenAI tool schema. */
-  toOpenaiSchema(): Record<string, any> {
-    return {
-      type: "function",
-      function: {
-        name: this.name,
-        description: this.description,
-        parameters: this.parameters,
-      },
-    };
-  }
 }

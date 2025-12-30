@@ -15,14 +15,14 @@ import type {
   ActorStateStorage,
   ActorMemory,
 } from "./skills/memory";
-import { OpenAIClient } from "./llm/openai_client";
+import { LLMClient } from "./llm";
 
 /**
  * A facade of the actor functionalities between the server (system) and the agent (actor).
  */
 export class ActorWorker implements ActorStateStorage, ActorMemory {
   /** The agent instance. */
-  private readonly agent: Agent;
+  public readonly agent: Agent;
   /** The subscribers of the actor. */
   private readonly subscribers = new Set<(response: ActorResponse) => void>();
   /** The current status of the actor. */
@@ -44,16 +44,12 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     /** The searcher of the long-term memory. */
     private readonly longTermMemorySearcher: LongTermMemorySearcher,
   ) {
-    const llm = new OpenAIClient(
-      this.config.llm.apiKey,
-      this.config.llm.apiBase,
-      this.config.llm.model,
-      this.config.llm.retry,
-    );
+    const llm = new LLMClient(this.config.llm);
     this.agent = new Agent(
       config.agent,
       llm,
       config.systemPrompt,
+      [],
       config.baseTools,
     );
   }
@@ -88,7 +84,9 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     });
 
     // push user input into the agent context
-    this.agent.contextManager.addUserMessage(input.content);
+    this.agent.contextManager.addUserMessage([
+      { type: "text", text: input.content },
+    ]);
 
     // setup event listeners of all agent events
     const handlers: Array<

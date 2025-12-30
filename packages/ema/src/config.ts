@@ -13,6 +13,7 @@ import yaml from "js-yaml";
 
 import { RetryConfig } from "./retry";
 import type { Tool } from "./tools/base";
+import { FinalReplyTool } from "./tools/final_reply_tool";
 
 export class MongoConfig {
   /** MongoDB configuration */
@@ -60,18 +61,18 @@ export class LLMConfig {
   apiKey: string;
   apiBase: string;
   model: string;
-  provider: string; // "anthropic" or "openai"
+  provider: string; // "google" or "openai"
   retry: RetryConfig;
 
   constructor({
     apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "",
     apiBase = process.env.OPENAI_API_BASE ||
       process.env.GEMINI_API_BASE ||
-      "https://generativelanguage.googleapis.com/v1beta/openai/",
+      "https://generativelanguage.googleapis.com",
     model = process.env.OPENAI_MODEL ||
       process.env.GEMINI_MODEL ||
       "gemini-2.5-flash",
-    provider = "openai",
+    provider = "google",
     retry = new RetryConfig(),
   }: {
     apiKey: string;
@@ -284,7 +285,7 @@ export class Config {
 
   // TODO: populate with concrete tool instances when tool wiring is ready.
   get baseTools(): Tool[] {
-    return [];
+    return [new FinalReplyTool()];
   }
 
   /**

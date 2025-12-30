@@ -1,119 +1,75 @@
-/**
- * LLM provider types.
- */
-export enum LLMProvider {
-  ANTHROPIC = "anthropic",
-  OPENAI = "openai",
-}
+import type { Tool, ToolResult } from "./tools/base";
 
-// TODO: pydantic?
-// from pydantic import BaseModel
-// class FunctionCall(BaseModel):
-
-/**
- * Function call details.
- */
-export interface FunctionCall {
-  /**
-   * Function name.
-   */
-  name: string;
-  /**
-   * Function arguments.
-   */
-  arguments: Record<string, unknown>;
-}
-
-/**
- * Tool call structure.
- */
+/** Tool invocation request emitted by the LLM. */
 export interface ToolCall {
-  /**
-   * Tool call ID.
-   */
-  id: string;
-  /**
-   * Tool call type.
-   */
-  type: string;
-  /**
-   * Function call.
-   */
-  function: FunctionCall;
+  /** Optional call id used to link request/response pairs. */
+  id?: string;
+  /** Tool name to invoke. */
+  name: string;
+  /** JSON arguments passed to the tool. */
+  args: Record<string, unknown>;
+  /** Optional thought signature associated with this tool call. */
+  thoughtSignature?: string;
 }
 
 /**
- * Chat message.
+ * Single content block within a chat message.
+ * TODO: extend with other types if necessary.
  */
-export interface Message {
-  /**
-   * Message role.
-   */
-  role: string;
-  /**
-   * Message content.
-   * TODO: is it possible to have a list of content blocks? Record<string, unknown>[]
-   */
-  content: string;
-  /**
-   * Extended thinking content for assistant messages.
-   */
-  thinking?: string;
-  /**
-   * Tool calls.
-   */
-  tool_calls?: ToolCall[];
+export type Content = { type: "text"; text: string };
 
-  /**
-   * Tool call ID.
-   */
-  tool_call_id?: string;
-  /**
-   * For tool role.
-   */
-  name?: string;
+/** User-originated message. */
+export interface UserMessage {
+  /** Role marker. */
+  role: "user";
+  /** Ordered list of content blocks. */
+  contents: Content[];
 }
 
-/**
- * Token usage statistics from LLM API response.
- */
-export interface TokenUsage {
-  /**
-   * Prompt tokens.
-   */
-  prompt_tokens: number;
-  /**
-   * Completion tokens.
-   */
-  completion_tokens: number;
-  /**
-   * Total tokens.
-   */
-  total_tokens: number;
+/** LLM-generated message, optionally containing tool calls. */
+export interface ModelMessage {
+  /** Role marker. */
+  role: "model";
+  /** Assistant-authored content blocks. */
+  contents: Content[];
+  /** Optional tool calls requested by the model. */
+  toolCalls?: ToolCall[];
+  // TODO: other fields if necessary
 }
 
-/**
- * LLM response.
- */
+/** Tool execution result returned to the LLM. */
+export interface ToolMessage {
+  /** Role marker. */
+  role: "tool";
+  /** Compatible with other messages */
+  contents?: Content[];
+  /** Optional id matching the originating tool call. */
+  id?: string;
+  /** Name of the tool that produced the result. */
+  name: string;
+  /** Execution outcome payload. */
+  result: ToolResult;
+}
+
+/** Union of all supported message kinds. */
+export type Message = UserMessage | ModelMessage | ToolMessage;
+
+/** Normalized LLM response envelope. */
 export interface LLMResponse {
-  /**
-   * Content.
-   */
-  content: string;
-  /**
-   * Extended thinking blocks.
-   */
-  thinking?: string;
-  /**
-   * Tool calls.
-   */
-  tool_calls?: ToolCall[];
-  /**
-   * Finish reason.
-   */
-  finish_reason: string;
-  /**
-   * Token usage from API response.
-   */
-  usage?: TokenUsage;
+  /** Final assistant message for this turn. */
+  message: ModelMessage;
+  /** Provider-specific finish reason (e.g., stop, length, tool_calls). */
+  finishReason: string;
+  /** Total tokens counted by the provider for this call. */
+  totalTokens: number;
+}
+
+/** Adapter contract for translating between EMA schema and provider schema. */
+export interface SchemaAdapter {
+  /** Convert an internal message to the provider request shape. */
+  adaptMessageToAPI(message: Message): Record<string, unknown>;
+  /** Convert a tool definition to the provider request shape. */
+  adaptToolToAPI(tool: Tool): Record<string, unknown>;
+  /** Convert a provider response back to the EMA schema. */
+  adaptResponseFromAPI(response: any): LLMResponse;
 }

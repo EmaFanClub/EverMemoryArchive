@@ -32,7 +32,10 @@ export default function ChatPage() {
             ) {
               setMessages((prev) => [
                 ...prev,
-                { role: "assistant", content: content.msg },
+                {
+                  role: "model",
+                  contents: [{ type: "text", text: content.msg }],
+                },
               ]);
             }
           });
@@ -65,7 +68,7 @@ export default function ChatPage() {
 
     const userMessage: Message = {
       role: "user",
-      content: inputValue.trim(),
+      contents: [{ type: "text", text: inputValue.trim() }],
     };
 
     // Add user message to conversation
@@ -84,7 +87,8 @@ export default function ChatPage() {
         body: JSON.stringify({
           userId: 1,
           actorId: 1,
-          inputs: [{ kind: "text", content: userMessage.content }],
+          // TODO: If supporting more input types, need to adjust here
+          inputs: [{ kind: "text", content: userMessage.contents[0].text }],
         }),
       });
 
@@ -100,8 +104,13 @@ export default function ChatPage() {
       console.error("Error:", error);
       // Add error message to chat
       const errorMessage: Message = {
-        role: "assistant",
-        content: "Sorry, I encountered an error. Please try again.",
+        role: "model",
+        contents: [
+          {
+            type: "text",
+            text: "Sorry, I encountered an error. Please try again.",
+          },
+        ],
       };
       setMessages([...updatedMessages, errorMessage]);
       // Reset loading state since no SSE event will come if the request failed
@@ -135,7 +144,9 @@ export default function ChatPage() {
                 <div className={styles.messageRole}>
                   {message.role === "user" ? "You" : "MeowGPT"}
                 </div>
-                <div className={styles.messageContent}>{message.content}</div>
+                <div className={styles.messageContent}>
+                  {message.contents![0].text}
+                </div>
               </div>
             ))}
           </div>
