@@ -151,7 +151,9 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
         candidateCount: 1,
         systemInstruction: systemPrompt,
         tools: apiTools ? [{ functionDeclarations: apiTools }] : [],
-        thinkingConfig: this.config.model.includes("gemini-3")
+        thinkingConfig: ["gemini-3-flash-preview", "gemini-3-flash"].includes(
+          this.config.model,
+        )
           ? {
               thinkingLevel: ThinkingLevel.MINIMAL,
             }

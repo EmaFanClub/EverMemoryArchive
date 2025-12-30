@@ -66,10 +66,25 @@ export interface LLMResponse {
 
 /** Adapter contract for translating between EMA schema and provider schema. */
 export interface SchemaAdapter {
-  /** Convert an internal message to the provider request shape. */
+  /** Converts an internal message to the provider request shape. */
   adaptMessageToAPI(message: Message): Record<string, unknown>;
-  /** Convert a tool definition to the provider request shape. */
+  /** Converts a tool definition to the provider request shape. */
   adaptToolToAPI(tool: Tool): Record<string, unknown>;
-  /** Convert a provider response back to the EMA schema. */
+  /** Converts a provider response back to the EMA schema. */
   adaptResponseFromAPI(response: any): LLMResponse;
+}
+
+/** Type guard for tool messages. */
+export function isToolMessage(message: Message): message is ToolMessage {
+  return message.role === "tool";
+}
+
+/** Type guard for model messages. */
+export function isModelMessage(message: Message): message is ModelMessage {
+  return message.role === "model";
+}
+
+/** Type guard for user messages. */
+export function isUserMessage(message: Message): message is UserMessage {
+  return message.role === "user";
 }

@@ -7,13 +7,16 @@ import type { LLMClient } from "./llm";
 import { AgentConfig } from "./config";
 import { AgentLogger } from "./logger";
 import { RetryExhaustedError } from "./retry";
-import type {
-  LLMResponse,
-  Message,
-  Content,
-  UserMessage,
-  ModelMessage,
-  ToolMessage,
+import {
+  type LLMResponse,
+  type Message,
+  type Content,
+  type UserMessage,
+  type ModelMessage,
+  type ToolMessage,
+  isModelMessage,
+  isToolMessage,
+  isUserMessage,
 } from "./schema";
 import { Tool, ToolResult } from "./tools/base";
 
@@ -208,8 +211,8 @@ export class ContextManager {
       let totalTokens = 0;
 
       for (const msg of this.messages) {
-        if (Array.isArray((msg as any).contents)) {
-          for (const block of (msg as any).contents as Content[]) {
+        if (isUserMessage(msg) || isModelMessage(msg)) {
+          for (const block of msg.contents) {
             if (block.type === "text") {
               totalTokens += enc.encode(block.text).length;
             } else {
@@ -218,19 +221,16 @@ export class ContextManager {
           }
         }
 
-        if (msg.role === "model" && (msg as ModelMessage).toolCalls) {
-          totalTokens += enc.encode(
-            JSON.stringify((msg as ModelMessage).toolCalls),
-          ).length;
+        if (isModelMessage(msg) && msg.toolCalls) {
+          totalTokens += enc.encode(JSON.stringify(msg.toolCalls)).length;
         }
 
-        if (msg.role === "tool") {
-          const toolMsg = msg as ToolMessage;
+        if (isToolMessage(msg)) {
           totalTokens += enc.encode(
             JSON.stringify({
-              content: toolMsg.result.content,
-              error: toolMsg.result.error,
-              success: toolMsg.result.success,
+              content: msg.result.content,
+              error: msg.result.error,
+              success: msg.result.success,
             }),
           ).length;
         }
@@ -255,8 +255,8 @@ export class ContextManager {
   estimateTokensFallback(): number {
     let totalChars = 0;
     for (const msg of this.messages) {
-      if (Array.isArray((msg as any).contents)) {
-        for (const block of (msg as any).contents as Content[]) {
+      if (isModelMessage(msg) || isUserMessage(msg)) {
+        for (const block of msg.contents) {
           if (block.type === "text") {
             totalChars += block.text.length;
           } else {
@@ -265,16 +265,15 @@ export class ContextManager {
         }
       }
 
-      if (msg.role === "model" && (msg as ModelMessage).toolCalls) {
-        totalChars += JSON.stringify((msg as ModelMessage).toolCalls).length;
+      if (isModelMessage(msg) && msg.toolCalls) {
+        totalChars += JSON.stringify(msg.toolCalls).length;
       }
 
-      if (msg.role === "tool") {
-        const toolMsg = msg as ToolMessage;
+      if (isToolMessage(msg)) {
         totalChars += JSON.stringify({
-          content: toolMsg.result.content,
-          error: toolMsg.result.error,
-          success: toolMsg.result.success,
+          content: msg.result.content,
+          error: msg.result.error,
+          success: msg.result.success,
         }).length;
       }
     }
@@ -432,20 +431,19 @@ export class ContextManager {
     // Build summary content
     let summaryContent = `Round ${roundNum} execution process:\n\n`;
     for (const msg of messages) {
-      if (msg.role === "model") {
+      if (isModelMessage(msg)) {
         const textParts =
-          (msg as ModelMessage).contents
-            ?.filter((c: Content) => c.type === "text")
-            .map((c) => c.text) ?? [];
+          msg.contents?.filter((c) => c.type === "text").map((c) => c.text) ??
+          [];
         const contentText = textParts.join("\n");
         summaryContent += `Assistant: ${contentText}\n`;
-        const toolCalls = (msg as ModelMessage).toolCalls ?? [];
+        const toolCalls = msg.toolCalls ?? [];
         if (toolCalls.length > 0) {
           const toolNames = toolCalls.map((tc) => tc.name);
           summaryContent += `  → Called tools: ${toolNames.join(", ")}\n`;
         }
-      } else if (msg.role === "tool") {
-        const result = (msg as ToolMessage).result;
+      } else if (isToolMessage(msg)) {
+        const result = msg.result;
         const preview = result.content || result.error || "";
         summaryContent += `  ← Tool returned: ${preview}...\n`;
       }
