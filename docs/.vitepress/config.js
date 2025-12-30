@@ -6,6 +6,9 @@ export default {
   title: "EverMemoryArchive",
   description:
     "EverMemoryArchive is a platform for creating and managing memory-based agents.",
+  head: [
+    ...mermaidHead()
+  ],
   themeConfig: {
     sidebar: [
       // overview
@@ -49,6 +52,41 @@ export default {
     /\/repl\//,
   ]
 };
+
+function mermaidHead() {
+  return [
+    [
+      'script',
+      {
+        id: 'mermaid-js',
+        src: 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js',
+        async: true,
+      }
+    ],
+    [
+      'script',
+      {},
+      `;(() => {
+const mermaidJS = document.getElementById('mermaid-js');
+document.addEventListener('DOMContentLoaded', async () => {
+  await mermaidJS.ready;
+  const isDark = document.documentElement.classList.contains('dark');
+  mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'neutral' });
+  const mermaidElements = document.getElementsByClassName('language-mermaid');
+  for (const code of mermaidElements) {
+    const preCode = code.querySelector('pre code');
+    if (preCode) {
+      const codeText = preCode.textContent;
+      const randomId = Math.random().toString(36).substring(2, 15);
+      const {svg} = await mermaid.render(randomId, codeText);
+      code.innerHTML = svg;
+    }
+  }
+});
+})()`
+    ]
+  ];
+}
 
 function flatHttpSidebar(sidebar) {
   const routes = [];
