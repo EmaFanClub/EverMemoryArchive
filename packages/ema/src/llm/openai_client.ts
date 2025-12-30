@@ -147,7 +147,7 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
     return {
       message: modelMessage,
       finishReason: choice.finish_reason ?? "",
-      totalTokens: response.usage.total_tokens,
+      totalTokens: response.usage?.total_tokens ?? 0,
     };
   }
 
