@@ -3,6 +3,8 @@ import { LLMConfig } from "../config";
 import { GoogleClient } from "./google_client";
 import { OpenAIClient } from "./openai_client";
 import type { LLMResponse } from "../schema";
+import type { Message } from "../schema";
+import type { Tool } from "../tools/base";
 
 export enum LLMProvider {
   GOOGLE = "google",
@@ -40,8 +42,8 @@ export class LLMClient {
    * @param systemPrompt Optional system instruction text
    */
   generate(
-    messages: any,
-    tools?: any,
+    messages: Message[],
+    tools?: Tool[],
     systemPrompt?: string,
   ): Promise<LLMResponse> {
     return this.client.generate(messages, tools, systemPrompt);
