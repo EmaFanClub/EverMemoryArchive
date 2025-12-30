@@ -1,6 +1,6 @@
 # HTTP Endpoints
 
-You can start an http server using `pnpm dev` (in development mode) or `pnpm build && pnpm start` (in production mode). For the first time running these commands, you need to install the dependencies first by running `pnpm install`.
+You can start an HTTP server using `pnpm dev` (in development mode) or `pnpm build && pnpm start` (in production mode). For the first time running these commands, you need to install the dependencies first by running `pnpm install`.
 
 Before starting the server, you need to create a `.env` file by copying the `.env.example` file and filling in your API keys.
 
