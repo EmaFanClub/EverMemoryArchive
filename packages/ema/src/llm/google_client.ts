@@ -15,7 +15,7 @@ import type {
 } from "../schema";
 import { LLMConfig } from "../config";
 
-/** Google Generative AI client that adapts EMA schema to Gemini OpenAI-compatible API. */
+/** Google Generative AI client that adapts EMA schema to the native Gemini API format. */
 export class GoogleClient extends LLMClientBase implements SchemaAdapter {
   private readonly client: GoogleGenAI;
 
