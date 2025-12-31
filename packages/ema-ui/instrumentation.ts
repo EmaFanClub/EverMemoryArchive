@@ -1,8 +1,9 @@
-import { getServer } from "@/app/api/shared-server";
-import { loadPlugins } from "@/plugin";
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    await import("./instrumentation-node");
+  }
 
-getServer()
-  .then(loadPlugins)
-  .catch((error) => {
-    console.error("Failed to load plugins:", error);
-  });
+  if (process.env.NEXT_RUNTIME === "edge") {
+    console.warn("Edge runtime is not supported yet");
+  }
+}
