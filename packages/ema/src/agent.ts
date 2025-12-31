@@ -53,8 +53,8 @@ const AgentEventDefs = {
   stepStarted: {} as { stepNumber: number; maxSteps: number },
   /* Emitted when the agent finished a run. */
   runFinished: {} as
-    | { ok: true; msg: string }
-    | { ok: false; msg: string; error: Error },
+    | { ok: true; msg: string; metadata: any }
+    | { ok: false; msg: string; error: Error; metadata: any },
   /* Emitted when an LLM response is received. */
   llmResponseReceived: {} as { response: LLMResponse },
   /* Emitted when a tool call is started. */
@@ -550,7 +550,7 @@ export class Agent {
   }
 
   /** Execute agent loop until task is complete or max steps reached. */
-  async run(): Promise<void> {
+  async run(metadata: any): Promise<void> {
     // Start new run, initialize log file
     // await this.logger.startNewRun();
     // console.log(
@@ -606,6 +606,7 @@ export class Agent {
           // );
           this.events.emit(AgentEvents.runFinished, {
             ok: false,
+            metadata,
             msg: `LLM call failed after ${error.attempts} retries.`,
             error: error as RetryExhaustedError,
           });
@@ -617,6 +618,7 @@ export class Agent {
         // );
         this.events.emit(AgentEvents.runFinished, {
           ok: false,
+          metadata,
           msg: `LLM call failed.`,
           error: error as Error,
         });
@@ -657,6 +659,7 @@ export class Agent {
       if (!response.tool_calls || response.tool_calls.length === 0) {
         this.events.emit(AgentEvents.runFinished, {
           ok: true,
+          metadata,
           msg: response.content,
         });
         return;
@@ -771,6 +774,7 @@ export class Agent {
     // console.log(`\n${Colors.BRIGHT_YELLOW}⚠️  ${errorMsg}${Colors.RESET}`);
     this.events.emit(AgentEvents.runFinished, {
       ok: false,
+      metadata,
       msg: errorMsg,
       error: new Error(errorMsg),
     });

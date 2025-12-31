@@ -33,6 +33,7 @@ import type { Fs } from "./fs";
 import { RealFs } from "./fs";
 import * as path from "node:path";
 import { ActorWorker } from "./actor";
+import type { EmaPlugin } from "./plugin";
 
 /**
  * The server class for the EverMemoryArchive.
@@ -56,6 +57,11 @@ export class Server {
   longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter;
   longTermMemoryVectorSearcher!: MongoMemorySearchAdaptor &
     MongoCollectionGetter;
+
+  /**
+   * The plugins of the server.
+   */
+  public plugins: Record<string, EmaPlugin> = {};
 
   private constructor(
     private readonly fs: Fs,

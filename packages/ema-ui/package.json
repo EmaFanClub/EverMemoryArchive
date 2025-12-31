@@ -17,6 +17,9 @@
     "@lancedb/lancedb": "^0.23.0",
     "mongodb": "^7.0.0"
   },
+  "peerDependencies": {
+    "ema-plugin-qq": "workspace:*"
+  },
   "devDependencies": {
     "@next/env": "^16.1.0",
     "@types/node": "^20",

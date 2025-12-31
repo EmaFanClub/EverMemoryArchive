@@ -73,7 +73,9 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * }
    * ```
    */
-  async work(inputs: ActorInput[]) {
+  async work(payload: ActorInputs) {
+    const { metadata, inputs } = payload;
+    console.log("work", inputs);
     // TODO: implement actor stepping logic
     if (inputs.length === 0) {
       throw new Error("No inputs provided");
@@ -84,6 +86,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     const input = inputs[0] as ActorTextInput;
     this.emitEvent({
       type: "message",
+      createdAt: Date.now(),
       content: `Received input: ${input.content}. Start running.`,
     });
 
@@ -96,14 +99,18 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     > = [];
     (Object.keys(AgentEvents) as AgentEventName[]).forEach((eventName) => {
       const handler = (content: AgentEventContent) => {
-        this.emitEvent({ type: eventName, content: content });
+        this.emitEvent({
+          type: eventName,
+          createdAt: Date.now(),
+          content: content,
+        });
       };
       this.agent.events.on(eventName, handler);
       handlers.push([eventName, handler]);
     });
 
     try {
-      await this.agent.run();
+      await this.agent.run(metadata);
     } finally {
       // cleanup listeners and notify idle
       for (const [eventName, handler] of handlers) {
@@ -231,6 +238,14 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
 /**
  * The input to the actor, including text, image, audio, video, etc.
  */
+export interface ActorInputs {
+  metadata?: any;
+  inputs: ActorInput[];
+}
+
+/**
+ * The input to the actor, including text, image, audio, video, etc.
+ */
 export type ActorInput = ActorTextInput;
 
 /**
@@ -265,13 +280,17 @@ export type ActorStatus = "running" | "idle";
 /**
  * A event from the actor.
  */
-export type ActorEvent = ActorMessage | AgentEvent;
+export type ActorEvent<K extends AgentEventName = AgentEventName> =
+  | ActorMessage
+  | AgentEvent<K>;
 
 /**
  * A message from the actor.
  */
 export interface ActorMessage {
   type: "message";
+  /** The timestamp of the message. */
+  createdAt: number;
   /** The content of the message. */
   content: string;
 }
@@ -279,11 +298,13 @@ export interface ActorMessage {
 /**
  * A event from the agent.
  */
-export interface AgentEvent {
+export interface AgentEvent<K extends AgentEventName> {
   /** The type of the event. */
-  type: AgentEventName;
+  type: K;
+  /** The timestamp of the event. */
+  createdAt: number;
   /** The content of the event. */
-  content: AgentEventContent<AgentEventName>;
+  content: AgentEventContent<K>;
 }
 
 /**
