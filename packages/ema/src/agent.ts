@@ -179,7 +179,7 @@ export class ContextManager {
 
   /** Add a user message to context. */
   addUserMessage(contents: Content[]): void {
-    this.messages.push({ role: "user", contents: contents } as UserMessage);
+    this.messages.push({ role: "user", contents: contents });
   }
 
   /** Add an model message to context. */
@@ -194,7 +194,7 @@ export class ContextManager {
       id: toolCallId,
       name: name,
       result: result,
-    } as ToolMessage);
+    });
   }
 
   /** Update API reported token count. */
@@ -331,7 +331,7 @@ export class ContextManager {
     // Find all user message indices (skip system prompt)
     const userIndices = this.messages
       .map((msg, index) => ({ msg, index }))
-      .filter(({ msg }) => msg.role === "user")
+      .filter(({ msg }) => isUserMessage(msg))
       .map(({ index }) => index);
 
     // Need at least 1 user message to perform summary

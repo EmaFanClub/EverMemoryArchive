@@ -1,5 +1,10 @@
 import { LLMClientBase } from "./base";
-import type { SchemaAdapter } from "../schema";
+import {
+  type SchemaAdapter,
+  isModelMessage,
+  isToolMessage,
+  isUserMessage,
+} from "../schema";
 import { GoogleGenAI } from "@google/genai";
 import { type GoogleGenAIOptions, ThinkingLevel } from "@google/genai";
 import type { Tool } from "../tools/base";
@@ -32,9 +37,8 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
 
   /** Map EMA message shape to Gemini request content. */
   adaptMessageToAPI(message: Message): Record<string, unknown> {
-    if (message.role === "user") {
-      const userMessage = message as UserMessage;
-      const parts: any[] = userMessage.contents.map((content) => {
+    if (isUserMessage(message)) {
+      const parts: any[] = message.contents.map((content) => {
         if (content.type === "text") {
           return { text: content.text };
         }
@@ -42,15 +46,14 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
       });
       return { role: "user", parts: parts };
     }
-    if (message.role === "model") {
-      const modelMessage = message as ModelMessage;
-      const parts: any[] = modelMessage.contents.map((content) => {
+    if (isModelMessage(message)) {
+      const parts: any[] = message.contents.map((content) => {
         if (content.type === "text") {
           return { text: content.text };
         }
         throw new Error(`Unsupported content type: ${content.type}`);
       });
-      (modelMessage.toolCalls ?? []).forEach((toolCall) => {
+      (message.toolCalls ?? []).forEach((toolCall) => {
         parts.push({
           functionCall: {
             name: toolCall.name,
@@ -61,13 +64,12 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
       });
       return { role: "model", parts: parts };
     }
-    if (message.role === "tool") {
-      const toolMessage = message as ToolMessage;
+    if (isToolMessage(message)) {
       const parts: any[] = [
         {
           functionResponse: {
-            name: toolMessage.name,
-            response: toolMessage.result,
+            name: message.name,
+            response: message.result,
           },
         },
       ];

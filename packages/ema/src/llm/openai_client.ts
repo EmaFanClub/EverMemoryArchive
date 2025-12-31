@@ -1,7 +1,12 @@
 import OpenAI from "openai";
 import type { ClientOptions } from "openai";
 import { LLMClientBase } from "./base";
-import type { SchemaAdapter } from "../schema";
+import {
+  type SchemaAdapter,
+  isModelMessage,
+  isToolMessage,
+  isUserMessage,
+} from "../schema";
 import type {
   Content,
   LLMResponse,
@@ -30,44 +35,39 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
 
   /** Map EMA message shape to OpenAI chat format. */
   adaptMessageToAPI(message: Message): Record<string, unknown> {
-    if (message.role === "user") {
-      const userMessage = message as UserMessage;
+    if (isUserMessage(message)) {
       return {
         role: "user",
-        content: userMessage.contents.map((content) => ({
+        content: message.contents.map((content) => ({
           type: "text",
           text: content.text,
         })),
       };
     }
-    if (message.role === "model") {
-      const modelMessage = message as ModelMessage;
-      const content = modelMessage.contents.map((item) => ({
+    if (isModelMessage(message)) {
+      const content = message.contents.map((item) => ({
         type: "text",
         text: item.text,
       }));
-      const toolCalls = (modelMessage.toolCalls ?? []).map(
-        (toolCall, index) => ({
-          id: toolCall.id ?? `call_${index}`,
-          type: "function",
-          function: {
-            name: toolCall.name,
-            arguments: JSON.stringify(toolCall.args ?? {}),
-          },
-        }),
-      );
+      const toolCalls = (message.toolCalls ?? []).map((toolCall, index) => ({
+        id: toolCall.id ?? `call_${index}`,
+        type: "function",
+        function: {
+          name: toolCall.name,
+          arguments: JSON.stringify(toolCall.args ?? {}),
+        },
+      }));
       return {
         role: "assistant",
         content,
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       };
     }
-    if (message.role === "tool") {
-      const toolMessage = message as ToolMessage;
+    if (isToolMessage(message)) {
       return {
         role: "tool",
-        tool_call_id: toolMessage.id ?? toolMessage.name,
-        content: JSON.stringify(toolMessage.result),
+        tool_call_id: message.id ?? message.name,
+        content: JSON.stringify(message.result),
       };
     }
     throw new Error(`Unsupported message: ${message}`);
