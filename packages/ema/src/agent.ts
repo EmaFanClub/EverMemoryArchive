@@ -19,6 +19,7 @@ import {
   isUserMessage,
 } from "./schema";
 import { Tool, ToolResult } from "./tools/base";
+import { EmaReplyTool } from "./tools/ema_reply_tool";
 
 const AgentEventDefs = {
   /* Emitted when token estimation falls back to the simple method. */
@@ -551,7 +552,7 @@ export class Agent {
     const maxSteps = this.config.maxSteps;
     let step = 0;
 
-    let finalReply: string = "";
+    let emaReply: string = "";
 
     while (step < maxSteps) {
       // Check and summarize message history to prevent context overflow
@@ -654,7 +655,7 @@ export class Agent {
       ) {
         this.events.emit(AgentEvents.runFinished, {
           ok: true,
-          msg: finalReply,
+          msg: emaReply,
         });
         return;
       }
@@ -741,8 +742,8 @@ export class Agent {
             functionName: functionName,
             result: result,
           });
-          if (functionName === "final_reply" && result.success) {
-            finalReply = result.content!;
+          if (functionName === "ema_reply" && result.success) {
+            emaReply = result.content!;
             result.content = undefined;
           }
         } else {
