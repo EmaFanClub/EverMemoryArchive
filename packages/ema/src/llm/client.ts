@@ -44,13 +44,21 @@ function shouldProxy(url: string): boolean {
 if (proxyEnv && typeof globalThis.fetch === "function") {
   const originalFetch = globalThis.fetch.bind(globalThis);
   const proxyAgent = new EnvHttpProxyAgent();
+  const proxyFetch =
+    undiciFetch as unknown as (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => Promise<Response>;
   const wrappedFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = resolveRequestUrl(input);
     if (url && shouldProxy(url)) {
-      return undiciFetch(input as RequestInfo, {
-        ...(init ?? {}),
-        dispatcher: proxyAgent,
-      } as RequestInit);
+      return proxyFetch(
+        input,
+        ({
+          ...(init ?? {}),
+          dispatcher: proxyAgent,
+        } as unknown) as RequestInit,
+      );
     }
     return originalFetch(input as RequestInfo, init as RequestInit);
   };
