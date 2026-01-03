@@ -411,8 +411,6 @@ export class Config {
       if (typeof source !== "object" || source === undefined) {
         return target;
       }
-      console.log("target", target);
-      console.log("source", source);
       const result = { ...target };
       for (const key in source) {
         if (source[key] !== undefined) {
