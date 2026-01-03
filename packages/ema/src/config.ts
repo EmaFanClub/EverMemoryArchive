@@ -404,20 +404,37 @@ export class Config {
       deepMerge(new SystemConfig(), data?.system),
     );
 
+    /**
+     * Deep merges two objects, if the value is nullish, it will be ignored.
+     * If the value is not object (array, boolean, number, string, etc.), it will be shallow merged.
+     *
+     * @param target - The target object to merge into.
+     * @param source - The source object to merge from.
+     * @returns The merged object.
+     */
     function deepMerge(target: any, source: any): any {
-      if (typeof target !== "object" || target === undefined) {
+      if (typeof target !== "object" || isNullish(target)) {
         return source;
       }
-      if (typeof source !== "object" || source === undefined) {
+      if (typeof source !== "object" || isNullish(source)) {
         return target;
       }
       const result = { ...target };
       for (const key in source) {
-        if (source[key] !== undefined) {
+        if (!isNullish(source[key])) {
           result[key] = source[key];
         }
       }
       return result;
+    }
+    /**
+     * Checks if the value is nullish (undefined or null).
+     *
+     * @param value - The value to check.
+     * @returns True if the value is nullish, false otherwise.
+     */
+    function isNullish(value: any): boolean {
+      return value === undefined || value === null;
     }
   }
 
