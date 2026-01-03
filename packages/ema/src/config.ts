@@ -213,14 +213,14 @@ export class LLMConfig {
      * OPENAI_API_BASE=https://api.deepseek.com
      * ```
      */
-    public readonly chat_provider: "google" | "openai" = "google",
+    public chat_provider: "google" | "openai" = "google",
     /**
      * Model name used for chat agent.
      * If environment variable EMA_CHAT_MODEL is set, it will be used first.
      *
      * @see {@link EMA_CHAT_PROVIDER} for examples.
      */
-    public readonly chat_model: string = "gemini-2.5-flash",
+    public chat_model: string = "gemini-2.5-flash",
     /**
      * Retry configuration for the LLM provider.
      */
@@ -349,6 +349,14 @@ export class Config {
    * Assigns environment variables to the config.
    */
   assignEnv(): this {
+    if (process.env.EMA_CHAT_PROVIDER) {
+      this.llm.chat_provider = process.env.EMA_CHAT_PROVIDER as
+        | "google"
+        | "openai";
+    }
+    if (process.env.EMA_CHAT_MODEL) {
+      this.llm.chat_model = process.env.EMA_CHAT_MODEL;
+    }
     if (process.env.OPENAI_API_KEY) {
       this.llm.openai.key = process.env.OPENAI_API_KEY;
     }
