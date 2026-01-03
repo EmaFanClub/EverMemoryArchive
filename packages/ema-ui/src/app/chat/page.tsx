@@ -26,15 +26,15 @@ export default function ChatPage() {
             const content = evt.content;
             // Handles LLM response which contains the assistant's message
             if (
-              evt.type === "runFinished" &&
+              evt.type === "emaReplyReceived" &&
               typeof content === "object" &&
-              "msg" in content
+              "reply" in content
             ) {
               setMessages((prev) => [
                 ...prev,
                 {
                   role: "model",
-                  contents: [{ type: "text", text: content.msg }],
+                  contents: [{ type: "text", text: content.reply.response }],
                 },
               ]);
             }
@@ -142,7 +142,7 @@ export default function ChatPage() {
                 }`}
               >
                 <div className={styles.messageRole}>
-                  {message.role === "user" ? "You" : "MeowGPT"}
+                  {message.role === "user" ? "You" : "Ema"}
                 </div>
                 <div className={styles.messageContent}>
                   {message.contents![0].text}
