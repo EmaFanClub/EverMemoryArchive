@@ -134,7 +134,12 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
             );
           }
           const extraContent = call.extra_content as
-            | { google?: { thought_signature?: string; thoughtSignature?: string } }
+            | {
+                google?: {
+                  thought_signature?: string;
+                  thoughtSignature?: string;
+                };
+              }
             | undefined;
           const thoughtSignature =
             extraContent?.google?.thought_signature ??
@@ -144,7 +149,9 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
             name: call.function.name,
             args: parsedArgs ?? {},
             thoughtSignature:
-              typeof thoughtSignature === "string" ? thoughtSignature : undefined,
+              typeof thoughtSignature === "string"
+                ? thoughtSignature
+                : undefined,
           });
         }
       }
