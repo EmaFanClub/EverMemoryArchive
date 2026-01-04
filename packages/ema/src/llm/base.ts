@@ -4,7 +4,6 @@
  */
 
 import type { Tool } from "../tools/base";
-import { LLMConfig } from "../config";
 import type { Message, LLMResponse } from "../schema";
 
 /**
@@ -16,8 +15,6 @@ import type { Message, LLMResponse } from "../schema";
 export abstract class LLMClientBase {
   retryCallback: ((exception: Error, attempt: number) => void) | undefined =
     undefined;
-
-  constructor(readonly config: LLMConfig) {}
 
   abstract adaptTools(tools: Tool[]): Record<string, unknown>[];
 

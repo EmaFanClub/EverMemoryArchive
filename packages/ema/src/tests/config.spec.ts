@@ -22,15 +22,17 @@ describe("Config", () => {
       // 3. Load config and verify values match the file content.
       const config = Config.fromYaml(configPath);
 
-      expect(config.llm.apiKey).toBe("test-api-key");
-      expect(config.llm.apiBase).toBe("https://example.com/v1/");
-      expect(config.llm.model).toBe("test-model");
-      expect(config.llm.provider).toBe("openai");
+      expect(config.llm.openai.key).toBe("test-openai-key");
+      expect(config.llm.openai.base_url).toBe("https://example.com/openai/v1/");
+      expect(config.llm.google.key).toBe("test-google-key");
+      expect(config.llm.google.base_url).toBe("https://example.com/google/v1/");
+      expect(config.llm.chat_model).toBe("test-model");
+      expect(config.llm.chat_provider).toBe("openai");
 
       expect(config.llm.retry.enabled).toBe(false);
-      expect(config.llm.retry.maxRetries).toBe(5);
+      expect(config.llm.retry.max_retries).toBe(5);
 
-      expect(config.tools.enableBash).toBe(false);
+      expect(config.tools.enable_bash).toBe(false);
     } finally {
       // 4. Delete the temporary directory.
       fs.rmSync(tempDir, { recursive: true, force: true });

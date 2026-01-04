@@ -6,7 +6,7 @@ import { globSync } from "fs";
  */
 function docsGen() {
   execSync(
-    "typedoc --entryPoints packages/ema/src/index.ts --entryPoints packages/ema/src/db/index.ts --entryPoints packages/ema/src/skills/index.ts --tsconfig packages/ema/tsconfig.json --out docs/core",
+    "typedoc --entryPoints packages/ema/src/index.ts --entryPoints packages/ema/src/config.ts --entryPoints packages/ema/src/db/index.ts --entryPoints packages/ema/src/skills/index.ts --tsconfig packages/ema/tsconfig.json --out docs/core",
   );
   const routes = globSync("packages/ema-ui/src/app/api/**/route.ts").map(
     (it) => `--entryPoints ${it}`,

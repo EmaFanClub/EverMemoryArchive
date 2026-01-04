@@ -17,21 +17,34 @@ export class LLMClient {
   private readonly client: LLMClientBase;
 
   constructor(readonly config: LLMConfig) {
-    if (!this.config.apiKey) {
-      throw new Error("LLM API key is required.");
-    }
-    if (!this.config.provider) {
+    if (!this.config.chat_provider) {
       throw new Error("Missing LLM provider.");
     }
-    switch (this.config.provider) {
+    switch (this.config.chat_provider) {
       case LLMProvider.GOOGLE:
-        this.client = new GoogleClient(this.config);
+        if (!this.config.google.key) {
+          throw new Error("Google API key is required.");
+        }
+        this.client = new GoogleClient(
+          this.config.chat_model,
+          this.config.google,
+          this.config.retry,
+        );
         break;
       case LLMProvider.OPENAI:
-        this.client = new OpenAIClient(this.config);
+        if (!this.config.openai.key) {
+          throw new Error("OpenAI API key is required.");
+        }
+        this.client = new OpenAIClient(
+          this.config.chat_model,
+          this.config.openai,
+          this.config.retry,
+        );
         break;
       default:
-        throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
+        throw new Error(
+          `Unsupported LLM provider: ${this.config.chat_provider}`,
+        );
     }
   }
 

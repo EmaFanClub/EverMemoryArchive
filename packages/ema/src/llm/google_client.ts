@@ -13,23 +13,25 @@ import type {
   ToolCall,
   Content,
   Message,
-  UserMessage,
   ModelMessage,
-  ToolMessage,
   LLMResponse,
 } from "../schema";
-import { LLMConfig } from "../config";
+import type { LLMApiConfig, RetryConfig } from "../config";
 
 /** Google Generative AI client that adapts EMA schema to the native Gemini API format. */
 export class GoogleClient extends LLMClientBase implements SchemaAdapter {
   private readonly client: GoogleGenAI;
 
-  constructor(config: LLMConfig) {
-    super(config);
+  constructor(
+    readonly model: string,
+    readonly config: LLMApiConfig,
+    readonly retryConfig: RetryConfig,
+  ) {
+    super();
     const options: GoogleGenAIOptions = {
-      apiKey: config.apiKey,
+      apiKey: config.key,
       httpOptions: {
-        baseUrl: config.apiBase,
+        baseUrl: config.base_url,
       },
     };
     this.client = new GoogleGenAI(options);
@@ -147,14 +149,14 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
     systemPrompt?: string,
   ): Promise<any> {
     return this.client.models.generateContent({
-      model: this.config.model,
+      model: this.model,
       contents: apiMessages,
       config: {
         candidateCount: 1,
         systemInstruction: systemPrompt,
         tools: apiTools ? [{ functionDeclarations: apiTools }] : [],
         thinkingConfig: ["gemini-3-flash-preview", "gemini-3-flash"].includes(
-          this.config.model,
+          this.model,
         )
           ? {
               thinkingLevel: ThinkingLevel.MINIMAL,
@@ -173,10 +175,10 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
     const apiMessages = this.adaptMessages(messages);
     const apiTools = tools ? this.adaptTools(tools) : undefined;
 
-    const executor = this.config.retry.enabled
+    const executor = this.retryConfig.enabled
       ? wrapWithRetry(
           this.makeApiRequest.bind(this),
-          this.config.retry,
+          this.retryConfig,
           this.retryCallback,
         )
       : this.makeApiRequest.bind(this);

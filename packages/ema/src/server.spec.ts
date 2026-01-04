@@ -6,6 +6,8 @@ import { createMongo, type Mongo } from "./db";
 import {
   Config,
   LLMConfig,
+  OpenAIApiConfig,
+  GoogleApiConfig,
   AgentConfig,
   ToolsConfig,
   MongoConfig,
@@ -14,13 +16,16 @@ import {
 import * as lancedb from "@lancedb/lancedb";
 
 const createTestConfig = () =>
-  new Config({
-    llm: new LLMConfig({ apiKey: "test-key" }),
-    agent: new AgentConfig(),
-    tools: new ToolsConfig(),
-    mongo: new MongoConfig(),
-    system: new SystemConfig(),
-  });
+  new Config(
+    new LLMConfig(
+      new OpenAIApiConfig("test-openai-key", "https://example.com/openai/v1/"),
+      new GoogleApiConfig("test-google-key", "https://example.com/google/v1/"),
+    ),
+    new AgentConfig(),
+    new ToolsConfig(),
+    new MongoConfig(),
+    new SystemConfig(),
+  );
 
 describe("Server", () => {
   test("should return user on login", async () => {

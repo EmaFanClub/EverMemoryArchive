@@ -1,12 +1,16 @@
 /**
  * Configuration management module
  *
- * Provides unified configuration loading and management functionality
+ * Provides unified configuration loading and management functionality.
+ *
+ * See {@link Config} for more details.
+ *
+ * @module config
  */
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import envPaths from "env-paths";
 import { fileURLToPath } from "node:url";
 
 import yaml from "js-yaml";
@@ -15,186 +19,371 @@ import { RetryConfig } from "./retry";
 import type { Tool } from "./tools/base";
 import { FinalReplyTool } from "./tools/final_reply_tool";
 
+export { RetryConfig } from "./retry";
+
+/**
+ * MongoDB configuration.
+ *
+ * @example
+ * ```yaml
+ * # Configure to use memory MongoDB in config.yaml
+ * mongo:
+ *   kind: "memory"
+ *   db_name: "ema"
+ * ```
+ *
+ * @example
+ * ```yaml
+ * # Configure to use remote MongoDB in config.yaml
+ * mongo:
+ *   kind: "remote"
+ *   uri: "mongodb://localhost:27017"
+ *   db_name: "ema"
+ * ```
+ */
 export class MongoConfig {
-  /** MongoDB configuration */
-  uri: string;
-  dbName: string;
-  kind: "memory" | "remote";
-
-  constructor({
-    uri = process.env.MONGO_URI || "mongodb://localhost:27017",
-    dbName = process.env.MONGO_DB_NAME || "ema",
-    kind,
-  }: Partial<MongoConfig> = {}) {
-    this.uri = uri;
-    this.dbName = dbName;
-    if (kind) {
-      this.kind = kind;
-    } else {
-      const isDev = ["development", "test"].includes(
-        process.env.NODE_ENV || "",
-      );
-      this.kind =
-        (process.env.MONGO_KIND as "memory" | "remote") ||
-        (isDev ? "memory" : "remote");
-    }
-  }
+  constructor(
+    /**
+     * The MongoDB kind.
+     *
+     * If under development mode, it will be "memory" by default.
+     * If under production mode, it will be "remote" by default.
+     */
+    public readonly kind: "memory" | "remote" = "memory",
+    /**
+     * The MongoDB URI.
+     *
+     * Unused if mongo kind is set to "memory".
+     */
+    public readonly uri: string = "mongodb://localhost:27017",
+    /**
+     * The MongoDB database name.
+     */
+    public readonly db_name: string = "ema",
+  ) {}
 }
 
+/**
+ * System configuration.
+ */
 export class SystemConfig {
-  /** System configuration */
-  dataRoot: string;
-  httpsProxy: string;
-
-  constructor({
-    dataRoot = process.env.DATA_ROOT || ".data",
-    httpsProxy = process.env.HTTPS_PROXY || process.env.https_proxy || "",
-  }: Partial<SystemConfig> = {}) {
-    this.dataRoot = dataRoot;
-    this.httpsProxy = httpsProxy;
-  }
+  constructor(
+    /**
+     * The data root directory.
+     */
+    public readonly data_root: string = ".data",
+    /**
+     * The HTTPS proxy.
+     *
+     * If environment variable `HTTPS_PROXY` or `https_proxy` is set, it will be used first.
+     * If it is empty, no proxy will be used.
+     */
+    public https_proxy: string = "",
+  ) {}
 }
 
+/**
+ * API configuration for LLM providers.
+ */
+export interface LLMApiConfig {
+  /**
+   * API key for the LLM provider.
+   */
+  key: string;
+  /**
+   * Base URL for the LLM provider.
+   */
+  base_url: string;
+}
+
+/**
+ * API Configuration for the OpenAI provider.
+ *
+ * @example
+ * ```yaml
+ * # Configure in config.yaml
+ * llm:
+ *   openai:
+ *     key: "sk-1234567890"
+ *     base_url: "https://api.openai.com/v1"
+ * ```
+ *
+ * @example
+ * ```env
+ * # Configure in .env (suggested)
+ * OPENAI_API_KEY=sk-1234567890
+ * OPENAI_API_BASE=https://api.openai.com/v1
+ * ```
+ */
+export class OpenAIApiConfig implements LLMApiConfig {
+  constructor(
+    /**
+     * API key for the OpenAI provider.
+     *
+     * If environment variable OPENAI_API_KEY is set, it will be used first.
+     */
+    public key: string = "",
+    /**
+     * Base URL for the OpenAI provider.
+     *
+     * If environment variable OPENAI_API_BASE is set, it will be used first.
+     */
+    public base_url: string = "https://api.openai.com/v1",
+  ) {}
+}
+
+/**
+ * API Configuration for the Google Generative AI provider.
+ *
+ * @example
+ * ```yaml
+ * # Configure in config.yaml
+ * llm:
+ *   google:
+ *     key: "sk-1234567890"
+ *     base_url: "https://generativelanguage.googleapis.com"
+ * ```
+ *
+ * @example
+ * ```env
+ * # Configure in .env (suggested)
+ * GEMINI_API_KEY=sk-1234567890
+ * GEMINI_API_BASE=https://generativelanguage.googleapis.com
+ * ```
+ */
+export class GoogleApiConfig implements LLMApiConfig {
+  constructor(
+    /**
+     * API key for the Google Generative AI provider.
+     *
+     * If environment variable GEMINI_API_KEY is set, it will be used first.
+     */
+    public key: string = "",
+    /**
+     * Base URL for the Google Generative AI provider.
+     *
+     * If environment variable GEMINI_API_BASE is set, it will be used first.
+     */
+    public base_url: string = "https://generativelanguage.googleapis.com",
+  ) {}
+}
+
+/**
+ * LLM configuration.
+ */
 export class LLMConfig {
-  /** LLM configuration */
-
-  apiKey: string;
-  apiBase: string;
-  model: string;
-  provider: string; // "google" or "openai"
-  retry: RetryConfig;
-
-  constructor({
-    apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "",
-    apiBase = process.env.OPENAI_API_BASE ||
-      process.env.GEMINI_API_BASE ||
-      "https://generativelanguage.googleapis.com",
-    model = process.env.OPENAI_MODEL ||
-      process.env.GEMINI_MODEL ||
-      "gemini-2.5-flash",
-    provider = "google",
-    retry = new RetryConfig(),
-  }: {
-    apiKey: string;
-    apiBase?: string;
-    model?: string;
-    provider?: string;
-    retry?: RetryConfig;
-  }) {
-    this.apiKey = apiKey;
-    this.apiBase = apiBase;
-    this.model = model;
-    this.provider = provider;
-    this.retry = retry;
-  }
+  constructor(
+    /**
+     * OpenAI API configuration.
+     */
+    public readonly openai: OpenAIApiConfig = new OpenAIApiConfig(),
+    /**
+     * Google API configuration
+     */
+    public readonly google: GoogleApiConfig = new GoogleApiConfig(),
+    /**
+     * Provider name used for chat agent.
+     * If environment variable EMA_CHAT_PROVIDER is set, it will be used first.
+     *
+     * @example
+     * ```yaml
+     * # Configure to use Google Generative AI in config.yaml
+     * llm:
+     *   chat_provider: "google"
+     *   google:
+     *     key: "sk-1234567890"
+     * ```
+     *
+     * @example
+     * ```yaml
+     * # Configure to use model "gemini-2.5-flash" and Google Generative AI in config.yaml
+     * llm:
+     *   chat_provider: "google"
+     *   chat_model: "gemini-2.5-flash"
+     *   google:
+     *     key: "sk-1234567890"
+     * ```
+     *
+     * @example
+     * ```env
+     * # Configure to use deepseek in .env
+     * EMA_CHAT_PROVIDER=openai
+     * EMA_CHAT_MODEL=deepseek-chat
+     * OPENAI_API_KEY=sk-1234567890
+     * OPENAI_API_BASE=https://api.deepseek.com
+     * ```
+     */
+    public chat_provider: "google" | "openai" = "google",
+    /**
+     * Model name used for chat agent.
+     * If environment variable EMA_CHAT_MODEL is set, it will be used first.
+     *
+     * @see {@link chat_provider} for examples.
+     */
+    public chat_model: string = "gemini-2.5-flash",
+    /**
+     * Retry configuration for the LLM provider.
+     */
+    public readonly retry: RetryConfig = new RetryConfig(),
+  ) {}
 }
 
+/**
+ * Agent configuration.
+ */
 export class AgentConfig {
-  /** Agent configuration */
-
-  maxSteps: number;
-  workspaceDir: string;
-  systemPromptFile: string;
-  tokenLimit: number;
-
-  constructor({
-    maxSteps = 50,
-    workspaceDir = "./workspace",
-    systemPromptFile = "system_prompt.md",
-    tokenLimit = 80000,
-  }: Partial<AgentConfig> = {}) {
-    this.maxSteps = maxSteps;
-    this.workspaceDir = workspaceDir;
-    this.systemPromptFile = systemPromptFile;
-    this.tokenLimit = tokenLimit;
-  }
+  constructor(
+    /**
+     * The maximum number of steps the agent can take.
+     */
+    public readonly maxSteps: number = 50,
+    /**
+     * The workspace directory for the agent.
+     */
+    public readonly workspaceDir: string = "./workspace",
+    /**
+     * The system prompt file for the agent.
+     */
+    public readonly systemPromptFile: string = "system_prompt.md",
+    /**
+     * The token limit for the agent.
+     */
+    public readonly tokenLimit: number = 80000,
+  ) {}
 }
 
+/**
+ * Tools configuration.
+ */
 export class ToolsConfig {
-  /** Tools configuration */
-
-  // Basic tools (file operations, bash)
-  enableFileTools: boolean;
-  enableBash: boolean;
-  enableNote: boolean;
-
-  // Skills
-  enableSkills: boolean;
-  skillsDir: string;
-
-  // MCP tools
-  enableMcp: boolean;
-  mcpConfigPath: string;
-
-  constructor({
-    enableFileTools = true,
-    enableBash = true,
-    enableNote = true,
-    enableSkills = true,
-    skillsDir = "./skills",
-    enableMcp = true,
-    mcpConfigPath = "mcp.json",
-  }: Partial<ToolsConfig> = {}) {
-    this.enableFileTools = enableFileTools;
-    this.enableBash = enableBash;
-    this.enableNote = enableNote;
-    this.enableSkills = enableSkills;
-    this.skillsDir = skillsDir;
-    this.enableMcp = enableMcp;
-    this.mcpConfigPath = mcpConfigPath;
-  }
+  constructor(
+    /**
+     * Whether to enable file tools.
+     */
+    public readonly enable_file_tools: boolean = true,
+    /**
+     * Whether to enable bash tools.
+     *
+     * For security reasons, bash tools are disabled by default (`false`).
+     */
+    public readonly enable_bash: boolean = false,
+    /**
+     * Whether to enable note tools.
+     */
+    public readonly enable_note: boolean = true,
+    /**
+     * The skills directory.
+     */
+    public readonly skills_dir: string = "./skills",
+    /**
+     * Whether to enable MCP tools.
+     */
+    public readonly enable_mcp: boolean = true,
+    /**
+     * The MCP config path.
+     */
+    public readonly mcp_config_path: string = "mcp.json",
+  ) {}
 }
 
+/**
+ * This class contains definition of all the configuration for the EMA.
+ *
+ * The default load paths is given by {@link Config.findConfigFile}.
+ *
+ * @example
+ * ```js
+ * // Loads configuration from the default load paths.
+ * const config = Config.load();
+ * ```
+ *
+ * @example
+ * ```js
+ * // Loads configuration in YAML format from a specific file.
+ * const config = Config.fromYaml("/path/to/config.yaml");
+ * ```
+ */
 export class Config {
-  /** Main configuration class */
-
-  llm: LLMConfig;
-  agent: AgentConfig;
-  tools: ToolsConfig;
-  mongo: MongoConfig;
-  system: SystemConfig;
-
-  constructor({
-    llm,
-    agent,
-    tools,
-    mongo,
-    system,
-  }: {
-    llm: LLMConfig;
-    agent: AgentConfig;
-    tools: ToolsConfig;
-    mongo: MongoConfig;
-    system: SystemConfig;
-  }) {
-    this.llm = llm;
-    this.agent = agent;
-    this.tools = tools;
-    this.mongo = mongo;
-    this.system = system;
-  }
+  constructor(
+    /**
+     * LLM configuration
+     */
+    public readonly llm: LLMConfig,
+    /**
+     * Agent configuration
+     */
+    public readonly agent: AgentConfig,
+    /**
+     * Tools configuration
+     */
+    public readonly tools: ToolsConfig,
+    /**
+     * MongoDB configuration
+     */
+    public readonly mongo: MongoConfig,
+    /**
+     * System configuration
+     */
+    public readonly system: SystemConfig,
+  ) {}
 
   /**
-   * Load configuration from the default search path.
+   * Loads configuration from the default search path.
    */
   static load(): Config {
     const configPath = this.getDefaultConfigPath();
     if (!fs.existsSync(configPath)) {
-      const defaultConfig = this.getDefaultConfig();
-      const defaultContent = this.getConfigYAMLContent(defaultConfig);
+      const defaultContent = this.getDefaultConfig().toYAML();
       fs.mkdirSync(path.dirname(configPath), { recursive: true });
       fs.writeFileSync(configPath, defaultContent, "utf-8");
     }
-    return this.fromYaml(configPath);
+    const config = this.fromYaml(configPath).assignEnv();
+
+    // todo: validate in better position.
+    if (!config.llm.openai.key && !config.llm.google.key) {
+      throw new Error("OPENAI_API_KEY or GEMINI_API_KEY env is not set");
+    }
+
+    return config;
   }
 
   /**
-   * Load configuration from YAML file
+   * Assigns environment variables to the config.
+   */
+  assignEnv(): this {
+    if (process.env.EMA_CHAT_PROVIDER) {
+      this.llm.chat_provider = process.env.EMA_CHAT_PROVIDER as
+        | "google"
+        | "openai";
+    }
+    if (process.env.EMA_CHAT_MODEL) {
+      this.llm.chat_model = process.env.EMA_CHAT_MODEL;
+    }
+    if (process.env.OPENAI_API_KEY) {
+      this.llm.openai.key = process.env.OPENAI_API_KEY;
+    }
+    if (process.env.OPENAI_API_BASE) {
+      this.llm.openai.base_url = process.env.OPENAI_API_BASE;
+    }
+    if (process.env.GEMINI_API_KEY) {
+      this.llm.google.key = process.env.GEMINI_API_KEY;
+    }
+    if (process.env.GEMINI_API_BASE) {
+      this.llm.google.base_url = process.env.GEMINI_API_BASE;
+    }
+    if (process.env.HTTPS_PROXY) {
+      this.system.https_proxy = process.env.HTTPS_PROXY;
+    } else if (process.env.https_proxy) {
+      this.system.https_proxy = process.env.https_proxy;
+    }
+    return this;
+  }
+
+  /**
+   * Loads configuration from YAML file
    *
    * @param configPath Configuration file path
    * @returns Config instance
-   * @throws Error Configuration file does not exist
-   * @throws Error Invalid configuration format or missing required fields
    */
   static fromYaml(configPath: string): Config {
     if (!fs.existsSync(configPath)) {
@@ -208,71 +397,52 @@ export class Config {
       throw new Error("Configuration file is empty");
     }
 
-    const llmData = data.llm ?? {};
+    const isDev = ["development", "test"].includes(process.env.NODE_ENV || "");
+    return new Config(
+      deepMerge(new LLMConfig(), data?.llm),
+      deepMerge(new AgentConfig(), data?.agent),
+      deepMerge(new ToolsConfig(), data?.tools),
+      deepMerge(new MongoConfig(isDev ? "memory" : "remote"), data?.mongo),
+      deepMerge(new SystemConfig(), data?.system),
+    );
 
-    // Parse retry configuration
-    const retryData = llmData.retry ?? {};
-    const retryConfig = new RetryConfig({
-      enabled: retryData.enabled,
-      maxRetries: retryData.max_retries,
-      initialDelay: retryData.initial_delay,
-      maxDelay: retryData.max_delay,
-      exponentialBase: retryData.exponential_base,
-    });
-
-    const llmConfig = new LLMConfig({
-      apiKey: llmData.api_key || undefined, // undefined triggers default value in constructor
-      apiBase: llmData.api_base,
-      model: llmData.model,
-      provider: llmData.provider,
-      retry: retryConfig,
-    });
-
-    // Parse Agent configuration
-    const agentData = data.agent ?? {};
-    const agentConfig = new AgentConfig({
-      maxSteps: agentData.max_steps,
-      workspaceDir: agentData.workspace_dir,
-      systemPromptFile: agentData.system_prompt_file,
-      tokenLimit: agentData.token_limit,
-    });
-
-    // Parse tools configuration
-    const toolsData = data.tools ?? {};
-    const toolsConfig = new ToolsConfig({
-      enableFileTools: toolsData.enable_file_tools,
-      enableBash: toolsData.enable_bash,
-      enableNote: toolsData.enable_note,
-      enableSkills: toolsData.enable_skills,
-      skillsDir: toolsData.skills_dir,
-      enableMcp: toolsData.enable_mcp,
-      mcpConfigPath: toolsData.mcp_config_path,
-    });
-
-    // Parse Mongo configuration
-    const mongoData = data.mongo ?? {};
-    const mongoConfig = new MongoConfig({
-      uri: mongoData.uri,
-      dbName: mongoData.db_name,
-      kind: mongoData.kind,
-    });
-
-    // Parse System configuration
-    const systemData = data.system ?? {};
-    const systemConfig = new SystemConfig({
-      dataRoot: systemData.data_root,
-      httpsProxy: systemData.https_proxy,
-    });
-
-    return new Config({
-      llm: llmConfig,
-      agent: agentConfig,
-      tools: toolsConfig,
-      mongo: mongoConfig,
-      system: systemConfig,
-    });
+    /**
+     * Deep merges two objects, if the value is nullish, it will be ignored.
+     * If the value is not object (array, boolean, number, string, etc.), it will be shallow merged.
+     *
+     * @param target - The target object to merge into.
+     * @param source - The source object to merge from.
+     * @returns The merged object.
+     */
+    function deepMerge(target: any, source: any): any {
+      if (typeof target !== "object" || isNullish(target)) {
+        return source;
+      }
+      if (typeof source !== "object" || isNullish(source)) {
+        return target;
+      }
+      const result = { ...target };
+      for (const key in source) {
+        if (!isNullish(source[key])) {
+          result[key] = deepMerge(result[key], source[key]);
+        }
+      }
+      return result;
+    }
+    /**
+     * Checks if the value is nullish (undefined or null).
+     *
+     * @param value - The value to check.
+     * @returns True if the value is nullish, false otherwise.
+     */
+    function isNullish(value: any): boolean {
+      return value === undefined || value === null;
+    }
   }
 
+  /**
+   * Gets the system prompt file path.
+   */
   get systemPrompt(): string {
     const path = Config.findConfigFile(this.agent.systemPromptFile);
     if (!path) {
@@ -301,9 +471,16 @@ export class Config {
    * Find configuration file with priority order
    *
    * Search for config file in the following order of priority:
-   * 1) packages/ema/src/config/{filename} in current directory (development mode)
-   * 2) ~/.ema/config/{filename} in user home directory
-   * 3) {package}/config/{filename} in package installation directory
+   * 1) `packages/ema/src/config/{filename}` in current directory (development mode)
+   * 2) `{data}/ema/config/{filename}` in user home directory
+   * 3) `{package}/config/{filename}` in package installation directory
+   *
+   * The table below shows the `{data}` directory for different platforms:
+   * | Platform | Value                                    | Example                                  |
+   * | ------- | ---------------------------------------- | ---------------------------------------- |
+   * | Linux   | `$XDG_DATA_HOME` or `$HOME`/.local/share | /home/alice/.local/share                 |
+   * | macOS   | `$HOME`/Library/Application Support      | /Users/Alice/Library/Application Support |
+   * | Windows | `{FOLDERID_LocalAppData}`                | C:\Users\Alice\AppData\Local             |
    *
    * @param filename Configuration file name (e.g., "config.yaml", "mcp.json", "system_prompt.md")
    * @returns Path to found config file, or null if not found
@@ -316,7 +493,8 @@ export class Config {
     }
 
     // Priority 2: User config directory
-    const userConfig = path.join(os.homedir(), ".ema", "config", filename);
+    const paths = envPaths("ema");
+    const userConfig = path.join(paths.data, "config", filename);
     if (fs.existsSync(userConfig)) {
       return userConfig;
     }
@@ -340,59 +518,22 @@ export class Config {
   }
 
   private static getDefaultConfig(): Config {
-    return new Config({
-      llm: new LLMConfig({ apiKey: "" }),
-      agent: new AgentConfig(),
-      tools: new ToolsConfig(),
-      mongo: new MongoConfig(),
-      system: new SystemConfig(),
-    });
+    return new Config(
+      new LLMConfig(),
+      new AgentConfig(),
+      new ToolsConfig(),
+      new MongoConfig(),
+      new SystemConfig(),
+    );
   }
 
-  private static getConfigYAMLContent(config: Config): string {
-    const llmConfig = config.llm;
-    const agentConfig = config.agent;
-    const toolsConfig = config.tools;
-    const mongoConfig = config.mongo;
-    const systemConfig = config.system;
+  private toYAML(): string {
     return yaml.dump({
-      llm: {
-        api_key: llmConfig.apiKey,
-        api_base: llmConfig.apiBase,
-        model: llmConfig.model,
-        provider: llmConfig.provider,
-        retry: {
-          enabled: llmConfig.retry.enabled,
-          max_retries: llmConfig.retry.maxRetries,
-          initial_delay: llmConfig.retry.initialDelay,
-          max_delay: llmConfig.retry.maxDelay,
-          exponential_base: llmConfig.retry.exponentialBase,
-        },
-      },
-      agent: {
-        max_steps: agentConfig.maxSteps,
-        workspace_dir: agentConfig.workspaceDir,
-        system_prompt_file: agentConfig.systemPromptFile,
-        token_limit: agentConfig.tokenLimit,
-      },
-      tools: {
-        enable_file_tools: toolsConfig.enableFileTools,
-        enable_bash: toolsConfig.enableBash,
-        enable_note: toolsConfig.enableNote,
-        enable_skills: toolsConfig.enableSkills,
-        skills_dir: toolsConfig.skillsDir,
-        enable_mcp: toolsConfig.enableMcp,
-        mcp_config_path: toolsConfig.mcpConfigPath,
-      },
-      mongo: {
-        uri: mongoConfig.uri,
-        db_name: mongoConfig.dbName,
-        kind: mongoConfig.kind,
-      },
-      system: {
-        data_root: systemConfig.dataRoot,
-        https_proxy: systemConfig.httpsProxy,
-      },
+      llm: this.llm,
+      agent: this.agent,
+      tools: this.tools,
+      mongo: this.mongo,
+      system: this.system,
     });
   }
 }

@@ -67,6 +67,9 @@ importers:
       apache-arrow:
         specifier: ^18.1.0
         version: 18.1.0
+      env-paths:
+        specifier: ^3.0.0
+        version: 3.0.0
       js-tiktoken:
         specifier: ^1.0.21
         version: 1.0.21
@@ -2045,6 +2048,10 @@ packages:
   entities@7.0.0:
     resolution: {integrity: sha512-FDWG5cmEYf2Z00IkYRhbFrwIwvdFKH07uV8dvNy0omp/Qb1xcyCWp2UDtcwJF4QZZvk0sLudP6/hAu42TaqVhQ==}
     engines: {node: '>=0.12'}
+
+  env-paths@3.0.0:
+    resolution: {integrity: sha512-dtJUTepzMW3Lm/NPxRf3wP4642UWhjL2sQxc+ym2YMj1m/H2zDNQOlezafzkHwn6sMstjHTwG6iQQsctDW/b1A==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   es-abstract@1.24.1:
     resolution: {integrity: sha512-zHXBLhP+QehSSbsS9Pt23Gg964240DPd6QCf8WpkqEXxQ7fhdZzYsocOr5u7apWonsS5EjZDmTF+/slGMyasvw==}
@@ -5794,6 +5801,8 @@ snapshots:
   entities@4.5.0: {}
 
   entities@7.0.0: {}
+
+  env-paths@3.0.0: {}
 
   es-abstract@1.24.1:
     dependencies:

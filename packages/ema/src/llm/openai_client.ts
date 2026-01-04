@@ -13,22 +13,24 @@ import type {
   Message,
   ModelMessage,
   ToolCall,
-  ToolMessage,
-  UserMessage,
 } from "../schema";
 import type { Tool } from "../tools/base";
 import { wrapWithRetry } from "../retry";
-import { LLMConfig } from "../config";
+import type { LLMApiConfig, RetryConfig } from "../config";
 
 /** OpenAI-compatible client that adapts EMA schema to Chat Completions. */
 export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
   private readonly client: OpenAI;
 
-  constructor(config: LLMConfig) {
-    super(config);
+  constructor(
+    readonly model: string,
+    readonly config: LLMApiConfig,
+    readonly retryConfig: RetryConfig,
+  ) {
+    super();
     const options: ClientOptions = {
-      apiKey: config.apiKey,
-      baseURL: config.apiBase,
+      apiKey: config.key,
+      baseURL: config.base_url,
     };
     this.client = new OpenAI(options);
   }
@@ -181,7 +183,7 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
       : apiMessages;
 
     return this.client.chat.completions.create({
-      model: this.config.model,
+      model: this.model,
       messages: messages as any[],
       tools: apiTools as any[],
     });
@@ -196,10 +198,10 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
     const apiMessages = this.adaptMessages(messages);
     const apiTools = tools ? this.adaptTools(tools) : undefined;
 
-    const executor = this.config.retry.enabled
+    const executor = this.retryConfig.enabled
       ? wrapWithRetry(
           this.makeApiRequest.bind(this),
-          this.config.retry,
+          this.retryConfig,
           this.retryCallback,
         )
       : this.makeApiRequest.bind(this);

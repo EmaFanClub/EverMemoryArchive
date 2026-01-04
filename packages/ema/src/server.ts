@@ -62,12 +62,6 @@ export class Server {
     config: Config,
   ) {
     this.config = config;
-    const { apiKey, apiBase, model, retry } = config.llm;
-
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY or GEMINI_API_KEY env is not set");
-    }
-
     this.llmClient = new LLMClient(config.llm);
   }
 
@@ -80,7 +74,7 @@ export class Server {
     // Initialize MongoDB asynchronously
     const mongo = await createMongo(
       config.mongo.uri,
-      config.mongo.dbName,
+      config.mongo.db_name,
       config.mongo.kind,
     );
     await mongo.connect();
@@ -143,7 +137,7 @@ export class Server {
       );
     }
 
-    const dataRoot = this.config.system.dataRoot;
+    const dataRoot = this.config.system.data_root;
     return `${dataRoot}/mongo-snapshots/${name}.json`;
   }
 

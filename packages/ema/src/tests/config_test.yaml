@@ -1,8 +1,12 @@
 llm:
-  api_key: "test-api-key"
-  api_base: "https://example.com/v1/"
-  model: "test-model"
-  provider: "openai"
+  openai:
+    key: "test-openai-key"
+    base_url: "https://example.com/openai/v1/"
+  google:
+    key: "test-google-key"
+    base_url: "https://example.com/google/v1/"
+  chat_model: "test-model"
+  chat_provider: "openai"
   retry:
     enabled: false
     max_retries: 5

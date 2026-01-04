@@ -11,34 +11,32 @@
  * - Fully decoupled, non-invasive to business code
  */
 export class RetryConfig {
-  /** Whether to enable retry mechanism */
-  enabled: boolean;
-  /** Maximum number of retries */
-  maxRetries: number;
-  /** Initial delay time (seconds) */
-  initialDelay: number;
-  /** Maximum delay time (seconds) */
-  maxDelay: number;
-  /** Exponential backoff base */
-  exponentialBase: number;
-  /** Retryable exception types */
-  retryableExceptions: Array<typeof Error>;
-
-  constructor({
-    enabled = true,
-    maxRetries = 3,
-    initialDelay = 1.0,
-    maxDelay = 60.0,
-    exponentialBase = 2.0,
-    retryableExceptions = [Error],
-  }: Partial<RetryConfig> = {}) {
-    this.enabled = enabled;
-    this.maxRetries = maxRetries;
-    this.initialDelay = initialDelay;
-    this.maxDelay = maxDelay;
-    this.exponentialBase = exponentialBase;
-    this.retryableExceptions = retryableExceptions;
-  }
+  constructor(
+    /**
+     * Whether to enable retry mechanism
+     */
+    public readonly enabled: boolean = true,
+    /**
+     * Maximum number of retries
+     */
+    public readonly max_retries: number = 3,
+    /**
+     * Initial delay time (seconds)
+     */
+    public readonly initial_delay: number = 1.0,
+    /**
+     * Maximum delay time (seconds)
+     */
+    public readonly max_delay: number = 60.0,
+    /**
+     * Exponential backoff base
+     */
+    public readonly exponential_base: number = 2.0,
+    /**
+     * Retryable exception types
+     */
+    public readonly retryable_exceptions: Array<typeof Error> = [Error],
+  ) {}
 
   /**
    * Calculate delay time (exponential backoff)
@@ -47,8 +45,8 @@ export class RetryConfig {
    * @returns Delay time (seconds)
    */
   public calculateDelay(attempt: number): number {
-    const delay = this.initialDelay * Math.pow(this.exponentialBase, attempt);
-    return Math.min(delay, this.maxDelay);
+    const delay = this.initial_delay * Math.pow(this.exponential_base, attempt);
+    return Math.min(delay, this.max_delay);
   }
 }
 
@@ -87,14 +85,14 @@ export function asyncRetry(
     const originalMethod = descriptor.value;
     descriptor.value = async function (...args: any[]) {
       let lastException: Error | undefined;
-      for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
+      for (let attempt = 0; attempt <= config.max_retries; attempt++) {
         try {
           return await originalMethod.apply(this, args);
         } catch (exception) {
           lastException = exception as Error;
-          if (attempt >= config.maxRetries) {
+          if (attempt >= config.max_retries) {
             console.error(
-              `Function ${propertyKey} retry failed, reached maximum retry count ${config.maxRetries}`,
+              `Function ${propertyKey} retry failed, reached maximum retry count ${config.max_retries}`,
             );
             throw new RetryExhaustedError(lastException, attempt + 1);
           }
