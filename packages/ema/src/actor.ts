@@ -266,6 +266,21 @@ export type ActorStatus = "running" | "idle";
 export type ActorEvent = ActorMessage | AgentEvent;
 
 /**
+ * Type guard that narrows an actor event to a specific agent event (or any agent event).
+ */
+export function isAgentEvent<K extends AgentEventName | undefined>(
+  event: ActorEvent | undefined,
+  type?: K,
+): event is AgentEvent &
+  (K extends AgentEventName
+    ? { type: K; content: AgentEventContent<K> }
+    : AgentEvent) {
+  if (!event) return false;
+  if (event.type === "message") return false;
+  return type ? event.type === type : true;
+}
+
+/**
  * A message from the actor.
  */
 export interface ActorMessage {

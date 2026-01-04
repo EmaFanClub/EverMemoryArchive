@@ -15,7 +15,7 @@ import type {
   ShortTermMemoryEntity,
   ListShortTermMemoriesRequest,
 } from "./db";
-import { ActorWorker } from "./actor";
+import { ActorWorker, isAgentEvent } from "./actor";
 
 // Minimal in-memory implementations to satisfy ActorWorker dependencies.
 class InMemoryActorDB implements ActorDB {
@@ -99,11 +99,10 @@ async function main(): Promise<void> {
 
   actor.subscribe((response) => {
     const last = response.events.at(-1);
-    if (last?.type === AgentEvents.runFinished) {
-      console.log(
-        "[run Finished] ",
-        (last.content as AgentEventContent<"runFinished">).msg,
-      );
+    if (isAgentEvent(last, AgentEvents.emaReplyReceived)) {
+      const reply = last.content.reply;
+      console.log(`[${reply.expression}][${reply.action}](${reply.think})`);
+      console.log(`EMA > ${reply.response}`);
     }
   });
 
