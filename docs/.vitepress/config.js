@@ -33,7 +33,7 @@ export default {
         items: [
           {
             text: "Guide",
-            link: "/http",
+            link: "/http-server",
           },
           ...flatHttpSidebar(httpSidebar),
         ],

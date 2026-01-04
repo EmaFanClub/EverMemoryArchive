@@ -19,13 +19,32 @@ const ActorInputRequest = k.type({
 });
 
 /**
- * POST /api/actor/input - Sends input to actor
- * Body:
- *   - userId: User ID
- *   - actorId: Actor ID
- *   - inputs: Array of inputs
+ * Sends input to actor.
  *
- * Returns a success response.
+ * Body:
+ *   - userId (`number`): User ID
+ *   - actorId (`number`): Actor ID
+ *   - inputs (`ActorInput[]`): Array of inputs
+ *
+ * ActorInput:
+ *   - kind (`"text"`): The kind of the input.
+ *   - content (`string`): The content of the input.
+ *
+ * @example
+ * ```ts
+ * // Send text input to actor
+ * const response = await fetch("/api/actor/input", {
+ *   method: "POST",
+ *   headers: {
+ *     "Content-Type": "application/json",
+ *   },
+ *   body: JSON.stringify({
+ *     userId: 1,
+ *     actorId: 1,
+ *     inputs: [{ kind: "text", content: "Hello, world!" }],
+ *   }),
+ * });
+ *
  */
 export const POST = postBody(ActorInputRequest)(async (body) => {
   const server = await getServer();
