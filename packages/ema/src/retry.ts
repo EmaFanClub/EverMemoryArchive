@@ -35,7 +35,7 @@ export class RetryConfig {
     /**
      * Retryable exception types
      */
-    public readonly retryable_exceptions: Array<typeof Error> = [Error],
+    // public readonly retryable_exceptions: Array<typeof Error> = [Error],
   ) {}
 
   /**
