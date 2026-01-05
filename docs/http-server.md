@@ -12,5 +12,5 @@ Frontend endpoints:
 
 Backend endpoints:
 
-- [Send](../http/actor/input/route/variables/POST/) inputs to actors.
-- [Subscribe](../http/actor/sse/route/variables/GET/) to outputs from actors.
+- [Send](./http/actor/input/route/variables/POST) inputs to actors.
+- [Subscribe](./http/actor/sse/route/variables/GET) to outputs from actors.
