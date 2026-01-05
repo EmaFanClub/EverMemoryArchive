@@ -14,10 +14,7 @@ const EmaReplySchema = z
     action: z
       .enum(["无", "点头", "摇头", "挥手", "跳跃", "指点"])
       .describe("肢体动作"),
-    response: z
-      .string()
-      .min(1)
-      .describe("说出口的内容，直接传达给用户的话语"),
+    response: z.string().min(1).describe("说出口的内容，直接传达给用户的话语"),
   })
   .strict();
 
