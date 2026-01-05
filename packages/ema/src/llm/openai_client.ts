@@ -56,6 +56,10 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
           name: toolCall.name,
           arguments: JSON.stringify(toolCall.args ?? {}),
         },
+        // @@@thought-signature - Preserve Gemini tool-call signatures in OpenAI-compat payloads.
+        extra_content: toolCall.thoughtSignature
+          ? { google: { thought_signature: toolCall.thoughtSignature } }
+          : undefined,
       }));
       return {
         role: "assistant",
@@ -129,10 +133,25 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
               `Failed to parse tool call arguments: ${call.function.arguments}`,
             );
           }
+          const extraContent = call.extra_content as
+            | {
+                google?: {
+                  thought_signature?: string;
+                  thoughtSignature?: string;
+                };
+              }
+            | undefined;
+          const thoughtSignature =
+            extraContent?.google?.thought_signature ??
+            extraContent?.google?.thoughtSignature;
           toolCalls.push({
             id: call.id,
             name: call.function.name,
             args: parsedArgs ?? {},
+            thoughtSignature:
+              typeof thoughtSignature === "string"
+                ? thoughtSignature
+                : undefined,
           });
         }
       }

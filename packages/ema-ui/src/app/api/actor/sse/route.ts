@@ -14,12 +14,24 @@ const ActorSseRequest = k.type({
 });
 
 /**
- * GET /api/actor/sse - Subscribes to actor events
+ * Subscribes to actor events.
+ *
  * Query params:
- *   - userId: User ID
- *   - actorId: Actor ID
+ *   - userId (`number`): User ID
+ *   - actorId (`number`): Actor ID
  *
  * Returns a SSE stream of actor events.
+ *
+ * @example
+ * ```ts
+ * // Subscribe to actor events
+ * const eventSource = new EventSource("/api/actor/sse?userId=1&actorId=1");
+ *
+ * eventSource.onmessage = (event) => {
+ *   const response = JSON.parse(event.data);
+ *   console.log(response);
+ * };
+ * ```
  */
 export const GET = getQuery(ActorSseRequest)(async (query) => {
   const server = await getServer();
