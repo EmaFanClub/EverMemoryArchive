@@ -24,7 +24,7 @@ export type Tool = any;
  * The state of the agent.
  * More state could be added for specific agents, e.g. `memoryBuffer` for agents who have long-term memory.
  */
-interface AgentState {
+export interface AgentState {
   /**
    * The history of the agent.
    */
