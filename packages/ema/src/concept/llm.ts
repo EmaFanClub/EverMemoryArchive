@@ -108,6 +108,7 @@ interface AgentTask<S extends AgentState = AgentState> {
    * A human-readable name of the task.
    */
   name: string;
+
   /**
    * A cron expression of the task.
    * - See {@link https://en.wikipedia.org/wiki/Cron} for more details.
