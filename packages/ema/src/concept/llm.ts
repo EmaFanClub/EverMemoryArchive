@@ -51,7 +51,7 @@ interface AgentState {
  * // Runs with additional messages.
  * const agent = new AgentImpl();
  * agent.run(async (state, next) => {
- *   state.history.push(new Message("user", "Hello, world!"));
+ *   state.history.push({ type: "user", content: "Hello, World!" });
  *   await next();
  *   return state;
  * });
@@ -63,7 +63,7 @@ interface AgentState {
  * const agent = new AgentImpl();
  * agent.run(async (state, next) => {
  *   const messages = state.history;
- *   state.history.push(new Message("user", "Hello, world!"));
+ *   state.history.push({ type: "user", content: "Hello, World!" });
  *   await next();
  *   state.history = messages;
  *   return state;
@@ -149,7 +149,7 @@ export interface AgentTask<S extends AgentState = AgentState> {
    *   async run(agent, scheduler) {
    *     while(nextTick(cronTab)) {
    *       await scheduler.waitForIdle(agent);
-   *       await agent.runWithMessage(new Message("user", "Hello, world!"));
+   *       await agent.runWithMessage({ type: "user", content: "Hello, World!" });
    *     }
    *   },
    * });
