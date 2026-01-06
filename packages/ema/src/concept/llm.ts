@@ -103,20 +103,11 @@ export abstract class Agent<S extends AgentState = AgentState> {
   }
 }
 
-interface AgentTask<S extends AgentState = AgentState> {
+export interface AgentTask<S extends AgentState = AgentState> {
   /**
    * A human-readable name of the task.
    */
   name: string;
-
-  /**
-   * A cron expression of the task.
-   * - See {@link https://en.wikipedia.org/wiki/Cron} for more details.
-   * - Use {@link https://crontab.guru/} to create cron expressions.
-   *
-   * If this is not provided, the task will run once.
-   */
-  cron?: string;
 
   /**
    * The agent to run the task with.
@@ -125,7 +116,7 @@ interface AgentTask<S extends AgentState = AgentState> {
   agent?: Agent<S>;
 
   /**
-   * Runs the task with the agent and scheduler.
+   * Runs the task with the agent and schedule context.
    *
    * @param agent - The agent to run the task with. *Note that the agent may be running when it is scheduled.*
    * @param scheduler - The scheduler to run the task with.
@@ -134,27 +125,17 @@ interface AgentTask<S extends AgentState = AgentState> {
    * @example
    * ```ts
    * // Runs the task every day at midnight forever.
-   * scheduler.schedule({
+   * const cronTab: CronTab = {
    *   name: "daily-task",
    *   cron: "0 0 * * *",
-   *   async run(agent, scheduler) {
-   *     await agent.runWithMessage(new Message("user", "Hello, world!"));
-   *   },
-   * });
-   * ```
-   *
-   * @example
-   * ```ts
-   * // Cancels the task.
+   * };
    * scheduler.schedule({
    *   name: "daily-task",
-   *   cron: "0 0 * * *",
    *   async run(agent, scheduler) {
-   *     if (timeIsAfter('2026-01-01')) {
-   *       await scheduler.cancel(this);
-   *       return;
+   *     while(nextTick(cronTab)) {
+   *       await scheduler.waitForIdle(agent);
+   *       await agent.runWithMessage(new Message("user", "Hello, world!"));
    *     }
-   *     await agent.runWithMessage(new Message("user", "Hello, world!"));
    *   },
    * });
    * ```
@@ -167,6 +148,15 @@ interface AgentTask<S extends AgentState = AgentState> {
  */
 export interface AgentScheduler {
   /**
+   * Runs an oneshot task.
+   *
+   * @param cb - The callback to run the task.
+   * @returns Promise resolving when the task is completed.
+   */
+  run<S extends AgentState = AgentState>(
+    cb: (agent: Agent<S>) => Promise<void>,
+  ): Promise<void>;
+  /**
    * Schedules a task to run.
    *
    * @param task - The task to schedule.
@@ -174,10 +164,50 @@ export interface AgentScheduler {
    */
   schedule(task: AgentTask): Promise<void>;
   /**
-   * Cancels a task to run.
+   * Waits for the agent to be idle.
    *
-   * @param task - The task to cancel.
-   * @returns Promise resolving when the task is canceled.
+   * @param agent - The agent to wait for.
+   * @param timeout - The timeout in milliseconds. If not provided, the agent will wait indefinitely.
+   * @returns Promise resolving when the agent is idle or the timeout is reached.
    */
-  cancel(task: AgentTask): Promise<void>;
+  waitForIdle(agent: Agent, timeout?: number): Promise<void>;
+  /**
+   * Checks if the agent is running.
+   *
+   * @param agent - The agent to check.
+   * @returns Whether the agent is running.
+   */
+  isRunning(agent: Agent): boolean;
+  /**
+   * Stops the agent unconditionally.
+   *
+   * @param agent - The agent to stop.
+   */
+  stop(agent: Agent): Promise<void>;
+}
+
+/**
+ * A cron tab is a descriptor of a cron job.
+ *
+ * @example
+ * ```ts
+ * const cronTab: CronTab = {
+ *   name: "daily-task",
+ *   cron: "0 0 * * *",
+ * };
+ * ```
+ */
+export interface CronTab {
+  /**
+   * A human-readable name of the cron tab.
+   */
+  name: string;
+  /**
+   * A cron expression of the task.
+   * - See {@link https://en.wikipedia.org/wiki/Cron} for more details.
+   * - Use {@link https://crontab.guru/} to create cron expressions.
+   *
+   * If this is not provided, the task will run once.
+   */
+  cron?: string;
 }

@@ -6,6 +6,8 @@
  *   - Visit an actor instance using {@link ActorClient}.
  * - LLM is the LLM that is responsible for the generation of the response.
  *   - Visit llm providers using {@link EmaLLMClient}.
+ *   - Create a stateful agent by extending {@link Agent}.
+ *   - Run a task with {@link AgentScheduler} by providing {@link AgentTask}.
  * - Storage is the storage that is responsible for the storage of the data.
  *
  * ```mermaid
@@ -47,7 +49,7 @@
 export { type ActorClient } from "./actor";
 export * from "./actor";
 
-export { type EmaLLMClient } from "./llm";
+export type { EmaLLMClient, Agent, AgentTask, AgentScheduler } from "./llm";
 export * from "./llm";
 
 export * from "./storage";
