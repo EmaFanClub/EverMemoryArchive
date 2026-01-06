@@ -97,10 +97,10 @@ export abstract class Agent<S extends AgentState = AgentState> {
   abstract stop(): Promise<void>;
 
   /**
-   * Runs the agent with a user message.
+   * Runs the agent with a message in OpenAI format.
    *
    * @param message - The message to add.
-   * @returns void
+   * @returns Promise resolving when the agent is idle.
    */
   runWithMessage(message: Message): Promise<void> {
     return this.run(async (s, next) => {
@@ -111,7 +111,8 @@ export abstract class Agent<S extends AgentState = AgentState> {
   }
 
   /**
-   * Runs the agent with a state callback. The agent will ensure that it is idle when the callback is called.
+   * Runs a state callback when the agent becomes idle. If the agent is running a LLM session, the callback will be
+   * called after the session is finished.
    *
    * See {@link AgentStateCallback} for examples.
    *
