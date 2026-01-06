@@ -1,3 +1,4 @@
+import type { EventEmitter } from "node:events";
 import type { Message, LLMResponse } from "../schema";
 
 /**
@@ -79,6 +80,11 @@ export type AgentStateCallback<S extends AgentState> = (
  */
 export abstract class Agent<S extends AgentState = AgentState> {
   /**
+   * The event source of the agent. See {@link AgentEventSource} for more details.
+   */
+  abstract events: EventEmitter<AgentEventMap> & AgentEventSource;
+
+  /**
    * Runs the agent with a state callback.
    *
    * See {@link AgentStateCallback} for examples.
@@ -101,6 +107,15 @@ export abstract class Agent<S extends AgentState = AgentState> {
       return s;
     });
   }
+}
+
+/**
+ * The event map for the agent.
+ */
+export interface AgentEventMap {
+  // todo: agent events. maybe:
+  // 1. agent output
+  // 2. special agent event, for example, we can define "memory:reorgnize" to tell other components the agent is reorgnizing memory.
 }
 
 export interface AgentTask<S extends AgentState = AgentState> {
@@ -211,3 +226,10 @@ export interface CronTab {
    */
   cron?: string;
 }
+
+/** Following are extended friendly typings.  */
+
+/**
+ * The event source for the agent.
+ */
+export interface AgentEventSource {}
