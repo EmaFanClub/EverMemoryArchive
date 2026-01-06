@@ -174,7 +174,7 @@ export interface AgentTask<S extends AgentState = AgentState> {
  */
 export interface AgentScheduler {
   /**
-   * Runs an oneshot task.
+   * Runs a one-shot task.
    *
    * @param cb - The callback to run the task.
    * @returns Promise resolving when the task is completed.
