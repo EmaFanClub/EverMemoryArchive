@@ -53,3 +53,30 @@ export type { EmaLLMClient, Agent, AgentTask, AgentScheduler } from "./llm";
 export * from "./llm";
 
 export * from "./storage";
+
+// todo: move me to a separate file.
+/**
+ * A cron tab is a descriptor of a cron job.
+ *
+ * @example
+ * ```ts
+ * const cronTab: CronTab = {
+ *   name: "daily-task",
+ *   cron: "0 0 * * *",
+ * };
+ * ```
+ */
+export interface CronTab {
+  /**
+   * A human-readable name of the cron tab.
+   */
+  name: string;
+  /**
+   * A cron expression of the task.
+   * - See {@link https://en.wikipedia.org/wiki/Cron} for more details.
+   * - Use {@link https://crontab.guru/} to create cron expressions.
+   *
+   * If this is not provided, the task will run once.
+   */
+  cron?: string;
+}

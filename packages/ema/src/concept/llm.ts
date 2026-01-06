@@ -85,7 +85,21 @@ export abstract class Agent<S extends AgentState = AgentState> {
   abstract events: EventEmitter<AgentEventMap> & AgentEventSource;
 
   /**
-   * Runs the agent with a state callback.
+   * Checks if the agent is running a LLM session.
+   *
+   * @param agent - The agent to check.
+   * @returns Whether the agent is running.
+   */
+  abstract isRunning(): boolean;
+  /**
+   * Stops the running session unconditionally.
+   *
+   * @param agent - The agent to stop.
+   */
+  abstract stop(): Promise<void>;
+
+  /**
+   * Runs the agent with a state callback. The agent will ensure that it is idle when the callback is called.
    *
    * See {@link AgentStateCallback} for examples.
    *
@@ -185,45 +199,6 @@ export interface AgentScheduler {
    * @returns Promise resolving when the agent is idle or the timeout is reached.
    */
   waitForIdle(agent: Agent, timeout?: number): Promise<void>;
-  /**
-   * Checks if the agent is running.
-   *
-   * @param agent - The agent to check.
-   * @returns Whether the agent is running.
-   */
-  isRunning(agent: Agent): boolean;
-  /**
-   * Stops the agent unconditionally.
-   *
-   * @param agent - The agent to stop.
-   */
-  stop(agent: Agent): Promise<void>;
-}
-
-/**
- * A cron tab is a descriptor of a cron job.
- *
- * @example
- * ```ts
- * const cronTab: CronTab = {
- *   name: "daily-task",
- *   cron: "0 0 * * *",
- * };
- * ```
- */
-export interface CronTab {
-  /**
-   * A human-readable name of the cron tab.
-   */
-  name: string;
-  /**
-   * A cron expression of the task.
-   * - See {@link https://en.wikipedia.org/wiki/Cron} for more details.
-   * - Use {@link https://crontab.guru/} to create cron expressions.
-   *
-   * If this is not provided, the task will run once.
-   */
-  cron?: string;
 }
 
 /** Following are extended friendly typings.  */
