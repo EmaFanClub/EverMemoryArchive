@@ -119,6 +119,12 @@ interface AgentTask<S extends AgentState = AgentState> {
   cron?: string;
 
   /**
+   * The agent to run the task with.
+   * If not provided, the task will run with a new agent.
+   */
+  agent?: Agent<S>;
+
+  /**
    * Runs the task with the agent and scheduler.
    *
    * @param agent - The agent to run the task with. *Note that the agent may be running when it is scheduled.*
@@ -144,7 +150,11 @@ interface AgentTask<S extends AgentState = AgentState> {
    *   name: "daily-task",
    *   cron: "0 0 * * *",
    *   async run(agent, scheduler) {
-   *     await scheduler.cancel(this);
+   *     if (timeIsAfter('2026-01-01')) {
+   *       await scheduler.cancel(this);
+   *       return;
+   *     }
+   *     await agent.runWithMessage(new Message("user", "Hello, world!"));
    *   },
    * });
    * ```
