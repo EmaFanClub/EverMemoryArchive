@@ -47,23 +47,23 @@ interface AgentState {
  *
  * @example
  * ```ts
- * // Run with additional messages.
- * const agent = new Agent();
- * agent.run((state, next) => {
+ * // Runs with additional messages.
+ * const agent = new AgentImpl();
+ * agent.run(async (state, next) => {
  *   state.history.push(new Message("user", "Hello, world!"));
- *   next();
+ *   await next();
  *   return state;
  * });
  * ```
  *
  * @example
  * ```ts
- * // Run without saving history
- * const agent = new Agent();
- * agent.run((state, next) => {
+ * // Runs without saving history
+ * const agent = new AgentImpl();
+ * agent.run(async (state, next) => {
  *   const messages = state.history;
  *   state.history.push(new Message("user", "Hello, world!"));
- *   next();
+ *   await next();
  *   state.history = messages;
  *   return state;
  * });
@@ -71,8 +71,8 @@ interface AgentState {
  */
 export type AgentStateCallback<S extends AgentState> = (
   state: S,
-  next: () => void,
-) => S;
+  next: () => Promise<void>,
+) => Promise<S>;
 
 /**
  * {@link Agent} is a background-running thread that communicates with the actor.
@@ -95,10 +95,78 @@ export abstract class Agent<S extends AgentState = AgentState> {
    * @returns void
    */
   runWithMessage(message: Message): Promise<void> {
-    return this.run((s, next) => {
+    return this.run(async (s, next) => {
       s.history.push(message);
-      next();
+      await next();
       return s;
     });
   }
+}
+
+interface AgentTask<S extends AgentState = AgentState> {
+  /**
+   * A human-readable name of the task.
+   */
+  name: string;
+  /**
+   * A cron expression of the task.
+   * - See {@link https://en.wikipedia.org/wiki/Cron} for more details.
+   * - Use {@link https://crontab.guru/} to create cron expressions.
+   *
+   * If this is not provided, the task will run once.
+   */
+  cron?: string;
+
+  /**
+   * Runs the task with the agent and scheduler.
+   *
+   * @param agent - The agent to run the task with. *Note that the agent may be running when it is scheduled.*
+   * @param scheduler - The scheduler to run the task with.
+   * @returns Promise resolving when the task is completed.
+   *
+   * @example
+   * ```ts
+   * // Runs the task every day at midnight forever.
+   * scheduler.schedule({
+   *   name: "daily-task",
+   *   cron: "0 0 * * *",
+   *   async run(agent, scheduler) {
+   *     await agent.runWithMessage(new Message("user", "Hello, world!"));
+   *   },
+   * });
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Cancels the task.
+   * scheduler.schedule({
+   *   name: "daily-task",
+   *   cron: "0 0 * * *",
+   *   async run(agent, scheduler) {
+   *     await scheduler.cancel(this);
+   *   },
+   * });
+   * ```
+   */
+  run(agent: Agent<S>, scheduler: AgentScheduler): Promise<void>;
+}
+
+/**
+ * The scheduler of the agent. A scheduler manages multiple llm sessions with a sensible resource limits.
+ */
+export interface AgentScheduler {
+  /**
+   * Schedules a task to run.
+   *
+   * @param task - The task to schedule.
+   * @returns Promise resolving when the task is scheduled.
+   */
+  schedule(task: AgentTask): Promise<void>;
+  /**
+   * Cancels a task to run.
+   *
+   * @param task - The task to cancel.
+   * @returns Promise resolving when the task is canceled.
+   */
+  cancel(task: AgentTask): Promise<void>;
 }
