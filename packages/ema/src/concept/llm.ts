@@ -148,7 +148,6 @@ export interface AgentTask<S extends AgentState = AgentState> {
    *   name: "daily-task",
    *   async run(agent, scheduler) {
    *     while(nextTick(cronTab)) {
-   *       await scheduler.waitForIdle(agent);
    *       await agent.runWithMessage({ type: "user", content: "Hello, World!" });
    *     }
    *   },
