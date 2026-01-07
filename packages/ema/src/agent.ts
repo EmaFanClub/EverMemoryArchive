@@ -100,7 +100,9 @@ export class AgentEventsEmitter {
     logger?: AgentLogger,
   ): boolean {
     const emitted = this.emitter.emit(event, content);
-    if (logger && emitted) logger.logAgentEvent(event, content);
+    if (logger && emitted) {
+      void logger.logAgentEvent(event, content);
+    }
     return emitted;
   }
 
