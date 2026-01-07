@@ -47,7 +47,6 @@ describeLLM("MemorySkill", () => {
     const searcher = new LanceMemoryVectorSearcher(mongo, lance);
     worker = new ActorWorker(
       Config.load(),
-      new ActorLogger("console", "none"),
       1,
       new MongoActorDB(mongo),
       new MongoShortTermMemoryDB(mongo),
