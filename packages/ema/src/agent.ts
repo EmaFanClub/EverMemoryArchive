@@ -97,8 +97,11 @@ export class AgentEventsEmitter {
   emit<K extends AgentEventName>(
     event: K,
     content: AgentEventContent<K>,
+    logger?: AgentLogger,
   ): boolean {
-    return this.emitter.emit(event, content);
+    const emitted = this.emitter.emit(event, content);
+    if (logger && emitted) logger.logAgentEvent(event, content);
+    return emitted;
   }
 
   on<K extends AgentEventName>(
@@ -143,6 +146,7 @@ export class ContextManager {
   llmClient: LLMClient;
   tokenLimit: number;
   events: AgentEventsEmitter;
+  agentLogger: AgentLogger;
   tools: Tool[];
   toolDict: Map<string, Tool>;
   messages: Message[];
@@ -151,13 +155,15 @@ export class ContextManager {
 
   constructor(
     llmClient: LLMClient,
-    tokenLimit: number = 80000,
     events: AgentEventsEmitter,
+    agentLogger: AgentLogger,
+    tokenLimit: number = 80000,
     messages: Message[] = [],
     tools: Tool[] = [],
   ) {
     this.llmClient = llmClient;
     this.events = events;
+    this.agentLogger = agentLogger;
 
     this.tokenLimit = tokenLimit;
 
@@ -243,10 +249,8 @@ export class ContextManager {
 
       return totalTokens;
     } catch (error) {
-      // console.warn(
-      //   `Token estimation fallback due to error: ${(error as Error).message}`,
-      // );
-      this.events.emit(AgentEvents.tokenEstimationFallbacked, {
+      // Log tiktoken is unavailable or failed
+      this.agentLogger.logTokenEstimationFallbacked({
         error: error as Error,
       });
       return this.estimateTokensFallback();
@@ -316,15 +320,8 @@ export class ContextManager {
       return;
     }
 
-    // console.log(
-    //   `\n${Colors.BRIGHT_YELLOW}📊 Token usage - Local estimate: ${estimatedTokens}, ` +
-    //     `API reported: ${this.apiTotalTokens}, Limit: ${this.tokenLimit}${Colors.RESET}`,
-    // );
-    // console.log(
-    //   `${Colors.BRIGHT_YELLOW}🔄 Triggering message history summarization...${Colors.RESET}`,
-    // );
-
-    this.events.emit(AgentEvents.summarizeMessagesStarted, {
+    // Log summary start
+    this.agentLogger.logSummarizeMessagesStarted({
       localEstimatedTokens: estimatedTokens,
       apiReportedTokens: this.apiTotalTokens,
       tokenLimit: this.tokenLimit,
@@ -338,10 +335,8 @@ export class ContextManager {
 
     // Need at least 1 user message to perform summary
     if (userIndices.length < 1) {
-      // console.log(
-      //   `${Colors.BRIGHT_YELLOW}⚠️  Insufficient messages, cannot summarize${Colors.RESET}`,
-      // );
-      this.events.emit(AgentEvents.summarizeMessagesFinished, {
+      // Log summary failure
+      this.agentLogger.logSummarizeMessagesFinished({
         ok: false,
         msg: "Insufficient messages, cannot summarize.",
       });
@@ -396,25 +391,9 @@ export class ContextManager {
     this.skipNextTokenCheck = true;
 
     const newTokens = this.estimateTokens();
-    // console.log(
-    //   `${Colors.BRIGHT_GREEN}✓ Summary completed, local tokens: ${estimatedTokens} → ${newTokens}${Colors.RESET}`,
-    // );
-    // console.log(
-    //   `${Colors.DIM}  Structure: system + ${userIndices.length} user messages + ${summaryCount} summaries${Colors.RESET}`,
-    // );
-    // console.log(
-    //   `${Colors.DIM}  Note: API token count will update on next LLM call${Colors.RESET}`,
-    // );
-    // this.events.emit(AgentEvents.summarizeMessagesNotice, {
-    //   content: `${Colors.BRIGHT_GREEN}✓ Summary completed, local tokens: ${estimatedTokens} → ${newTokens}${Colors.RESET}`
-    // });
-    // this.events.emit(AgentEvents.summarizeMessagesNotice, {
-    //   content: `${Colors.DIM}  Structure: system + ${userIndices.length} user messages + ${summaryCount} summaries${Colors.RESET}`
-    // });
-    // this.events.emit(AgentEvents.summarizeMessagesNotice, {
-    //   content: `${Colors.DIM}  Note: API token count will update on next LLM call${Colors.RESET}`
-    // });
-    this.events.emit(AgentEvents.summarizeMessagesFinished, {
+
+    // Log summary completion
+    this.agentLogger.logSummarizeMessagesFinished({
       ok: true,
       msg: "Summary completed and API token count will update on next LLM call.",
       oldTokens: estimatedTokens,
@@ -438,7 +417,7 @@ export class ContextManager {
           msg.contents?.filter((c) => c.type === "text").map((c) => c.text) ??
           [];
         const contentText = textParts.join("\n");
-        summaryContent += `Assistant: ${contentText}\n`;
+        summaryContent += `Model: ${contentText}\n`;
         const toolCalls = msg.toolCalls ?? [];
         if (toolCalls.length > 0) {
           const toolNames = toolCalls.map((tc) => tc.name);
@@ -477,10 +456,8 @@ export class ContextManager {
           .filter((c) => c.type === "text")
           .map((c) => c.text)
           .join("\n") ?? "";
-      // console.log(
-      //   `${Colors.BRIGHT_GREEN}✓ Summary for round ${roundNum} generated successfully${Colors.RESET}`,
-      // );
-      this.events.emit(AgentEvents.createSummaryFinished, {
+      // Log summary success
+      this.agentLogger.logCreateSummaryFinished({
         ok: true,
         msg: "Summary generation succeeded.",
         roundNum: roundNum,
@@ -488,10 +465,8 @@ export class ContextManager {
       });
       return summaryText;
     } catch (error) {
-      // console.log(
-      //   `${Colors.BRIGHT_RED}✗ Summary generation failed for round ${roundNum}: ${(error as Error).message}${Colors.RESET}`,
-      // );
-      this.events.emit(AgentEvents.createSummaryFinished, {
+      // Log summary failure
+      this.agentLogger.logCreateSummaryFinished({
         ok: false,
         msg: "Summary generation failed.",
         roundNum: roundNum,
@@ -515,7 +490,7 @@ export class Agent {
   /** Manages conversation context, history, and available tools. */
   contextManager: ContextManager;
   /** Logger for agent events and actions. */
-  logger: AgentLogger = new AgentLogger("console", "full");
+  logger: AgentLogger = new AgentLogger("console", "debug");
 
   constructor(
     /** Configuration for the agent. */
@@ -532,8 +507,9 @@ export class Agent {
     // Initialize context manager with tools
     this.contextManager = new ContextManager(
       this.llm,
-      this.config.tokenLimit,
       this.events,
+      this.logger,
+      this.config.tokenLimit,
       messages,
       tools,
     );
@@ -541,12 +517,6 @@ export class Agent {
 
   /** Execute agent loop until task is complete or max steps reached. */
   async run(): Promise<void> {
-    // Start new run, initialize log file
-    // await this.logger.startNewRun();
-    // console.log(
-    //   `${Colors.DIM}📝 Log file: ${this.logger.getLogFilePath()}${Colors.RESET}`,
-    // );
-
     const maxSteps = this.config.maxSteps;
     let step = 0;
 
@@ -554,27 +524,11 @@ export class Agent {
       // Check and summarize message history to prevent context overflow
       await this.contextManager.summarizeMessages();
 
-      // Step header with proper width calculation
-      // const BOX_WIDTH = 58;
-      // const stepText = `${Colors.BOLD}${Colors.BRIGHT_CYAN}💭 Step ${step + 1}/${maxSteps}${Colors.RESET}`;
-      // const stepDisplayWidth = stringWidth(stepText);
-      // const padding = Math.max(0, BOX_WIDTH - 1 - stepDisplayWidth); // -1 for leading space
-
-      // console.log(`${Colors.DIM}╭${"─".repeat(BOX_WIDTH)}╮${Colors.RESET}`);
-      // console.log(
-      //   `${Colors.DIM}│${Colors.RESET} ${stepText}${" ".repeat(padding)}${Colors.DIM}│${Colors.RESET}`,
-      // );
-      // console.log(`${Colors.DIM}╰${"─".repeat(BOX_WIDTH)}╯${Colors.RESET}`);
-      this.events.emit(AgentEvents.stepStarted, {
+      // Log step started event
+      this.logger.logStepStarted({
         stepNumber: step + 1,
         maxSteps: maxSteps,
       });
-
-      // Log LLM request
-      // await this.logger.logRequest(
-      //   this.contextManager.context.messages,
-      //   this.contextManager.context.tools,
-      // );
 
       // Call LLM with context from context manager
       let response: LLMResponse;
@@ -584,75 +538,61 @@ export class Agent {
           this.contextManager.context.tools,
           this.systemPrompt,
         );
-        this.events.emit(AgentEvents.llmResponseReceived, {
-          response: response,
-        });
+        this.events.emit(
+          AgentEvents.llmResponseReceived,
+          {
+            response: response,
+          },
+          this.logger,
+        );
       } catch (error) {
         if (error instanceof RetryExhaustedError) {
+          // Emit and log run finished event with retry exhausted error
           const errorMsg = `LLM call failed after ${error.attempts} retries. Last error: ${String(error.lastException)}`;
-          // console.log(
-          //   `\n${Colors.BRIGHT_RED}❌ Retry failed:${Colors.RESET} ${errorMsg}`,
-          // );
-          const content = {
-            ok: false,
-            msg: errorMsg,
-            error: error as RetryExhaustedError,
-          };
-          this.events.emit(AgentEvents.runFinished, content);
-          this.logger.logRunFinished(content);
+          this.events.emit(
+            AgentEvents.runFinished,
+            {
+              ok: false,
+              msg: errorMsg,
+              error: error as RetryExhaustedError,
+            },
+            this.logger,
+          );
           return;
         }
-        // const errorMsg = `LLM call failed: ${(error as Error).message}`;
-        // console.log(
-        //   `\n${Colors.BRIGHT_RED}❌ Error:${Colors.RESET} ${errorMsg}`,
-        // );
-        this.events.emit(AgentEvents.runFinished, {
-          ok: false,
-          msg: `LLM call failed: ${(error as Error).message}`,
-          error: error as Error,
-        });
+        // Emit and log run finished event with LLM call error
+        this.events.emit(
+          AgentEvents.runFinished,
+          {
+            ok: false,
+            msg: `LLM call failed: ${(error as Error).message}`,
+            error: error as Error,
+          },
+          this.logger,
+        );
         return;
       }
 
       // Update API reported token usage in context manager
       this.contextManager.updateApiTokens(response);
 
-      // Log LLM response
-      // await this.logger.logResponse(
-      //   response.content,
-      //   response.thinking ?? null,
-      //   response.tool_calls ?? null,
-      //   response.finish_reason ?? null,
-      // );
-
       // Add model message to context
       this.contextManager.addModelMessage(response);
-
-      // Print thinking if present
-      // if (response.thinking) {
-      //   console.log(
-      //     `\n${Colors.BOLD}${Colors.MAGENTA}🧠 Thinking:${Colors.RESET}`,
-      //   );
-      //   console.log(`${Colors.DIM}${response.thinking}${Colors.RESET}`);
-      // }
-
-      // // Print assistant response
-      // if (response.content) {
-      //   console.log(
-      //     `\n${Colors.BOLD}${Colors.BRIGHT_BLUE}🤖 Assistant:${Colors.RESET}`,
-      //   );
-      //   console.log(`${response.content}`);
-      // }
 
       // Check if task is complete (no tool calls)
       if (
         !response.message.toolCalls ||
         response.message.toolCalls.length === 0
       ) {
-        this.events.emit(AgentEvents.runFinished, {
-          ok: true,
-          msg: response.finishReason,
-        });
+        // Emit and log run finished event
+        this.events.emit(
+          AgentEvents.runFinished,
+          {
+            ok: true,
+            msg: response.finishReason,
+          },
+          this.logger,
+        );
         return;
       }
 
@@ -662,26 +602,8 @@ export class Agent {
         const functionName = toolCall.name;
         const callArgs = toolCall.args;
 
-        // Tool call header
-        // console.log(
-        //   `\n${Colors.BRIGHT_YELLOW}🔧 Tool Call:${Colors.RESET} ` +
-        //     `${Colors.BOLD}${Colors.CYAN}${functionName}${Colors.RESET}`,
-        // );
-
-        // Arguments (formatted display)
-        // console.log(`${Colors.DIM}   Arguments:${Colors.RESET}`);
-        // Truncate each argument value to avoid overly long output
-        // const truncatedArgs: Record<string, unknown> = {};
-        // for (const [key, value] of Object.entries(callArgs)) {
-        //   const valueStr = String(value);
-        //   truncatedArgs[key] =
-        //     valueStr.length > 200 ? `${valueStr.slice(0, 200)}...` : value;
-        // }
-        // const argsJson = JSON.stringify(truncatedArgs, null, 2);
-        // for (const line of argsJson.split("\n")) {
-        //   console.log(`   ${Colors.DIM}${line}${Colors.RESET}`);
-        // }
-        this.events.emit(AgentEvents.toolCallStarted, {
+        // Log tool call started event
+        this.logger.logToolCallStarted({
           toolCallId: toolCallId ?? "",
           functionName: functionName,
           callArgs: callArgs,
@@ -714,38 +636,29 @@ export class Agent {
           }
         }
 
-        // Log tool execution result
-        // await this.logger.logToolResult(
-        //   functionName,
-        //   callArgs,
-        //   result.success,
-        //   result.success ? result.content : null,
-        //   result.success ? null : result.error,
-        // );
-
         // Print result
         if (result.success) {
-          // let resultText = result.content;
-          // if (resultText.length > 300) {
-          //   resultText = `${resultText.slice(0, 300)}${Colors.DIM}...${Colors.RESET}`;
-          // }
-          // console.log(
-          //   `${Colors.BRIGHT_GREEN}✓ Result:${Colors.RESET} ${resultText}`,
-          // );
           if (functionName === "ema_reply" && result.success) {
             const reply = JSON.parse(result.content!);
             result.content = undefined;
-            this.events.emit(AgentEvents.toolCallFinished, {
+            // Log tool call finished and ema reply received events
+            this.logger.logToolCallFinished({
               ok: true,
               toolCallId: toolCallId ?? "",
               functionName: functionName,
               result: result,
             });
-            this.events.emit(AgentEvents.emaReplyReceived, {
-              reply: reply,
-            });
+            // Emit and log ema reply received event
+            this.events.emit(
+              AgentEvents.emaReplyReceived,
+              {
+                reply: reply,
+              },
+              this.logger,
+            );
           } else {
-            this.events.emit(AgentEvents.toolCallFinished, {
+            // Log tool call finished event
+            this.logger.logToolCallFinished({
               ok: true,
               toolCallId: toolCallId ?? "",
               functionName: functionName,
@@ -753,11 +666,8 @@ export class Agent {
             });
           }
         } else {
-          // console.log(
-          //   `${Colors.BRIGHT_RED}✗ Error:${Colors.RESET} ` +
-          //     `${Colors.RED}${result.error}${Colors.RESET}`,
-          // );
-          this.events.emit(AgentEvents.toolCallFinished, {
+          // Log tool call finished event with failure
+          this.logger.logToolCallFinished({
             ok: false,
             toolCallId: toolCallId ?? "",
             functionName: functionName,
@@ -772,14 +682,17 @@ export class Agent {
       step += 1;
     }
 
-    // Max steps reached
+    // Emit and log run finished event due to max steps reached
     const errorMsg = `Task couldn't be completed after ${maxSteps} steps.`;
-    // console.log(`\n${Colors.BRIGHT_YELLOW}⚠️  ${errorMsg}${Colors.RESET}`);
-    this.events.emit(AgentEvents.runFinished, {
-      ok: false,
-      msg: errorMsg,
-      error: new Error(errorMsg),
-    });
+    this.events.emit(
+      AgentEvents.runFinished,
+      {
+        ok: false,
+        msg: errorMsg,
+        error: new Error(errorMsg),
+      },
+      this.logger,
+    );
     return;
   }
 

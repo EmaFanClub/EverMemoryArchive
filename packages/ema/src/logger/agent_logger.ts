@@ -109,4 +109,48 @@ export class AgentLogger extends LoggerBase implements AgentLoggerInterface {
     const message = `[emaReplyReceived] [${content.reply.expression}/${content.reply.action}](${content.reply.think})${content.reply.response}`;
     await this.log(level, message, content);
   }
+
+  async logAgentEvent(
+    name: AgentEventName,
+    content: AgentEventContent<AgentEventName>,
+  ): Promise<void> {
+    switch (name) {
+      case "tokenEstimationFallbacked":
+        return this.logTokenEstimationFallbacked(
+          content as AgentEventContent<"tokenEstimationFallbacked">,
+        );
+      case "summarizeMessagesStarted":
+        return this.logSummarizeMessagesStarted(
+          content as AgentEventContent<"summarizeMessagesStarted">,
+        );
+      case "summarizeMessagesFinished":
+        return this.logSummarizeMessagesFinished(
+          content as AgentEventContent<"summarizeMessagesFinished">,
+        );
+      case "createSummaryFinished":
+        return this.logCreateSummaryFinished(
+          content as AgentEventContent<"createSummaryFinished">,
+        );
+      case "stepStarted":
+        return this.logStepStarted(content as AgentEventContent<"stepStarted">);
+      case "runFinished":
+        return this.logRunFinished(content as AgentEventContent<"runFinished">);
+      case "llmResponseReceived":
+        return this.logLLMResponseReceived(
+          content as AgentEventContent<"llmResponseReceived">,
+        );
+      case "toolCallStarted":
+        return this.logToolCallStarted(
+          content as AgentEventContent<"toolCallStarted">,
+        );
+      case "toolCallFinished":
+        return this.logToolCallFinished(
+          content as AgentEventContent<"toolCallFinished">,
+        );
+      case "emaReplyReceived":
+        return this.logEMARplyReceived(
+          content as AgentEventContent<"emaReplyReceived">,
+        );
+    }
+  }
 }
