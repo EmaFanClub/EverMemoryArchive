@@ -2,8 +2,6 @@ import { LoggerBase } from "./base";
 import type {
   LoggerMode,
   LoggerLevel,
-  LogLevel,
-  AgentLoggerInterface,
 } from "./base";
 
 export class RetryLogger extends LoggerBase {
