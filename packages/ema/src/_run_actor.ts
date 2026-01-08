@@ -98,12 +98,12 @@ async function main(): Promise<void> {
   );
 
   actor.subscribe((response) => {
-    const last = response.events.at(-1);
-    if (isAgentEvent(last, AgentEvents.emaReplyReceived)) {
-      const reply = last.content.reply;
-      console.log(`[${reply.expression}][${reply.action}](${reply.think})`);
-      console.log(`EMA > ${reply.response}`);
-    }
+    // const last = response.events.at(-1);
+    // if (isAgentEvent(last, AgentEvents.emaReplyReceived)) {
+    //   const reply = last.content.reply;
+    //   console.log(`[${reply.expression}][${reply.action}](${reply.think})`);
+    //   console.log(`EMA > ${reply.response}`);
+    // }
   });
 
   const rl = readline.createInterface({ input, output });

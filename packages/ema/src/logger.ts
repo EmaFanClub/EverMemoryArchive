@@ -1,4 +1,5 @@
 import pino, { type Logger as PinoLogger, type LoggerOptions } from "pino";
+import pinoPretty from "pino-pretty";
 
 /** Runtime log levels exposed by the wrapper. */
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -110,29 +111,23 @@ export class Logger {
 
 /** Build a pino transport config from the selected transports. */
 function buildTransport(transports: Transport[], level: LoggerLevel) {
-  // "full" means multiline output; other levels keep a single line.
-  const singleLine = level === "full" ? false : true;
-  const targets = transports.map((transport) => {
-    switch (transport) {
-      case "console":
-        return {
-          target: "pino-pretty",
-          options: {
-            colorize: true,
-            translateTime: "yyyy-mm-dd HH:MM:ss.l",
-            ignore: "pid,hostname",
-            singleLine,
-          },
-        };
-      case "file":
-        throw new Error("file transport is not supported yet.");
-      case "db":
-        throw new Error("db transport is not supported yet.");
-      default: {
-        const _exhaustive: never = transport;
-        return _exhaustive;
-      }
+  for (const transport of transports) {
+    if (transport === "file") {
+      throw new Error("file transport is not supported yet.");
     }
+    if (transport === "db") {
+      throw new Error("db transport is not supported yet.");
+    }
+  }
+  if (transports.length !== 1 || transports[0] !== "console") {
+    throw new Error("only console transport is supported yet.");
+  }
+  // "full" means multiline output; other levels keep a single line.
+  const singleLine = level !== "full";
+  return pinoPretty({
+    colorize: true,
+    translateTime: "yyyy-mm-dd HH:MM:ss.l",
+    ignore: "pid,hostname",
+    singleLine,
   });
-  return pino.transport({ targets });
 }
