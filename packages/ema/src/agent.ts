@@ -5,15 +5,12 @@ import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 
 import type { LLMClient } from "./llm";
 import { AgentConfig } from "./config";
-import { AgentLogger } from "./logger";
+import { Logger } from "./logger";
 import { RetryExhaustedError } from "./retry";
 import {
   type LLMResponse,
   type Message,
   type Content,
-  type UserMessage,
-  type ModelMessage,
-  type ToolMessage,
   isModelMessage,
   isToolMessage,
   isUserMessage,
@@ -143,6 +140,7 @@ export class ContextManager {
   llmClient: LLMClient;
   tokenLimit: number;
   events: AgentEventsEmitter;
+  logger: Logger;
   tools: Tool[];
   toolDict: Map<string, Tool>;
   messages: Message[];
@@ -151,14 +149,15 @@ export class ContextManager {
 
   constructor(
     llmClient: LLMClient,
-    tokenLimit: number = 80000,
     events: AgentEventsEmitter,
+    logger: Logger,
+    tokenLimit: number = 80000,
     messages: Message[] = [],
     tools: Tool[] = [],
   ) {
     this.llmClient = llmClient;
     this.events = events;
-
+    this.logger = logger;
     this.tokenLimit = tokenLimit;
 
     // Initialize message history with system prompt
@@ -515,7 +514,11 @@ export class Agent {
   /** Manages conversation context, history, and available tools. */
   contextManager: ContextManager;
   /** Logger instance used for agent-related logging. */
-  logger: AgentLogger;
+  logger: Logger = Logger.create({
+    name: "agent",
+    level: "info",
+    transport: "console",
+  });
 
   constructor(
     /** Configuration for the agent. */
@@ -532,14 +535,12 @@ export class Agent {
     // Initialize context manager with tools
     this.contextManager = new ContextManager(
       this.llm,
-      this.config.tokenLimit,
       this.events,
+      this.logger,
+      this.config.tokenLimit,
       messages,
       tools,
     );
-
-    // Initialize logger
-    this.logger = new AgentLogger();
   }
 
   /** Execute agent loop until task is complete or max steps reached. */
