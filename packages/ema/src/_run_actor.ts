@@ -97,15 +97,7 @@ async function main(): Promise<void> {
     new NoopLongTermMemorySearcher(),
   );
 
-  actor.subscribe((response) => {
-    // const last = response.events.at(-1);
-    // if (last?.type === AgentEvents.runFinished) {
-    //   console.log(
-    //     "[run Finished] ",
-    //     (last.content as AgentEventContent<"runFinished">).msg,
-    //   );
-    // }
-  });
+  actor.subscribe((response) => {});
 
   const rl = readline.createInterface({ input, output });
   rl.on("SIGINT", () => {
