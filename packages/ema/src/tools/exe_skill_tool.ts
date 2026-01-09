@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Tool, ToolResult } from "../tools/base";
+import { Tool, ToolResult } from "./base";
 import { type SkillRegistry } from "../skills";
 
 const ExeSkillSchema = z
@@ -12,6 +12,9 @@ const ExeSkillSchema = z
 export class ExeSkillTool extends Tool {
   private registry: SkillRegistry;
 
+  /**
+   * @param registry - In-memory registry of skills keyed by name.
+   */
   constructor(registry: SkillRegistry) {
     super();
     this.registry = registry;
@@ -29,6 +32,11 @@ export class ExeSkillTool extends Tool {
     return ExeSkillSchema.toJSONSchema();
   }
 
+  /**
+   * Execute a registered skill by name.
+   * @param skill_name - Name of the skill to invoke.
+   * @param args - Arguments forwarded to the skill's execute method.
+   */
   async execute(skill_name: string, args?: unknown): Promise<ToolResult> {
     let payload: { skill_name: string; args?: Record<string, unknown> };
     try {

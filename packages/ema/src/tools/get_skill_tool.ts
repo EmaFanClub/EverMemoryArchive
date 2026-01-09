@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Tool, ToolResult } from "../tools/base";
+import { Tool, ToolResult } from "./base";
 import { type SkillRegistry } from "../skills";
 
 const GetSkillSchema = z
@@ -11,6 +11,9 @@ const GetSkillSchema = z
 export class GetSkillTool extends Tool {
   private registry: SkillRegistry;
 
+  /**
+   * @param registry - In-memory registry of skills keyed by name.
+   */
   constructor(registry: SkillRegistry) {
     super();
     this.registry = registry;
@@ -28,6 +31,10 @@ export class GetSkillTool extends Tool {
     return GetSkillSchema.toJSONSchema();
   }
 
+  /**
+   * Fetch the SKILL.md playbook for a given skill.
+   * @param skill_name - Name of the skill to fetch.
+   */
   async execute(skill_name: string): Promise<ToolResult> {
     let payload: { skill_name: string };
     try {

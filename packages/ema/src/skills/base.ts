@@ -3,8 +3,16 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ToolResult } from "../tools/base";
 
+/** Skill name -> Skill instance registry. */
 export type SkillRegistry = Record<string, Skill>;
 
+/**
+ * Base class for all skills.
+ *
+ * A skill lives in a directory (skillDir) and exposes description, parameters
+ * (JSON Schema), and an async execute entry point. Concrete skills should
+ * extend this class and implement their own behaviour.
+ */
 export abstract class Skill {
   readonly name: string;
   readonly skillDir: string;
@@ -14,12 +22,19 @@ export abstract class Skill {
     this.name = name;
   }
 
+  /** One-line human-readable description of the skill. */
   abstract get description(): string;
 
+  /** JSON Schema describing the arguments the skill accepts. */
   abstract get parameters(): Record<string, any>;
 
+  /**
+   * Execute the skill.
+   * @param args - Arguments object that should satisfy `parameters`.
+   */
   abstract execute(...args: any[]): Promise<ToolResult>;
 
+  /** Minimal metadata used for listing in prompts/UI. */
   get metadata(): Record<string, string> {
     return {
       name: this.name,
@@ -27,6 +42,10 @@ export abstract class Skill {
     };
   }
 
+  /**
+   * Load the SKILL.md playbook (strips frontmatter) and append parameter hints.
+   * Returns empty string when the playbook file does not exist.
+   */
   async getPlaybook(): Promise<string> {
     const skillMdPath = path.join(this.skillDir, "SKILL.md");
     try {
@@ -43,6 +62,9 @@ export abstract class Skill {
   }
 }
 
+/**
+ * Build a human-readable list of available skills for prompt injection.
+ */
 export function buildSkillsPrompt(registry: SkillRegistry): string {
   const skills = Object.values(registry);
   if (!skills.length) {
@@ -57,6 +79,10 @@ export function buildSkillsPrompt(registry: SkillRegistry): string {
 
 const defaultSkillsDir = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Dynamically import a skill module, preferring the bundler-friendly path and
+ * falling back to file:// when running directly under Node.
+ */
 async function importSkillModule(name: string, indexPath: string) {
   // 1) bundler-friendly import so Next/Turbopack can transpile TS on the fly
   try {
@@ -73,6 +99,11 @@ async function importSkillModule(name: string, indexPath: string) {
   }
 }
 
+/**
+ * Discover and instantiate skills under the given directory.
+ * @param skillsDir - Directory containing skill folders.
+ * @returns Registry keyed by skill name.
+ */
 export async function loadSkills(
   skillsDir: string = defaultSkillsDir,
 ): Promise<SkillRegistry> {
