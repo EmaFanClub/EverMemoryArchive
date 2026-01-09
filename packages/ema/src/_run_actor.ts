@@ -97,7 +97,15 @@ async function main(): Promise<void> {
     new NoopLongTermMemorySearcher(),
   );
 
-  actor.subscribe((response) => {});
+  actor.subscribe((response) => {
+    const last = response.events.at(-1);
+    if (isAgentEvent(last, AgentEvents.emaReplyReceived)) {
+      const reply = last.content.reply;
+      const purple = "\x1b[35m";
+      const reset = "\x1b[0m";
+      console.log(`${purple}EMA > ${reply.response}${reset}`);
+    }
+  });
 
   const rl = readline.createInterface({ input, output });
   rl.on("SIGINT", () => {
@@ -114,6 +122,7 @@ async function main(): Promise<void> {
       break;
     }
     await actor.work([{ kind: "text", content: userInput }]);
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   rl.close();
