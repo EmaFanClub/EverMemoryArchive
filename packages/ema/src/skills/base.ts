@@ -54,8 +54,7 @@ export abstract class Skill {
       return "";
     }
     const content = await fs.promises.readFile(skillMdPath, "utf-8");
-    const match = content.match(/^---\n[\s\S]*?\n---\s*\n?([\s\S]*)$/);
-    const playbook = match ? match[1] : content;
+    const playbook = stripYamlFrontmatter(content).body;
     const parametersHint =
       "\n\n## Parameters\n\n" + JSON.stringify(this.parameters, null, 2);
     return `${playbook.trim()}${parametersHint}`;
@@ -75,6 +74,35 @@ export function buildSkillsPrompt(registry: SkillRegistry): string {
     lines.push(`- \`${skill.name}\`: ${skill.description}`);
   }
   return lines.join("\n");
+}
+
+/**
+ * Strip a leading YAML frontmatter block from markdown content.
+ */
+function stripYamlFrontmatter(markdown: string): {
+  frontmatter: string | null;
+  body: string;
+} {
+  if (!markdown.startsWith("---")) {
+    return { frontmatter: null, body: markdown };
+  }
+  const lines = markdown.split(/\r?\n/);
+  if (lines[0].trim() !== "---") {
+    return { frontmatter: null, body: markdown };
+  }
+  let end = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") {
+      end = i;
+      break;
+    }
+  }
+  if (end === -1) {
+    return { frontmatter: null, body: markdown };
+  }
+  const frontmatter = lines.slice(1, end).join("\n");
+  const body = lines.slice(end + 1).join("\n");
+  return { frontmatter, body };
 }
 
 const defaultSkillsDir = path.dirname(fileURLToPath(import.meta.url));
