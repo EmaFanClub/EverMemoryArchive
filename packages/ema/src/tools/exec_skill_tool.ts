@@ -56,11 +56,6 @@ export class ExecSkillTool extends Tool {
         error: `Skill '${payload.skill_name}' does not exist.`,
       };
     }
-
-    if (typeof payload.args === "undefined") {
-      return await skill.execute();
-    }
-
     return await skill.execute(payload.args);
   }
 }
