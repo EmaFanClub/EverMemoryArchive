@@ -25,25 +25,17 @@ export type EmaReply = z.infer<typeof EmaReplySchema>;
 /** Tool that enforces JSON output matching the EmaReply shape. */
 export class EmaReplyTool extends Tool {
   /** Returns the unique tool name. */
-  get name(): string {
-    return "ema_reply";
-  }
+  name = "ema_reply";
 
   /** Returns the tool purpose and usage guidance. */
-  get description(): string {
-    // TODO: If we need to support multiple sentence replies, we need to modify the description here.
-    return (
-      "这个工具用于客户端格式化回复内容，确保回复内容为特定的JSON结构。" +
-      "此工具的输出你不可见，会直接传递给用户，你只需要专注于生成符合要求的JSON内容即可。" +
-      "如果工具执行失败，请尝试根据错误信息修正调用参数后重新调用此工具。" +
-      "你可以多次调用该工具，以产生多句回复。如果想终止回复，则在最后一次调用该工具后不要输出任何内容。"
-    );
-  }
+  description =
+    "这个工具用于客户端格式化回复内容，确保回复内容为特定的JSON结构。" +
+    "此工具的输出你不可见，会直接传递给用户，你只需要专注于生成符合要求的JSON内容即可。" +
+    "如果工具执行失败，请尝试根据错误信息修正调用参数后重新调用此工具。" +
+    "你可以多次调用该工具，以产生多句回复。如果想终止回复，则在最后一次调用该工具后不要输出任何内容。";
 
   /** Returns the JSON Schema specifying the expected arguments. */
-  get parameters(): Record<string, any> {
-    return EmaReplySchema.toJSONSchema();
-  }
+  parameters = EmaReplySchema.toJSONSchema();
 
   /** Validates and emits a structured reply payload. */
   async execute(

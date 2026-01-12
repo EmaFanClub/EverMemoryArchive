@@ -20,17 +20,12 @@ export class GetSkillTool extends Tool {
     this.registry = registry;
   }
 
-  get name(): string {
-    return "get_skill";
-  }
+  name = "get_skill";
 
-  get description(): string {
-    return "获取指定 skill 的使用手册。在你想使用某个 skill 之前，可以先使用此工具查看该 skill 的使用说明。";
-  }
+  description =
+    "获取指定 skill 的使用手册。在你想使用某个 skill 之前，可以先使用此工具查看该 skill 的使用说明。";
 
-  get parameters(): Record<string, any> {
-    return GetSkillSchema.toJSONSchema();
-  }
+  parameters = GetSkillSchema.toJSONSchema();
 
   /**
    * Fetches the SKILL.md playbook for a given skill.

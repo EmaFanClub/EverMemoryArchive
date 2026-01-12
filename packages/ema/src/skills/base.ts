@@ -23,10 +23,10 @@ export abstract class Skill {
   }
 
   /** Returns a one-line human-readable description of the skill. */
-  abstract get description(): string;
+  abstract description: string;
 
   /** Returns the JSON Schema describing the arguments the skill accepts. */
-  abstract get parameters(): Record<string, any>;
+  abstract parameters: Record<string, any>;
 
   /**
    * Executes the skill.

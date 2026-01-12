@@ -21,17 +21,12 @@ export class ExecSkillTool extends Tool {
     this.registry = registry;
   }
 
-  get name(): string {
-    return "exec_skill";
-  }
+  name = "exec_skill";
 
-  get description(): string {
-    return "执行指定 skill，并返回执行结果。当你确定需要使用某个 skill 来完成任务时，可以使用此工具来执行该 skill。";
-  }
+  description =
+    "执行指定 skill，并返回执行结果。当你确定需要使用某个 skill 来完成任务时，可以使用此工具来执行该 skill。";
 
-  get parameters(): Record<string, any> {
-    return ExeSkillSchema.toJSONSchema();
-  }
+  parameters = ExeSkillSchema.toJSONSchema();
 
   /**
    * Executes a registered skill by name.

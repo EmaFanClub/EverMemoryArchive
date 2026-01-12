@@ -39,13 +39,9 @@ function parseCommand(input: string): { command: string; args: string } | null {
 
 export default class DemoSkill extends Skill {
   /** Returns a description of the demo skill that understands #time and #echo commands. */
-  get description(): string {
-    return "解析以 # 开头的命令并生成结果。";
-  }
+  description = "解析以 # 开头的命令并生成结果。";
 
-  get parameters(): Record<string, any> {
-    return DemoSkillSchema.toJSONSchema();
-  }
+  parameters = DemoSkillSchema.toJSONSchema();
 
   /**
    * Executes the demo skill.
