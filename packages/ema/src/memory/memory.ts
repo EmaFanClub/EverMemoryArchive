@@ -21,7 +21,7 @@ export interface ActorState {
   /**
    * The memory buffer, in the format of messages in OpenAI chat completion API.
    */
-  
+
   memoryBuffer: Message[];
   // more state can be added here.
 }
