@@ -18,6 +18,7 @@ export interface Task {
 
 /**
  * An agent task is a task that runs with an agent.
+ * - For a timed agent task, use {@link TimedTaskScheduler.iterateTimed}.
  *
  * @example
  * ```ts
@@ -26,8 +27,8 @@ export interface Task {
  *   name: "daily-task",
  *   cron: "0 0 * * *",
  *   async work(agent) {
- *     while(nextTick(this)) {
- *       await agent.runWithMessage({ type: "user", content: "Hello, World!" });
+ *     for await (const date of scheduler.iterateTimed(this)) {
+ *       await agent.runWithMessage({ type: "user", content: `Today is ${date}`});
  *     }
  *   },
  * };
@@ -171,8 +172,8 @@ export abstract class TimedTaskScheduler {
    *   name: "daily-task",
    *   cron: "0 0 * * *",
    * };
-   * for await (const _ of scheduler.iterateTimed(cronTask)) {
-   *   console.log(`Today is ${new Date().toISOString()}`);
+   * for await (const date of scheduler.iterateTimed(cronTask)) {
+   *   console.log(`Today is ${date}`);
    * }
    */
   iterateTimed(task: CronTask): AsyncIterable<Date> {
