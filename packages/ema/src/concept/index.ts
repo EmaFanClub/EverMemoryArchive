@@ -3,9 +3,11 @@
  *
  * - UI is the user interface. Users can interacts with ema using WebUI, NapCatQQ, or TUI.
  * - Ema Actor is the actor that takes user inputs and generates outputs.
- *   - Visit an actor instance using {@link ActorClient}.
+ *   - Visit an actor instance using {@link ActorClient}, implemented by `ActorHttpClient` and `ActorWorker`.
+ *   - In frontend, an `ActorHttpClient` connects to some actor in remote server.
+ *   - In frontend or backend, an `ActorWorker` uses LLM to implement the actor logic.
  * - LLM is the LLM that is responsible for the generation of the response.
- *   - Visit llm providers using {@link EmaLLMClient}.
+ *   - Visit LLM providers using {@link EmaLLMClient}.
  *   - Create a stateful agent by extending {@link Agent}.
  * - Task is the unit of work that can be scheduled and run. A task can implements one or multiple interfaces:
  *   - Run an agent task with {@link AgentTaskScheduler} by providing {@link AgentTask}.
