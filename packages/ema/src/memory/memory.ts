@@ -1,4 +1,7 @@
-import type { Message } from "../schema";
+export interface BufferMessage {
+  name: string;
+  text: string;
+}
 
 /**
  * Interface for persisting actor state
@@ -19,10 +22,9 @@ export interface ActorStateStorage {
 
 export interface ActorState {
   /**
-   * The memory buffer, in the format of messages in OpenAI chat completion API.
+   * The memory buffer containing lightweight historical messages.
    */
-
-  memoryBuffer: Message[];
+  memoryBuffer: BufferMessage[];
   // more state can be added here.
 }
 

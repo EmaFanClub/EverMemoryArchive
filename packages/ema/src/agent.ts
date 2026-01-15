@@ -127,55 +127,78 @@ export const AgentEvents = Object.fromEntries(
   Object.keys(AgentEventDefs).map((key) => [key, key]),
 ) as { [K in AgentEventName]: K };
 
-/** Conversation context container. */
-export interface Context {
-  /** Message history. */
+/** The state of the agent. */
+export type AgentState = {
+  systemPrompt: string;
   messages: Message[];
-  /** Available tools. */
   tools: Tool[];
-}
+};
+
+/** Meaning: state belongs to agent, externally initialized */
+export type AgentStateCallback1 = (
+  state: AgentState,
+  next: () => Promise<void>,
+) => Promise<void>;
+
+/** Meaning: state belongs to the external, agent is the executing engine. */
+export type AgentStateCallback2 = (
+  next: (state: AgentState) => Promise<void>,
+) => Promise<void>;
 
 /** Manages conversation context and message history for the agent. */
 export class ContextManager {
   llmClient: LLMClient;
-  tokenLimit: number;
   events: AgentEventsEmitter;
   logger: Logger;
-  tools: Tool[];
-  toolDict: Map<string, Tool>;
-  messages: Message[];
+
+  tokenLimit: number;
   apiTotalTokens: number;
   skipNextTokenCheck: boolean;
+
+  state: AgentState = {
+    systemPrompt: "",
+    messages: [],
+    tools: [],
+  };
 
   constructor(
     llmClient: LLMClient,
     events: AgentEventsEmitter,
     logger: Logger,
     tokenLimit: number = 80000,
-    messages: Message[] = [],
-    tools: Tool[] = [],
   ) {
     this.llmClient = llmClient;
     this.events = events;
     this.logger = logger;
     this.tokenLimit = tokenLimit;
-
-    // Initialize message history with system prompt
-    this.messages = messages;
-
-    // Store tools
-    this.tools = tools;
-    this.toolDict = new Map(tools.map((tool) => [tool.name, tool]));
-
     // Token usage tracking
     // TODO: if messages are provided, we may want to calculate initial token usage
     this.apiTotalTokens = 0;
     this.skipNextTokenCheck = false;
   }
 
-  /** Get current conversation context (messages and tools). */
-  get context(): Context {
-    return { messages: this.messages, tools: this.tools };
+  get systemPrompt(): string {
+    return this.state.systemPrompt;
+  }
+
+  set systemPrompt(v: string) {
+    this.state.systemPrompt = v;
+  }
+
+  get messages(): Message[] {
+    return this.state.messages;
+  }
+
+  set messages(v: Message[]) {
+    this.state.messages = v;
+  }
+
+  get tools(): Tool[] {
+    return this.state.tools;
+  }
+
+  set tools(v: Tool[]) {
+    this.state.tools = v;
   }
 
   /** Add a user message to context. */
@@ -491,27 +514,22 @@ export class ContextManager {
 /** Single agent with basic tools and MCP support. */
 export class Agent {
   /** Event emitter for agent lifecycle notifications. */
-  events: AgentEventsEmitter = new AgentEventsEmitter();
+  readonly events: AgentEventsEmitter = new AgentEventsEmitter();
   /** Manages conversation context, history, and available tools. */
-  contextManager: ContextManager;
+  private contextManager: ContextManager;
   /** Logger instance used for agent-related logging. */
-  logger: Logger = Logger.create({
+  private logger: Logger = Logger.create({
     name: "agent",
     level: "debug",
     transport: "console",
   });
+  private status: "idle" | "running" = "idle";
 
   constructor(
     /** Configuration for the agent. */
     private config: AgentConfig,
     /** LLM client used by the agent to generate responses. */
     private llm: LLMClient,
-    /** System prompt is used to guide the agent's behavior. */
-    private systemPrompt: string,
-    /** Initial messages for the agent's context. */
-    messages: Message[] = [],
-    /** Tools available to the agent. */
-    tools: Tool[] = [],
   ) {
     // Initialize context manager with tools
     this.contextManager = new ContextManager(
@@ -519,13 +537,42 @@ export class Agent {
       this.events,
       this.logger,
       this.config.tokenLimit,
-      messages,
-      tools,
     );
   }
 
+  isRunning(): boolean {
+    return this.status !== "idle";
+  }
+
+  async runWithState(state: AgentState): Promise<void> {
+    return this.run(async (loop) => {
+      await loop(state);
+    });
+    // Is equivalent to the following implementation ? Do we need AgentStateCallback2 ?
+    // this.status = "running";
+    // this.contextManager.state = state;
+    // await this.mainLoop();
+    // this.status = "idle";
+  }
+
+  async run(callback: AgentStateCallback2): Promise<void> {
+    this.status = "running";
+    let called = false;
+    const loop = async (state: AgentState): Promise<void> => {
+      if (called) {
+        throw new Error("loop() has already been called.");
+      }
+      called = true;
+      this.contextManager.state = state;
+      await this.mainLoop();
+    };
+    await callback(loop);
+    this.status = "idle";
+  }
+
   /** Execute agent loop until task is complete or max steps reached. */
-  async run(): Promise<void> {
+  async mainLoop(): Promise<void> {
+    const toolDict = new Map(this.contextManager.tools.map((t) => [t.name, t]));
     const maxSteps = this.config.maxSteps;
     let step = 0;
 
@@ -543,9 +590,9 @@ export class Agent {
       let response: LLMResponse;
       try {
         response = await this.llm.generate(
-          this.contextManager.context.messages,
-          this.contextManager.context.tools,
-          this.systemPrompt,
+          this.contextManager.messages,
+          this.contextManager.tools,
+          this.contextManager.systemPrompt,
         );
         // this.events.emit(AgentEvents.llmResponseReceived, {
         //   response: response,
@@ -605,7 +652,7 @@ export class Agent {
 
         // Execute tool
         let result: ToolResult;
-        const tool = this.contextManager.toolDict.get(functionName);
+        const tool = toolDict.get(functionName);
         if (!tool) {
           result = {
             success: false,

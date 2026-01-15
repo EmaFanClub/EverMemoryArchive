@@ -14,21 +14,27 @@ import type {
   LongTermMemory,
   ActorStateStorage,
   ActorMemory,
+  BufferMessage,
 } from "./memory/memory";
 import { LLMClient } from "./llm";
+import { type AgentState } from "./agent";
 
 /**
  * A facade of the actor functionalities between the server (system) and the agent (actor).
  */
 export class ActorWorker implements ActorStateStorage, ActorMemory {
   /** The agent instance. */
-  public readonly agent: Agent;
+  private readonly agent: Agent;
   /** The subscribers of the actor. */
   private readonly subscribers = new Set<(response: ActorResponse) => void>();
   /** The current status of the actor. */
   private currentStatus: ActorStatus = "idle";
   /** The event stream of the actor. */
   private eventStream = new EventHistory();
+  /** In-memory actor state to simulate persistence without DB. */
+  private _actorState: ActorState = { memoryBuffer: [] };
+  /** Cached agent state for the latest run. */
+  private agentState: AgentState | null = null;
 
   constructor(
     /** The config of the actor. */
@@ -45,13 +51,17 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     private readonly longTermMemorySearcher: LongTermMemorySearcher,
   ) {
     const llm = new LLMClient(this.config.llm);
-    this.agent = new Agent(
-      config.agent,
-      llm,
-      config.systemPrompt,
-      [],
-      config.baseTools,
-    );
+    this.agent = new Agent(config.agent, llm);
+  }
+
+  async buildSystemPrompt(systemPrompt: string): Promise<string> {
+    const state = await this.getState();
+    const bufferWindow = state.memoryBuffer.slice(-10);
+    const bufferText =
+      bufferWindow.length === 0
+        ? "None."
+        : bufferWindow.map((item) => `- ${item.name}> ${item.text}`).join("\n");
+    return systemPrompt.replace("{MEMORY_BUFFER}", bufferText);
   }
 
   /**
@@ -83,26 +93,38 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
       content: `Received input: ${input.content}. Start running.`,
     });
 
-    // push user input into the agent context
-    this.agent.contextManager.addUserMessage([
-      { type: "text", text: input.content },
-    ]);
-
     // setup event listeners of all agent events
     const handlers: Array<
       [AgentEventName, (content: AgentEventContent) => void]
     > = [];
     (Object.keys(AgentEvents) as AgentEventName[]).forEach((eventName) => {
-      const handler = (content: AgentEventContent) => {
+      const handler = async (content: AgentEventContent) => {
         this.emitEvent({ type: eventName, content: content });
+        if (eventName === AgentEvents.emaReplyReceived) {
+          const reply = (
+            content as AgentEventContent<typeof AgentEvents.emaReplyReceived>
+          ).reply;
+          await this.updateMemoryBuffer("EMA", reply.response);
+        }
       };
       this.agent.events.on(eventName, handler);
       handlers.push([eventName, handler]);
     });
 
     try {
-      await this.agent.run();
+      this.agentState = {
+        systemPrompt: await this.buildSystemPrompt(this.config.systemPrompt),
+        messages: [
+          { role: "user", contents: [{ type: "text", text: input.content }] },
+        ],
+        tools: this.config.baseTools,
+      };
+      console.log(this.agentState.systemPrompt);
+      await this.updateMemoryBuffer("User", input.content);
+      await this.agent.runWithState(this.agentState);
     } finally {
+      // the lifecycle of agentState has ended.
+      this.agentState = null;
       // cleanup listeners and notify idle
       for (const [eventName, handler] of handlers) {
         this.agent.events.off(eventName, handler);
@@ -159,11 +181,12 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * @returns The state of the actor.
    */
   async getState(): Promise<ActorState> {
-    const actor = await this.actorDB.getActor(this.actorId);
-    if (!actor) {
-      throw new Error(`Actor ${this.actorId} not found`);
-    }
-    return actor;
+    // const actor = await this.actorDB.getActor(this.actorId);
+    // if (!actor) {
+    //   throw new Error(`Actor ${this.actorId} not found`);
+    // }
+    // return actor;
+    return this._actorState;
   }
 
   /**
@@ -171,19 +194,28 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * @param state - The state to update.
    */
   async updateState(state: ActorState): Promise<void> {
-    // todo: only update necessary fields so that we don't have to get state
-    // from database every time
-    let actor = await this.actorDB.getActor(this.actorId);
-    if (!actor) {
-      actor = {
-        id: this.actorId,
-        roleId: 1,
-        memoryBuffer: [],
-      };
-    }
+    // // todo: only update necessary fields so that we don't have to get state
+    // // from database every time
+    // let actor = await this.actorDB.getActor(this.actorId);
+    // if (!actor) {
+    //   actor = {
+    //     id: this.actorId,
+    //     roleId: 1,
+    //     memoryBuffer: [],
+    //   };
+    // }
+    //
+    // actor.memoryBuffer = state.memoryBuffer;
+    // await this.actorDB.upsertActor(actor);
+    this._actorState = state;
+  }
 
-    actor.memoryBuffer = state.memoryBuffer;
-    await this.actorDB.upsertActor(actor);
+  private async updateMemoryBuffer(name: string, text: string): Promise<void> {
+    const state = await this.getState();
+    await this.updateState({
+      ...state,
+      memoryBuffer: [...state.memoryBuffer, { name, text }],
+    });
   }
 
   /**
