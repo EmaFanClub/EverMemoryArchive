@@ -16,11 +16,11 @@ export function bufferMessageToUserMessage(
     throw new Error(`Expected user message, got ${message.message.role}`);
   }
   const context = [
-    "[CONTEXT]",
-    `time: ${dayjs(message.time).format("YYYY-MM-DD HH:mm:ss")}`,
-    `id: ${message.id}`,
-    `name: ${message.name}`,
-    "[/CONTEXT]",
+    "<CONTEXT>",
+    `<time>${dayjs(message.time).format("YYYY-MM-DD HH:mm:ss")}</time>`,
+    `<id>${message.id}</id>`,
+    `<name>${message.name}</name>`,
+    "</CONTEXT>",
   ].join("\n");
   return {
     role: "user",
