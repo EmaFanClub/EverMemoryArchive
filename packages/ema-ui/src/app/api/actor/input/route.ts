@@ -51,7 +51,7 @@ export const POST = postBody(ActorInputRequest)(async (body) => {
   const actor = await server.getActor(body.userId, body.actorId);
 
   // Processes input.
-  await actor.work(body.userId, body.inputs);
+  await actor.work(body.inputs);
 
   return new Response(JSON.stringify({ success: true }), {
     status: 200,

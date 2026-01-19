@@ -218,6 +218,7 @@ export class Server {
     if (!actor) {
       actor = new ActorWorker(
         this.config,
+        _userId,
         actorId,
         this.actorDB,
         this.shortTermMemoryDB,

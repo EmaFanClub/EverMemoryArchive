@@ -59,6 +59,8 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   constructor(
     /** The config of the actor. */
     private readonly config: Config,
+    /** The ID of the user. */
+    private readonly userId: number,
     /** The ID of the actor. */
     private readonly actorId: number,
     /** The database of the actor. */
@@ -104,7 +106,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * }
    * ```
    */
-  async work(userId: number, inputs: ActorInputs) {
+  async work(inputs: ActorInputs) {
     // TODO: implement actor stepping logic
     if (inputs.length === 0) {
       throw new Error("No inputs provided");
@@ -119,7 +121,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
       type: "message",
       content: `Received input: ${input.text}.`,
     });
-    const bufferMessage = BufferMessage.fromUser(userId, "User", inputs);
+    const bufferMessage = BufferMessage.fromUser(this.userId, "User", inputs);
     this.logger.debug(`Received input when [${this.currentStatus}].`, inputs);
     this.queue.push(bufferMessage);
     this.enqueueBufferWrite(bufferMessage);
@@ -180,7 +182,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     if (isAgentEvent(event, AgentEvents.emaReplyReceived)) {
       const reply = event.content.reply;
       this.hasEmaReplyInRun = true;
-      this.enqueueBufferWrite(BufferMessage.fromEma(this.actorId, reply));
+      this.enqueueBufferWrite(BufferMessage.fromEma(this.userId, reply));
     }
     this.eventStream.push(event);
     this.broadcast();
