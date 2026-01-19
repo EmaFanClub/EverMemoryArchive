@@ -8,7 +8,9 @@ import type { Message, ActorEvent } from "ema";
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const chatAreaRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   // Set up SSE connection to subscribe to actor events
   useEffect(() => {
@@ -58,10 +60,16 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
-    });
+    const chatArea = chatAreaRef.current;
+    if (!chatArea) {
+      return;
+    }
+    if (shouldAutoScrollRef.current) {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }
   }, [messages]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -121,7 +129,20 @@ export default function ChatPage() {
         <h1 className={styles.title}>How can I help you?</h1>
       </div>
 
-      <div className={styles.chatArea}>
+      <div
+        className={styles.chatArea}
+        ref={chatAreaRef}
+        onScroll={() => {
+          const chatArea = chatAreaRef.current;
+          if (!chatArea) {
+            return;
+          }
+          const gap = 80;
+          const distanceToBottom =
+            chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight;
+          shouldAutoScrollRef.current = distanceToBottom <= gap;
+        }}
+      >
         {messages.length === 0 ? (
           <div className={styles.emptyState}>
             Start a conversation with MeowGPT
