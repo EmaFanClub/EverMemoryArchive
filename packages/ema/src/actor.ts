@@ -7,7 +7,13 @@ import type {
   LongTermMemorySearcher,
   ShortTermMemoryDB,
 } from "./db";
-import { BufferMessage } from "./memory/memory";
+import type { BufferMessage } from "./memory/memory";
+import {
+  bufferMessageFromEma,
+  bufferMessageFromUser,
+  bufferMessageToPrompt,
+  bufferMessageToUserMessage,
+} from "./memory/utils";
 import type {
   ActorState,
   SearchActorMemoryResult,
@@ -101,7 +107,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     const bufferText =
       bufferWindow.length === 0
         ? "None."
-        : bufferWindow.map((item) => item.toPrompt()).join("\n");
+        : bufferWindow.map((item) => bufferMessageToPrompt(item)).join("\n");
     return systemPrompt.replace("{MEMORY_BUFFER}", bufferText);
   }
 
@@ -134,7 +140,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
       type: "message",
       content: `Received input: ${input.text}.`,
     });
-    const bufferMessage = BufferMessage.fromUser(this.userId, "User", inputs);
+    const bufferMessage = bufferMessageFromUser(this.userId, "User", inputs);
     this.logger.debug(`Received input when [${this.currentStatus}].`, inputs);
     this.queue.push(bufferMessage);
     this.enqueueBufferWrite(bufferMessage);
@@ -195,7 +201,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     if (isAgentEvent(event, AgentEvents.emaReplyReceived)) {
       const reply = event.content.reply;
       this.hasEmaReplyInRun = true;
-      this.enqueueBufferWrite(BufferMessage.fromEma(this.userId, reply));
+      this.enqueueBufferWrite(bufferMessageFromEma(this.userId, reply));
     }
     this.eventStream.push(event);
     this.broadcast();
@@ -262,14 +268,14 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
         const batches = this.queue.splice(0, this.queue.length);
         if (this.resumeStateAfterAbort && this.agentState) {
           this.agentState.messages.push(
-            ...batches.map((item) => item.toUserMessage()),
+            ...batches.map((item) => bufferMessageToUserMessage(item)),
           );
         } else {
           this.agentState = {
             systemPrompt: await this.buildSystemPrompt(
               this.config.systemPrompt,
             ),
-            messages: batches.map((item) => item.toUserMessage()),
+            messages: batches.map((item) => bufferMessageToUserMessage(item)),
             tools: this.config.baseTools,
           };
         }

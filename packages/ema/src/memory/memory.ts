@@ -1,115 +1,13 @@
-import dayjs from "dayjs";
-
-import type { EmaReply } from "../tools/ema_reply_tool";
-import type { Content, EmaMessage, UserMessage } from "../schema";
+import type { EmaMessage, UserMessage } from "../schema";
 
 /**
  * Represents a persisted message with metadata for buffer history.
  */
-export class BufferMessage {
+export interface BufferMessage {
   id: number;
   name: string;
   message: UserMessage | EmaMessage;
   time: number;
-
-  /**
-   * Creates a buffer message with user/actor metadata.
-   * @param params - Construction parameters.
-   * @param params.id - User or actor identifier.
-   * @param params.name - Display name for the sender.
-   * @param params.message - Message payload for persistence and rendering.
-   * @param params.time - Optional timestamp (milliseconds since epoch).
-   */
-  constructor(params: {
-    id: number;
-    name: string;
-    message: UserMessage | EmaMessage;
-    time?: number;
-  }) {
-    this.time = params.time ?? Date.now();
-    this.id = params.id;
-    this.name = params.name;
-    this.message = params.message;
-  }
-
-  /**
-   * Converts the buffer message to a user message for API calls.
-   * @returns UserMessage with a context header prepended.
-   */
-  toUserMessage(): UserMessage {
-    if (this.message.role !== "user") {
-      throw new Error(`Expected user message, got ${this.message.role}`);
-    }
-    const context = [
-      "[CONTEXT]",
-      `time: ${dayjs(this.time).format("YYYY-MM-DD HH:mm:ss")}`,
-      `id: ${this.id}`,
-      `name: ${this.name}`,
-      "[/CONTEXT]",
-    ].join("\n");
-    return {
-      role: "user",
-      contents: [{ type: "text", text: context }, ...this.message.contents],
-    };
-  }
-
-  /**
-   * Formats the message into a single line for prompt injection.
-   * @returns Prompt line containing time, role, id, name, and message text.
-   */
-  toPrompt(): string {
-    const contents = this.message.contents
-      .map((part) => (part.type === "text" ? part.text : JSON.stringify(part)))
-      .join("\n");
-    return `- [${dayjs(this.time).format("YYYY-MM-DD HH:mm:ss")}][role:${
-      this.message.role
-    }][id:${this.id}][name:${this.name}] ${contents}`;
-  }
-
-  /**
-   * Builds a buffer message from user inputs.
-   * @param userId - User identifier.
-   * @param userName - User display name.
-   * @param inputs - User message contents.
-   * @param time - Optional timestamp (milliseconds since epoch).
-   * @returns A BufferMessage representing the user message.
-   */
-  static fromUser(
-    userId: number,
-    userName: string,
-    inputs: Content[],
-    time?: number,
-  ): BufferMessage {
-    return new BufferMessage({
-      id: userId,
-      name: userName,
-      message: { role: "user", contents: inputs },
-      time,
-    });
-  }
-
-  /**
-   * Builds a buffer message from an EMA reply.
-   * @param actorId - Actor identifier.
-   * @param reply - EMA reply payload.
-   * @param time - Optional timestamp (milliseconds since epoch).
-   * @returns A BufferMessage representing the EMA reply.
-   */
-  static fromEma(
-    actorId: number,
-    reply: EmaReply,
-    time?: number,
-  ): BufferMessage {
-    return new BufferMessage({
-      id: actorId,
-      name: "ema",
-      message: {
-        role: "ema",
-        contents: [{ type: "text", text: JSON.stringify(reply) }],
-      },
-      time,
-    });
-  }
 }
 
 /**
