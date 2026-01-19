@@ -6,7 +6,7 @@ import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 import type { LLMClient } from "./llm";
 import { AgentConfig } from "./config";
 import { Logger } from "./logger";
-import { RetryExhaustedError } from "./retry";
+import { RetryExhaustedError, isAbortError } from "./retry";
 import {
   type LLMResponse,
   type Message,
@@ -272,7 +272,7 @@ export class Agent {
         );
         this.logger.debug(`LLM response received.`, response);
       } catch (error) {
-        if (this.isAbortError(error)) {
+        if (isAbortError(error)) {
           this.finishAborted();
           return;
         }
@@ -388,13 +388,6 @@ export class Agent {
       msg: error.message,
       error,
     });
-  }
-
-  private isAbortError(error: unknown): boolean {
-    return (
-      error instanceof Error &&
-      (error.name === "AbortError" || error.message === "Aborted")
-    );
   }
 
   /** Get message history. */

@@ -69,6 +69,16 @@ export class RetryExhaustedError extends Error {
   }
 }
 
+export function isAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if (error.name === "AbortError") {
+    return true;
+  }
+  return error.message.toLowerCase().includes("abort");
+}
+
 /**
  * Async function retry decorator.
  */
@@ -128,14 +138,6 @@ export function asyncRetry(
     };
     return descriptor;
   };
-}
-
-function isAbortError(error: Error): boolean {
-  return (
-    error.name === "AbortError" ||
-    error.message.includes("aborted") ||
-    error.message.includes("aborted request")
-  );
 }
 
 /**
