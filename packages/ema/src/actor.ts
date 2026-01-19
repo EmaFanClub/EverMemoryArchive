@@ -82,6 +82,17 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     });
   }
 
+  /**
+   * Builds the system prompt by injecting the current short-term memory buffer.
+   *
+   * The placeholder `{MEMORY_BUFFER}` in the provided `systemPrompt` will be
+   * replaced with a textual representation of up to the last 10 buffer items.
+   * All occurrences of `{MEMORY_BUFFER}` are replaced. If the placeholder
+   * does not appear in `systemPrompt`, the original string is returned.
+   *
+   * @param systemPrompt - The system prompt template containing `{MEMORY_BUFFER}`.
+   * @returns The system prompt with the memory buffer injected.
+   */
   async buildSystemPrompt(systemPrompt: string): Promise<string> {
     const bufferWindow = await this.getBuffer(10);
     const bufferText =
