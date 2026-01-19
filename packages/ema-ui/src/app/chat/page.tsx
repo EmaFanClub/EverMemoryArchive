@@ -8,7 +8,6 @@ import type { Message, ActorEvent } from "ema";
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Set up SSE connection to subscribe to actor events
@@ -40,11 +39,6 @@ export default function ChatPage() {
               ]);
             }
           });
-        }
-
-        // Update loading state based on actor status
-        if (response.status === "idle") {
-          setIsLoading(false);
         }
       } catch (error) {
         console.error("Error parsing SSE event:", error);
@@ -83,8 +77,6 @@ export default function ChatPage() {
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInputValue("");
-    setIsLoading(true);
-
     try {
       // Send input to actor using the new API
       const response = await fetch("/api/actor/input", {
@@ -107,7 +99,6 @@ export default function ChatPage() {
       }
 
       // Response will come through SSE, so we don't need to process it here
-      // Note: isLoading remains true until SSE event with status 'idle' arrives
     } catch (error) {
       console.error("Error:", error);
       // Add error message to chat
@@ -121,8 +112,6 @@ export default function ChatPage() {
         ],
       };
       setMessages([...updatedMessages, errorMessage]);
-      // Reset loading state since no SSE event will come if the request failed
-      setIsLoading(false);
     }
   };
 
