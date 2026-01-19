@@ -70,7 +70,7 @@ export default function ChatPage() {
         block: "end",
       });
     }
-  }, [messages]);
+  }, [messages.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
