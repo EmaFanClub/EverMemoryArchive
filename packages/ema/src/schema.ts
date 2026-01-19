@@ -96,3 +96,8 @@ export function isModelMessage(message: Message): message is ModelMessage {
 export function isUserMessage(message: Message): message is UserMessage {
   return message.role === "user";
 }
+
+/** Type guard for EMA messages. */
+export function isEmaMessage(message: Message): message is EmaMessage {
+  return message.role === "ema";
+}
