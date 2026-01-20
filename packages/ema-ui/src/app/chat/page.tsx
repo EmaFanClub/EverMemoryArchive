@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import styles from "./page.module.css";
-import type { Message, ActorEvent } from "ema";
+import type { ActorAgentEvent, Message } from "ema";
 
 // todo: consider adding tests for this component to verify message state management
 export default function ChatPage() {
@@ -18,29 +18,20 @@ export default function ChatPage() {
 
     eventSource.onmessage = (event) => {
       try {
-        const response = JSON.parse(event.data);
-
-        // Process events from the actor
-        if (response.events && Array.isArray(response.events)) {
-          response.events.forEach((evt: ActorEvent) => {
-            console.log("evt", evt);
-
-            const content = evt.content;
-            // Handles LLM response which contains the assistant's message
-            if (
-              evt.type === "emaReplyReceived" &&
-              typeof content === "object" &&
-              "reply" in content
-            ) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "model",
-                  contents: [{ type: "text", text: content.reply.response }],
-                },
-              ]);
-            }
-          });
+        const evt = JSON.parse(event.data) as ActorAgentEvent;
+        const content = evt.content;
+        if (
+          evt.kind === "emaReplyReceived" &&
+          typeof content === "object" &&
+          "reply" in content
+        ) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "model",
+              contents: [{ type: "text", text: content.reply.response }],
+            },
+          ]);
         }
       } catch (error) {
         console.error("Error parsing SSE event:", error);

@@ -6,7 +6,7 @@
 import { getServer } from "../../shared-server";
 import * as k from "arktype";
 import { getQuery } from "../../utils";
-import type { ActorResponse } from "ema";
+import type { ActorAgentEvent } from "ema";
 
 const ActorSseRequest = k.type({
   userId: "string.numeric",
@@ -41,21 +41,23 @@ export const GET = getQuery(ActorSseRequest)(async (query) => {
   );
   const encoder = new TextEncoder();
   /* The handle to unsubscribe from the actor events. */
-  let eventCallback: (response: ActorResponse) => void;
+  let eventCallback: (event: ActorAgentEvent) => void;
 
   const customReadable = new ReadableStream({
     start(controller) {
-      actor.subscribe(
-        (eventCallback = (response) => {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(response)}\n\n`),
-          );
-        }),
-      );
+      eventCallback = (event) => {
+        if (event.kind !== "emaReplyReceived") {
+          return;
+        }
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+        );
+      };
+      actor.events.on("agent", eventCallback);
     },
     cancel() {
       if (eventCallback) {
-        actor.unsubscribe(eventCallback);
+        actor.events.off("agent", eventCallback);
       }
     },
   });

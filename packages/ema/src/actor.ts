@@ -1,6 +1,7 @@
+import { EventEmitter } from "node:events";
 import type { Config } from "./config";
 import { Agent, AgentEventNames } from "./agent";
-import type { AgentEventName, AgentEvent } from "./agent";
+import type { AgentEventName, AgentEvent, AgentEventUnion } from "./agent";
 import type {
   ActorDB,
   LongTermMemoryDB,
@@ -31,14 +32,12 @@ import { type AgentState } from "./agent";
  * A facade of the actor functionalities between the server (system) and the agent (actor).
  */
 export class ActorWorker implements ActorStateStorage, ActorMemory {
+  readonly events: ActorEventsEmitter =
+    new EventEmitter<ActorEventMap>() as ActorEventsEmitter;
   /** The agent instance. */
   private readonly agent: Agent;
-  /** The subscribers of the actor. */
-  private readonly subscribers = new Set<(response: ActorResponse) => void>();
   /** The current status of the actor. */
   private currentStatus: ActorStatus = "idle";
-  /** The event stream of the actor. */
-  private eventStream = new EventHistory();
   /** Logger */
   private readonly logger: Logger = Logger.create({
     name: "actor",
@@ -91,7 +90,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   ) {
     const bind = <K extends AgentEventName>(eventName: K) => {
       this.agent.events.on(eventName, (content: AgentEvent<K>) => {
-        this.emitEvent({ type: eventName, content });
+        this.emitEvent("agent", { kind: eventName, content });
       });
     };
     events.forEach(bind);
@@ -142,8 +141,8 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
       }
     }
     const input = inputs[0];
-    this.emitEvent({
-      type: "message",
+    this.emitEvent("message", {
+      kind: "message",
       content: `Received input: ${input.text}.`,
     });
     const bufferMessage = bufferMessageFromUser(this.userId, "User", inputs);
@@ -166,56 +165,27 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   }
 
   /**
-   * Subscribes to the actor events.
-   * @param cb - The callback to receive the actor events.
-   */
-  public subscribe(cb: (response: ActorResponse) => void) {
-    cb({
-      status: this.currentStatus,
-      events: this.eventStream.pastEvents(),
-    });
-    this.subscribers.add(cb);
-  }
-
-  /**
-   * Unsubscribes from the actor events.
-   * @param cb - The callback to unsubscribe from.
-   */
-  public unsubscribe(cb: (response: ActorResponse) => void) {
-    this.subscribers.delete(cb);
-  }
-
-  /**
-   * Broadcasts the actor events to the subscribers.
-   * @param status - The status of the actor.
-   */
-  private broadcast() {
-    const response: ActorResponse = {
-      status: this.currentStatus,
-      events: this.eventStream.advance(),
-    };
-    for (const cb of this.subscribers) {
-      cb({ ...response });
-    }
-  }
-
-  /**
    * Emits an event to the event stream.
    * @param event - The event to emit.
    */
-  private emitEvent(event: ActorEvent) {
-    if (isAgentEvent(event, "emaReplyReceived")) {
-      const reply = event.content.reply;
+  private emitEvent<K extends ActorEventName>(
+    event: K,
+    content: ActorEvent<K>,
+  ) {
+    if (isAgentEvent(content, "emaReplyReceived")) {
+      const reply = content.content.reply;
       this.hasEmaReplyInRun = true;
       this.enqueueBufferWrite(bufferMessageFromEma(this.userId, reply));
     }
-    this.eventStream.push(event);
-    this.broadcast();
+    this.events.emit(event, content);
   }
 
   private setStatus(status: ActorStatus): void {
     this.currentStatus = status;
-    this.broadcast();
+    this.events.emit("message", {
+      kind: "message",
+      content: `Actor status: ${status}.`,
+    });
   }
 
   /**
@@ -360,86 +330,109 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
 export type ActorInputs = Content[];
 
 /**
- * Convert actor inputs to a single user message.
- */
-
-/**
- * The response from the actor.
- */
-export interface ActorResponse {
-  /** A short status text of the actor. */
-  status: ActorStatus;
-  /** The events from the actor. */
-  events: ActorEvent[];
-}
-
-/**
  * The status of the actor.
  */
 export type ActorStatus = "preparing" | "running" | "idle";
 
 /**
- * A event from the actor.
- */
-export type ActorEvent = ActorMessage | EventFromAgent;
-
-/**
- * Type guard that narrows an actor event to a specific agent event (or any agent event).
- */
-export function isAgentEvent<K extends AgentEventName | undefined>(
-  event: ActorEvent | undefined,
-  type?: K,
-): event is EventFromAgent &
-  (K extends AgentEventName
-    ? { type: K; content: AgentEvent<K> }
-    : EventFromAgent) {
-  if (!event) return false;
-  if (event.type === "message") return false;
-  return type ? event.type === type : true;
-}
-
-/**
  * A message from the actor.
  */
-export interface ActorMessage {
-  type: "message";
+export interface ActorMessageEvent {
+  /** The kind of the event. */
+  kind: "message";
   /** The content of the message. */
   content: string;
 }
 
 /**
- * A event from the agent.
+ * A agent from the agent.
  */
-export interface EventFromAgent {
-  /** The type of the event. */
-  type: AgentEventName;
-  /** The content of the event. */
-  content: AgentEvent<AgentEventName>;
+export interface ActorAgentEvent {
+  /** The kind of the event. */
+  kind: AgentEventName;
+  /** The content of the message. */
+  content: AgentEventUnion;
 }
 
 /**
- * A history of newly produced actor events since agent started.
+ * The event map for the actor client.
  */
-class EventHistory {
-  /** The index of the current event. */
-  eventIdx = 0;
-  /** The list of events. */
-  events: ActorEvent[] = [];
+export interface ActorEventMap {
+  message: [ActorMessageEvent];
+  agent: [ActorAgentEvent];
+}
 
-  /** Pushes an event to the history. */
-  push(event: ActorEvent) {
-    this.events.push(event);
-  }
+/**
+ * A event from the actor.
+ */
+export type ActorEventName = keyof ActorEventMap;
 
-  /** Advances the history to the next event. */
-  advance() {
-    const events = this.events.slice(this.eventIdx);
-    this.eventIdx += events.length;
-    return events;
-  }
+/** Type mapping of actor event names to their corresponding event data types. */
+export type ActorEvent<K extends ActorEventName> = ActorEventMap[K][0];
 
-  /** Gets the past events. */
-  pastEvents() {
-    return this.events.slice(0, this.eventIdx);
-  }
+/** Union type of all actor event contents. */
+export type ActorEventUnion = ActorEvent<ActorEventName>;
+
+/** Constant mapping of actor event names for iteration */
+export const ActorEventNames: Record<ActorEventName, ActorEventName> = {
+  message: "message",
+  agent: "agent",
+};
+
+/** Event source interface for the actor */
+export interface ActorEventSource {
+  on<K extends ActorEventName>(
+    event: K,
+    handler: (content: ActorEvent<K>) => void,
+  ): this;
+  off<K extends ActorEventName>(
+    event: K,
+    handler: (content: ActorEvent<K>) => void,
+  ): this;
+  once<K extends ActorEventName>(
+    event: K,
+    handler: (content: ActorEvent<K>) => void,
+  ): this;
+  emit<K extends ActorEventName>(event: K, content: ActorEvent<K>): boolean;
+}
+
+export type ActorEventsEmitter = EventEmitter<ActorEventMap> & ActorEventSource;
+
+// /**
+//  * A history of newly produced actor events since agent started.
+//  */
+// class EventHistory {
+//   /** The index of the current event. */
+//   eventIdx = 0;
+//   /** The list of events. */
+//   events: ActorEventUnion[] = [];
+
+//   /** Pushes an event to the history. */
+//   push(event: ActorEventUnion) {
+//     this.events.push(event);
+//   }
+
+//   /** Advances the history to the next event. */
+//   advance() {
+//     const events = this.events.slice(this.eventIdx);
+//     this.eventIdx += events.length;
+//     return events;
+//   }
+
+//   /** Gets the past events. */
+//   pastEvents() {
+//     return this.events.slice(0, this.eventIdx);
+//   }
+// }
+
+export function isAgentEvent<K extends AgentEventName | undefined>(
+  event: ActorEventUnion,
+  kind?: K,
+): event is ActorAgentEvent &
+  (K extends AgentEventName
+    ? { kind: K; content: AgentEvent<K> }
+    : ActorAgentEvent) {
+  if (!event) return false;
+  if (event.kind === "message") return false;
+  return kind ? event.kind === kind : true;
 }
