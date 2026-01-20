@@ -17,6 +17,7 @@ import type {
 import type { Tool } from "../tools/base";
 import { wrapWithRetry } from "../retry";
 import type { LLMApiConfig, RetryConfig } from "../config";
+import { FetchWithProxy } from "./proxy";
 
 /** OpenAI-compatible client that adapts EMA schema to Chat Completions. */
 export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
@@ -31,6 +32,9 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
     const options: ClientOptions = {
       apiKey: config.key,
       baseURL: config.base_url,
+      fetch: new FetchWithProxy(
+        process.env.HTTPS_PROXY || process.env.https_proxy,
+      ).createFetcher(),
     };
     this.client = new OpenAI(options);
   }

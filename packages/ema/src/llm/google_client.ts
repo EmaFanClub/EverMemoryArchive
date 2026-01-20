@@ -17,6 +17,31 @@ import type {
   LLMResponse,
 } from "../schema";
 import type { LLMApiConfig, RetryConfig } from "../config";
+import { FetchWithProxy } from "./proxy";
+
+/**
+ * A wrapper around the GoogleGenAI class that uses a custom fetch implementation.
+ */
+class GenAI extends GoogleGenAI {
+  constructor(
+    options: GoogleGenAIOptions,
+    private readonly fetcher: (
+      url: string,
+      requestInit?: RequestInit,
+    ) => Promise<Response>,
+  ) {
+    super(options);
+    if (!(this.apiClient as any).apiCall) {
+      throw new Error("apiCall cannot be patched");
+    }
+    // Monkey patches apiCall to use our fetch.
+    (this.apiClient as any).apiCall = async (url: string, requestInit: any) => {
+      return this.fetcher(url, requestInit).catch((e) => {
+        throw new Error(`exception ${e} sending request`);
+      });
+    };
+  }
+}
 
 /** Google Generative AI client that adapts EMA schema to the native Gemini API format. */
 export class GoogleClient extends LLMClientBase implements SchemaAdapter {
@@ -34,7 +59,12 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
         baseUrl: config.base_url,
       },
     };
-    this.client = new GoogleGenAI(options);
+    this.client = new GenAI(
+      options,
+      new FetchWithProxy(
+        process.env.HTTPS_PROXY || process.env.https_proxy,
+      ).createFetcher(),
+    );
   }
 
   /** Map EMA message shape to Gemini request content. */
