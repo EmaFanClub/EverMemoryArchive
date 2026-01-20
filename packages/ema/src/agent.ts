@@ -73,14 +73,8 @@ export type AgentState = {
   tools: Tool[];
 };
 
-/** Meaning: state belongs to agent, externally initialized */
-export type AgentStateCallback1 = (
-  state: AgentState,
-  next: () => Promise<void>,
-) => Promise<void>;
-
-/** Meaning: state belongs to the external, agent is the executing engine. */
-export type AgentStateCallback2 = (
+/** Callback type for running the agent with a given state. */
+export type AgentStateCallback = (
   next: (state: AgentState) => Promise<void>,
 ) => Promise<void>;
 
@@ -205,14 +199,9 @@ export class Agent {
     return this.run(async (loop) => {
       await loop(state);
     });
-    // Is equivalent to the following implementation ? Do we need AgentStateCallback2 ?
-    // this.status = "running";
-    // this.contextManager.state = state;
-    // await this.mainLoop();
-    // this.status = "idle";
   }
 
-  async run(callback: AgentStateCallback2): Promise<void> {
+  async run(callback: AgentStateCallback): Promise<void> {
     this.status = "running";
     this.abortRequested = false;
     this.abortController = new AbortController();
