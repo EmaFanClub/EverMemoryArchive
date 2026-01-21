@@ -1,5 +1,6 @@
 /**
  * Debug DB endpoint (in-memory mongo only).
+ * TODO: Remove this endpoint before deploying to production
  */
 
 import { getServer } from "../../shared-server";
@@ -34,11 +35,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const docs = await db
-    .collection(collection)
-    .find()
-    .limit(Number.isNaN(limit) ? 200 : limit)
-    .toArray();
+  const docs = await db.collection(collection).find().limit(limit).toArray();
 
   return new Response(JSON.stringify({ collection, docs }), {
     status: 200,

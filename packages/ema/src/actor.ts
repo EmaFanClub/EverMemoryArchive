@@ -65,8 +65,12 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * Creates a new actor worker with storage access and event wiring.
    * @param config - Actor configuration.
    * @param userId - User identifier for message attribution.
+   * @param userName - User display name for message attribution.
    * @param actorId - Actor identifier for memory and storage.
+   * @param actorName - Actor display name for message attribution.
+   * @param conversationId - Conversation identifier for message history.
    * @param actorDB - Actor persistence interface.
+   * @param conversationMessageDB - Conversation message persistence interface.
    * @param shortTermMemoryDB - Short-term memory persistence interface.
    * @param longTermMemoryDB - Long-term memory persistence interface.
    * @param longTermMemorySearcher - Long-term memory search interface.
