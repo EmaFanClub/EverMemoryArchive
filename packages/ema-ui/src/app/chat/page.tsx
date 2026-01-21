@@ -14,7 +14,9 @@ export default function ChatPage() {
 
   // Set up SSE connection to subscribe to actor events
   useEffect(() => {
-    const eventSource = new EventSource("/api/actor/sse?userId=1&actorId=1");
+    const eventSource = new EventSource(
+      "/api/actor/sse?userId=1&actorId=1&conversationId=1",
+    );
 
     eventSource.onmessage = (event) => {
       try {
@@ -86,6 +88,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           userId: 1,
           actorId: 1,
+          conversationId: 1,
           // TODO: If supporting more input types, need to adjust here
           inputs: userMessage.contents,
         }),

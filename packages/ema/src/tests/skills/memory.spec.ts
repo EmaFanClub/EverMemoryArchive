@@ -2,6 +2,7 @@ import { expect, test, describe, beforeEach, afterEach } from "vitest";
 import {
   createMongo,
   MongoActorDB,
+  MongoConversationMessageDB,
   MongoShortTermMemoryDB,
   MongoLongTermMemoryDB,
   LanceMemoryVectorSearcher,
@@ -47,8 +48,12 @@ describeLLM("MemorySkill", () => {
     worker = new ActorWorker(
       Config.load(),
       1,
+      "User",
+      1,
+      "EMA",
       1,
       new MongoActorDB(mongo),
+      new MongoConversationMessageDB(mongo),
       new MongoShortTermMemoryDB(mongo),
       new MongoLongTermMemoryDB(mongo),
       searcher,

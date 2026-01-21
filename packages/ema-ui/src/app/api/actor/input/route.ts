@@ -15,6 +15,7 @@ const Content = k.type({
 const ActorInputRequest = k.type({
   userId: "number.integer",
   actorId: "number.integer",
+  conversationId: "number.integer",
   inputs: Content.array(),
 });
 
@@ -24,6 +25,7 @@ const ActorInputRequest = k.type({
  * Body:
  *   - userId (`number`): User ID
  *   - actorId (`number`): Actor ID
+ *   - conversationId (`number`): Conversation ID
  *   - inputs (`Content[]`): Array of inputs
  *
  * Content:
@@ -41,6 +43,7 @@ const ActorInputRequest = k.type({
  *   body: JSON.stringify({
  *     userId: 1,
  *     actorId: 1,
+ *     conversationId: 1,
  *     inputs: [{ type: "text", text: "Hello, world!" }],
  *   }),
  * });
@@ -48,7 +51,11 @@ const ActorInputRequest = k.type({
  */
 export const POST = postBody(ActorInputRequest)(async (body) => {
   const server = await getServer();
-  const actor = await server.getActor(body.userId, body.actorId);
+  const actor = await server.getActor(
+    body.userId,
+    body.actorId,
+    body.conversationId,
+  );
 
   // Processes input.
   await actor.work(body.inputs);

@@ -39,7 +39,7 @@ import { ActorWorker } from "./actor";
  * The server class for the EverMemoryArchive.
  */
 export class Server {
-  actors: Map<number, ActorWorker> = new Map();
+  actors: Map<string, ActorWorker> = new Map();
 
   config: Config;
   private llmClient: LLMClient;
@@ -66,6 +66,10 @@ export class Server {
   ) {
     this.config = config;
     this.llmClient = new LLMClient(config.llm);
+  }
+
+  private actorKey(userId: number, actorId: number, conversationId: number) {
+    return `${userId}:${actorId}:${conversationId}`;
   }
 
   static async create(
@@ -226,28 +230,46 @@ export class Server {
   }
 
   /**
-   * Gets an actor by user ID and actor ID.
+   * Gets an actor by user ID, actor ID, and conversation ID.
    * @param userId - The user ID
    * @param actorId - The actor ID
+   * @param conversationId - The conversation ID
    * @returns The actor
    */
-  async getActor(_userId: number, actorId: number): Promise<ActorWorker> {
+  async getActor(
+    userId: number,
+    actorId: number,
+    conversationId: number,
+  ): Promise<ActorWorker> {
     // todo: use userId to authorize request.
-
-    let actor = this.actors.get(actorId);
+    const key = this.actorKey(userId, actorId, conversationId);
+    let actor = this.actors.get(key);
     if (!actor) {
+      const user = await this.userDB.getUser(userId);
+      const actorName = "EMA";
+      const userName = user?.name || "User";
+      await this.conversationDB.upsertConversation({
+        id: conversationId,
+        name: "default",
+        actorId,
+        userId,
+      });
       actor = new ActorWorker(
         this.config,
-        _userId,
+        userId,
+        userName,
         actorId,
+        actorName,
+        conversationId,
         this.actorDB,
+        this.conversationMessageDB,
         this.shortTermMemoryDB,
         this.longTermMemoryDB,
         this.longTermMemoryVectorSearcher,
       );
-      this.actors.set(actorId, actor);
+      this.actors.set(key, actor);
       await this.userOwnActorDB.addActorToUser({
-        userId: _userId,
+        userId,
         actorId,
       });
     }

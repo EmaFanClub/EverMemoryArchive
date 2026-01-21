@@ -401,6 +401,14 @@ export interface ListConversationMessagesRequest {
    * The conversation ID to filter conversation messages by
    */
   conversationId?: number;
+  /**
+   * Max number of messages to return
+   */
+  limit?: number;
+  /**
+   * Sort order by createdAt
+   */
+  sort?: "asc" | "desc";
 }
 
 /**
