@@ -159,8 +159,8 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     this.enqueueBufferWrite(bufferMessage);
 
     if (this.isBusy()) {
-      this.resumeStateAfterAbort = !this.hasEmaReplyInRun;
       await this.abortCurrentRun();
+      this.resumeStateAfterAbort = !this.hasEmaReplyInRun;
       return;
     }
 
@@ -178,6 +178,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     if (isAgentEvent(content, "emaReplyReceived")) {
       const reply = content.content.reply;
       this.hasEmaReplyInRun = true;
+      this.resumeStateAfterAbort = false;
       this.enqueueBufferWrite(
         bufferMessageFromEma(this.actorId, this.actorName, reply),
       );
