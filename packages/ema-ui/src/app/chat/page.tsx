@@ -8,9 +8,12 @@ import type { ActorAgentEvent, Message } from "ema";
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [snapshotting, setSnapshotting] = useState(false);
+  const [snapshotStatus, setSnapshotStatus] = useState<string | null>(null);
   const chatAreaRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
+  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Set up SSE connection to subscribe to actor events
   useEffect(() => {
@@ -97,6 +100,25 @@ export default function ChatPage() {
     }
   }, [messages.length]);
 
+  useEffect(() => {
+    if (!snapshotStatus) {
+      return;
+    }
+    if (snapshotTimerRef.current) {
+      clearTimeout(snapshotTimerRef.current);
+    }
+    snapshotTimerRef.current = setTimeout(() => {
+      setSnapshotStatus(null);
+      snapshotTimerRef.current = null;
+    }, 3200);
+    return () => {
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current);
+        snapshotTimerRef.current = null;
+      }
+    };
+  }, [snapshotStatus]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
@@ -149,11 +171,53 @@ export default function ChatPage() {
     }
   };
 
+  const handleSnapshot = async () => {
+    setSnapshotStatus(null);
+    setSnapshotting(true);
+    try {
+      const response = await fetch("/api/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "default" }),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        setSnapshotStatus(text || "Snapshot failed.");
+        return;
+      }
+      const data = (await response.json().catch(() => null)) as {
+        fileName?: string;
+      } | null;
+      setSnapshotStatus(
+        data?.fileName
+          ? `Snapshot saved: ${data.fileName}`
+          : "Snapshot created.",
+      );
+    } catch (error) {
+      console.error("Snapshot error:", error);
+      setSnapshotStatus("Snapshot failed.");
+    } finally {
+      setSnapshotting(false);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>How can I help you?</h1>
+        <div>
+          <h1 className={styles.title}>How can I help you?</h1>
+        </div>
+        <button
+          className={styles.snapshotButton}
+          onClick={handleSnapshot}
+          disabled={snapshotting}
+        >
+          {snapshotting ? "Snapshotting..." : "Snapshot"}
+        </button>
       </div>
+      {snapshotStatus ? (
+        <div className={styles.snapshotStatus}>{snapshotStatus}</div>
+      ) : null}
 
       <div
         className={styles.chatArea}

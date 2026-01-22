@@ -14,12 +14,62 @@
   justify-content: center;
   gap: 1rem;
   margin-bottom: 2rem;
+  position: relative;
 }
 
 .title {
   font-size: 2rem;
   font-weight: 600;
   color: #ededed;
+}
+
+.snapshotButton {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid #3a3a3a;
+  background: #242424;
+  color: #ededed;
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.snapshotButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.snapshotStatus {
+  max-width: 800px;
+  margin: -1rem auto 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cdd6f7;
+  font-size: 0.9rem;
+  animation: toastFade 3s ease forwards;
+}
+
+@keyframes toastFade {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .chatArea {
