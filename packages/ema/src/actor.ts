@@ -7,6 +7,7 @@ import type {
   LongTermMemoryDB,
   LongTermMemorySearcher,
   ShortTermMemoryDB,
+  ConversationMessageDB,
 } from "./db";
 import type { BufferMessage } from "./memory/memory";
 import {
@@ -47,8 +48,6 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   });
   /** Cached agent state for the latest run. */
   private agentState: AgentState | null = null;
-  /** In-memory buffer to simulate persisted records without DB. */
-  private _buffer: BufferMessage[] = [];
   /** Queue of pending actor input batches. */
   private queue: BufferMessage[] = [];
   /** Tracks whether a run produced any ema_reply events. */
@@ -66,8 +65,12 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * Creates a new actor worker with storage access and event wiring.
    * @param config - Actor configuration.
    * @param userId - User identifier for message attribution.
+   * @param userName - User display name for message attribution.
    * @param actorId - Actor identifier for memory and storage.
+   * @param actorName - Actor display name for message attribution.
+   * @param conversationId - Conversation identifier for message history.
    * @param actorDB - Actor persistence interface.
+   * @param conversationMessageDB - Conversation message persistence interface.
    * @param shortTermMemoryDB - Short-term memory persistence interface.
    * @param longTermMemoryDB - Long-term memory persistence interface.
    * @param longTermMemorySearcher - Long-term memory search interface.
@@ -75,8 +78,12 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   constructor(
     private readonly config: Config,
     private readonly userId: number,
+    private readonly userName: string,
     private readonly actorId: number,
+    private readonly actorName: string,
+    private readonly conversationId: number,
     private readonly actorDB: ActorDB,
+    private readonly conversationMessageDB: ConversationMessageDB,
     private readonly shortTermMemoryDB: ShortTermMemoryDB,
     private readonly longTermMemoryDB: LongTermMemoryDB,
     private readonly longTermMemorySearcher: LongTermMemorySearcher,
@@ -146,14 +153,18 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
       kind: "message",
       content: `Received input: ${input.text}.`,
     });
-    const bufferMessage = bufferMessageFromUser(this.userId, "User", inputs);
+    const bufferMessage = bufferMessageFromUser(
+      this.userId,
+      this.userName,
+      inputs,
+    );
     this.logger.debug(`Received input when [${this.currentStatus}].`, inputs);
     this.queue.push(bufferMessage);
     this.enqueueBufferWrite(bufferMessage);
 
     if (this.isBusy()) {
-      this.resumeStateAfterAbort = !this.hasEmaReplyInRun;
       await this.abortCurrentRun();
+      this.resumeStateAfterAbort = !this.hasEmaReplyInRun;
       return;
     }
 
@@ -171,7 +182,10 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     if (isAgentEvent(content, "emaReplyReceived")) {
       const reply = content.content.reply;
       this.hasEmaReplyInRun = true;
-      this.enqueueBufferWrite(bufferMessageFromEma(this.actorId, "EMA", reply));
+      this.resumeStateAfterAbort = false;
+      this.enqueueBufferWrite(
+        bufferMessageFromEma(this.actorId, this.actorName, reply),
+      );
     }
     this.events.emit(event, content);
   }
@@ -209,15 +223,45 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   }
 
   private async addBuffer(message: BufferMessage): Promise<void> {
-    // TODO: persist to DB
-    await Promise.resolve();
-    this._buffer.push(message);
+    const payload =
+      message.kind === "user"
+        ? { kind: "user" as const, userId: message.id }
+        : { kind: "actor" as const, actorId: message.id };
+    await this.conversationMessageDB.addConversationMessage({
+      conversationId: this.conversationId,
+      message: {
+        ...payload,
+        contents: message.contents,
+      },
+      createdAt: message.time,
+    });
   }
 
   private async getBuffer(count: number): Promise<BufferMessage[]> {
-    // TODO: fetch from DB
-    await Promise.resolve();
-    return this._buffer.slice(-count);
+    const messages = await this.conversationMessageDB.listConversationMessages({
+      conversationId: this.conversationId,
+      limit: count,
+      sort: "desc",
+    });
+    return [...messages].reverse().map((item) => {
+      const message = item.message;
+      if (message.kind === "user") {
+        return {
+          kind: "user",
+          name: this.userName,
+          id: message.userId,
+          contents: message.contents,
+          time: item.createdAt!,
+        };
+      }
+      return {
+        kind: "actor",
+        name: this.actorName,
+        id: message.actorId,
+        contents: message.contents,
+        time: item.createdAt!,
+      };
+    });
   }
 
   private enqueueBufferWrite(message: BufferMessage): void {

@@ -70,4 +70,14 @@ export class MongoActorDB implements ActorDB {
   async deleteActor(id: number): Promise<boolean> {
     return deleteEntity(this.mongo, this.$cn, id);
   }
+
+  /**
+   * Creates indices for the actors collection.
+   * @returns Promise resolving when indices are created.
+   */
+  async createIndices(): Promise<void> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<ActorEntity>(this.$cn);
+    await collection.createIndex({ id: 1 }, { unique: true });
+  }
 }

@@ -68,7 +68,7 @@ export function bufferMessageFromUser(
  * Builds a buffer message from an EMA reply.
  * @param actorId - Actor identifier.
  * @param actorName - Actor display name.
- * @param reply - EMA reply payload.
+ * @param reply - EMA reply response.
  * @param time - Optional timestamp (milliseconds since epoch).
  * @returns BufferMessage representing the EMA reply.
  */
@@ -82,7 +82,7 @@ export function bufferMessageFromEma(
     kind: "actor",
     name: actorName,
     id: actorId,
-    contents: [{ type: "text", text: JSON.stringify(reply) }],
+    contents: [{ type: "text", text: reply.response }],
     time,
   };
 }

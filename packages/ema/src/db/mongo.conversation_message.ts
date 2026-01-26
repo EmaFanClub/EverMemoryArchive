@@ -47,7 +47,14 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       filter.conversationId = req.conversationId;
     }
 
-    return (await collection.find(filter).toArray()).map(omitMongoId);
+    let cursor = collection.find(filter);
+    if (req.sort) {
+      cursor = cursor.sort({ createdAt: req.sort === "asc" ? 1 : -1 });
+    }
+    if (req.limit !== undefined) {
+      cursor = cursor.limit(req.limit);
+    }
+    return (await cursor.toArray()).map(omitMongoId);
   }
 
   /**
@@ -91,5 +98,16 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
    */
   async deleteConversationMessage(id: number): Promise<boolean> {
     return deleteEntity(this.mongo, this.$cn, id);
+  }
+
+  /**
+   * Creates indices for the conversation messages collection.
+   * @returns Promise resolving when indices are created.
+   */
+  async createIndices(): Promise<void> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<ConversationMessageEntity>(this.$cn);
+    await collection.createIndex({ id: 1 }, { unique: true });
+    await collection.createIndex({ conversationId: 1, createdAt: -1 });
   }
 }

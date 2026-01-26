@@ -59,4 +59,15 @@ export class MongoUserDB implements UserDB {
   async deleteUser(id: number): Promise<boolean> {
     return deleteEntity(this.mongo, this.$cn, id);
   }
+
+  /**
+   * Creates indices for the users collection.
+   * @returns Promise resolving when indices are created.
+   */
+  async createIndices(): Promise<void> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<UserEntity>(this.$cn);
+    await collection.createIndex({ id: 1 }, { unique: true });
+    await collection.createIndex({ email: 1 }, { unique: true });
+  }
 }

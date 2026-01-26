@@ -28,6 +28,7 @@ import type {
   ConversationMessageDB,
   ShortTermMemoryDB,
   LongTermMemoryDB,
+  IndexableDB,
 } from "./db/base";
 import type { Fs } from "./fs";
 import { RealFs } from "./fs";
@@ -38,7 +39,8 @@ import { ActorWorker } from "./actor";
  * The server class for the EverMemoryArchive.
  */
 export class Server {
-  actors: Map<number, ActorWorker> = new Map();
+  actors: Map<string, ActorWorker> = new Map();
+  private actorInFlight: Map<string, Promise<ActorWorker>> = new Map();
 
   config: Config;
   private llmClient: LLMClient;
@@ -47,13 +49,15 @@ export class Server {
   lancedb!: lancedb.Connection;
 
   roleDB!: RoleDB & MongoCollectionGetter;
-  actorDB!: ActorDB & MongoCollectionGetter;
-  userDB!: UserDB & MongoCollectionGetter;
-  userOwnActorDB!: UserOwnActorDB & MongoCollectionGetter;
-  conversationDB!: ConversationDB & MongoCollectionGetter;
-  conversationMessageDB!: ConversationMessageDB & MongoCollectionGetter;
-  shortTermMemoryDB!: ShortTermMemoryDB & MongoCollectionGetter;
-  longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter;
+  actorDB!: ActorDB & MongoCollectionGetter & IndexableDB;
+  userDB!: UserDB & MongoCollectionGetter & IndexableDB;
+  userOwnActorDB!: UserOwnActorDB & MongoCollectionGetter & IndexableDB;
+  conversationDB!: ConversationDB & MongoCollectionGetter & IndexableDB;
+  conversationMessageDB!: ConversationMessageDB &
+    MongoCollectionGetter &
+    IndexableDB;
+  shortTermMemoryDB!: ShortTermMemoryDB & MongoCollectionGetter & IndexableDB;
+  longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter & IndexableDB;
   longTermMemoryVectorSearcher!: MongoMemorySearchAdaptor &
     MongoCollectionGetter;
 
@@ -63,6 +67,10 @@ export class Server {
   ) {
     this.config = config;
     this.llmClient = new LLMClient(config.llm);
+  }
+
+  private actorKey(userId: number, actorId: number, conversationId: number) {
+    return `${userId}:${actorId}:${conversationId}`;
   }
 
   static async create(
@@ -93,7 +101,16 @@ export class Server {
       }
     }
 
-    await server.longTermMemoryVectorSearcher.createIndices();
+    await Promise.all([
+      server.actorDB.createIndices(),
+      server.userDB.createIndices(),
+      server.userOwnActorDB.createIndices(),
+      server.conversationDB.createIndices(),
+      server.conversationMessageDB.createIndices(),
+      server.shortTermMemoryDB.createIndices(),
+      server.longTermMemoryDB.createIndices(),
+      server.longTermMemoryVectorSearcher.createIndices(),
+    ]);
 
     return server;
   }
@@ -194,38 +211,88 @@ export class Server {
    *
    * @example
    * // Example usage:
-   * const user = server.login();
+   * const user = await server.login();
    * console.log(user.id); // 1
    */
-  login(): { id: number; name: string; email: string } {
-    return {
+  async login(): Promise<{ id: number; name: string; email: string }> {
+    const user = {
       id: 1,
       name: "alice",
       email: "alice@example.com",
     };
+    const actor = {
+      id: 1,
+      roleId: 1,
+    };
+    await this.userDB.upsertUser({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      description: "",
+      avatar: "",
+    });
+    await this.actorDB.upsertActor({
+      id: actor.id,
+      roleId: actor.roleId,
+    });
+    await this.userOwnActorDB.addActorToUser({
+      userId: user.id,
+      actorId: actor.id,
+    });
+    return user;
   }
 
   /**
-   * Gets an actor by user ID and actor ID.
+   * Gets an actor by user ID, actor ID, and conversation ID.
    * @param userId - The user ID
    * @param actorId - The actor ID
+   * @param conversationId - The conversation ID
    * @returns The actor
    */
-  async getActor(_userId: number, actorId: number): Promise<ActorWorker> {
+  async getActor(
+    userId: number,
+    actorId: number,
+    conversationId: number,
+  ): Promise<ActorWorker> {
     // todo: use userId to authorize request.
-
-    let actor = this.actors.get(actorId);
+    const key = this.actorKey(userId, actorId, conversationId);
+    let actor = this.actors.get(key);
     if (!actor) {
-      actor = new ActorWorker(
-        this.config,
-        _userId,
-        actorId,
-        this.actorDB,
-        this.shortTermMemoryDB,
-        this.longTermMemoryDB,
-        this.longTermMemoryVectorSearcher,
-      );
-      this.actors.set(actorId, actor);
+      let inFlight = this.actorInFlight.get(key);
+      if (!inFlight) {
+        inFlight = (async () => {
+          const user = await this.userDB.getUser(userId);
+          const actorName = "EMA";
+          const userName = user?.name || "User";
+          await this.conversationDB.upsertConversation({
+            id: conversationId,
+            name: "default",
+            actorId,
+            userId,
+          });
+          const created = new ActorWorker(
+            this.config,
+            userId,
+            userName,
+            actorId,
+            actorName,
+            conversationId,
+            this.actorDB,
+            this.conversationMessageDB,
+            this.shortTermMemoryDB,
+            this.longTermMemoryDB,
+            this.longTermMemoryVectorSearcher,
+          );
+          this.actors.set(key, created);
+          return created;
+        })();
+        this.actorInFlight.set(key, inFlight);
+      }
+      try {
+        actor = await inFlight;
+      } finally {
+        this.actorInFlight.delete(key);
+      }
     }
     return actor;
   }

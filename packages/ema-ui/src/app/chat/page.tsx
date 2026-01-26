@@ -8,45 +8,82 @@ import type { ActorAgentEvent, Message } from "ema";
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [snapshotting, setSnapshotting] = useState(false);
+  const [snapshotStatus, setSnapshotStatus] = useState<string | null>(null);
   const chatAreaRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
+  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Set up SSE connection to subscribe to actor events
   useEffect(() => {
-    const eventSource = new EventSource("/api/actor/sse?userId=1&actorId=1");
+    let eventSource: EventSource | null = null;
+    let isActive = true;
 
-    eventSource.onmessage = (event) => {
+    const init = async () => {
       try {
-        const evt = JSON.parse(event.data) as ActorAgentEvent;
-        const content = evt.content;
-        if (
-          evt.kind === "emaReplyReceived" &&
-          typeof content === "object" &&
-          "reply" in content
-        ) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "model",
-              contents: [{ type: "text", text: content.reply.response }],
-            },
-          ]);
+        await fetch("/api/users/login");
+      } catch (error) {
+        console.error("Error logging in:", error);
+      }
+
+      try {
+        const response = await fetch(
+          "/api/conversations/messages?conversationId=1&limit=100",
+        );
+        if (response.ok) {
+          const data = (await response.json()) as { messages: Message[] };
+          if (isActive && Array.isArray(data.messages)) {
+            setMessages(data.messages);
+          }
         }
       } catch (error) {
-        console.error("Error parsing SSE event:", error);
+        console.error("Error loading history:", error);
       }
+
+      if (!isActive) {
+        return;
+      }
+
+      eventSource = new EventSource(
+        "/api/actor/sse?userId=1&actorId=1&conversationId=1",
+      );
+
+      eventSource.onmessage = (event) => {
+        try {
+          const evt = JSON.parse(event.data) as ActorAgentEvent;
+          const content = evt.content;
+          if (
+            evt.kind === "emaReplyReceived" &&
+            typeof content === "object" &&
+            "reply" in content
+          ) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "model",
+                contents: [{ type: "text", text: content.reply.response }],
+              },
+            ]);
+          }
+        } catch (error) {
+          console.error("Error parsing SSE event:", error);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        // todo: reconnect
+        console.error("SSE connection error:", error);
+        eventSource?.close();
+      };
     };
 
-    eventSource.onerror = (error) => {
-      // todo: reconnect
-      console.error("SSE connection error:", error);
-      eventSource.close();
-    };
+    void init();
 
     // Cleanup on unmount (EventSource.close() is safe to call multiple times)
     return () => {
-      eventSource.close();
+      isActive = false;
+      eventSource?.close();
     };
   }, []);
 
@@ -62,6 +99,25 @@ export default function ChatPage() {
       });
     }
   }, [messages.length]);
+
+  useEffect(() => {
+    if (!snapshotStatus) {
+      return;
+    }
+    if (snapshotTimerRef.current) {
+      clearTimeout(snapshotTimerRef.current);
+    }
+    snapshotTimerRef.current = setTimeout(() => {
+      setSnapshotStatus(null);
+      snapshotTimerRef.current = null;
+    }, 3200);
+    return () => {
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current);
+        snapshotTimerRef.current = null;
+      }
+    };
+  }, [snapshotStatus]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +142,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           userId: 1,
           actorId: 1,
+          conversationId: 1,
           // TODO: If supporting more input types, need to adjust here
           inputs: userMessage.contents,
         }),
@@ -114,11 +171,53 @@ export default function ChatPage() {
     }
   };
 
+  const handleSnapshot = async () => {
+    setSnapshotStatus(null);
+    setSnapshotting(true);
+    try {
+      const response = await fetch("/api/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "default" }),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        setSnapshotStatus(text || "Snapshot failed.");
+        return;
+      }
+      const data = (await response.json().catch(() => null)) as {
+        fileName?: string;
+      } | null;
+      setSnapshotStatus(
+        data?.fileName
+          ? `Snapshot saved: ${data.fileName}`
+          : "Snapshot created.",
+      );
+    } catch (error) {
+      console.error("Snapshot error:", error);
+      setSnapshotStatus("Snapshot failed.");
+    } finally {
+      setSnapshotting(false);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>How can I help you?</h1>
+        <div>
+          <h1 className={styles.title}>How can I help you?</h1>
+        </div>
+        <button
+          className={styles.snapshotButton}
+          onClick={handleSnapshot}
+          disabled={snapshotting}
+        >
+          {snapshotting ? "Snapshotting..." : "Snapshot"}
+        </button>
       </div>
+      {snapshotStatus ? (
+        <div className={styles.snapshotStatus}>{snapshotStatus}</div>
+      ) : null}
 
       <div
         className={styles.chatArea}

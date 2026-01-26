@@ -79,4 +79,15 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
   async deleteShortTermMemory(id: number): Promise<boolean> {
     return deleteEntity(this.mongo, this.$cn, id);
   }
+
+  /**
+   * Creates indices for the short term memories collection.
+   * @returns Promise resolving when indices are created.
+   */
+  async createIndices(): Promise<void> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<ShortTermMemoryEntity>(this.$cn);
+    await collection.createIndex({ id: 1 }, { unique: true });
+    await collection.createIndex({ actorId: 1, kind: 1, createdAt: -1 });
+  }
 }

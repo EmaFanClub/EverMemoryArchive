@@ -49,6 +49,17 @@ export interface CreatedField {
 }
 
 /**
+ * Interface for databases that support index creation.
+ */
+export interface IndexableDB {
+  /**
+   * Creates indices for the database collection.
+   * @returns Promise resolving when indices are created.
+   */
+  createIndices(): Promise<void>;
+}
+
+/**
  * Interface for role database operations
  */
 export interface RoleDB {
@@ -390,6 +401,14 @@ export interface ListConversationMessagesRequest {
    * The conversation ID to filter conversation messages by
    */
   conversationId?: number;
+  /**
+   * Max number of messages to return
+   */
+  limit?: number;
+  /**
+   * Sort order by createdAt
+   */
+  sort?: "asc" | "desc";
 }
 
 /**

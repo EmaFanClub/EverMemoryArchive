@@ -30,7 +30,7 @@ const createTestConfig = () =>
 describe("Server", () => {
   test("should return user on login", async () => {
     const server = await Server.create(new MemFs(), createTestConfig());
-    const user = server.login();
+    const user = await server.login();
     expect(user).toBeDefined();
     expect(user.id).toBe(1);
     expect(user.name).toBe("alice");
