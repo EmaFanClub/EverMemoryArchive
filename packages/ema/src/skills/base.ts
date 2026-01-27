@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ToolResult, ToolContext } from "../tools/base";
-import type { ActorScope } from "../actor";
 
 /** Skill name -> Skill instance registry. */
 export type SkillRegistry = Record<string, Skill>;
