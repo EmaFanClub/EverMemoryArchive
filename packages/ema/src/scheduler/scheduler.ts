@@ -2,6 +2,7 @@ import { Agenda, type IAgendaConfig } from "@hokify/agenda";
 import type { Mongo } from "../db/mongo";
 import type {
   Job,
+  JobEverySpec,
   JobHandler,
   JobHandlerMap,
   JobId,
@@ -81,7 +82,7 @@ export class AgendaScheduler implements Scheduler {
     const scheduled = await this.agenda.schedule(
       new Date(job.runAt),
       job.name,
-      job.payload,
+      job.data,
     );
     const id = scheduled.attrs._id?.toString();
     if (!id) {
@@ -91,7 +92,7 @@ export class AgendaScheduler implements Scheduler {
   }
 
   /**
-   * Reschedules an existing queued job with new runAt/payload.
+   * Reschedules an existing queued job with new runAt/data.
    * @param id - The job identifier.
    * @param job - The new job data.
    * @returns Promise resolving to true if rescheduled, false otherwise.
@@ -109,7 +110,7 @@ export class AgendaScheduler implements Scheduler {
     }
 
     agendaJob.attrs.name = job.name;
-    agendaJob.attrs.data = job.payload;
+    agendaJob.attrs.data = job.data;
     agendaJob.schedule(new Date(job.runAt));
     await agendaJob.save();
     return true;
@@ -134,6 +135,52 @@ export class AgendaScheduler implements Scheduler {
 
     const removed = await agendaJob.remove();
     return removed > 0;
+  }
+
+  /**
+   * Schedules a recurring job.
+   * @param job - The recurring job data.
+   * @returns Promise resolving to the job id.
+   */
+  async scheduleEvery(job: JobEverySpec): Promise<JobId> {
+    await this.ensureReady();
+    const agendaJob = this.agenda.create(job.name, job.data);
+    agendaJob.unique(job.unique);
+    agendaJob.schedule(new Date(job.runAt));
+    agendaJob.repeatEvery(job.interval, { skipImmediate: true });
+    const saved = await agendaJob.save();
+    const id = saved.attrs._id?.toString();
+    if (!id) {
+      throw new Error("Agenda job id is missing.");
+    }
+    return id;
+  }
+
+  /**
+   * Reschedules an existing recurring job.
+   * @param id - The job identifier.
+   * @param job - The new recurring job data.
+   * @returns Promise resolving to true if rescheduled, false otherwise.
+   */
+  async rescheduleEvery(id: JobId, job: JobEverySpec): Promise<boolean> {
+    await this.ensureReady();
+    const agendaJob = await this.loadJob(id);
+    if (!agendaJob) {
+      return false;
+    }
+
+    const running = await this.isRunning(agendaJob);
+    if (running) {
+      return false;
+    }
+
+    agendaJob.attrs.name = job.name;
+    agendaJob.attrs.data = job.data;
+    agendaJob.unique(job.unique);
+    agendaJob.schedule(new Date(job.runAt));
+    agendaJob.repeatEvery(job.interval, { skipImmediate: true });
+    await agendaJob.save();
+    return true;
   }
 
   private async ensureReady(): Promise<void> {

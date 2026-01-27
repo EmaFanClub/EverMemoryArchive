@@ -18,7 +18,7 @@ export type JobName = keyof JobDataMap;
 export type JobData<K extends JobName> = JobDataMap[K];
 
 /**
- * Union of all job data payloads.
+ * Union of all job data types.
  */
 export type JobDataUnion = JobData<JobName>;
 
@@ -47,7 +47,33 @@ export interface JobSpec<K extends JobName = JobName> {
   /**
    * Handler-specific data.
    */
-  payload: JobData<K>;
+  data: JobData<K>;
+}
+
+/**
+ * Input data for scheduling a recurring job.
+ */
+export interface JobEverySpec<K extends JobName = JobName> {
+  /**
+   * The job name used to resolve a handler.
+   */
+  name: K;
+  /**
+   * Earliest time the recurring schedule becomes active (Unix timestamp in milliseconds).
+   */
+  runAt: number;
+  /**
+   * How often the job should repeat (Agenda interval string or milliseconds).
+   */
+  interval: string | number;
+  /**
+   * Handler-specific data.
+   */
+  data: JobData<K>;
+  /**
+   * Optional uniqueness criteria for deduplicating recurring jobs.
+   */
+  unique: Record<string, unknown>;
 }
 
 /**
@@ -92,6 +118,19 @@ export interface Scheduler {
    * @returns Promise resolving to true if canceled, false otherwise.
    */
   cancel(id: JobId): Promise<boolean>;
+  /**
+   * Schedules a recurring job.
+   * @param job - The recurring job data.
+   * @returns Promise resolving to the job id.
+   */
+  scheduleEvery(job: JobEverySpec): Promise<JobId>;
+  /**
+   * Reschedules an existing recurring job.
+   * @param id - The job identifier.
+   * @param job - The new recurring job data.
+   * @returns Promise resolving to true if rescheduled, false otherwise.
+   */
+  rescheduleEvery(id: JobId, job: JobEverySpec): Promise<boolean>;
 }
 
 /**
