@@ -1,4 +1,5 @@
 import type { ActorScope } from "../actor";
+import type { Server } from "../server";
 
 /** Tool execution result. */
 export interface ToolResult {
@@ -7,7 +8,17 @@ export interface ToolResult {
   error?: string;
 }
 
+/**
+ * Context passed to tool executions.
+ */
 export interface ToolContext {
+  /**
+   * Server instance for accessing shared services.
+   */
+  server?: Server;
+  /**
+   * Actor scope associated with the tool invocation.
+   */
   actorScope?: ActorScope;
 }
 

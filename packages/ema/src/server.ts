@@ -35,7 +35,7 @@ import { RealFs } from "./fs";
 import * as path from "node:path";
 import { ActorWorker } from "./actor";
 import { AgendaScheduler } from "./scheduler";
-import { jobHandlers } from "./scheduler/jobs";
+import { createJobHandlers } from "./scheduler/jobs";
 
 /**
  * The server class for the EverMemoryArchive.
@@ -115,7 +115,7 @@ export class Server {
       server.longTermMemoryVectorSearcher.createIndices(),
     ]);
 
-    await server.scheduler.start(jobHandlers);
+    await server.scheduler.start(createJobHandlers(server));
 
     return server;
   }
