@@ -4,12 +4,16 @@ import { useState, useEffect, useRef } from "react";
 import styles from "./page.module.css";
 import type { ActorAgentEvent, Message } from "ema";
 
+let initialLoadPromise: Promise<Message[] | null> | null = null;
+let initialMessagesCache: Message[] | null = null;
+
 // todo: consider adding tests for this component to verify message state management
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [initializing, setInitializing] = useState(true);
   const [snapshotting, setSnapshotting] = useState(false);
-  const [snapshotStatus, setSnapshotStatus] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const chatAreaRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -21,24 +25,48 @@ export default function ChatPage() {
     let isActive = true;
 
     const init = async () => {
+      setInitializing(true);
       try {
-        await fetch("/api/users/login");
-      } catch (error) {
-        console.error("Error logging in:", error);
-      }
+        if (!initialLoadPromise) {
+          initialLoadPromise = (async () => {
+            try {
+              await fetch("/api/users/login");
+            } catch (error) {
+              console.error("Error logging in:", error);
+            }
 
-      try {
-        const response = await fetch(
-          "/api/conversations/messages?conversationId=1&limit=100",
-        );
-        if (response.ok) {
-          const data = (await response.json()) as { messages: Message[] };
-          if (isActive && Array.isArray(data.messages)) {
-            setMessages(data.messages);
-          }
+            try {
+              const response = await fetch(
+                "/api/conversations/messages?conversationId=1&limit=100",
+              );
+              if (response.ok) {
+                const data = (await response.json()) as { messages: Message[] };
+                if (Array.isArray(data.messages)) {
+                  return data.messages;
+                }
+              }
+            } catch (error) {
+              console.error("Error loading history:", error);
+            }
+            return null;
+          })().catch((error) => {
+            initialLoadPromise = null;
+            throw error;
+          });
         }
-      } catch (error) {
-        console.error("Error loading history:", error);
+
+        if (!initialMessagesCache) {
+          initialMessagesCache = await initialLoadPromise;
+        }
+
+        if (isActive && Array.isArray(initialMessagesCache)) {
+          setMessages(initialMessagesCache);
+          setNotice("Conversation history loaded.");
+        }
+      } finally {
+        if (isActive) {
+          setInitializing(false);
+        }
       }
 
       if (!isActive) {
@@ -101,14 +129,14 @@ export default function ChatPage() {
   }, [messages.length]);
 
   useEffect(() => {
-    if (!snapshotStatus) {
+    if (!notice) {
       return;
     }
     if (snapshotTimerRef.current) {
       clearTimeout(snapshotTimerRef.current);
     }
     snapshotTimerRef.current = setTimeout(() => {
-      setSnapshotStatus(null);
+      setNotice(null);
       snapshotTimerRef.current = null;
     }, 3200);
     return () => {
@@ -117,7 +145,7 @@ export default function ChatPage() {
         snapshotTimerRef.current = null;
       }
     };
-  }, [snapshotStatus]);
+  }, [notice]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,7 +200,7 @@ export default function ChatPage() {
   };
 
   const handleSnapshot = async () => {
-    setSnapshotStatus(null);
+    setNotice(null);
     setSnapshotting(true);
     try {
       const response = await fetch("/api/snapshot", {
@@ -182,20 +210,20 @@ export default function ChatPage() {
       });
       if (!response.ok) {
         const text = await response.text();
-        setSnapshotStatus(text || "Snapshot failed.");
+        setNotice(text || "Snapshot failed.");
         return;
       }
       const data = (await response.json().catch(() => null)) as {
         fileName?: string;
       } | null;
-      setSnapshotStatus(
+      setNotice(
         data?.fileName
           ? `Snapshot saved: ${data.fileName}`
           : "Snapshot created.",
       );
     } catch (error) {
       console.error("Snapshot error:", error);
-      setSnapshotStatus("Snapshot failed.");
+      setNotice("Snapshot failed.");
     } finally {
       setSnapshotting(false);
     }
@@ -215,9 +243,7 @@ export default function ChatPage() {
           {snapshotting ? "Snapshotting..." : "Snapshot"}
         </button>
       </div>
-      {snapshotStatus ? (
-        <div className={styles.snapshotStatus}>{snapshotStatus}</div>
-      ) : null}
+      {notice ? <div className={styles.snapshotStatus}>{notice}</div> : null}
 
       <div
         className={styles.chatArea}
@@ -270,13 +296,14 @@ export default function ChatPage() {
           placeholder="Enter message..."
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
+          disabled={initializing}
         />
         <div className={styles.buttonGroup}>
           <button
             type="submit"
             aria-label="Send message"
             className={styles.sendButton}
-            disabled={!inputValue.trim()}
+            disabled={initializing || !inputValue.trim()}
           >
             <svg
               width="16"

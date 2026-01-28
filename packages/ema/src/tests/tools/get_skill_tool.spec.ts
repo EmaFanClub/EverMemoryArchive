@@ -27,14 +27,14 @@ describe("GetSkillTool", () => {
   it("returns playbook when skill exists", async () => {
     const registry = { stub: new StubSkill("playbook") };
     const tool = new GetSkillTool(registry);
-    const res = await tool.execute("stub");
+    const res = await tool.execute({ skill_name: "stub" });
     expect(res.success).toBe(true);
     expect(res.content).toBe("playbook");
   });
 
   it("fails when skill missing", async () => {
     const tool = new GetSkillTool({});
-    const res = await tool.execute("missing");
+    const res = await tool.execute({ skill_name: "missing" });
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/does not exist/);
   });
@@ -42,7 +42,7 @@ describe("GetSkillTool", () => {
   it("validates input schema", async () => {
     const registry = { stub: new StubSkill("playbook") };
     const tool = new GetSkillTool(registry);
-    const res = await tool.execute("");
+    const res = await tool.execute({ skill_name: "" });
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/Invalid get_skill_tool input/);
   });
@@ -50,7 +50,7 @@ describe("GetSkillTool", () => {
   it("validates non-string input", async () => {
     const registry = { stub: new StubSkill("playbook") };
     const tool = new GetSkillTool(registry);
-    const res = await tool.execute(123 as any);
+    const res = await tool.execute({ skill_name: 123 as any });
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/Invalid get_skill_tool input/);
   });
@@ -64,7 +64,7 @@ describe("GetSkillTool", () => {
     }
     const registry = { spy: new SpySkill("doc", "spy") };
     const tool = new GetSkillTool(registry);
-    const res = await tool.execute("spy");
+    const res = await tool.execute({ skill_name: "spy" });
     expect(res.success).toBe(true);
     expect(res.content).toBe("doc");
     expect(getPlaybook).toHaveBeenCalledTimes(1);

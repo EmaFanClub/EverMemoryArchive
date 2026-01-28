@@ -11,7 +11,7 @@ import {
   isToolMessage,
   isUserMessage,
 } from "./schema";
-import type { Tool, ToolResult } from "./tools/base";
+import type { Tool, ToolResult, ToolContext } from "./tools/base";
 import type { EmaReply } from "./tools/ema_reply_tool";
 
 /** Event emitted when the agent finishes a run. */
@@ -71,6 +71,7 @@ export type AgentState = {
   systemPrompt: string;
   messages: Message[];
   tools: Tool[];
+  toolContext?: ToolContext;
 };
 
 /** Callback type for running the agent with a given state. */
@@ -314,13 +315,10 @@ export class Agent {
           };
         } else {
           try {
-            const props = (
-              tool.parameters as { properties?: Record<string, unknown> }
-            ).properties;
-            const positionalArgs = props
-              ? Object.keys(props).map((key) => callArgs[key])
-              : Object.values(callArgs);
-            result = await tool.execute(...positionalArgs);
+            result = await tool.execute(
+              callArgs,
+              this.contextManager.state.toolContext,
+            );
           } catch (err) {
             const errorDetail = `${(err as Error).name}: ${(err as Error).message}`;
             const errorTrace = (err as Error).stack ?? "";

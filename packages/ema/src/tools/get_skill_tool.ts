@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Tool } from "./base";
-import type { ToolResult } from "./base";
+import type { ToolResult, ToolContext } from "./base";
 import { type SkillRegistry } from "../skills";
 
 const GetSkillSchema = z
@@ -29,12 +29,13 @@ export class GetSkillTool extends Tool {
 
   /**
    * Fetches the SKILL.md playbook for a given skill.
-   * @param skill_name - Name of the skill to fetch.
+   * @param args - Arguments containing the skill name.
+   * @param context - Optional tool context (unused).
    */
-  async execute(skill_name: string): Promise<ToolResult> {
-    let payload: { skill_name: string };
+  async execute(args: any, context?: ToolContext): Promise<ToolResult> {
+    let payload: z.infer<typeof GetSkillSchema>;
     try {
-      payload = GetSkillSchema.parse({ skill_name });
+      payload = GetSkillSchema.parse(args);
     } catch (err) {
       return {
         success: false,

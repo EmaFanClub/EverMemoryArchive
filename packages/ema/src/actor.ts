@@ -29,6 +29,13 @@ import type { Content } from "./schema";
 import { LLMClient } from "./llm";
 import { type AgentState } from "./agent";
 
+/** The scope information for the actor. */
+export interface ActorScope {
+  actorId: number;
+  userId: number;
+  conversationId?: number;
+}
+
 /**
  * A facade of the actor functionalities between the server (system) and the agent (actor).
  */
@@ -293,6 +300,13 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
             ),
             messages: batches.map((item) => bufferMessageToUserMessage(item)),
             tools: this.config.baseTools,
+            toolContext: {
+              actorScope: {
+                actorId: this.actorId,
+                userId: this.userId,
+                conversationId: this.conversationId,
+              },
+            },
           };
         }
         this.resumeStateAfterAbort = false;

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { ToolResult } from "../tools/base";
+import type { ToolResult, ToolContext } from "../tools/base";
 
 /** Skill name -> Skill instance registry. */
 export type SkillRegistry = Record<string, Skill>;
@@ -31,8 +31,9 @@ export abstract class Skill {
   /**
    * Executes the skill.
    * @param args - Arguments object that should satisfy `parameters`.
+   * @param context - Optional tool context (e.g. actor scope).
    */
-  abstract execute(...args: any[]): Promise<ToolResult>;
+  abstract execute(args: any, context?: ToolContext): Promise<ToolResult>;
 
   /** Returns minimal metadata used for listing in prompts/UI. */
   get metadata(): Record<string, string> {

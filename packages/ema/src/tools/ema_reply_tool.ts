@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { Tool } from "./base";
-import type { ToolResult } from "./base";
+import type { ToolResult, ToolContext } from "./base";
 
 const EmaReplySchema = z
   .object({
@@ -37,20 +37,14 @@ export class EmaReplyTool extends Tool {
   /** Returns the JSON Schema specifying the expected arguments. */
   parameters = EmaReplySchema.toJSONSchema();
 
-  /** Validates and emits a structured reply payload. */
-  async execute(
-    think: string,
-    expression: string,
-    action: string,
-    response: string,
-  ): Promise<ToolResult> {
+  /**
+   * Validates and emits a structured reply payload.
+   * @param args - Tool arguments matching the reply schema.
+   * @param context - Optional tool context (unused).
+   */
+  async execute(args: any, context?: ToolContext): Promise<ToolResult> {
     try {
-      const payload = EmaReplySchema.parse({
-        think,
-        expression,
-        action,
-        response,
-      });
+      const payload = EmaReplySchema.parse(args);
       return {
         success: true,
         content: JSON.stringify(payload),

@@ -40,7 +40,11 @@ export class MemoryMongo extends Mongo {
     let client: MongoClient | undefined;
 
     try {
-      mongoServer = await MongoMemoryServer.create();
+      mongoServer = await MongoMemoryServer.create({
+        instance: {
+          port: 0,
+        },
+      });
       const uri = mongoServer.getUri();
       client = new MongoClient(uri);
       await client.connect();
@@ -81,6 +85,18 @@ export class MemoryMongo extends Mongo {
       throw new Error("MongoDB not connected. Call connect() first.");
     }
     return this.client;
+  }
+
+  /**
+   * Gets the MongoDB connection URI.
+   * @returns The MongoDB connection URI
+   * @throws Error if not connected
+   */
+  getUri(): string {
+    if (!this.mongoServer) {
+      throw new Error("MongoDB not connected. Call connect() first.");
+    }
+    return this.mongoServer.getUri(this.dbName);
   }
 
   /**

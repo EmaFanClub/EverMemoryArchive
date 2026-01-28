@@ -1,0 +1,90 @@
+diff --git a/dist/Job.d.ts b/dist/Job.d.ts
+index 191a9d8f82451d04708211306271546ff1a2b33d..a9acbad14021b6afba60ee22c8a81a1042674eb5 100644
+--- a/dist/Job.d.ts
++++ b/dist/Job.d.ts
+@@ -1,4 +1,4 @@
+-import { ObjectId } from 'mongodb';
++import { ObjectId } from 'mongodb-agenda';
+ import type { Agenda } from './index';
+ import { IJobParameters } from './types/JobParameters';
+ import { JobPriority } from './utils/priority';
+diff --git a/dist/JobDbRepository.d.ts b/dist/JobDbRepository.d.ts
+index 7719da22c1a097047c373c172290f835b9816b90..5d4bc54b40cb9915121825c24d87bae1ccc63d2b 100644
+--- a/dist/JobDbRepository.d.ts
++++ b/dist/JobDbRepository.d.ts
+@@ -1,4 +1,4 @@
+-import { Collection, Filter, ObjectId, Sort } from 'mongodb';
++import { Collection, Filter, ObjectId, Sort } from 'mongodb-agenda';
+ import type { Job, JobWithId } from './Job';
+ import type { Agenda } from './index';
+ import type { IDatabaseOptions, IDbConfig, IMongoOptions } from './types/DbOptions';
+@@ -14,7 +14,7 @@ export declare class JobDbRepository {
+     private createConnection;
+     private hasMongoConnection;
+     private hasDatabaseConfig;
+-    getJobById(id: string): Promise<import("mongodb").WithId<IJobParameters<unknown>> | null>;
++    getJobById(id: string): Promise<import("mongodb-agenda").WithId<IJobParameters<unknown>> | null>;
+     getJobs(query: Filter<IJobParameters>, sort?: Sort, limit?: number, skip?: number): Promise<IJobParameters[]>;
+     removeJobs(query: Filter<IJobParameters>): Promise<number>;
+     getQueueSize(): Promise<number>;
+diff --git a/dist/JobDbRepository.js b/dist/JobDbRepository.js
+index 6dec3f9301ce0f7561dba7baefdc247a132bf4c0..e5ceef0dc39dcef2f070e15c6b84ee43f1253aab 100644
+--- a/dist/JobDbRepository.js
++++ b/dist/JobDbRepository.js
+@@ -2,7 +2,7 @@
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.JobDbRepository = void 0;
+ const debug = require("debug");
+-const mongodb_1 = require("mongodb");
++const mongodb_1 = require("mongodb-agenda");
+ const hasMongoProtocol_1 = require("./utils/hasMongoProtocol");
+ const log = debug('agenda:db');
+ /**
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index a65473711ba88fad34b792c83eea536833b970b2..6f62e641627fe1abb1815a1ade4f4c8fa0e0989b 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,8 +1,8 @@
+ /// <reference types="node" />
+ /// <reference types="node" />
+ import { EventEmitter } from 'events';
+-import type { Db, Filter, MongoClientOptions, Sort } from 'mongodb';
+-import { SortDirection } from 'mongodb';
++import type { Db, Filter, MongoClientOptions, Sort } from 'mongodb-agenda';
++import { SortDirection } from 'mongodb-agenda';
+ import { ForkOptions } from 'child_process';
+ import type { IJobDefinition } from './types/JobDefinition';
+ import type { IAgendaConfig } from './types/AgendaConfig';
+diff --git a/dist/types/DbOptions.d.ts b/dist/types/DbOptions.d.ts
+index 897c3975c8d16d2fe2c530369797b43680179b73..d69c7381bca685d9b8ad0efcb02195970e4aea4b 100644
+--- a/dist/types/DbOptions.d.ts
++++ b/dist/types/DbOptions.d.ts
+@@ -1,4 +1,4 @@
+-import type { Db, MongoClientOptions, SortDirection } from 'mongodb';
++import type { Db, MongoClientOptions, SortDirection } from 'mongodb-agenda';
+ export interface IDatabaseOptions {
+     db: {
+         collection?: string;
+diff --git a/dist/types/JobParameters.d.ts b/dist/types/JobParameters.d.ts
+index 46358160593792f74a30cbdaa1178093e24fdbc7..9f8228a7898c0070007c5882eff7f17d086983a9 100644
+--- a/dist/types/JobParameters.d.ts
++++ b/dist/types/JobParameters.d.ts
+@@ -1,4 +1,4 @@
+-import { Filter, ObjectId } from 'mongodb';
++import { Filter, ObjectId } from 'mongodb-agenda';
+ export interface IJobParameters<DATA = unknown | void> {
+     _id?: ObjectId;
+     name: string;
+diff --git a/package.json b/package.json
+index e3c578da6d15d76378a079da77036883c62b5792..56a71ad1a489fc68e0ba804c69eb00f158ae7c57 100644
+--- a/package.json
++++ b/package.json
+@@ -56,7 +56,7 @@
+     "debug": "~4",
+     "human-interval": "~2",
+     "luxon": "^3",
+-    "mongodb": "^4"
++    "mongodb-agenda": "npm:mongodb@4.17.2"
+   },
+   "devDependencies": {
+     "eslint": "^8.29.0",

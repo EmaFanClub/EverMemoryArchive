@@ -1,7 +1,7 @@
 import { z } from "zod";
 import dayjs from "dayjs";
 import { Skill } from "../base";
-import type { ToolResult } from "../../tools/base";
+import type { ToolResult, ToolContext } from "../../tools/base";
 
 //TODO: Use arktype in future
 const DemoSkillSchema = z
@@ -37,9 +37,11 @@ export default class DemoSkill extends Skill {
    * - Validates args with zod
    * - Supports #time and #echo commands
    * - Returns localized error messages for invalid inputs
+   * @param args - Skill arguments.
+   * @param context - Optional tool context (unused).
    */
-  async execute(args: { input: string }): Promise<ToolResult> {
-    let payload: { input: string };
+  async execute(args: any, context?: ToolContext): Promise<ToolResult> {
+    let payload: z.infer<typeof DemoSkillSchema>;
     try {
       payload = DemoSkillSchema.parse(args);
     } catch (err) {

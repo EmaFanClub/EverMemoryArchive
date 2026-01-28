@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { Tool } from "./base";
-import type { ToolResult } from "./base";
+import type { ToolResult, ToolContext } from "./base";
 import { type SkillRegistry } from "../skills";
 
 const ExeSkillSchema = z
   .object({
     skill_name: z.string().min(1).describe("需要执行的 skill 名称"),
-    args: z.any().optional().describe("传给 skill.execute 的参数对象"),
+    skill_args: z.any().optional().describe("传给 skill.execute 的参数对象"),
   })
   .strict();
 
@@ -30,13 +30,13 @@ export class ExecSkillTool extends Tool {
 
   /**
    * Executes a registered skill by name.
-   * @param skill_name - Name of the skill to invoke.
-   * @param args - Arguments forwarded to the skill's execute method.
+   * @param args - Arguments containing skill name and payload.
+   * @param context - Optional tool context forwarded to the skill.
    */
-  async execute(skill_name: string, args?: unknown): Promise<ToolResult> {
-    let payload: { skill_name: string; args?: Record<string, unknown> };
+  async execute(args: any, context?: ToolContext): Promise<ToolResult> {
+    let payload: z.infer<typeof ExeSkillSchema>;
     try {
-      payload = ExeSkillSchema.parse({ skill_name, args });
+      payload = ExeSkillSchema.parse(args);
     } catch (err) {
       return {
         success: false,
@@ -51,6 +51,6 @@ export class ExecSkillTool extends Tool {
         error: `Skill '${payload.skill_name}' does not exist.`,
       };
     }
-    return await skill.execute(payload.args);
+    return await skill.execute(payload.skill_args, context);
   }
 }

@@ -23,14 +23,14 @@ class StubSkill extends Skill {
 describe("ExeSkillTool", () => {
   it("fails when skill missing", async () => {
     const tool = new ExecSkillTool({});
-    const res = await tool.execute("missing", {});
+    const res = await tool.execute({ skill_name: "missing" });
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/does not exist/);
   });
 
   it("validates input schema", async () => {
     const tool = new ExecSkillTool({});
-    const res = await tool.execute("", {});
+    const res = await tool.execute({ skill_name: "" });
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/Invalid exe_skill_tool input/);
   });
@@ -42,7 +42,7 @@ describe("ExeSkillTool", () => {
     const registry = { stub: new StubSkill(execSpy) };
     const tool = new ExecSkillTool(registry);
     const payload = { a: 1, b: "x" };
-    const res = await tool.execute("stub", payload);
+    const res = await tool.execute({ skill_name: "stub", skill_args: payload });
     expect(execSpy).toHaveBeenCalledWith(payload);
     expect(res.success).toBe(true);
     expect(res.content).toBe(JSON.stringify(payload));
@@ -57,7 +57,7 @@ describe("ExeSkillTool", () => {
     });
     const registry = { stub: new StubSkill(execSpy) };
     const tool = new ExecSkillTool(registry);
-    const res = await tool.execute("stub");
+    const res = await tool.execute({ skill_name: "stub" });
     expect(execSpy).toHaveBeenCalledWith(undefined);
     expect(res.success).toBe(true);
     expect(res.content).toBe("no-args");
@@ -69,7 +69,10 @@ describe("ExeSkillTool", () => {
     });
     const registry = { stub: new StubSkill(execSpy) };
     const tool = new ExecSkillTool(registry);
-    const res = await tool.execute("stub", { any: "thing" });
+    const res = await tool.execute({
+      skill_name: "stub",
+      skill_args: { any: "thing" },
+    });
     expect(execSpy).toHaveBeenCalled();
     expect(res.success).toBe(false);
     expect(res.error).toBe("boom");
@@ -81,6 +84,8 @@ describe("ExeSkillTool", () => {
     });
     const registry = { stub: new StubSkill(execSpy) };
     const tool = new ExecSkillTool(registry);
-    await expect(tool.execute("stub")).rejects.toThrow("explode");
+    await expect(tool.execute({ skill_name: "stub" })).rejects.toThrow(
+      "explode",
+    );
   });
 });

@@ -63,6 +63,14 @@ export class RemoteMongo extends Mongo {
   }
 
   /**
+   * Gets the MongoDB connection URI.
+   * @returns The MongoDB connection URI
+   */
+  getUri(): string {
+    return this.buildUriWithDb();
+  }
+
+  /**
    * Closes the MongoDB connection
    * @returns Promise resolving when connection is closed
    */
@@ -71,5 +79,28 @@ export class RemoteMongo extends Mongo {
       await this.client.close();
       this.client = undefined;
     }
+  }
+
+  private buildUriWithDb(): string {
+    const [base, query] = this.uri.split("?");
+    const withQuery = (value: string) => (query ? `${value}?${query}` : value);
+
+    const schemeIndex = base.indexOf("://");
+    if (schemeIndex === -1) {
+      return withQuery(base);
+    }
+
+    const rest = base.slice(schemeIndex + 3);
+    const slashIndex = rest.indexOf("/");
+    if (slashIndex === -1) {
+      return withQuery(`${base}/${this.dbName}`);
+    }
+
+    const path = rest.slice(slashIndex + 1);
+    if (!path) {
+      return withQuery(`${base}${this.dbName}`);
+    }
+
+    return withQuery(base);
   }
 }

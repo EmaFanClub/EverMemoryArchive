@@ -34,6 +34,8 @@ import type { Fs } from "./fs";
 import { RealFs } from "./fs";
 import * as path from "node:path";
 import { ActorWorker } from "./actor";
+import { AgendaScheduler } from "./scheduler";
+import { createJobHandlers } from "./scheduler/jobs";
 
 /**
  * The server class for the EverMemoryArchive.
@@ -60,6 +62,7 @@ export class Server {
   longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter & IndexableDB;
   longTermMemoryVectorSearcher!: MongoMemorySearchAdaptor &
     MongoCollectionGetter;
+  scheduler!: AgendaScheduler;
 
   private constructor(
     private readonly fs: Fs,
@@ -112,6 +115,8 @@ export class Server {
       server.longTermMemoryVectorSearcher.createIndices(),
     ]);
 
+    await server.scheduler.start(createJobHandlers(server));
+
     return server;
   }
 
@@ -144,6 +149,7 @@ export class Server {
     server.longTermMemoryDB = new MongoLongTermMemoryDB(mongo, [
       server.longTermMemoryVectorSearcher,
     ]);
+    server.scheduler = new AgendaScheduler(mongo);
     return server;
   }
 
@@ -179,7 +185,7 @@ export class Server {
       this.longTermMemoryVectorSearcher,
     ];
     const collections = new Set<string>(dbs.flatMap((db) => db.collections));
-
+    collections.add(this.scheduler.collectionName);
     const snapshot = await this.mongo.snapshot(Array.from(collections));
     await this.fs.write(fileName, JSON.stringify(snapshot, null, 1));
     return {
