@@ -164,9 +164,11 @@ export class AgendaScheduler implements Scheduler {
    */
   async scheduleEvery(job: JobEverySpec): Promise<JobId> {
     const agendaJob = this.agenda.create(job.name, job.data);
-    agendaJob.unique(job.unique);
+    if (job.unique) {
+      agendaJob.unique(job.unique);
+    }
     agendaJob.schedule(new Date(job.runAt));
-    agendaJob.repeatEvery(job.interval, { skipImmediate: true });
+    agendaJob.repeatEvery(job.interval);
     const saved = await agendaJob.save();
     const id = saved.attrs._id?.toString();
     if (!id) {
@@ -194,9 +196,11 @@ export class AgendaScheduler implements Scheduler {
 
     agendaJob.attrs.name = job.name;
     agendaJob.attrs.data = job.data;
-    agendaJob.unique(job.unique);
+    if (job.unique) {
+      agendaJob.unique(job.unique);
+    }
     agendaJob.schedule(new Date(job.runAt));
-    agendaJob.repeatEvery(job.interval, { skipImmediate: true });
+    agendaJob.repeatEvery(job.interval);
     await agendaJob.save();
     return true;
   }
@@ -218,12 +222,12 @@ export class AgendaScheduler implements Scheduler {
 
   private registerHandlers(handlers: JobHandlerMap): void {
     for (const name of Object.keys(handlers) as JobName[]) {
-      this.register(name, handlers[name]);
+      const handler = handlers[name];
+      if (!handler) {
+        throw new Error(`Job handler "${name}" is missing.`);
+      }
+      this.agenda.define(name, handler as (job: Job) => Promise<void> | void);
     }
-  }
-
-  private register<K extends JobName>(name: K, handler: JobHandler<K>): void {
-    this.agenda.define(name, handler as (job: Job) => Promise<void> | void);
   }
 
   private async loadJob(id: JobId): Promise<Job | null> {
