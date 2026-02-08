@@ -57,7 +57,8 @@ export abstract class Skill {
     const content = await fs.promises.readFile(skillMdPath, "utf-8");
     const playbook = stripYamlFrontmatter(content).body;
     const parametersHint =
-      "\n\n## Parameters\n\n" + JSON.stringify(this.parameters, null, 2);
+      "\n\n## 执行该skill需要提供的参数(Parameters)\n\n" +
+      JSON.stringify(this.parameters, null, 2);
     return `${playbook.trim()}${parametersHint}`;
   }
 }
