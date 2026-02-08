@@ -3,7 +3,7 @@
  */
 
 import { getServer } from "../../shared-server";
-import type { Message } from "ema";
+import type { ConversationMessage } from "ema";
 import * as k from "arktype";
 import { getQuery } from "../../utils";
 
@@ -24,13 +24,9 @@ export const GET = getQuery(ConversationMessagesRequest)(async (query) => {
     sort: "desc",
   });
 
-  const messages: Message[] = rows.reverse().map((row) => {
-    const msg = row.message;
-    if (msg.kind === "user") {
-      return { role: "user", contents: msg.contents };
-    }
-    return { role: "model", contents: msg.contents };
-  });
+  const messages: ConversationMessage[] = rows
+    .reverse()
+    .map((row) => row.message);
 
   return new Response(JSON.stringify({ messages }), {
     status: 200,

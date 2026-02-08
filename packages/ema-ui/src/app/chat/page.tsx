@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import styles from "./page.module.css";
-import type { ActorAgentEvent, Message } from "ema";
+import type { ActorAgentEvent, ConversationMessage } from "ema";
 
-let initialLoadPromise: Promise<Message[] | null> | null = null;
-let initialMessagesCache: Message[] | null = null;
+let initialLoadPromise: Promise<ConversationMessage[] | null> | null = null;
+let initialMessagesCache: ConversationMessage[] | null = null;
 
 // todo: consider adding tests for this component to verify message state management
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [initializing, setInitializing] = useState(true);
   const [snapshotting, setSnapshotting] = useState(false);
@@ -40,7 +40,9 @@ export default function ChatPage() {
                 "/api/conversations/messages?conversationId=1&limit=100",
               );
               if (response.ok) {
-                const data = (await response.json()) as { messages: Message[] };
+                const data = (await response.json()) as {
+                  messages: ConversationMessage[];
+                };
                 if (Array.isArray(data.messages)) {
                   return data.messages;
                 }
@@ -84,12 +86,14 @@ export default function ChatPage() {
           if (
             evt.kind === "emaReplyReceived" &&
             typeof content === "object" &&
+            content &&
             "reply" in content
           ) {
             setMessages((prev) => [
               ...prev,
               {
-                role: "model",
+                kind: "actor",
+                actorId: 1,
                 contents: [{ type: "text", text: content.reply.response }],
               },
             ]);
@@ -151,8 +155,9 @@ export default function ChatPage() {
     e.preventDefault();
     if (!inputValue.trim()) return;
 
-    const userMessage: Message = {
-      role: "user",
+    const userMessage: ConversationMessage = {
+      kind: "user",
+      userId: 1,
       contents: [{ type: "text", text: inputValue.trim() }],
     };
 
@@ -186,8 +191,9 @@ export default function ChatPage() {
     } catch (error) {
       console.error("Error:", error);
       // Add error message to chat
-      const errorMessage: Message = {
-        role: "model",
+      const errorMessage: ConversationMessage = {
+        kind: "actor",
+        actorId: 1,
         contents: [
           {
             type: "text",
@@ -270,16 +276,16 @@ export default function ChatPage() {
               <div
                 key={index}
                 className={`${styles.message} ${
-                  message.role === "user"
+                  message.kind === "user"
                     ? styles.userMessage
                     : styles.assistantMessage
                 }`}
               >
                 <div className={styles.messageRole}>
-                  {message.role === "user" ? "You" : "Ema"}
+                  {message.kind === "user" ? "You" : "Ema"}
                 </div>
                 <div className={styles.messageContent}>
-                  {message.contents![0].text}
+                  {message.contents.map((content) => content.text).join("")}
                 </div>
               </div>
             ))}
