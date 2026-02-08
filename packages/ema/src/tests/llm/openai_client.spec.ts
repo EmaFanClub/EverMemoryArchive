@@ -34,6 +34,10 @@ describe.skip("OpenAI", () => {
       "You are a helpful assistant.",
     );
     expect(response).toBeDefined();
-    expect(/hello/i.test(response.message.contents[0].text)).toBeTruthy();
+    const firstText = response.message.contents.find(
+      (content) => content.type === "text",
+    );
+    expect(firstText).toBeDefined();
+    expect(/hello/i.test(firstText!.text)).toBeTruthy();
   });
 });
