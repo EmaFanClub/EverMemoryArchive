@@ -4,6 +4,11 @@
  * @module ema
  */
 
+export type {
+  ConversationMessage,
+  ConversationUserMessage,
+  ConversationActorMessage,
+} from "./db";
 export * from "./server";
 export * from "./schema";
 export * from "./config";
