@@ -40,17 +40,6 @@ export class AgendaScheduler implements Scheduler {
   }
 
   /**
-   * Creates a scheduler instance without async initialization.
-   * Intended for sync construction paths that don't start the scheduler.
-   */
-  static createSync(
-    mongo: Mongo,
-    config?: Partial<IAgendaConfig>,
-  ): AgendaScheduler {
-    return new AgendaScheduler(mongo, config);
-  }
-
-  /**
    * Creates a new AgendaScheduler instance.
    * @param mongo - MongoDB instance used to resolve the Agenda connection URI.
    * @param config - Agenda configuration overrides.

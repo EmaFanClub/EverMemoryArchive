@@ -150,7 +150,6 @@ export class Server {
     server.longTermMemoryDB = new MongoLongTermMemoryDB(mongo, [
       server.longTermMemoryVectorSearcher,
     ]);
-    server.scheduler = AgendaScheduler.createSync(mongo);
     return server;
   }
 
@@ -186,7 +185,9 @@ export class Server {
       this.longTermMemoryVectorSearcher,
     ];
     const collections = new Set<string>(dbs.flatMap((db) => db.collections));
-    collections.add(this.scheduler.collectionName);
+    if (this.scheduler) {
+      collections.add(this.scheduler.collectionName);
+    }
     const snapshot = await this.mongo.snapshot(Array.from(collections));
     await this.fs.write(fileName, JSON.stringify(snapshot, null, 1));
     return {
