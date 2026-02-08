@@ -74,7 +74,7 @@ export interface JobEverySpec<K extends JobName = JobName> {
   /**
    * Uniqueness criteria for deduplicating recurring jobs.
    */
-  unique: Record<string, unknown>;
+  unique?: Record<string, unknown>;
 }
 
 /**
@@ -84,6 +84,19 @@ export type JobHandler<K extends JobName = JobName> = (
   job: Job<K>,
   done?: (error?: Error) => void,
 ) => Promise<void> | void;
+
+/**
+ * Type guard to narrow a job to a specific name/data pair.
+ * @param job - The job instance to check.
+ * @param name - The expected job name.
+ * @returns True when the job matches the provided name.
+ */
+export function isJob<K extends JobName>(
+  job: Job | null | undefined,
+  name: K,
+): job is Job & { attrs: { name: K; data: JobData<K> } } {
+  return !!job && job.attrs.name === name;
+}
 
 /**
  * Scheduler interface for managing job lifecycle.
@@ -149,9 +162,9 @@ export interface Scheduler {
 /**
  * Mapping of job names to their handlers.
  */
-export type JobHandlerMap = {
+export type JobHandlerMap = Partial<{
   [K in JobName]: JobHandler<K>;
-};
+}>;
 
 /**
  * Runtime status of the scheduler.

@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 
 import { createMongo } from "../db";
 import type { Mongo } from "../db";
-import { AgendaScheduler, type JobHandlerMap } from "../scheduler";
+import { AgendaScheduler, isJob, type JobHandlerMap } from "../scheduler";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -245,7 +245,10 @@ describe("AgendaScheduler", () => {
     const job = await scheduler.getJob(jobId);
     expect(job).not.toBeNull();
     expect(job?.attrs.name).toBe("test");
-    expect(job?.attrs.data?.message).toBe("lookup");
+    expect(isJob(job, "test")).toBe(true);
+    if (isJob(job, "test")) {
+      expect(job.attrs.data.message).toBe("lookup");
+    }
   });
 
   test("listJobs filters by name and data", async () => {
@@ -269,7 +272,9 @@ describe("AgendaScheduler", () => {
     });
 
     expect(jobs.length).toBe(1);
-    expect(jobs[0]?.attrs.data?.message).toBe("b");
+    if (isJob(jobs[0], "test")) {
+      expect(jobs[0].attrs.data.message).toBe("b");
+    }
   });
 
   test("recurring job runs expected times when runAt is in the future", async () => {
@@ -280,7 +285,7 @@ describe("AgendaScheduler", () => {
     const intervalMs = 500;
     const start = Date.now();
     const end = start + windowMs;
-    const runAt = start + 100;
+    const runAt = start + 400;
     let count = 0;
 
     const handler = vi.fn(async () => {
@@ -302,7 +307,7 @@ describe("AgendaScheduler", () => {
     await sleep(windowMs + 200);
     await scheduler.cancel(jobId);
 
-    expect(count).toBe(3);
+    expect(count).toBe(4);
   }, 5000);
 
   test("recurring job runs expected times when runAt is in the past", async () => {

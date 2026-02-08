@@ -5,6 +5,11 @@
 import type { JobHandlerMap } from "../base";
 import type { Server } from "../../server";
 import { TestJobHandler, type TestJobData } from "./test.job";
+import {
+  createActorForegroundJobHandler,
+  createActorBackgroundJobHandler,
+  type ActorJobData,
+} from "./actor.job";
 
 /**
  * Mapping from job name to its data schema.
@@ -14,6 +19,14 @@ export interface JobDataMap {
    * Demo job data mapping.
    */
   test: TestJobData;
+  /**
+   * ActorBackground job data mapping.
+   */
+  actor_background: ActorJobData;
+  /**
+   * ActorForeground job data mapping.
+   */
+  actor_foreground: ActorJobData;
 }
 
 /**
@@ -22,9 +35,9 @@ export interface JobDataMap {
  * @returns The job handler map.
  */
 export function createJobHandlers(server: Server): JobHandlerMap {
-  // Keep server available for handlers that need it in the future.
-  void server;
   return {
     test: TestJobHandler,
+    actor_background: createActorBackgroundJobHandler(server),
+    actor_foreground: createActorForegroundJobHandler(server),
   };
 }
