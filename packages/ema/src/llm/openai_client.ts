@@ -1,25 +1,33 @@
 import OpenAI from "openai";
 import type { ClientOptions } from "openai";
+import type {
+  ResponseInputItem,
+  ResponseFunctionToolCall,
+  EasyInputMessage,
+  Response as OpenAIResponse,
+  FunctionTool,
+} from "openai/resources/responses/responses";
 import { LLMClientBase } from "./base";
 import {
   type SchemaAdapter,
   isModelMessage,
-  isToolMessage,
   isUserMessage,
+  isFunctionCall,
+  isFunctionResponse,
+  isTextItem,
 } from "../schema";
-import type {
-  Content,
-  LLMResponse,
-  Message,
-  ModelMessage,
-  ToolCall,
-} from "../schema";
+import type { Content, LLMResponse, Message, ModelMessage } from "../schema";
 import type { Tool } from "../tools/base";
 import { wrapWithRetry } from "../retry";
 import type { LLMApiConfig, RetryConfig } from "../config";
 import { FetchWithProxy } from "./proxy";
 
-/** OpenAI-compatible client that adapts EMA schema to Chat Completions. */
+type OpenAIMessage =
+  | ResponseFunctionToolCall
+  | ResponseInputItem.FunctionCallOutput
+  | EasyInputMessage;
+
+/** OpenAI-compatible client that adapts EMA schema to Responses API. */
 export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
   private readonly client: OpenAI;
 
@@ -39,159 +47,208 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
     this.client = new OpenAI(options);
   }
 
-  /** Map EMA message shape to OpenAI chat format. */
-  adaptMessageToAPI(message: Message): Record<string, unknown> {
+  /** Map EMA message shape to OpenAI Responses input items. */
+  adaptMessageToAPI(message: Message): OpenAIMessage[] {
+    const items: OpenAIMessage[] = [];
     if (isUserMessage(message)) {
-      return {
-        role: "user",
-        content: message.contents.map((content) => ({
-          type: "text",
-          text: content.text,
-        })),
-      };
+      for (const content of message.contents) {
+        if (isFunctionResponse(content)) {
+          items.push({
+            type: "function_call_output",
+            call_id: content.id!,
+            output: JSON.stringify(content.result),
+          });
+          continue;
+        }
+        if (isTextItem(content)) {
+          const lastItem = items[items.length - 1];
+          if (
+            lastItem &&
+            lastItem.type === "message" &&
+            lastItem.role === "user" &&
+            Array.isArray(lastItem.content)
+          ) {
+            lastItem.content.push({
+              type: "input_text",
+              text: content.text,
+            });
+          } else {
+            items.push({
+              type: "message",
+              role: "user",
+              content: [{ type: "input_text", text: content.text }],
+            });
+          }
+          continue;
+        }
+        /** Additional content types can be handled here. */
+        console.warn(
+          `Unsupported content type in user message: ${JSON.stringify(content)}`,
+        );
+      }
+      return items;
     }
     if (isModelMessage(message)) {
-      const content = message.contents.map((item) => ({
-        type: "text",
-        text: item.text,
-      }));
-      const toolCalls = (message.toolCalls ?? []).map((toolCall, index) => ({
-        id: toolCall.id ?? `call_${index}`,
-        type: "function",
-        function: {
-          name: toolCall.name,
-          arguments: JSON.stringify(toolCall.args ?? {}),
-        },
-        // @@@thought-signature - Preserve Gemini tool-call signatures in OpenAI-compat payloads.
-        extra_content: toolCall.thoughtSignature
-          ? { google: { thought_signature: toolCall.thoughtSignature } }
-          : undefined,
-      }));
-      return {
-        role: "assistant",
-        content,
-        tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-      };
+      for (const content of message.contents) {
+        if (isFunctionCall(content)) {
+          items.push({
+            type: "function_call",
+            call_id: content.id!,
+            name: content.name,
+            arguments: JSON.stringify(content.args),
+          });
+          continue;
+        }
+        if (isTextItem(content)) {
+          const lastItem = items[items.length - 1];
+          if (
+            lastItem &&
+            lastItem.type === "message" &&
+            lastItem.role === "assistant" &&
+            Array.isArray(lastItem.content)
+          ) {
+            lastItem.content.push({
+              type: "input_text",
+              text: content.text,
+            });
+          } else {
+            items.push({
+              type: "message",
+              role: "assistant",
+              content: [{ type: "input_text", text: content.text }],
+            });
+          }
+          continue;
+        }
+        /** Additional content types can be handled here. */
+        console.warn(
+          `Unsupported content type in model message: ${JSON.stringify(content)}`,
+        );
+      }
+      return items;
     }
-    if (isToolMessage(message)) {
-      return {
-        role: "tool",
-        tool_call_id: message.id ?? message.name,
-        content: JSON.stringify(message.result),
-      };
-    }
-    throw new Error(`Unsupported message: ${message}`);
+    throw new Error(`Unsupported message role: ${(message as Message).role}`);
   }
 
-  /** Map tool definition to OpenAI tool schema. */
-  adaptToolToAPI(tool: Tool): Record<string, unknown> {
+  /** Map tool definition to OpenAI Responses tool schema. */
+  adaptToolToAPI(tool: Tool): FunctionTool {
     return {
       type: "function",
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      },
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters ?? null,
+      strict: true,
     };
   }
 
   /** Convert a batch of EMA messages. */
-  adaptMessages(messages: Message[]): Record<string, unknown>[] {
-    return messages.map((message) => this.adaptMessageToAPI(message));
+  adaptMessages(messages: Message[]): OpenAIMessage[] {
+    const history: OpenAIMessage[] = [];
+    for (const message of messages) {
+      history.push(...this.adaptMessageToAPI(message));
+    }
+    return history;
   }
 
   /** Convert a batch of tools. */
-  adaptTools(tools: Tool[]): Record<string, unknown>[] {
+  adaptTools(tools: Tool[]): FunctionTool[] {
     return tools.map((tool) => this.adaptToolToAPI(tool));
   }
 
   /** Normalize OpenAI response into EMA schema. */
-  adaptResponseFromAPI(response: any): LLMResponse {
-    const choice = response.choices?.[0];
-    if (!choice?.message) {
-      throw new Error("Invalid OpenAI response: missing message");
+  adaptResponseFromAPI(response: OpenAIResponse): LLMResponse {
+    const usage = response.usage;
+    const output = response.output;
+    /** Handle some invalid response cases. */
+    if (!usage || typeof usage.total_tokens !== "number") {
+      throw new Error(
+        `Missing or invalid usage in response: ${JSON.stringify(response)}`,
+      );
     }
-
-    const apiMessage = choice.message;
+    if (!Array.isArray(output)) {
+      console.warn(`No valid output in response: ${JSON.stringify(response)}`);
+      return {
+        message: {
+          role: "model",
+          contents: [],
+        },
+        finishReason: "NO_OUTPUT",
+        totalTokens: usage.total_tokens,
+      };
+    }
+    if (!response.status || response.status !== "completed") {
+      console.warn(
+        `Non-stop finish reason in response: ${JSON.stringify(response)}`,
+      );
+      return {
+        message: {
+          role: "model",
+          contents: [],
+        },
+        finishReason: response.status ?? "UNKNOWN",
+        totalTokens: usage.total_tokens,
+      };
+    }
+    /** Handle valid response content parts in response. */
     const contents: Content[] = [];
-    if (Array.isArray(apiMessage.content)) {
-      for (const part of apiMessage.content) {
-        if (part?.type === "text" && typeof part.text === "string") {
-          contents.push({ type: "text", text: part.text });
+    for (const item of output) {
+      if (item.type === "function_call") {
+        let parsedArgs: Record<string, unknown> = {};
+        try {
+          parsedArgs = JSON.parse(item.arguments);
+        } catch (error) {
+          console.warn(
+            `Failed to parse tool call arguments: ${item.arguments}`,
+          );
         }
+        contents.push({
+          type: "function_call",
+          id: item.call_id,
+          name: item.name!,
+          args: parsedArgs ?? {},
+        });
+        continue;
       }
-    } else if (typeof apiMessage.content === "string") {
-      contents.push({ type: "text", text: apiMessage.content });
-    }
-
-    const toolCalls: ToolCall[] = [];
-    if (Array.isArray(apiMessage.tool_calls)) {
-      for (const call of apiMessage.tool_calls) {
-        if (call.function) {
-          let parsedArgs: Record<string, unknown> = {};
-          try {
-            parsedArgs =
-              typeof call.function.arguments === "string"
-                ? JSON.parse(call.function.arguments)
-                : (call.function.arguments as Record<string, unknown>);
-          } catch (error) {
-            console.warn(
-              `Failed to parse tool call arguments: ${call.function.arguments}`,
-            );
+      if (item.type === "message") {
+        for (const content of item.content) {
+          if (content.type === "output_text") {
+            contents.push({ type: "text", text: content.text });
+            continue;
           }
-          const extraContent = call.extra_content as
-            | {
-                google?: {
-                  thought_signature?: string;
-                  thoughtSignature?: string;
-                };
-              }
-            | undefined;
-          const thoughtSignature =
-            extraContent?.google?.thought_signature ??
-            extraContent?.google?.thoughtSignature;
-          toolCalls.push({
-            id: call.id,
-            name: call.function.name,
-            args: parsedArgs ?? {},
-            thoughtSignature:
-              typeof thoughtSignature === "string"
-                ? thoughtSignature
-                : undefined,
-          });
+          /** Additional content types can be handled here. */
+          console.warn(
+            `Unsupported content in response: ${JSON.stringify(content)}`,
+          );
         }
+        continue;
       }
+      /** Additional output types can be handled here. */
+      console.warn(`Unsupported output in response: ${JSON.stringify(item)}`);
     }
-
-    const modelMessage: ModelMessage = {
-      role: "model",
-      contents,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    };
-
     return {
-      message: modelMessage,
-      finishReason: choice.finish_reason ?? "",
-      totalTokens: response.usage?.total_tokens ?? 0,
+      message: {
+        role: "model",
+        contents: contents,
+      },
+      finishReason: response.status,
+      totalTokens: usage.total_tokens,
     };
   }
 
-  /** Execute a Chat Completions request. */
+  /** Execute a Responses API request. */
   makeApiRequest(
-    apiMessages: Record<string, unknown>[],
-    apiTools?: Record<string, unknown>[],
+    apiMessages: OpenAIMessage[],
+    apiTools?: FunctionTool[],
     systemPrompt?: string,
     signal?: AbortSignal,
-  ): Promise<any> {
-    const messages = systemPrompt
-      ? [{ role: "system", content: systemPrompt }, ...apiMessages]
-      : apiMessages;
-
-    return this.client.chat.completions.create(
+  ): Promise<OpenAIResponse> {
+    console.log("API Request Messages:", JSON.stringify(apiMessages, null, 2));
+    return this.client.responses.create(
       {
         model: this.model,
-        messages: messages as any[],
-        tools: apiTools as any[],
+        input: apiMessages,
+        tools: apiTools,
+        instructions: systemPrompt,
       },
       { signal },
     );

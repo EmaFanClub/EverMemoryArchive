@@ -2,7 +2,7 @@ import type { ActorScope } from "../actor";
 import type { Server } from "../server";
 
 /** Tool execution result. */
-export interface ToolResult {
+export interface ToolResult extends Record<string, unknown> {
   success: boolean;
   content?: string;
   error?: string;
@@ -31,7 +31,7 @@ export abstract class Tool {
   abstract description: string;
 
   /** Returns the tool parameters schema (JSON Schema format). */
-  abstract parameters: Record<string, any>;
+  abstract parameters: Record<string, unknown>;
 
   /**
    * Executes the tool with arbitrary arguments.
