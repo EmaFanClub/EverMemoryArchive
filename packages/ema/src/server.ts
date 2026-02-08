@@ -93,7 +93,8 @@ export class Server {
     const databaseDir = path.join(process.env.DATA_ROOT || ".data", "lancedb");
     const lance = await lancedb.connect(databaseDir);
 
-    const server = await Server.createSync(fs, mongo, lance, config);
+    const server = Server.createSync(fs, mongo, lance, config);
+    server.scheduler = await AgendaScheduler.create(mongo);
 
     if (isDev) {
       const restored = await server.restoreFromSnapshot("default");
@@ -125,14 +126,14 @@ export class Server {
    * @param fs - File system implementation
    * @param mongo - MongoDB instance
    * @param lance - LanceDB instance
-   * @returns Promise resolving to the Server instance
+   * @returns The Server instance
    */
-  static async createSync(
+  static createSync(
     fs: Fs,
     mongo: Mongo,
     lance: lancedb.Connection,
     config: Config = Config.load(),
-  ): Promise<Server> {
+  ): Server {
     const server = new Server(fs, config);
     server.mongo = mongo;
     server.roleDB = new MongoRoleDB(mongo);
@@ -149,7 +150,7 @@ export class Server {
     server.longTermMemoryDB = new MongoLongTermMemoryDB(mongo, [
       server.longTermMemoryVectorSearcher,
     ]);
-    server.scheduler = await AgendaScheduler.create(mongo);
+    server.scheduler = AgendaScheduler.createSync(mongo);
     return server;
   }
 

@@ -52,7 +52,7 @@ describe("Server with MemFs and snapshot functions", () => {
     await mongo.connect();
 
     lance = await lancedb.connect("memory://ema");
-    server = await Server.createSync(fs, mongo, lance, createTestConfig());
+    server = Server.createSync(fs, mongo, lance, createTestConfig());
   });
 
   afterEach(async () => {
