@@ -76,7 +76,7 @@ describe("AgendaScheduler", () => {
 
     const jobId = await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 500,
+      runAt: Date.now() + 3000,
       data: { message: "cancel" },
     });
 
@@ -105,15 +105,18 @@ describe("AgendaScheduler", () => {
     const handlers: JobHandlerMap = { test: handler };
     await scheduler.start(handlers);
 
+    const initialRunAt = Date.now() + 3000;
+    const updatedRunAt = Date.now() + 200;
+
     const jobId = await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 800,
+      runAt: initialRunAt,
       data: { message: "old" },
     });
 
     const updated = await scheduler.reschedule(jobId, {
       name: "test",
-      runAt: Date.now() + 50,
+      runAt: updatedRunAt,
       data: { message: "new" },
     });
     expect(updated).toBe(true);
@@ -181,7 +184,7 @@ describe("AgendaScheduler", () => {
 
     await scheduler.scheduleEvery({
       name: "test",
-      runAt: Date.now() + 100,
+      runAt: Date.now() + 3000,
       interval: "1 second",
       data: { message: "dedupe" },
       unique: { name: "test", "data.message": "dedupe" },
@@ -189,7 +192,7 @@ describe("AgendaScheduler", () => {
 
     await scheduler.scheduleEvery({
       name: "test",
-      runAt: Date.now() + 100,
+      runAt: Date.now() + 3000,
       interval: "1 second",
       data: { message: "dedupe" },
       unique: { name: "test", "data.message": "dedupe" },
@@ -208,9 +211,12 @@ describe("AgendaScheduler", () => {
     const handlers: JobHandlerMap = { test: handler };
     await scheduler.start(handlers);
 
+    const initialRunAt = Date.now() + 3000;
+    const updatedRunAt = initialRunAt + 1000;
+
     const jobId = await scheduler.scheduleEvery({
       name: "test",
-      runAt: Date.now() + 100,
+      runAt: initialRunAt,
       interval: "2 seconds",
       data: { message: "old" },
       unique: { name: "test", "data.message": "old" },
@@ -218,7 +224,7 @@ describe("AgendaScheduler", () => {
 
     const updated = await scheduler.rescheduleEvery(jobId, {
       name: "test",
-      runAt: Date.now() + 200,
+      runAt: updatedRunAt,
       interval: "3 seconds",
       data: { message: "new" },
       unique: { name: "test", "data.message": "new" },
@@ -240,7 +246,7 @@ describe("AgendaScheduler", () => {
 
     const jobId = await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 200,
+      runAt: Date.now() + 3000,
       data: { message: "lookup" },
     });
 
@@ -259,12 +265,12 @@ describe("AgendaScheduler", () => {
 
     await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 500,
+      runAt: Date.now() + 3000,
       data: { message: "a" },
     });
     await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 500,
+      runAt: Date.now() + 3000,
       data: { message: "b" },
     });
 
