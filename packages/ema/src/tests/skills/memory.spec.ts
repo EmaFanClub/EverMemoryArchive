@@ -2,14 +2,19 @@ import { expect, test, describe, beforeEach, afterEach } from "vitest";
 import {
   createMongo,
   MongoActorDB,
+  MongoConversationDB,
   MongoConversationMessageDB,
   MongoShortTermMemoryDB,
   MongoLongTermMemoryDB,
+  MongoRoleDB,
+  MongoUserDB,
+  MongoUserOwnActorDB,
   LanceMemoryVectorSearcher,
 } from "../../db";
 import type { Mongo } from "../../db";
-import { ActorWorker } from "../../actor";
 import { Config } from "../../config";
+import { MemoryManager } from "../../memory/manager";
+import { AgendaScheduler } from "../../scheduler";
 import * as lancedb from "@lancedb/lancedb";
 
 const describeLLM = describe.runIf(
@@ -35,7 +40,7 @@ describeLLM("MemorySkill", () => {
   }
 
   let mongo: Mongo;
-  let worker: ActorWorker;
+  let memoryManager: MemoryManager;
   let lance: lancedb.Connection;
 
   beforeEach(async () => {
@@ -45,18 +50,18 @@ describeLLM("MemorySkill", () => {
     await mongo.connect();
 
     const searcher = new LanceMemoryVectorSearcher(mongo, lance);
-    worker = new ActorWorker(
-      Config.load(),
-      1,
-      "User",
-      1,
-      "EMA",
-      1,
+    const scheduler = await AgendaScheduler.create(mongo);
+    memoryManager = new MemoryManager(
+      new MongoRoleDB(mongo),
       new MongoActorDB(mongo),
+      new MongoUserDB(mongo),
+      new MongoUserOwnActorDB(mongo),
+      new MongoConversationDB(mongo),
       new MongoConversationMessageDB(mongo),
       new MongoShortTermMemoryDB(mongo),
       new MongoLongTermMemoryDB(mongo),
       searcher,
+      scheduler,
     );
 
     await searcher.createIndices();
@@ -68,23 +73,20 @@ describeLLM("MemorySkill", () => {
   });
 
   test("should search memory", async () => {
-    const result = await worker.search(["test"]);
-    expect(result).toEqual({ items: [] });
+    const result = await memoryManager.search(1, "test", 10);
+    expect(result).toEqual([]);
   });
 
   test("should mock search memory", async () => {
     const item = {
+      id: 1,
       index0: "test",
       index1: "test",
-      keywords: ["test"],
-      os: "test",
-      statement: "test",
+      memory: "test",
       createdAt: Date.now(),
     };
-    worker.search = vi.fn().mockResolvedValue({
-      items: [item],
-    });
-    const result = await worker.search(["test"]);
-    expect(result).toEqual({ items: [item] });
+    memoryManager.search = vi.fn().mockResolvedValue([item]);
+    const result = await memoryManager.search(1, "test", 10);
+    expect(result).toEqual([item]);
   });
 });
