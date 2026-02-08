@@ -33,7 +33,7 @@ export abstract class Skill {
    * @param args - Arguments object that should satisfy `parameters`.
    * @param context - Optional tool context (e.g. actor scope).
    */
-  abstract execute(args: any, context?: ToolContext): Promise<ToolResult>;
+  abstract execute(args: unknown, context?: ToolContext): Promise<ToolResult>;
 
   /** Returns minimal metadata used for listing in prompts/UI. */
   get metadata(): Record<string, string> {

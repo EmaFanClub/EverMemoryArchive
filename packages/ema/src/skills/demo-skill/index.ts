@@ -40,7 +40,7 @@ export default class DemoSkill extends Skill {
    * @param args - Skill arguments.
    * @param context - Optional tool context (unused).
    */
-  async execute(args: any, context?: ToolContext): Promise<ToolResult> {
+  async execute(args: unknown, context?: ToolContext): Promise<ToolResult> {
     let payload: z.infer<typeof DemoSkillSchema>;
     try {
       payload = DemoSkillSchema.parse(args);

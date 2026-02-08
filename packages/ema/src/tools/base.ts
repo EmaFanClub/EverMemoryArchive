@@ -38,5 +38,5 @@ export abstract class Tool {
    * @param args - Tool-specific arguments.
    * @param context - Optional tool context (e.g. actor scope).
    */
-  abstract execute(args: any, context?: ToolContext): Promise<ToolResult>;
+  abstract execute(args: unknown, context?: ToolContext): Promise<ToolResult>;
 }

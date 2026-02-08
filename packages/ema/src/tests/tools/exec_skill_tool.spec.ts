@@ -15,7 +15,7 @@ class StubSkill extends Skill {
   get parameters() {
     return {};
   }
-  async execute(args?: any): Promise<ToolResult> {
+  async execute(args?: unknown): Promise<ToolResult> {
     return this.executeFn(args);
   }
 }

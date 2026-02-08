@@ -42,7 +42,7 @@ export class EmaReplyTool extends Tool {
    * @param args - Tool arguments matching the reply schema.
    * @param context - Optional tool context (unused).
    */
-  async execute(args: any, context?: ToolContext): Promise<ToolResult> {
+  async execute(args: unknown, context?: ToolContext): Promise<ToolResult> {
     try {
       const payload = EmaReplySchema.parse(args);
       return {

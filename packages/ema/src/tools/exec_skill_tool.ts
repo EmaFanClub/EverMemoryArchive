@@ -33,7 +33,7 @@ export class ExecSkillTool extends Tool {
    * @param args - Arguments containing skill name and payload.
    * @param context - Optional tool context forwarded to the skill.
    */
-  async execute(args: any, context?: ToolContext): Promise<ToolResult> {
+  async execute(args: unknown, context?: ToolContext): Promise<ToolResult> {
     let payload: z.infer<typeof ExeSkillSchema>;
     try {
       payload = ExeSkillSchema.parse(args);
