@@ -6,15 +6,23 @@ import type {
 import type { Mongo } from "./mongo";
 import { MongoMemorySearchAdaptor } from "./mongo.long_term_memory";
 import * as lancedb from "@lancedb/lancedb";
-import { Field, Int64, FixedSizeList, Float32, Schema } from "apache-arrow";
+import {
+  Field,
+  Int64,
+  FixedSizeList,
+  Float32,
+  Schema,
+  Utf8,
+} from "apache-arrow";
+
+import { FetchWithProxy } from "../llm/proxy";
+import { GenAI } from "../llm/google_client";
+import { type GoogleGenAIOptions } from "@google/genai";
 
 /**
- * The fields of a long term memory that are interested for embedding
+ * The text input used to compute an embedding.
  */
-export type EmbeddingInterestedLTMFields = Pick<
-  SearchLongTermMemoriesRequest,
-  "index0" | "index1" | "keywords"
->;
+export type LongTermMemoryEmbeddingInput = string;
 
 /**
  * Interface for a long term memory embedding engine
@@ -23,12 +31,12 @@ export interface LongTermMemoryEmbeddingEngine {
   /**
    * Creates a vector embedding for a long term memory
    * @param dim - The dimension of the vector embedding
-   * @param entity - The long term memory to create an embedding for
+   * @param input - The text input to embed
    * @returns Promise resolving to the vector embedding of the long term memory
    */
   createEmbedding(
     dim: number,
-    entity: EmbeddingInterestedLTMFields,
+    input: LongTermMemoryEmbeddingInput,
   ): Promise<number[] | undefined>;
 }
 
@@ -59,19 +67,29 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
     if (!actorId || typeof actorId !== "number") {
       throw new Error("actorId must be provided");
     }
+    if (!req.memory) {
+      throw new Error("memory must be provided");
+    }
     const embedding = await this.embeddingEngine.createEmbedding(
       this.$dim,
-      req,
+      req.memory,
     );
     if (!embedding) {
       throw new Error("cannot compute embedding");
     }
 
+    const filters = [`actor_id = ${actorId}`];
+    if (req.index0) {
+      filters.push(`index0 = '${escapeWhereValue(req.index0)}'`);
+    }
+    if (req.index1) {
+      filters.push(`index1 = '${escapeWhereValue(req.index1)}'`);
+    }
     let query = this.indexTable
       .query()
-      .where(`actor_id == ${actorId}`)
+      .where(filters.join(" AND "))
       .nearestTo(embedding)
-      .limit(req.limit ?? 100);
+      .limit(req.limit);
 
     let ids: { id: number }[] = this.isDebug
       ? await query.toArray()
@@ -80,7 +98,9 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
       console.log("[LanceMemoryVectorSearcher]", ids);
     }
 
-    return ids.map((res) => res.id);
+    return ids.map((res) =>
+      typeof res.id === "bigint" ? Number(res.id) : res.id,
+    );
   }
 
   /**
@@ -100,7 +120,7 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
 
     const embedding = await this.embeddingEngine.createEmbedding(
       this.$dim,
-      entity,
+      entity.memory,
     );
     if (!embedding) {
       throw new Error("cannot compute embedding");
@@ -110,6 +130,8 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
       {
         id,
         actor_id: actorId,
+        index0: entity.index0,
+        index1: entity.index1,
         embedding,
       },
     ]);
@@ -132,6 +154,8 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
         new Schema([
           new Field("id", new Int64(), false),
           new Field("actor_id", new Int64(), false),
+          new Field("index0", new Utf8(), false),
+          new Field("index1", new Utf8(), false),
           new Field(
             "embedding",
             new FixedSizeList(
@@ -158,9 +182,25 @@ class LongTermMemoryGeminiEmbeddingEngine implements LongTermMemoryEmbeddingEngi
       throw new Error("GEMINI_API_KEY is not set");
     }
 
-    this.ai = new GoogleGenAI({
-      apiKey,
-    });
+    const vertexAIOptions = {
+      vertexai: true,
+      project: process.env.GOOGLE_CLOUD_PROJECT,
+      location: process.env.GOOGLE_CLOUD_LOCATION,
+    };
+    const googleAIOptions = {
+      apiKey: apiKey,
+    };
+    const options: GoogleGenAIOptions =
+      process.env.GOOGLE_GENAI_USE_VERTEXAI === "True"
+        ? vertexAIOptions
+        : googleAIOptions;
+    console.log("GoogleClient options:", options);
+    this.ai = new GenAI(
+      options,
+      new FetchWithProxy(
+        process.env.HTTPS_PROXY || process.env.https_proxy,
+      ).createFetcher(),
+    );
   }
   /**
    * Creates a vector embedding for a long term memory
@@ -170,21 +210,15 @@ class LongTermMemoryGeminiEmbeddingEngine implements LongTermMemoryEmbeddingEngi
    */
   async createEmbedding(
     dim: number,
-    entity: EmbeddingInterestedLTMFields,
+    input: LongTermMemoryEmbeddingInput,
   ): Promise<number[] | undefined> {
-    const embeddingContent = [];
-    if (entity.index0) {
-      embeddingContent.push(entity.index0);
-    }
-    if (entity.index1) {
-      embeddingContent.push(entity.index1);
-    }
-    if (entity.keywords) {
-      embeddingContent.push(...entity.keywords);
+    const embeddingContent = input.trim();
+    if (!embeddingContent) {
+      return undefined;
     }
     const response = await this.ai.models.embedContent({
       model: "gemini-embedding-001",
-      contents: embeddingContent,
+      contents: [embeddingContent],
       config: {
         // todo: find the best task type.
         taskType: "RETRIEVAL_QUERY",
@@ -193,4 +227,8 @@ class LongTermMemoryGeminiEmbeddingEngine implements LongTermMemoryEmbeddingEngi
     });
     return response.embeddings?.[0]?.values;
   }
+}
+
+function escapeWhereValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }

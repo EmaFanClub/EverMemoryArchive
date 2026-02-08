@@ -55,8 +55,18 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
         filter.createdAt.$gte = req.createdAfter;
       }
     }
+    if (req.kind) {
+      filter.kind = req.kind;
+    }
 
-    return (await collection.find(filter).toArray()).map(omitMongoId);
+    let cursor = collection.find(filter);
+    if (req.sort) {
+      cursor = cursor.sort({ createdAt: req.sort === "asc" ? 1 : -1 });
+    }
+    if (req.limit !== undefined) {
+      cursor = cursor.limit(req.limit);
+    }
+    return (await cursor.toArray()).map(omitMongoId);
   }
 
   /**

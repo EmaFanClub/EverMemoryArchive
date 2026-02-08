@@ -46,6 +46,37 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       }
       filter.conversationId = req.conversationId;
     }
+    if (req.createdBefore !== undefined || req.createdAfter !== undefined) {
+      if (
+        req.createdBefore !== undefined &&
+        typeof req.createdBefore !== "number"
+      ) {
+        throw new Error("createdBefore must be a number");
+      }
+      if (
+        req.createdAfter !== undefined &&
+        typeof req.createdAfter !== "number"
+      ) {
+        throw new Error("createdAfter must be a number");
+      }
+      const createdAtFilter: { $lte?: number; $gte?: number } = {};
+      if (req.createdBefore !== undefined) {
+        createdAtFilter.$lte = req.createdBefore;
+      }
+      if (req.createdAfter !== undefined) {
+        createdAtFilter.$gte = req.createdAfter;
+      }
+      filter.createdAt = createdAtFilter;
+    }
+    if (req.messageIds !== undefined) {
+      if (!Array.isArray(req.messageIds)) {
+        throw new Error("messageIds must be an array");
+      }
+      if (req.messageIds.some((id) => typeof id !== "number")) {
+        throw new Error("messageIds must contain only numbers");
+      }
+      filter.id = { $in: req.messageIds };
+    }
 
     let cursor = collection.find(filter);
     if (req.sort) {
@@ -55,6 +86,20 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       cursor = cursor.limit(req.limit);
     }
     return (await cursor.toArray()).map(omitMongoId);
+  }
+
+  /**
+   * Counts conversation messages in the database
+   * @param conversationId - The conversation ID to count messages for
+   * @returns Promise resolving to the number of matching messages
+   */
+  async countConversationMessages(conversationId: number): Promise<number> {
+    if (typeof conversationId !== "number") {
+      throw new Error("conversationId must be a number");
+    }
+    const db = this.mongo.getDb();
+    const collection = db.collection<ConversationMessageEntity>(this.$cn);
+    return collection.countDocuments({ conversationId });
   }
 
   /**
