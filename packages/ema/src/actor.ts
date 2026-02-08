@@ -1,31 +1,17 @@
+import dayjs from "dayjs";
 import { EventEmitter } from "node:events";
 import type { Config } from "./config";
-import { Agent, AgentEventNames } from "./agent";
+import { Agent, AgentEventNames, checkCompleteMessages } from "./agent";
 import type { AgentEventName, AgentEvent, AgentEventUnion } from "./agent";
-import type {
-  ActorDB,
-  LongTermMemoryDB,
-  LongTermMemorySearcher,
-  ShortTermMemoryDB,
-  ConversationMessageDB,
-} from "./db";
-import type { BufferMessage } from "./memory/memory";
 import {
   bufferMessageFromEma,
   bufferMessageFromUser,
-  bufferMessageToPrompt,
   bufferMessageToUserMessage,
 } from "./memory/utils";
-import type {
-  ActorState,
-  SearchActorMemoryResult,
-  ShortTermMemory,
-  LongTermMemory,
-  ActorStateStorage,
-  ActorMemory,
-} from "./memory/memory";
+import type { BufferMessage } from "./memory/base";
+import type { Server } from "./server";
 import { Logger } from "./logger";
-import type { Content } from "./schema";
+import type { InputContent } from "./schema";
 import { LLMClient } from "./llm";
 import { type AgentState } from "./agent";
 
@@ -33,13 +19,13 @@ import { type AgentState } from "./agent";
 export interface ActorScope {
   actorId: number;
   userId: number;
-  conversationId?: number;
+  conversationId: number;
 }
 
 /**
  * A facade of the actor functionalities between the server (system) and the agent (actor).
  */
-export class ActorWorker implements ActorStateStorage, ActorMemory {
+export class ActorWorker {
   /** Event emitter for actor events. */
   readonly events: ActorEventsEmitter =
     new EventEmitter<ActorEventMap>() as ActorEventsEmitter;
@@ -50,53 +36,37 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   /** Logger */
   private readonly logger: Logger = Logger.create({
     name: "actor",
-    level: "full",
+    level: "debug",
     transport: "console",
   });
   /** Cached agent state for the latest run. */
   private agentState: AgentState | null = null;
   /** Queue of pending actor input batches. */
   private queue: BufferMessage[] = [];
-  /** Tracks whether a run produced any ema_reply events. */
-  private hasEmaReplyInRun = false;
   /** Promise for the current agent run. */
   private currentRunPromise: Promise<void> | null = null;
   /** Ensures queue processing runs serially. */
   private processingQueue = false;
   /** Serializes buffer writes to preserve order. */
   private bufferWritePromise: Promise<void> = Promise.resolve();
-  /** Whether the next run should reuse the current state after an abort. */
-  private resumeStateAfterAbort = false;
 
   /**
    * Creates a new actor worker with storage access and event wiring.
    * @param config - Actor configuration.
    * @param userId - User identifier for message attribution.
-   * @param userName - User display name for message attribution.
    * @param actorId - Actor identifier for memory and storage.
-   * @param actorName - Actor display name for message attribution.
    * @param conversationId - Conversation identifier for message history.
-   * @param actorDB - Actor persistence interface.
-   * @param conversationMessageDB - Conversation message persistence interface.
-   * @param shortTermMemoryDB - Short-term memory persistence interface.
-   * @param longTermMemoryDB - Long-term memory persistence interface.
-   * @param longTermMemorySearcher - Long-term memory search interface.
+   * @param server - Server instance for shared services.
    */
   constructor(
     private readonly config: Config,
     private readonly userId: number,
-    private readonly userName: string,
     private readonly actorId: number,
-    private readonly actorName: string,
     private readonly conversationId: number,
-    private readonly actorDB: ActorDB,
-    private readonly conversationMessageDB: ConversationMessageDB,
-    private readonly shortTermMemoryDB: ShortTermMemoryDB,
-    private readonly longTermMemoryDB: LongTermMemoryDB,
-    private readonly longTermMemorySearcher: LongTermMemorySearcher,
+    private readonly server: Server,
   ) {
     const llm = new LLMClient(this.config.llm);
-    this.agent = new Agent(config.agent, llm);
+    this.agent = new Agent(config.agent, llm, this.logger);
     this.bindAgentEvent();
   }
 
@@ -109,26 +79,6 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
       });
     };
     events.forEach(bind);
-  }
-
-  /**
-   * Builds the system prompt by injecting the current short-term memory buffer.
-   *
-   * The placeholder `{MEMORY_BUFFER}` in the provided `systemPrompt` will be
-   * replaced with a textual representation of up to the last 10 buffer items.
-   * All occurrences of `{MEMORY_BUFFER}` are replaced. If the placeholder
-   * does not appear in `systemPrompt`, the original string is returned.
-   *
-   * @param systemPrompt - The system prompt template containing `{MEMORY_BUFFER}`.
-   * @returns The system prompt with the memory buffer injected.
-   */
-  async buildSystemPrompt(systemPrompt: string): Promise<string> {
-    const bufferWindow = await this.getBuffer(10);
-    const bufferText =
-      bufferWindow.length === 0
-        ? "None."
-        : bufferWindow.map((item) => bufferMessageToPrompt(item)).join("\n");
-    return systemPrompt.replaceAll("{MEMORY_BUFFER}", bufferText);
   }
 
   /**
@@ -145,7 +95,7 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
    * }
    * ```
    */
-  async work(inputs: ActorInputs) {
+  async work(inputs: ActorInputs, addToBuffer: boolean = true): Promise<void> {
     // TODO: implement actor stepping logic
     if (inputs.length === 0) {
       throw new Error("No inputs provided");
@@ -160,18 +110,16 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
       kind: "message",
       content: `Received input: ${input.text}.`,
     });
-    const bufferMessage = bufferMessageFromUser(
-      this.userId,
-      this.userName,
-      inputs,
-    );
+    const bufferMessage = bufferMessageFromUser(this.userId, inputs);
     this.logger.debug(`Received input when [${this.currentStatus}].`, inputs);
     this.queue.push(bufferMessage);
-    this.enqueueBufferWrite(bufferMessage);
+
+    if (addToBuffer) {
+      this.enqueueBufferWrite(bufferMessage);
+    }
 
     if (this.isBusy()) {
       await this.abortCurrentRun();
-      this.resumeStateAfterAbort = !this.hasEmaReplyInRun;
       return;
     }
 
@@ -188,11 +136,8 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
   ) {
     if (isAgentEvent(content, "emaReplyReceived")) {
       const reply = content.content.reply;
-      this.hasEmaReplyInRun = true;
-      this.resumeStateAfterAbort = false;
-      this.enqueueBufferWrite(
-        bufferMessageFromEma(this.actorId, this.actorName, reply),
-      );
+      if (reply.response.length === 0) return;
+      this.enqueueBufferWrite(bufferMessageFromEma(this.actorId, reply));
     }
     this.events.emit(event, content);
   }
@@ -213,67 +158,11 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     return this.currentStatus !== "idle";
   }
 
-  /**
-   * Gets the state of the actor.
-   * @returns The state of the actor.
-   */
-  async getState(): Promise<ActorState> {
-    throw new Error("getState is not implemented yet.");
-  }
-
-  /**
-   * Updates the state of the actor.
-   * @param state - The state to update.
-   */
-  async updateState(state: ActorState): Promise<void> {
-    throw new Error("updateState is not implemented yet.");
-  }
-
-  private async addBuffer(message: BufferMessage): Promise<void> {
-    const payload =
-      message.kind === "user"
-        ? { kind: "user" as const, userId: message.id }
-        : { kind: "actor" as const, actorId: message.id };
-    await this.conversationMessageDB.addConversationMessage({
-      conversationId: this.conversationId,
-      message: {
-        ...payload,
-        contents: message.contents,
-      },
-      createdAt: message.time,
-    });
-  }
-
-  private async getBuffer(count: number): Promise<BufferMessage[]> {
-    const messages = await this.conversationMessageDB.listConversationMessages({
-      conversationId: this.conversationId,
-      limit: count,
-      sort: "desc",
-    });
-    return [...messages].reverse().map((item) => {
-      const message = item.message;
-      if (message.kind === "user") {
-        return {
-          kind: "user",
-          name: this.userName,
-          id: message.userId,
-          contents: message.contents,
-          time: item.createdAt!,
-        };
-      }
-      return {
-        kind: "actor",
-        name: this.actorName,
-        id: message.actorId,
-        contents: message.contents,
-        time: item.createdAt!,
-      };
-    });
-  }
-
   private enqueueBufferWrite(message: BufferMessage): void {
     this.bufferWritePromise = this.bufferWritePromise
-      .then(() => this.addBuffer(message))
+      .then(() =>
+        this.server.memoryManager.addBuffer(this.conversationId, message),
+      )
       .catch((error) => {
         this.logger.error("Failed to write buffer:", error);
         throw error;
@@ -289,13 +178,47 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
       while (this.queue.length > 0) {
         this.setStatus("preparing");
         const batches = this.queue.splice(0, this.queue.length);
-        if (this.resumeStateAfterAbort && this.agentState) {
-          this.agentState.messages.push(
+        if (
+          this.agentState &&
+          !checkCompleteMessages(this.agentState.messages)
+        ) {
+          const messages = this.agentState.messages;
+          if (messages.length === 0) {
+            throw new Error("Cannot resume from an empty message history.");
+          }
+          const last = messages[messages.length - 1];
+          if (last.role === "model") {
+            throw new Error(
+              "Cannot resume when the last message is a model message.",
+            );
+          }
+          if (
+            last.role === "user" &&
+            last.contents.some(
+              (content) => content.type === "function_response",
+            )
+          ) {
+            const time = dayjs(Date.now()).format("YYYY-MM-DD HH:mm:ss");
+            messages.push({
+              role: "model",
+              contents: [
+                { type: "text", text: `<system time="${time}">` },
+                {
+                  type: "text",
+                  text: "检测到用户插话。请综合考虑这条提示之前和之后的消息，理解上下文之间的关系后选择合适的回复方式，注意避免回复割裂和重复。",
+                },
+                { type: "text", text: `</system>` },
+              ],
+            });
+          }
+          messages.push(
             ...batches.map((item) => bufferMessageToUserMessage(item)),
           );
         } else {
           this.agentState = {
-            systemPrompt: await this.buildSystemPrompt(
+            systemPrompt: await this.server.memoryManager.buildSystemPrompt(
+              this.actorId,
+              this.conversationId,
               this.config.systemPrompt,
             ),
             messages: batches.map((item) => bufferMessageToUserMessage(item)),
@@ -306,21 +229,23 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
                 userId: this.userId,
                 conversationId: this.conversationId,
               },
+              server: this.server,
             },
           };
         }
-        this.resumeStateAfterAbort = false;
-        this.hasEmaReplyInRun = false;
         this.setStatus("running");
         this.currentRunPromise = this.agent.runWithState(this.agentState);
         try {
           await this.currentRunPromise;
         } finally {
           this.currentRunPromise = null;
-          if (!this.resumeStateAfterAbort) {
+          if (
+            this.agentState &&
+            checkCompleteMessages(this.agentState.messages)
+          ) {
             this.agentState = null;
           }
-          if (this.queue.length === 0 && !this.resumeStateAfterAbort) {
+          if (this.queue.length === 0) {
             this.setStatus("idle");
           }
         }
@@ -342,51 +267,12 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
     await this.agent.abort();
     await this.currentRunPromise;
   }
-
-  /**
-   * Searches the long-term memory for items matching the keywords.
-   * @param keywords - The keywords to search for.
-   * @returns The search results.
-   */
-  async search(keywords: string[]): Promise<SearchActorMemoryResult> {
-    // todo: combine short-term memory search
-    const items = await this.longTermMemorySearcher.searchLongTermMemories({
-      actorId: this.actorId,
-      keywords,
-    });
-
-    return { items };
-  }
-
-  /**
-   * Adds a short-term memory item to the actor.
-   * @param item - The short-term memory item to add.
-   */
-  async addShortTermMemory(item: ShortTermMemory): Promise<void> {
-    // todo: enforce short-term memory limit
-    await this.shortTermMemoryDB.appendShortTermMemory({
-      actorId: this.actorId,
-      ...item,
-    });
-  }
-
-  /**
-   * Adds a long-term memory item to the actor.
-   * @param item - The long-term memory item to add.
-   */
-  async addLongTermMemory(item: LongTermMemory): Promise<void> {
-    // todo: enforce long-term memory limit
-    await this.longTermMemoryDB.appendLongTermMemory({
-      actorId: this.actorId,
-      ...item,
-    });
-  }
 }
 
 /**
  * A batch of actor inputs in one request.
  */
-export type ActorInputs = Content[];
+export type ActorInputs = InputContent[];
 
 /**
  * The status of the actor.
