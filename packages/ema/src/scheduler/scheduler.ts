@@ -25,11 +25,26 @@ export class AgendaScheduler implements Scheduler {
   private readonly mongo: Mongo;
 
   /**
+   * Creates and initializes a new AgendaScheduler instance.
+   * @param mongo - MongoDB instance used to resolve the Agenda connection URI.
+   * @param config - Agenda configuration overrides.
+   * @returns Promise resolving to an initialized scheduler instance.
+   */
+  static async create(
+    mongo: Mongo,
+    config?: Partial<IAgendaConfig>,
+  ): Promise<AgendaScheduler> {
+    const scheduler = new AgendaScheduler(mongo, config);
+    await scheduler.initialize();
+    return scheduler;
+  }
+
+  /**
    * Creates a new AgendaScheduler instance.
    * @param mongo - MongoDB instance used to resolve the Agenda connection URI.
    * @param config - Agenda configuration overrides.
    */
-  constructor(mongo: Mongo, config?: Partial<IAgendaConfig>) {
+  private constructor(mongo: Mongo, config?: Partial<IAgendaConfig>) {
     this.agenda = new Agenda(config);
     this.mongo = mongo;
   }
@@ -47,7 +62,6 @@ export class AgendaScheduler implements Scheduler {
     this.status = "running";
 
     try {
-      await this.agenda.database(this.mongo.getUri(), this.collectionName);
       await this.agenda.start();
     } catch (error) {
       this.status = "idle";
@@ -78,7 +92,6 @@ export class AgendaScheduler implements Scheduler {
    * @returns Promise resolving to the job if found.
    */
   async getJob(id: JobId): Promise<Job | null> {
-    await this.ensureReady();
     return this.loadJob(id);
   }
 
@@ -88,7 +101,6 @@ export class AgendaScheduler implements Scheduler {
    * @returns Promise resolving to the job id.
    */
   async schedule(job: JobSpec): Promise<JobId> {
-    await this.ensureReady();
     const scheduled = await this.agenda.schedule(
       new Date(job.runAt),
       job.name,
@@ -108,7 +120,6 @@ export class AgendaScheduler implements Scheduler {
    * @returns Promise resolving to true if rescheduled, false otherwise.
    */
   async reschedule(id: JobId, job: JobSpec): Promise<boolean> {
-    await this.ensureReady();
     const agendaJob = await this.loadJob(id);
     if (!agendaJob) {
       return false;
@@ -132,7 +143,6 @@ export class AgendaScheduler implements Scheduler {
    * @returns Promise resolving to true if canceled, false otherwise.
    */
   async cancel(id: JobId): Promise<boolean> {
-    await this.ensureReady();
     const agendaJob = await this.loadJob(id);
     if (!agendaJob) {
       return false;
@@ -153,7 +163,6 @@ export class AgendaScheduler implements Scheduler {
    * @returns Promise resolving to the job id.
    */
   async scheduleEvery(job: JobEverySpec): Promise<JobId> {
-    await this.ensureReady();
     const agendaJob = this.agenda.create(job.name, job.data);
     agendaJob.unique(job.unique);
     agendaJob.schedule(new Date(job.runAt));
@@ -173,7 +182,6 @@ export class AgendaScheduler implements Scheduler {
    * @returns Promise resolving to true if rescheduled, false otherwise.
    */
   async rescheduleEvery(id: JobId, job: JobEverySpec): Promise<boolean> {
-    await this.ensureReady();
     const agendaJob = await this.loadJob(id);
     if (!agendaJob) {
       return false;
@@ -199,15 +207,12 @@ export class AgendaScheduler implements Scheduler {
    * @returns Promise resolving to matching jobs.
    */
   async listJobs(filter?: Record<string, unknown>): Promise<Job[]> {
-    await this.ensureReady();
     const jobs = await this.agenda.jobs(filter ?? {});
     return jobs as Job[];
   }
 
-  private async ensureReady(): Promise<void> {
-    if (this.status !== "running") {
-      throw new Error("Scheduler is not running.");
-    }
+  private async initialize(): Promise<void> {
+    await this.agenda.database(this.mongo.getUri(), this.collectionName);
     await this.agenda.ready;
   }
 

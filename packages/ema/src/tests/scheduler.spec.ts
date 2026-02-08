@@ -14,7 +14,7 @@ describe("AgendaScheduler", () => {
   beforeEach(async () => {
     mongo = await createMongo("", "ema_scheduler_test", "memory");
     await mongo.connect();
-    scheduler = new AgendaScheduler(mongo, {
+    scheduler = await AgendaScheduler.create(mongo, {
       processEvery: 20,
       defaultConcurrency: 1,
       maxConcurrency: 1,
@@ -29,14 +29,13 @@ describe("AgendaScheduler", () => {
     await mongo.close();
   });
 
-  test("throws when scheduling before start", async () => {
-    await expect(
-      scheduler.schedule({
-        name: "test",
-        runAt: Date.now() + 50,
-        data: { message: "not-started" },
-      }),
-    ).rejects.toThrow("Scheduler is not running.");
+  test("schedules job before start", async () => {
+    const jobId = await scheduler.schedule({
+      name: "test",
+      runAt: Date.now() + 50,
+      data: { message: "not-started" },
+    });
+    expect(jobId).toBeDefined();
   });
 
   test("executes a scheduled job", async () => {
