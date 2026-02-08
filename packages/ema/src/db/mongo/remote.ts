@@ -3,9 +3,27 @@
  * Connects to an actual MongoDB instance using connection string.
  */
 
-import { MongoClient, type Db } from "mongodb";
+import { createRequire } from "node:module";
+import { MongoClient } from "mongodb";
 import type { CreateMongoArgs } from "../mongo";
 import { Mongo } from "../mongo";
+
+type ConnectionString = {
+  pathname: string;
+  toString(): string;
+};
+
+type ConnectionStringConstructor = new (
+  uri: string,
+  options?: { looseValidation?: boolean },
+) => ConnectionString;
+
+const requireFromMongo = createRequire(
+  createRequire(import.meta.url).resolve("mongodb/package.json"),
+);
+const { default: MongoConnectionString } = requireFromMongo(
+  "mongodb-connection-string-url",
+) as { default: ConnectionStringConstructor };
 
 /**
  * Remote MongoDB implementation
@@ -82,25 +100,10 @@ export class RemoteMongo extends Mongo {
   }
 
   private buildUriWithDb(): string {
-    const [base, query] = this.uri.split("?");
-    const withQuery = (value: string) => (query ? `${value}?${query}` : value);
-
-    const schemeIndex = base.indexOf("://");
-    if (schemeIndex === -1) {
-      return withQuery(base);
+    const connectionString = new MongoConnectionString(this.uri);
+    if (connectionString.pathname === "" || connectionString.pathname === "/") {
+      connectionString.pathname = `/${this.dbName}`;
     }
-
-    const rest = base.slice(schemeIndex + 3);
-    const slashIndex = rest.indexOf("/");
-    if (slashIndex === -1) {
-      return withQuery(`${base}/${this.dbName}`);
-    }
-
-    const path = rest.slice(slashIndex + 1);
-    if (!path) {
-      return withQuery(`${base}${this.dbName}`);
-    }
-
-    return withQuery(base);
+    return connectionString.toString();
   }
 }
