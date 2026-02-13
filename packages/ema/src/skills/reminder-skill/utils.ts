@@ -1,7 +1,4 @@
-import dayjs from "dayjs";
-import customParseFormat from "dayjs/plugin/customParseFormat";
-
-dayjs.extend(customParseFormat);
+import { formatTimestamp, parseTimestamp } from "../../utils";
 
 const RUN_AT_FORMAT = "YYYY-MM-DD HH:mm:ss";
 
@@ -11,11 +8,11 @@ const RUN_AT_FORMAT = "YYYY-MM-DD HH:mm:ss";
  * @returns Unix timestamp in milliseconds.
  */
 export function parseRunAt(runAt: string): number {
-  const parsed = dayjs(runAt, RUN_AT_FORMAT, true);
-  if (!parsed.isValid()) {
+  try {
+    return parseTimestamp(RUN_AT_FORMAT, runAt);
+  } catch {
     throw new Error(`runAt must be in format "${RUN_AT_FORMAT}".`);
   }
-  return parsed.valueOf();
 }
 
 /**
@@ -24,9 +21,5 @@ export function parseRunAt(runAt: string): number {
  * @returns Formatted runAt string.
  */
 export function formatRunAt(timestamp: number): string {
-  const parsed = dayjs(timestamp);
-  if (!parsed.isValid()) {
-    throw new Error("Invalid timestamp.");
-  }
-  return parsed.format(RUN_AT_FORMAT);
+  return formatTimestamp(RUN_AT_FORMAT, timestamp);
 }

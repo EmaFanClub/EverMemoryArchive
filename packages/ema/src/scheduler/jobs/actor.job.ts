@@ -1,4 +1,3 @@
-import dayjs from "dayjs";
 import type { JobHandler } from "../base";
 import type { ActorScope } from "../../actor";
 import type { ActorState } from "../../memory/base";
@@ -6,6 +5,7 @@ import type { Server } from "../../server";
 import { Agent, type AgentState } from "../../agent";
 import { LLMClient } from "../../llm";
 import { Logger } from "../../logger";
+import { formatTimestamp } from "../../utils";
 
 /**
  * Data shape for the agent job.
@@ -49,7 +49,7 @@ export function createActorBackgroundJobHandler(
           filePath: `ActorBackgroundJob/actor-${actorScope.actorId}-${Date.now()}.log`,
         }),
       );
-      const time = dayjs(Date.now()).format("YYYY-MM-DD HH:mm:ss");
+      const time = formatTimestamp("YYYY-MM-DD HH:mm:ss", Date.now());
       const agentState: AgentState = {
         systemPrompt: await server.memoryManager.buildSystemPrompt(
           actorScope.actorId,
@@ -95,7 +95,7 @@ export function createActorForegroundJobHandler(
         actorScope.actorId,
         actorScope.conversationId,
       );
-      const time = dayjs(Date.now()).format("YYYY-MM-DD HH:mm:ss");
+      const time = formatTimestamp("YYYY-MM-DD HH:mm:ss", Date.now());
       await actor.work(
         [
           { type: "text", text: `<system time="${time}">` },

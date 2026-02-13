@@ -1,11 +1,8 @@
-import dayjs from "dayjs";
-import customParseFormat from "dayjs/plugin/customParseFormat";
 import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
 import type { ConversationMessageEntity } from "../../db/base";
-
-dayjs.extend(customParseFormat);
+import { formatTimestamp, parseTimestamp } from "../../utils";
 
 const TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
 const DEFAULT_LIMIT = 50;
@@ -68,11 +65,11 @@ type QueryChatHistoryInput = z.infer<typeof QueryChatHistorySchema>;
  * @returns Unix timestamp in milliseconds.
  */
 function parseTime(value: string, field: string): number {
-  const parsed = dayjs(value, TIME_FORMAT, true);
-  if (!parsed.isValid()) {
+  try {
+    return parseTimestamp(TIME_FORMAT, value);
+  } catch {
     throw new Error(`${field} must be in format "${TIME_FORMAT}".`);
   }
-  return parsed.valueOf();
 }
 
 /**
@@ -89,7 +86,7 @@ function formatMessage(entity: ConversationMessageEntity) {
     msg_id: entity.id,
     role: message.kind,
     role_id: message.kind === "user" ? message.userId : message.actorId,
-    time: dayjs(entity.createdAt ?? Date.now()).format(TIME_FORMAT),
+    time: formatTimestamp(TIME_FORMAT, entity.createdAt ?? Date.now()),
     contents: message.contents,
   };
 }

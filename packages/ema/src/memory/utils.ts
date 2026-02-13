@@ -1,7 +1,7 @@
-import dayjs from "dayjs";
 import { z } from "zod";
 import type { InputContent, UserMessage } from "../schema";
 import type { EmaReply } from "../tools/ema_reply_tool";
+import { formatTimestamp } from "../utils";
 import type { BufferMessage } from "./base";
 
 export const LONG_TERM_INDEX_MAP = {
@@ -55,7 +55,7 @@ export function bufferMessageToUserMessage(
   if (message.kind !== "user") {
     throw new Error(`Expected user message, got ${message.kind}`);
   }
-  const time = dayjs(message.time).format("YYYY-MM-DD HH:mm:ss");
+  const time = formatTimestamp("YYYY-MM-DD HH:mm:ss", message.time);
   const msgId = message.msg_id ?? "";
   return {
     role: "user",
@@ -80,7 +80,7 @@ export function bufferMessageToPrompt(message: BufferMessage): string {
     .map((part) => (part.type === "text" ? part.text : JSON.stringify(part)))
     .join("\n");
   const msgId = message.msg_id ?? "";
-  return `- [${dayjs(message.time).format("YYYY-MM-DD HH:mm:ss")}][${message.kind} role_id=${message.role_id} msg_id=${msgId}] ${contents}`;
+  return `- [${formatTimestamp("YYYY-MM-DD HH:mm:ss", message.time)}][${message.kind} role_id=${message.role_id} msg_id=${msgId}] ${contents}`;
 }
 
 /**

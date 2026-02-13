@@ -1,4 +1,3 @@
-import dayjs from "dayjs";
 import { EventEmitter } from "node:events";
 import type { Config } from "./config";
 import { Agent, AgentEventNames, checkCompleteMessages } from "./agent";
@@ -14,6 +13,7 @@ import { Logger } from "./logger";
 import type { InputContent } from "./schema";
 import { LLMClient } from "./llm";
 import { type AgentState } from "./agent";
+import { formatTimestamp } from "./utils";
 
 /** The scope information for the actor. */
 export interface ActorScope {
@@ -198,7 +198,7 @@ export class ActorWorker {
               (content) => content.type === "function_response",
             )
           ) {
-            const time = dayjs(Date.now()).format("YYYY-MM-DD HH:mm:ss");
+            const time = formatTimestamp("YYYY-MM-DD HH:mm:ss", Date.now());
             messages.push({
               role: "model",
               contents: [

@@ -1,8 +1,8 @@
-import dayjs from "dayjs";
 import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
 import { Index0Enum, Index1Enum, isAllowedIndex1 } from "../../memory/utils";
+import { formatTimestamp } from "../../utils";
 
 export const SearchLongTermMemorySchema = z
   .object({
@@ -80,7 +80,10 @@ export default class SearchLongTermMemorySkill extends Skill {
     );
     const formatted = records.map((record) => ({
       ...record,
-      createdAt: dayjs(record.createdAt).format("YYYY-MM-DD HH:mm:ss"),
+      createdAt: formatTimestamp(
+        "YYYY-MM-DD HH:mm:ss",
+        record.createdAt ?? Date.now(),
+      ),
     }));
     return {
       success: true,
