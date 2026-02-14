@@ -1,4 +1,4 @@
-import type { Content } from "../schema";
+import type { InputContent } from "../schema";
 
 /**
  * Represents an entity in the database
@@ -341,7 +341,7 @@ export interface ConversationUserMessage {
   /**
    * The message content
    */
-  contents: Content[];
+  contents: InputContent[];
 }
 
 /**
@@ -359,7 +359,7 @@ export interface ConversationActorMessage {
   /**
    * The message content
    */
-  contents: Content[];
+  contents: InputContent[];
 }
 
 /**
@@ -373,6 +373,13 @@ export interface ConversationMessageDB {
   listConversationMessages(
     req: ListConversationMessagesRequest,
   ): Promise<ConversationMessageEntity[]>;
+
+  /**
+   * counts conversation messages in the database
+   * @param conversationId - The conversation ID to count messages for
+   * @returns Promise resolving to the number of matching messages
+   */
+  countConversationMessages(conversationId: number): Promise<number>;
 
   /**
    * gets a conversation message by id
@@ -409,6 +416,18 @@ export interface ListConversationMessagesRequest {
    * Sort order by createdAt
    */
   sort?: "asc" | "desc";
+  /**
+   * Filter conversation messages created before the given date and time
+   */
+  createdBefore?: DbDate;
+  /**
+   * Filter conversation messages created after the given date and time
+   */
+  createdAfter?: DbDate;
+  /**
+   * Filter conversation messages by message IDs
+   */
+  messageIds?: number[];
 }
 
 /**
@@ -424,13 +443,9 @@ export interface ShortTermMemoryEntity extends Entity {
    */
   actorId: number;
   /**
-   * The os when the actor saw the messages.
+   * The memory text when the actor saw the messages.
    */
-  os: string;
-  /**
-   * The statement when the actor saw the messages.
-   */
-  statement: string;
+  memory: string;
   /**
    * The messages ids facilitating the short term memory, for debugging purpose.
    */
@@ -468,6 +483,18 @@ export interface ListShortTermMemoriesRequest {
    */
   actorId?: number;
   /**
+   * The kind of short term memory to filter by
+   */
+  kind?: ShortTermMemoryEntity["kind"];
+  /**
+   * Sort order by createdAt
+   */
+  sort?: "asc" | "desc";
+  /**
+   * Max number of memories to return
+   */
+  limit?: number;
+  /**
    * Filter short term memories created before the given date and time
    */
   createdBefore?: DbDate;
@@ -494,17 +521,9 @@ export interface LongTermMemoryEntity extends Entity {
    */
   index1: string;
   /**
-   * The keywords to search
+   * The memory text when the actor saw the messages.
    */
-  keywords: string[];
-  /**
-   * The os when the actor saw the messages.
-   */
-  os: string;
-  /**
-   * The statement when the actor saw the messages.
-   */
-  statement: string;
+  memory: string;
   /**
    * The messages ids facilitating the long term memory, for debugging purpose.
    */
@@ -583,19 +602,19 @@ export interface SearchLongTermMemoriesRequest {
    */
   actorId: number;
   /**
-   * The 0-index to search, a.k.a. 一级分类
+   * The memory text to search against.
+   */
+  memory: string;
+  /**
+   * The maximum number of memories to return.
+   */
+  limit: number;
+  /**
+   * The 0-index to filter, a.k.a. 一级分类
    */
   index0?: string;
   /**
-   * The 1-index to search, a.k.a. 二级分类
+   * The 1-index to filter, a.k.a. 二级分类
    */
   index1?: string;
-  /**
-   * The keywords to search
-   */
-  keywords?: string[];
-  /**
-   * The limit of the number of long term memories to return
-   */
-  limit?: number;
 }

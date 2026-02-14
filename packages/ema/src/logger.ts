@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import pino, { type Logger as PinoLogger, type LoggerOptions } from "pino";
 import pinoPretty from "pino-pretty";
 
@@ -16,6 +19,8 @@ export interface LoggerConfig {
   level: LoggerLevel;
   /** Transport target(s); defaults to "console". */
   transport?: Transport | Transport[];
+  /** File path required when using the "file" transport. */
+  filePath?: string;
   /** Additional pino options (passed through). */
   options?: LoggerOptions;
 }
@@ -96,7 +101,7 @@ export class Logger {
         ? config.transport
         : [config.transport]
       : ["console"];
-    const transport = buildTransport(transports, config.level);
+    const transport = buildTransport(transports, config.level, config.filePath);
     const logger = pino(
       {
         ...config.options,
@@ -110,24 +115,72 @@ export class Logger {
 }
 
 /** Build a pino transport config from the selected transports. */
-function buildTransport(transports: Transport[], level: LoggerLevel) {
-  for (const transport of transports) {
-    if (transport === "file") {
-      throw new Error("file transport is not supported yet.");
-    }
-    if (transport === "db") {
-      throw new Error("db transport is not supported yet.");
-    }
+function buildTransport(
+  transports: Transport[],
+  level: LoggerLevel,
+  filePath?: string,
+) {
+  const logsRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "logs",
+  );
+  const hasConsole = transports.includes("console");
+  const hasFile = transports.includes("file");
+  const hasDb = transports.includes("db");
+  if (hasDb) {
+    throw new Error("db transport is not supported yet.");
   }
-  if (transports.length !== 1 || transports[0] !== "console") {
-    throw new Error("only console transport is supported yet.");
+  if (hasFile && !filePath) {
+    throw new Error("filePath is required for file transport.");
   }
+  const resolvedFilePath =
+    hasFile && filePath ? resolveLogFilePath(filePath, logsRoot) : undefined;
   // "full" means multiline output; other levels keep a single line.
   const singleLine = level !== "full";
-  return pinoPretty({
-    colorize: true,
+  const prettyOptions = {
     translateTime: "yyyy-mm-dd HH:MM:ss.l",
     ignore: "pid,hostname",
     singleLine,
+  };
+  const consoleStream = pinoPretty({
+    colorize: true,
+    ...prettyOptions,
   });
+  if (hasConsole && hasFile) {
+    const fileStream = pinoPretty({
+      colorize: false,
+      destination: resolvedFilePath,
+      mkdir: true,
+      ...prettyOptions,
+    });
+    return pino.multistream([
+      { stream: consoleStream },
+      { stream: fileStream },
+    ]);
+  }
+  if (hasFile) {
+    return pinoPretty({
+      colorize: false,
+      destination: resolvedFilePath,
+      mkdir: true,
+      ...prettyOptions,
+    });
+  }
+  if (hasConsole) {
+    return consoleStream;
+  }
+  throw new Error("at least one transport must be specified.");
+}
+
+function resolveLogFilePath(filePath: string, logsRoot: string): string {
+  const resolved = path.isAbsolute(filePath)
+    ? path.normalize(filePath)
+    : path.resolve(logsRoot, filePath);
+  const normalizedRoot = path.normalize(logsRoot + path.sep);
+  if (!resolved.startsWith(normalizedRoot)) {
+    throw new Error(`filePath must be under ${logsRoot}`);
+  }
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  return resolved;
 }

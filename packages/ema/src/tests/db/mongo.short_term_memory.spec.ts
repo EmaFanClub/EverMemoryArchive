@@ -27,8 +27,7 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const memoryData: ShortTermMemoryEntity = {
       kind: "day",
       actorId: 1,
-      os: "Test OS",
-      statement: "Test statement",
+      memory: "Test statement",
       createdAt: Date.now(),
       messages: [1, 2],
     };
@@ -43,8 +42,7 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const memoryData: ShortTermMemoryEntity = {
       kind: "day",
       actorId: 1,
-      os: "Test OS",
-      statement: "Test statement",
+      memory: "Test statement",
       createdAt: Date.now(),
       messages: [1, 2],
     };
@@ -66,8 +64,7 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const memoryData: ShortTermMemoryEntity = {
       kind: "day",
       actorId: 1,
-      os: "Test OS",
-      statement: "Test statement",
+      memory: "Test statement",
       createdAt: Date.now(),
       messages: [1, 2],
     };
@@ -85,24 +82,21 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const mem1: ShortTermMemoryEntity = {
       kind: "day",
       actorId: 1,
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: Date.now(),
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
       kind: "month",
       actorId: 1,
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: Date.now(),
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
       kind: "year",
       actorId: 2,
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: Date.now(),
       messages: [3],
     };
@@ -122,24 +116,21 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const mem1: ShortTermMemoryEntity = {
       kind: "day",
       actorId: 1,
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: now - 1000,
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
       kind: "month",
       actorId: 1,
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: now,
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
       kind: "year",
       actorId: 1,
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: now + 1000,
       messages: [3],
     };
@@ -159,24 +150,21 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const mem1: ShortTermMemoryEntity = {
       kind: "day",
       actorId: 1,
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: now - 1000,
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
       kind: "month",
       actorId: 1,
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: now,
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
       kind: "year",
       actorId: 1,
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: now + 1000,
       messages: [3],
     };
@@ -196,24 +184,21 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const mem1: ShortTermMemoryEntity = {
       kind: "day",
       actorId: 1,
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: now - 2000,
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
       kind: "month",
       actorId: 1,
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: now,
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
       kind: "year",
       actorId: 1,
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: now + 2000,
       messages: [3],
     };
@@ -235,24 +220,21 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const mem1: ShortTermMemoryEntity = {
       kind: "day",
       actorId: 1,
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: now,
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
       kind: "month",
       actorId: 2,
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: now,
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
       kind: "year",
       actorId: 1,
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: now + 2000,
       messages: [3],
     };
@@ -273,24 +255,21 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const mem1: ShortTermMemoryEntity = {
       kind: "day",
       actorId: 1,
-      os: "Test OS",
-      statement: "Daily memory",
+      memory: "Daily memory",
       createdAt: Date.now(),
       messages: [1],
     };
     const mem2: ShortTermMemoryEntity = {
       kind: "month",
       actorId: 1,
-      os: "Test OS",
-      statement: "Monthly memory",
+      memory: "Monthly memory",
       createdAt: Date.now(),
       messages: [2],
     };
     const mem3: ShortTermMemoryEntity = {
       kind: "year",
       actorId: 1,
-      os: "Test OS",
-      statement: "Yearly memory",
+      memory: "Yearly memory",
       createdAt: Date.now(),
       messages: [3],
     };

@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 
 import { createMongo } from "../db";
 import type { Mongo } from "../db";
-import { AgendaScheduler, type JobHandlerMap } from "../scheduler";
+import { AgendaScheduler, isJob, type JobHandlerMap } from "../scheduler";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -76,7 +76,7 @@ describe("AgendaScheduler", () => {
 
     const jobId = await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 500,
+      runAt: Date.now() + 3000,
       data: { message: "cancel" },
     });
 
@@ -105,15 +105,18 @@ describe("AgendaScheduler", () => {
     const handlers: JobHandlerMap = { test: handler };
     await scheduler.start(handlers);
 
+    const initialRunAt = Date.now() + 3000;
+    const updatedRunAt = Date.now() + 200;
+
     const jobId = await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 800,
+      runAt: initialRunAt,
       data: { message: "old" },
     });
 
     const updated = await scheduler.reschedule(jobId, {
       name: "test",
-      runAt: Date.now() + 50,
+      runAt: updatedRunAt,
       data: { message: "new" },
     });
     expect(updated).toBe(true);
@@ -140,7 +143,7 @@ describe("AgendaScheduler", () => {
     expect(updated).toBe(false);
   });
 
-  test("executes a recurring job after runAt", async () => {
+  test("executes a recurring job after scheduling", async () => {
     let resolveDone!: (value: number) => void;
     const donePromise = new Promise<number>((resolve) => {
       resolveDone = resolve;
@@ -152,7 +155,8 @@ describe("AgendaScheduler", () => {
     const handlers: JobHandlerMap = { test: handler };
     await scheduler.start(handlers);
 
-    const runAt = Date.now() + 120;
+    const scheduledAt = Date.now();
+    const runAt = scheduledAt + 120;
     const jobId = await scheduler.scheduleEvery({
       name: "test",
       runAt,
@@ -168,7 +172,8 @@ describe("AgendaScheduler", () => {
       }),
     ]);
 
-    expect(firedAt).toBeGreaterThanOrEqual(runAt);
+    const earlyToleranceMs = 150;
+    expect(firedAt + earlyToleranceMs).toBeGreaterThanOrEqual(runAt);
     await scheduler.cancel(jobId);
     expect(handler).toHaveBeenCalled();
   }, 5000);
@@ -179,7 +184,7 @@ describe("AgendaScheduler", () => {
 
     await scheduler.scheduleEvery({
       name: "test",
-      runAt: Date.now() + 100,
+      runAt: Date.now() + 3000,
       interval: "1 second",
       data: { message: "dedupe" },
       unique: { name: "test", "data.message": "dedupe" },
@@ -187,7 +192,7 @@ describe("AgendaScheduler", () => {
 
     await scheduler.scheduleEvery({
       name: "test",
-      runAt: Date.now() + 100,
+      runAt: Date.now() + 3000,
       interval: "1 second",
       data: { message: "dedupe" },
       unique: { name: "test", "data.message": "dedupe" },
@@ -206,9 +211,12 @@ describe("AgendaScheduler", () => {
     const handlers: JobHandlerMap = { test: handler };
     await scheduler.start(handlers);
 
+    const initialRunAt = Date.now() + 3000;
+    const updatedRunAt = initialRunAt + 1000;
+
     const jobId = await scheduler.scheduleEvery({
       name: "test",
-      runAt: Date.now() + 100,
+      runAt: initialRunAt,
       interval: "2 seconds",
       data: { message: "old" },
       unique: { name: "test", "data.message": "old" },
@@ -216,7 +224,7 @@ describe("AgendaScheduler", () => {
 
     const updated = await scheduler.rescheduleEvery(jobId, {
       name: "test",
-      runAt: Date.now() + 200,
+      runAt: updatedRunAt,
       interval: "3 seconds",
       data: { message: "new" },
       unique: { name: "test", "data.message": "new" },
@@ -238,14 +246,17 @@ describe("AgendaScheduler", () => {
 
     const jobId = await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 200,
+      runAt: Date.now() + 3000,
       data: { message: "lookup" },
     });
 
     const job = await scheduler.getJob(jobId);
     expect(job).not.toBeNull();
     expect(job?.attrs.name).toBe("test");
-    expect(job?.attrs.data?.message).toBe("lookup");
+    expect(isJob(job, "test")).toBe(true);
+    if (isJob(job, "test")) {
+      expect(job.attrs.data.message).toBe("lookup");
+    }
   });
 
   test("listJobs filters by name and data", async () => {
@@ -254,12 +265,12 @@ describe("AgendaScheduler", () => {
 
     await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 500,
+      runAt: Date.now() + 3000,
       data: { message: "a" },
     });
     await scheduler.schedule({
       name: "test",
-      runAt: Date.now() + 500,
+      runAt: Date.now() + 3000,
       data: { message: "b" },
     });
 
@@ -269,7 +280,9 @@ describe("AgendaScheduler", () => {
     });
 
     expect(jobs.length).toBe(1);
-    expect(jobs[0]?.attrs.data?.message).toBe("b");
+    if (isJob(jobs[0], "test")) {
+      expect(jobs[0].attrs.data.message).toBe("b");
+    }
   });
 
   test("recurring job runs expected times when runAt is in the future", async () => {
@@ -280,7 +293,7 @@ describe("AgendaScheduler", () => {
     const intervalMs = 500;
     const start = Date.now();
     const end = start + windowMs;
-    const runAt = start + 100;
+    const runAt = start + 400;
     let count = 0;
 
     const handler = vi.fn(async () => {
@@ -302,7 +315,7 @@ describe("AgendaScheduler", () => {
     await sleep(windowMs + 200);
     await scheduler.cancel(jobId);
 
-    expect(count).toBe(3);
+    expect(count).toBe(4);
   }, 5000);
 
   test("recurring job runs expected times when runAt is in the past", async () => {

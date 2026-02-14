@@ -1,7 +1,7 @@
 import { z } from "zod";
-import dayjs from "dayjs";
 import { Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
+import { formatTimestamp } from "../../utils";
 
 //TODO: Use arktype in future
 const DemoSkillSchema = z
@@ -64,7 +64,7 @@ export default class DemoSkill extends Skill {
     if (parsed.command === "time") {
       return {
         success: true,
-        content: dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss"),
+        content: formatTimestamp("YYYY-MM-DD HH:mm:ss", Date.now()),
       };
     }
 

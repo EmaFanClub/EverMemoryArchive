@@ -10,7 +10,7 @@ describe("EmaReplyTool", () => {
 
   it("should have correct name and description", () => {
     expect(tool.name).toBe("ema_reply");
-    expect(tool.description).toContain("JSON");
+    expect(tool.description).toContain("唯一渠道");
   });
 
   it("should expose required parameters schema", () => {
@@ -44,7 +44,7 @@ describe("EmaReplyTool", () => {
     expect(parsed.response).toBe("  你好，很高兴见到你  ");
   });
 
-  it("should reject invalid expression enum values", async () => {
+  it("accepts arbitrary expression values", async () => {
     const result = await tool.execute({
       think: "想法",
       expression: "生气",
@@ -52,11 +52,10 @@ describe("EmaReplyTool", () => {
       response: "回复",
     });
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("Invalid structured reply");
+    expect(result.success).toBe(true);
   });
 
-  it("should reject invalid action enum values", async () => {
+  it("accepts arbitrary action values", async () => {
     const result = await tool.execute({
       think: "想法",
       expression: "普通",
@@ -64,8 +63,7 @@ describe("EmaReplyTool", () => {
       response: "回复",
     });
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("Invalid structured reply");
+    expect(result.success).toBe(true);
   });
 
   it("should reject empty strings", async () => {
