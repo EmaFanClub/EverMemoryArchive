@@ -15,10 +15,10 @@ import { fileURLToPath } from "node:url";
 
 import yaml from "js-yaml";
 
-import { RetryConfig } from "./retry";
+import { RetryConfig } from "./llm/retry";
 import { type Tool, baseTools } from "./tools";
 import { skillsPrompt } from "./skills";
-export { RetryConfig } from "./retry";
+export { RetryConfig } from "./llm/retry";
 
 /**
  * MongoDB configuration.
@@ -59,7 +59,7 @@ export class MongoConfig {
      * The MongoDB database name.
      */
     public readonly db_name: string = "ema",
-  ) {}
+  ) { }
 }
 
 /**
@@ -78,7 +78,7 @@ export class SystemConfig {
      * If it is empty, no proxy will be used.
      */
     public https_proxy: string = "",
-  ) {}
+  ) { }
 }
 
 /**
@@ -128,7 +128,7 @@ export class OpenAIApiConfig implements LLMApiConfig {
      * If environment variable OPENAI_API_BASE is set, it will be used first.
      */
     public base_url: string = "https://api.openai.com/v1",
-  ) {}
+  ) { }
 }
 
 /**
@@ -164,7 +164,7 @@ export class GoogleApiConfig implements LLMApiConfig {
      * If environment variable GEMINI_API_BASE is set, it will be used first.
      */
     public base_url: string = "https://generativelanguage.googleapis.com",
-  ) {}
+  ) { }
 }
 
 /**
@@ -224,7 +224,7 @@ export class LLMConfig {
      * Retry configuration for the LLM provider.
      */
     public readonly retry: RetryConfig = new RetryConfig(),
-  ) {}
+  ) { }
 }
 
 /**
@@ -248,7 +248,7 @@ export class AgentConfig {
      * The token limit for the agent.
      */
     public readonly tokenLimit: number = 80000,
-  ) {}
+  ) { }
 }
 
 /**
@@ -282,7 +282,7 @@ export class ToolsConfig {
      * The MCP config path.
      */
     public readonly mcp_config_path: string = "mcp.json",
-  ) {}
+  ) { }
 }
 
 /**
@@ -324,7 +324,7 @@ export class Config {
      * System configuration
      */
     public readonly system: SystemConfig,
-  ) {}
+  ) { }
 
   /**
    * Loads configuration from the default search path.

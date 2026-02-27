@@ -18,7 +18,7 @@ import {
 } from "../schema";
 import type { Content, LLMResponse, Message, ModelMessage } from "../schema";
 import type { Tool } from "../tools/base";
-import { wrapWithRetry } from "../retry";
+import { wrapWithRetry } from "./retry";
 import type { LLMApiConfig, RetryConfig } from "../config";
 import { FetchWithProxy } from "./proxy";
 
@@ -266,10 +266,10 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
 
     const executor = this.retryConfig.enabled
       ? wrapWithRetry(
-          this.makeApiRequest.bind(this),
-          this.retryConfig,
-          this.retryCallback,
-        )
+        this.makeApiRequest.bind(this),
+        this.retryConfig,
+        this.retryCallback,
+      )
       : this.makeApiRequest.bind(this);
 
     const response = await executor(

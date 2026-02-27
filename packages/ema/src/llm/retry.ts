@@ -1,0 +1,135 @@
+/**
+ * Elegant retry mechanism module
+ *
+ * Provides decorators and utility functions to support retry logic for async functions.
+ *
+ * Features:
+ * - Supports exponential backoff strategy
+ * - Configurable retry count and intervals
+ * - Supports specifying retryable exception types
+ * - Detailed logging
+ * - Fully decoupled, non-invasive to business code
+ */
+export class RetryConfig {
+  constructor(
+    /**
+     * Whether to enable retry mechanism
+     */
+    public readonly enabled: boolean = true,
+    /**
+     * Maximum number of retries
+     */
+    public readonly max_retries: number = 3,
+    /**
+     * Initial delay time (seconds)
+     */
+    public readonly initial_delay: number = 1.0,
+    /**
+     * Maximum delay time (seconds)
+     */
+    public readonly max_delay: number = 60.0,
+    /**
+     * Exponential backoff base
+     */
+    public readonly exponential_base: number = 2.0,
+    /**
+     * Retryable exception types
+     */
+    // public readonly retryable_exceptions: Array<typeof Error> = [Error],
+  ) { }
+}
+
+/**
+ * Calculate delay time (exponential backoff)
+ *
+ * @param attempt - Current attempt number (starting from 0)
+ * @returns Delay time (seconds)
+ */
+function calculateDelay(
+  attempt: number,
+  initial_delay: number,
+  exponential_base: number,
+  max_delay: number,
+): number {
+  const delay = initial_delay * Math.pow(exponential_base, attempt);
+  return Math.min(delay, max_delay);
+}
+
+export class RetryExhaustedError extends Error {
+  public lastException: Error;
+  public attempts: number;
+
+  constructor(lastException: Error, attempts: number) {
+    super(
+      `Retry failed after ${attempts} attempts. Last error: ${lastException.message}`,
+    );
+    this.name = "RetryExhaustedError";
+    this.lastException = lastException;
+    this.attempts = attempts;
+  }
+}
+
+export function isAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if (error.name === "AbortError") {
+    return true;
+  }
+  return error.message.toLowerCase().includes("abort");
+}
+
+/**
+ * Wrap a standalone async function with retry logic (non-decorator usage).
+ * Useful when you want a callable instead of applying a class method decorator.
+ */
+export function wrapWithRetry<T extends (...args: any[]) => Promise<any>>(
+  originalMethod: T,
+  /**
+   * Retry configuration
+   */
+  config: RetryConfig = new RetryConfig(),
+  /**
+   * Callback function on retry, receives exception and current attempt number
+   */
+  onRetry?: (exception: Error, attempt: number) => void,
+): T {
+  return async function (...args: any[]) {
+    let lastException: Error | undefined;
+    for (let attempt = 0; attempt <= config.max_retries; attempt++) {
+      try {
+        return await originalMethod(args);
+      } catch (exception) {
+        lastException = exception as Error;
+        if (isAbortError(lastException)) {
+          throw lastException;
+        }
+        if (attempt >= config.max_retries) {
+          console.error(
+            `Function retry failed, reached maximum retry count ${config.max_retries}`,
+          );
+          throw new RetryExhaustedError(lastException, attempt + 1);
+        }
+        const delay = calculateDelay(
+          attempt,
+          config.initial_delay,
+          config.exponential_base,
+          config.max_delay,
+        );
+        console.warn(
+          `Function call ${attempt + 1} failed: ${lastException.message}, retrying attempt ${attempt + 2} after ${delay.toFixed(2)} seconds`,
+        );
+        // Call callback function
+        if (onRetry) {
+          onRetry(lastException, attempt + 1);
+        }
+        // Wait before retry
+        await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+      }
+    }
+    if (lastException) {
+      throw lastException;
+    }
+    throw new Error("Unknown error");
+  } as T;
+}

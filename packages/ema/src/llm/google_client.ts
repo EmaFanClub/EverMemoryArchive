@@ -8,7 +8,7 @@ import {
 } from "../schema";
 import type { Content, LLMResponse, Message, SchemaAdapter } from "../schema";
 import type { Tool } from "../tools";
-import { wrapWithRetry } from "../retry";
+import { wrapWithRetry } from "./retry";
 import { FetchWithProxy } from "./proxy";
 import {
   GenerateContentResponse as GenAIResponse,
@@ -294,10 +294,10 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
 
     const executor = this.retryConfig.enabled
       ? wrapWithRetry(
-          this.makeApiRequest.bind(this),
-          this.retryConfig,
-          this.retryCallback,
-        )
+        this.makeApiRequest.bind(this),
+        this.retryConfig,
+        this.retryCallback,
+      )
       : this.makeApiRequest.bind(this);
 
     const response = await executor(
