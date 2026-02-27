@@ -28,12 +28,14 @@ export const Plugin: EmaPluginProvider = class {
   static name = "QQ";
   constructor(private readonly server: Server) { }
   async start(): Promise<void> {
+    await napcat.connect();
+    await this.startLLM();
+  }
+  async startLLM(): Promise<void> {
     const replyPat = process.env.NAPCAT_REPLY_PATTERN;
     if (!replyPat) {
       throw new Error("NAPCAT_REPLY_PATTERN is not set");
     }
-
-    await napcat.connect();
 
     const actor = await this.server.getActor(1, 1, 1);
 
