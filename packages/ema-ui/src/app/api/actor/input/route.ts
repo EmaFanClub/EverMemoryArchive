@@ -58,7 +58,7 @@ export const POST = postBody(ActorInputRequest)(async (body) => {
   );
 
   // Processes input.
-  await actor.work(body.inputs);
+  await actor.work({ inputs: body.inputs });
 
   return new Response(JSON.stringify({ success: true }), {
     status: 200,
