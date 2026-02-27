@@ -266,10 +266,10 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
 
     const executor = this.retryConfig.enabled
       ? wrapWithRetry(
-        this.makeApiRequest.bind(this),
-        this.retryConfig,
-        this.retryCallback,
-      )
+          this.makeApiRequest.bind(this),
+          this.retryConfig,
+          this.retryCallback,
+        )
       : this.makeApiRequest.bind(this);
 
     const response = await executor(
