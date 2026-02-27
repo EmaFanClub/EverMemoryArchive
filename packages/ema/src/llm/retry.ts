@@ -36,7 +36,7 @@ export class RetryConfig {
      * Retryable exception types
      */
     // public readonly retryable_exceptions: Array<typeof Error> = [Error],
-  ) {}
+  ) { }
 }
 
 /**
@@ -94,6 +94,9 @@ export function wrapWithRetry<T extends (...args: any[]) => Promise<any>>(
    */
   onRetry?: (exception: Error, attempt: number) => void,
 ): T {
+  if (config.max_retries <= 0) {
+    throw new Error("Max retries must be greater than 0");
+  }
   return async function (...args: any[]) {
     let lastException: Error | undefined;
     for (let attempt = 0; attempt <= config.max_retries; attempt++) {
