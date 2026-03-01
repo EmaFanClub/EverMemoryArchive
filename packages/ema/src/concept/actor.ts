@@ -1,132 +1,132 @@
-import { EventEmitter } from "node:events";
+import type { EventEmitter } from "node:events";
+import type { Content as InputContent } from "../schema";
+import type { AgentEventName, AgentEvent, AgentEventUnion } from "./llm";
 
 /**
- * You can use {@link ActorClient} APIs to communicate with the actor.
- * The actors are the core components of the system. They are responsible for taking user inputs and generating outputs.
- * Each actor holds resources, such as LLM memory, tools, database storage, etc.
- *
- * - Receive inputs from the user by {@link ActorClient.addInputs}.
- * - Subscribe to the actor's events by {@link ActorClient.events}.
- *   - See output events ({@link ActorClientEventMap.output}).
- *
- * @example
- * ```ts
- * // Add inputs to the actor.
- * const actor: ActorClient;
- * actor.addInputs([{ kind: "text", content: "Hello, world!" }]);
- * ```
- *
- * @example
- * ```ts
- * // Subscribe to the actor's output events.
- * const actor: ActorClient;
- * actor.events.on("output", (event) => {
- *   if (event.kind === "message") {
- *     console.log(event.content);
- *   }
- * });
- * ```
+ * The scope information for the actor.
  */
-export interface ActorClient {
-  /**
-   * The event source of the actor client. See {@link ActorEventSource} for more details.
-   */
-  events: EventEmitter<ActorClientEventMap> & ActorEventSource;
-
-  /**
-   * Adds a batch of {@link ActorInput} to the actor's input queue.
-   * @param inputs - The batch of inputs to add to the actor's input queue.
-   * @returns Promise resolving when the batch of inputs is added to the input queue.
-   */
-  addInputs(inputs: ActorInput[]): Promise<void>;
+export interface ActorScope {
+  actorId: number;
+  userId: number;
+  conversationId: number;
 }
 
 /**
- * The event map for the actor client.
+ * A batch of actor inputs in one request.
  */
-export interface ActorClientEventMap {
-  /**
-   * Emit {@link ActorMessageEvent} when the actor has processed the input and generated the output.
-   */
-  output: ActorMessageEvent[];
-}
+export type ActorInputs = InputContent[];
 
 /**
- * The input to the actor, including text, image, audio, video, etc.
+ * The status of the actor.
  */
-export type ActorInput = ActorTextInput;
-
-/**
- * The text input to the actor.
- */
-export interface ActorTextInput {
-  /**
-   * The kind of the input.
-   */
-  kind: "text";
-  /**
-   * The content of the input.
-   */
-  content: string;
-}
-
-/**
- * A event from the actor.
- */
-export type ActorEvent = ActorMessageEvent;
+export type ActorStatus = "preparing" | "running" | "idle";
 
 /**
  * A message from the actor.
  */
 export interface ActorMessageEvent {
-  /**
-   * The kind of the event.
-   */
+  /** The kind of the event. */
   kind: "message";
-  /**
-   * The content of the message.
-   */
+  /** The content of the message. */
   content: string;
 }
 
-/** Following are extended friendly typings.  */
-
 /**
- * The event source for the actor client.
+ * An event forwarded from the agent.
  */
-export interface ActorEventSource {
-  /**
-   * Subscribes to the actor's output ({@link ActorEvent}).
-   * @param event - The event to subscribe to.
-   * @param callback - The callback to call when the event is emitted.
-   * @returns The actor client.
-   */
-  on(event: "output", callback: (event: ActorMessageEvent) => void): this;
-  /**
-   * Unsubscribes from the actor's output ({@link ActorEvent}).
-   * @param event - The event to unsubscribe from.
-   * @param callback - The callback to unsubscribe from.
-   * @returns The actor client.
-   */
-  off(event: "output", callback: (event: ActorMessageEvent) => void): this;
-  /**
-   * Subscribes to the actor's output ({@link ActorEvent}) once.
-   * @param event - The event to subscribe to.
-   * @param callback - The callback to call when the event is emitted.
-   * @returns The actor client.
-   */
-  once(event: "output", callback: (event: ActorMessageEvent) => void): this;
-  /**
-   * Emits events from the actor.
-   * @param events - The events to emit.
-   * @returns True if the event was emitted, false otherwise.
-   */
-  emit(event: "output", ...events: ActorMessageEvent[]): boolean;
+export interface ActorAgentEvent {
+  /** The kind of the event. */
+  kind: AgentEventName;
+  /** The content of the message. */
+  content: AgentEventUnion;
 }
 
-import type { Expect, Is } from "../types";
+/**
+ * The event map for actor events.
+ */
+export interface ActorEventMap {
+  message: [ActorMessageEvent];
+  agent: [ActorAgentEvent];
+}
 
-type Cases = [
-  // EventEmitter<ActorClientEventMap> must be a subtype of ActorEventSource.
-  Expect<Is<EventEmitter<ActorClientEventMap>, ActorEventSource>>,
-];
+/**
+ * Union of actor event names.
+ */
+export type ActorEventName = keyof ActorEventMap;
+
+/**
+ * Type mapping of actor event names to their corresponding event data types.
+ */
+export type ActorEvent<K extends ActorEventName> = ActorEventMap[K][0];
+
+/**
+ * Union type of all actor event contents.
+ */
+export type ActorEventUnion = ActorEvent<ActorEventName>;
+
+/**
+ * Constant mapping of actor event names for iteration.
+ */
+export const ActorEventNames: Record<ActorEventName, ActorEventName> = {
+  message: "message",
+  agent: "agent",
+};
+
+/**
+ * Event source interface for the actor.
+ */
+export interface ActorEventSource {
+  on<K extends ActorEventName>(
+    event: K,
+    handler: (content: ActorEvent<K>) => void,
+  ): this;
+  off<K extends ActorEventName>(
+    event: K,
+    handler: (content: ActorEvent<K>) => void,
+  ): this;
+  once<K extends ActorEventName>(
+    event: K,
+    handler: (content: ActorEvent<K>) => void,
+  ): this;
+  emit<K extends ActorEventName>(event: K, content: ActorEvent<K>): boolean;
+}
+
+/**
+ * Typed event emitter for actor events.
+ */
+export type ActorEventsEmitter = EventEmitter<ActorEventMap> & ActorEventSource;
+
+/**
+ * Type guard that narrows an actor event to a specific agent event (or any agent event).
+ */
+export function isAgentEvent<K extends AgentEventName | undefined>(
+  event: ActorEventUnion,
+  kind?: K,
+): event is ActorAgentEvent &
+  (K extends AgentEventName
+    ? { kind: K; content: AgentEvent<K> }
+    : ActorAgentEvent) {
+  if (!event) return false;
+  if (event.kind === "message") return false;
+  return kind ? event.kind === kind : true;
+}
+
+/**
+ * A facade of the actor functionalities between the server (system) and the agent (actor).
+ */
+export declare class ActorWorker {
+  /**
+   * Event emitter for actor events.
+   */
+  readonly events: ActorEventsEmitter;
+  /**
+   * Enqueues inputs and runs the agent sequentially for this actor.
+   * @param inputs - Batch of user inputs for a single request.
+   * @param addToBuffer - Whether to persist inputs to conversation buffer.
+   */
+  work(inputs: ActorInputs, addToBuffer?: boolean): Promise<void>;
+  /**
+   * Reports whether the actor is currently preparing or running.
+   */
+  isBusy(): boolean;
+}

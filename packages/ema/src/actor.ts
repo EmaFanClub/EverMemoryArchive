@@ -14,11 +14,16 @@ import type {
   LongTermMemory,
   ActorStateStorage,
   ActorMemory,
-} from "./concept";
+} from "./concept/compat";
 import { LLMClient } from "./llm";
 
 /**
- * A facade of the actor functionalities between the server (system) and the agent (actor).
+ * A facade of actor runtime behavior between server and agent.
+ *
+ * Note:
+ * - Current production runtime (memory branch) uses queued inputs, interruptible
+ *   runs, and conversation-scoped memory injection.
+ * - This branch keeps a simplified compatibility implementation for reference.
  */
 export class ActorWorker implements ActorStateStorage, ActorMemory {
   /** The agent instance. */
@@ -56,7 +61,10 @@ export class ActorWorker implements ActorStateStorage, ActorMemory {
 
   /**
    * A low-level function to step the actor.
-   * Currently, we ensure that the actor processes the input sequentially.
+   *
+   * In current production runtime, inputs are batched and queued, and a busy run
+   * may be interrupted by newer user input. This compatibility implementation
+   * keeps a simpler sequential flow.
    *
    * @param input - The input to the actor.
    * @example

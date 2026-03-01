@@ -8,7 +8,6 @@ function docsGen() {
   const entryFlag = (it) => `--entryPoints ${it}`;
 
   const coreEntries = [
-    "packages/ema/src/index.ts",
     "packages/ema/src/config.ts",
     "packages/ema/src/db/index.ts",
     "packages/ema/src/concept/index.ts",

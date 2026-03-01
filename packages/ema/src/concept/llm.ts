@@ -1,171 +1,281 @@
 import type { EventEmitter } from "node:events";
 import type { Message, LLMResponse } from "../schema";
+import type { Tool } from "../tools/base";
+import type { EmaReply } from "../tools/ema_reply_tool";
 
 /**
- * {@link EmaLLMClient} is a stateless client for the LLM, holding a physical network connection to the LLM.
- *
- * TODO: remove mini-agent's LLMClient definition.
+ * LLM providers supported by EMA runtime.
  */
-export interface EmaLLMClient {
+export enum LLMProvider {
+  GOOGLE = "google",
+  ANTHROPIC = "anthropic",
+  OPENAI = "openai",
+}
+
+/**
+ * Stateless LLM client abstraction used by agent runtime.
+ */
+export declare class LLMClient {
   /**
-   * Generates response from LLM.
+   * Generates one model turn from current context.
    *
-   * @param messages - List of conversation messages
-   * @param tools - Optional list of Tool objects or dicts
-   * @param systemPrompt - Optional system prompt to start with
-   * @returns LLMResponse containing the generated content, thinking, and tool calls
+   * @param messages - Conversation history in EMA schema.
+   * @param tools - Optional tool definitions.
+   * @param systemPrompt - Optional system prompt for this call.
+   * @param signal - Optional abort signal.
    */
   generate(
     messages: Message[],
     tools?: Tool[],
     systemPrompt?: string,
+    signal?: AbortSignal,
   ): Promise<LLMResponse>;
 }
 
-// TODO: definition of tools.
-export type Tool = any;
-
-/**
- * The state of the agent.
- * More state could be added for specific agents, e.g. `memoryBuffer` for agents who have long-term memory.
- */
-export interface AgentState {
-  /**
-   * The system prompt of the agent.
-   */
-  systemPrompt: string;
-  /**
-   * The messages of the agent to start with.
-   */
-  messages: Message[];
-  /**
-   * The tools of the agent.
-   */
-  tools: Tool[];
+/** Event emitted when the agent finishes a run. */
+export interface RunFinishedEvent {
+  ok: boolean;
+  msg: string;
+  error?: Error;
 }
 
-export interface MutatableAgentState extends AgentState {
-  /**
-   * Replaces the state with a new state.
-   * @param s - The state to replace with.
-   */
-  replace(s: AgentState): void;
+/* Emitted when the ema_reply tool is called successfully. */
+export interface EmaReplyReceivedEvent {
+  reply: EmaReply;
 }
 
-/**
- * The state callback of the agent. You can visit the state in the callback,
- * and call the `next` function to continue to run the next callback.
- *
- * - The next function can only be called once.
- * - If the next is not called, the agent will keep state change but will not run.
- *
- * @param state - The state of the agent.
- * @param next - The next function to call.
- * @returns The state of the agent.
- *
- * @example
- * ```ts
- * // Runs with additional messages.
- * const agent = new AgentImpl();
- * agent.run(async (state, next) => {
- *   state.history.push({ type: "user", content: "Hello, World!" });
- *   await next();
- *   return state;
- * });
- * ```
- *
- * @example
- * ```ts
- * // Runs without saving history
- * const agent = new AgentImpl();
- * agent.run(async (state, next) => {
- *   const messages = state.history;
- *   state.history.push({ type: "user", content: "Hello, World!" });
- *   await next();
- *   state.history = messages;
- *   return state;
- * });
- * ```
- */
-export type AgentStateCallback<S extends AgentState> = (
-  state: S & MutatableAgentState,
-  next: () => Promise<void>,
-) => Promise<S>;
-
-/**
- * {@link Agent} is a background-running thread that communicates with the actor.
- */
-export abstract class Agent<S extends AgentState = AgentState> {
-  /**
-   * The event source of the agent. See {@link AgentEventSource} for more details.
-   */
-  abstract events: EventEmitter<AgentEventMap> & AgentEventSource;
-
-  /**
-   * Checks if the agent is running a LLM session.
-   *
-   * @returns Whether the agent is running.
-   */
-  abstract isRunning(): boolean;
-  /**
-   * Stops the running session unconditionally.
-   *
-   */
-  abstract stop(): Promise<void>;
-
-  /**
-   * Runs the agent in stateless manner.
-   *
-   * @param state - The state to run the agent with.
-   * @returns Promise resolving when the agent is idle.
-   */
-  execute(state: S): Promise<void> {
-    return this.run(async (s, next) => {
-      s.replace(state);
-      await next();
-      return s;
-    });
-  }
-
-  /**
-   * Runs the agent with an additional message in OpenAI format.
-   *
-   * @param message - The message to add.
-   * @returns Promise resolving when the agent is idle.
-   */
-  runWithMessage(message: Message): Promise<void> {
-    return this.run(async (s, next) => {
-      s.messages.push(message);
-      await next();
-      return s;
-    });
-  }
-
-  /**
-   * Runs a state callback when the agent becomes idle. If the agent is running a LLM session, the callback will be
-   * called after the session is finished.
-   *
-   * See {@link AgentStateCallback} for examples.
-   *
-   * @param stateCallback - The state callback to run the agent with.
-   * @returns Promise resolving when the agent is idle.
-   */
-  abstract run(stateCallback: AgentStateCallback<S>): Promise<void>;
-}
-
-/**
- * The event map for the agent.
- */
+/** Map of agent event names to their corresponding event data types. */
 export interface AgentEventMap {
-  // todo: agent events. maybe:
-  // 1. agent output
-  // 2. special agent event, for example, we can define "memory:reorganize" to tell other components the agent is
-  // reorganizing memory.
+  runFinished: [RunFinishedEvent];
+  emaReplyReceived: [EmaReplyReceivedEvent];
 }
 
-/** Following are extended friendly typings.  */
+/** Union type of all agent event names. */
+export type AgentEventName = keyof AgentEventMap;
+
+/** Type mapping of agent event names to their corresponding event data types. */
+export type AgentEvent<K extends AgentEventName> = AgentEventMap[K][0];
+
+/** Union type of all agent event contents. */
+export type AgentEventUnion = AgentEvent<AgentEventName>;
+
+/** Constant mapping of agent event names for iteration. */
+export const AgentEventNames: Record<AgentEventName, AgentEventName> = {
+  runFinished: "runFinished",
+  emaReplyReceived: "emaReplyReceived",
+};
+
+/** Event source interface for the agent. */
+export interface AgentEventSource {
+  on<K extends AgentEventName>(
+    event: K,
+    handler: (content: AgentEvent<K>) => void,
+  ): this;
+  off<K extends AgentEventName>(
+    event: K,
+    handler: (content: AgentEvent<K>) => void,
+  ): this;
+  once<K extends AgentEventName>(
+    event: K,
+    handler: (content: AgentEvent<K>) => void,
+  ): this;
+  emit<K extends AgentEventName>(event: K, content: AgentEvent<K>): boolean;
+}
+
+export type AgentEventsEmitter = EventEmitter<AgentEventMap> & AgentEventSource;
+
+/** The runtime state of the agent. */
+export type AgentState = {
+  systemPrompt: string;
+  messages: Message[];
+  tools: Tool[];
+  toolContext?: unknown;
+};
+
+/** Callback type for running the agent with a given state. */
+export type AgentStateCallback = (
+  next: (state: AgentState) => Promise<void>,
+) => Promise<void>;
+
+/** Agent abstraction (event-driven LLM + tool execution loop). */
+export declare class Agent {
+  events: AgentEventsEmitter;
+  isRunning(): boolean;
+  abort(): Promise<void>;
+  runWithState(state: AgentState): Promise<void>;
+  run(callback: AgentStateCallback): Promise<void>;
+}
 
 /**
- * The event source for the agent.
+ * Mapping of job names to payload shape.
  */
-export interface AgentEventSource {}
+export type JobDataMap = Record<string, Record<string, unknown>>;
+
+/**
+ * Union of all job names.
+ */
+export type JobName = keyof JobDataMap & string;
+
+/**
+ * Data type for a specific job name.
+ * @typeParam K - The job name.
+ */
+export type JobData<K extends JobName> = JobDataMap[K];
+
+/**
+ * Union of all job data types.
+ */
+export type JobDataUnion = JobData<JobName>;
+
+/**
+ * Scheduler job shape.
+ */
+export type Job<K extends JobName = JobName> = {
+  attrs: {
+    name: K;
+    data: JobData<K>;
+  };
+};
+
+/**
+ * Scheduler job identifier.
+ */
+export type JobId = string;
+
+/**
+ * Input data for scheduling a job.
+ */
+export interface JobSpec<K extends JobName = JobName> {
+  /**
+   * The job name used to resolve a handler.
+   */
+  name: K;
+  /**
+   * When the job should run (Unix timestamp in milliseconds).
+   */
+  runAt: number;
+  /**
+   * Handler-specific data.
+   */
+  data: JobData<K>;
+}
+
+/**
+ * Input data for scheduling a recurring job.
+ */
+export interface JobEverySpec<K extends JobName = JobName> {
+  /**
+   * The job name used to resolve a handler.
+   */
+  name: K;
+  /**
+   * Earliest time the recurring schedule becomes active (Unix timestamp in milliseconds).
+   */
+  runAt: number;
+  /**
+   * How often the job should repeat (Agenda interval string or milliseconds).
+   */
+  interval: string | number;
+  /**
+   * Handler-specific data.
+   */
+  data: JobData<K>;
+  /**
+   * Uniqueness criteria for deduplicating recurring jobs.
+   */
+  unique?: Record<string, unknown>;
+}
+
+/**
+ * Scheduler job handler signature.
+ */
+export type JobHandler<K extends JobName = JobName> = (
+  job: Job<K>,
+  done?: (error?: Error) => void,
+) => Promise<void> | void;
+
+/**
+ * Type guard to narrow a job to a specific name/data pair.
+ * @param job - The job instance to check.
+ * @param name - The expected job name.
+ * @returns True when the job matches the provided name.
+ */
+export function isJob<K extends JobName>(
+  job: Job | null | undefined,
+  name: K,
+): job is Job<K> {
+  return !!job && job.attrs.name === name;
+}
+
+/**
+ * Scheduler interface for managing job lifecycle.
+ */
+export interface Scheduler {
+  /**
+   * Starts the scheduler loop.
+   * @param handlers - Mapping of job names to their handlers.
+   * @returns Promise resolving when the scheduler is started.
+   */
+  start(handlers: JobHandlerMap): Promise<void>;
+  /**
+   * Stops the scheduler loop.
+   * @returns Promise resolving when the scheduler is stopped.
+   */
+  stop(): Promise<void>;
+  /**
+   * Schedules a job for execution.
+   * @param job - The job to schedule.
+   * @returns Promise resolving to the job id.
+   */
+  schedule(job: JobSpec): Promise<JobId>;
+  /**
+   * Reschedules an existing queued job with new runAt/data.
+   * @param id - The job identifier.
+   * @param job - The new job data.
+   * @returns Promise resolving to true if rescheduled, false otherwise.
+   */
+  reschedule(id: JobId, job: JobSpec): Promise<boolean>;
+  /**
+   * Cancels a pending job by id.
+   * @param id - The job identifier.
+   * @returns Promise resolving to true if canceled, false otherwise.
+   */
+  cancel(id: JobId): Promise<boolean>;
+  /**
+   * Schedules a recurring job.
+   * @param job - The recurring job data.
+   * @returns Promise resolving to the job id.
+   */
+  scheduleEvery(job: JobEverySpec): Promise<JobId>;
+  /**
+   * Reschedules an existing recurring job.
+   * @param id - The job identifier.
+   * @param job - The new recurring job data.
+   * @returns Promise resolving to true if rescheduled, false otherwise.
+   */
+  rescheduleEvery(id: JobId, job: JobEverySpec): Promise<boolean>;
+  /**
+   * Gets a job by id.
+   * @param id - The job identifier.
+   * @returns Promise resolving to the job if found.
+   */
+  getJob(id: JobId): Promise<Job | null>;
+  /**
+   * Lists jobs with an optional filter.
+   * @param filter - Filter for jobs.
+   * @returns Promise resolving to matching jobs.
+   */
+  listJobs(filter?: Record<string, unknown>): Promise<Job[]>;
+}
+
+/**
+ * Mapping of job names to their handlers.
+ */
+export type JobHandlerMap = Partial<{
+  [K in JobName]: JobHandler<K>;
+}>;
+
+/**
+ * Runtime status of the scheduler.
+ */
+export type SchedulerStatus = "idle" | "running" | "stopping";
