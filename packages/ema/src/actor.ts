@@ -23,7 +23,12 @@ export interface ActorScope {
 }
 
 /**
- * A facade of the actor functionalities between the server (system) and the agent (actor).
+ * A facade of actor runtime behavior between server and agent.
+ *
+ * Note:
+ * - Current production runtime (memory branch) uses queued inputs, interruptible
+ *   runs, and conversation-scoped memory injection.
+ * - This branch keeps a simplified compatibility implementation for reference.
  */
 export class ActorWorker {
   /** Event emitter for actor events. */
