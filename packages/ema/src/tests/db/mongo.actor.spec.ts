@@ -26,20 +26,19 @@ describe("MongoActorDB with in-memory MongoDB", () => {
   test("should create an actor", async () => {
     const actorData: ActorEntity = {
       roleId: 1,
-      memoryBuffer: [],
-      updatedAt: Date.now(),
     };
 
     await db.upsertActor(actorData);
     const retrievedActor = await db.getActor(1);
-    expect(retrievedActor).toEqual(actorData);
+    expect(retrievedActor).toEqual(
+      expect.objectContaining({ roleId: actorData.roleId }),
+    );
+    expect(typeof retrievedActor?.updatedAt).toBe("number");
   });
 
   test("should update an existing actor", async () => {
     const actorData: ActorEntity = {
       roleId: 1,
-      memoryBuffer: [],
-      updatedAt: Date.now(),
     };
 
     const id = await db.upsertActor(actorData);
@@ -47,23 +46,20 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
     const updatedActor: ActorEntity = {
       id,
-      ...actorData,
-      memoryBuffer: [
-        { role: "user", contents: [{ type: "text", text: "Hello" }] },
-      ],
-      updatedAt: Date.now(),
+      roleId: 2,
     };
 
     await db.upsertActor(updatedActor);
     const retrievedActor = await db.getActor(1);
-    expect(retrievedActor).toEqual(updatedActor);
+    expect(retrievedActor).toEqual(
+      expect.objectContaining({ id, roleId: updatedActor.roleId }),
+    );
+    expect(typeof retrievedActor?.updatedAt).toBe("number");
   });
 
   test("should delete an actor", async () => {
     const actorData: ActorEntity = {
       roleId: 1,
-      memoryBuffer: [],
-      updatedAt: Date.now(),
     };
 
     await db.upsertActor(actorData);
@@ -82,8 +78,6 @@ describe("MongoActorDB with in-memory MongoDB", () => {
   test("should return false when deleting already deleted actor", async () => {
     const actorData: ActorEntity = {
       roleId: 1,
-      memoryBuffer: [],
-      updatedAt: Date.now(),
     };
 
     await db.upsertActor(actorData);
@@ -98,18 +92,12 @@ describe("MongoActorDB with in-memory MongoDB", () => {
   test("should not list deleted actors", async () => {
     const actor1: ActorEntity = {
       roleId: 1,
-      memoryBuffer: [],
-      updatedAt: Date.now(),
     };
     const actor2: ActorEntity = {
       roleId: 1,
-      memoryBuffer: [],
-      updatedAt: Date.now(),
     };
     const actor3: ActorEntity = {
       roleId: 2,
-      memoryBuffer: [],
-      updatedAt: Date.now(),
     };
 
     await db.upsertActor(actor1);
@@ -121,8 +109,12 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
     const actors = await db.listActors();
     expect(actors).toHaveLength(2);
-    expect(actors).toContainEqual(actor1);
-    expect(actors).toContainEqual(actor3);
+    expect(actors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ roleId: actor1.roleId }),
+        expect.objectContaining({ roleId: actor3.roleId }),
+      ]),
+    );
     expect(actors).not.toContainEqual(expect.objectContaining({ id: 2 }));
   });
 
@@ -134,23 +126,12 @@ describe("MongoActorDB with in-memory MongoDB", () => {
   test("should list multiple actors", async () => {
     const actor1: ActorEntity = {
       roleId: 1,
-      memoryBuffer: [],
-      updatedAt: Date.now(),
     };
     const actor2: ActorEntity = {
       roleId: 1,
-      memoryBuffer: [
-        { role: "user", contents: [{ type: "text", text: "Hello" }] },
-      ],
-      updatedAt: Date.now(),
     };
     const actor3: ActorEntity = {
       roleId: 2,
-      memoryBuffer: [
-        { role: "user", contents: [{ type: "text", text: "Hello" }] },
-        { role: "model", contents: [{ type: "text", text: "Hi there!" }] },
-      ],
-      updatedAt: Date.now(),
     };
 
     await db.upsertActor(actor1);
@@ -159,35 +140,40 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
     const actors = await db.listActors();
     expect(actors).toHaveLength(3);
-    expect(actors).toContainEqual(actor1);
-    expect(actors).toContainEqual(actor2);
-    expect(actors).toContainEqual(actor3);
+    expect(actors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ roleId: actor1.roleId }),
+        expect.objectContaining({ roleId: actor2.roleId }),
+        expect.objectContaining({ roleId: actor3.roleId }),
+      ]),
+    );
   });
 
   test("should handle CRUD operations in sequence", async () => {
     // Create
     const actorData: ActorEntity = {
       roleId: 1,
-      memoryBuffer: [],
-      updatedAt: Date.now(),
     };
     await db.upsertActor(actorData);
 
     // Read
     let actor = await db.getActor(1);
-    expect(actor).toEqual(actorData);
+    expect(actor).toEqual(
+      expect.objectContaining({ roleId: actorData.roleId }),
+    );
+    expect(typeof actor?.updatedAt).toBe("number");
 
     // Update
     const updatedActor: ActorEntity = {
-      ...actorData,
-      memoryBuffer: [
-        { role: "user", contents: [{ type: "text", text: "Hello" }] },
-      ],
-      updatedAt: Date.now(),
+      id: 1,
+      roleId: 2,
     };
     await db.upsertActor(updatedActor);
     actor = await db.getActor(1);
-    expect(actor).toEqual(updatedActor);
+    expect(actor).toEqual(
+      expect.objectContaining({ id: 1, roleId: updatedActor.roleId }),
+    );
+    expect(typeof actor?.updatedAt).toBe("number");
 
     // Delete
     const deleted = await db.deleteActor(1);

@@ -1,18 +1,7 @@
 import { z } from "zod";
 import { Skill } from "../base";
-import type { ToolResult } from "../../tools/base";
-
-/** Formats a Date as `YYYY-MM-DD HH:mm:ss`. */
-function formatDate(date: Date): string {
-  const pad = (v: number) => String(v).padStart(2, "0");
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-}
+import type { ToolResult, ToolContext } from "../../tools/base";
+import { formatTimestamp } from "../../utils";
 
 //TODO: Use arktype in future
 const DemoSkillSchema = z
@@ -48,9 +37,11 @@ export default class DemoSkill extends Skill {
    * - Validates args with zod
    * - Supports #time and #echo commands
    * - Returns localized error messages for invalid inputs
+   * @param args - Skill arguments.
+   * @param context - Optional tool context (unused).
    */
-  async execute(args: { input: string }): Promise<ToolResult> {
-    let payload: { input: string };
+  async execute(args: unknown, context?: ToolContext): Promise<ToolResult> {
+    let payload: z.infer<typeof DemoSkillSchema>;
     try {
       payload = DemoSkillSchema.parse(args);
     } catch (err) {
@@ -73,7 +64,7 @@ export default class DemoSkill extends Skill {
     if (parsed.command === "time") {
       return {
         success: true,
-        content: formatDate(new Date()),
+        content: formatTimestamp("YYYY-MM-DD HH:mm:ss", Date.now()),
       };
     }
 

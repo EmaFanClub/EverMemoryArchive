@@ -16,19 +16,21 @@ export abstract class LLMClientBase {
   retryCallback: ((exception: Error, attempt: number) => void) | undefined =
     undefined;
 
-  abstract adaptTools(tools: Tool[]): Record<string, unknown>[];
+  abstract adaptTools(tools: Tool[]): any[];
 
-  abstract adaptMessages(messages: Message[]): Record<string, unknown>[];
+  abstract adaptMessages(messages: Message[]): any[];
 
   abstract makeApiRequest(
-    apiMessages: Record<string, unknown>[],
-    apiTools?: Record<string, unknown>[],
+    apiMessages: any[],
+    apiTools?: any[],
     systemPrompt?: string,
+    signal?: AbortSignal,
   ): Promise<any>;
 
   abstract generate(
     messages: Message[],
     tools?: Tool[],
     systemPrompt?: string,
+    signal?: AbortSignal,
   ): Promise<LLMResponse>;
 }

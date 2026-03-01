@@ -10,7 +10,7 @@ describe("EmaReplyTool", () => {
 
   it("should have correct name and description", () => {
     expect(tool.name).toBe("ema_reply");
-    expect(tool.description).toContain("JSON");
+    expect(tool.description).toContain("唯一渠道");
   });
 
   it("should expose required parameters schema", () => {
@@ -27,12 +27,12 @@ describe("EmaReplyTool", () => {
   });
 
   it("should execute successfully with valid inputs", async () => {
-    const result = await tool.execute(
-      "  我应该回复用户  ",
-      "微笑",
-      "点头",
-      "  你好，很高兴见到你  ",
-    );
+    const result = await tool.execute({
+      think: "  我应该回复用户  ",
+      expression: "微笑",
+      action: "点头",
+      response: "  你好，很高兴见到你  ",
+    });
 
     expect(result.success).toBe(true);
     expect(result.content).toBeTruthy();
@@ -44,22 +44,35 @@ describe("EmaReplyTool", () => {
     expect(parsed.response).toBe("  你好，很高兴见到你  ");
   });
 
-  it("should reject invalid expression enum values", async () => {
-    const result = await tool.execute("想法", "生气", "无", "回复");
+  it("accepts arbitrary expression values", async () => {
+    const result = await tool.execute({
+      think: "想法",
+      expression: "生气",
+      action: "无",
+      response: "回复",
+    });
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("Invalid structured reply");
+    expect(result.success).toBe(true);
   });
 
-  it("should reject invalid action enum values", async () => {
-    const result = await tool.execute("想法", "普通", "跳舞", "回复");
+  it("accepts arbitrary action values", async () => {
+    const result = await tool.execute({
+      think: "想法",
+      expression: "普通",
+      action: "跳舞",
+      response: "回复",
+    });
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("Invalid structured reply");
+    expect(result.success).toBe(true);
   });
 
   it("should reject empty strings", async () => {
-    const result = await tool.execute("", "普通", "无", "");
+    const result = await tool.execute({
+      think: "",
+      expression: "普通",
+      action: "无",
+      response: "",
+    });
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Invalid structured reply");

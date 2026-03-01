@@ -67,6 +67,12 @@ export abstract class Mongo {
   abstract getClient(): MongoClient;
 
   /**
+   * Gets the MongoDB connection URI.
+   * @returns The MongoDB connection URI
+   */
+  abstract getUri(): string;
+
+  /**
    * Connects to the MongoDB database
    * @returns Promise resolving when connection is established
    */

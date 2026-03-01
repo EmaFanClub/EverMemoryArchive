@@ -28,9 +28,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword1", "keyword2"],
-      os: "Test OS",
-      statement: "Test statement",
+      memory: "Test statement",
       createdAt: Date.now(),
       messages: [1, 2],
     };
@@ -46,9 +44,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword1", "keyword2"],
-      os: "Test OS",
-      statement: "Test statement",
+      memory: "Test statement",
       createdAt: Date.now(),
       messages: [1, 2],
     };
@@ -71,9 +67,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword1", "keyword2"],
-      os: "Test OS",
-      statement: "Test statement",
+      memory: "Test statement",
       createdAt: Date.now(),
       messages: [1, 2],
     };
@@ -92,9 +86,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword1"],
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: Date.now(),
       messages: [1],
     };
@@ -102,9 +94,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category2",
       index1: "subcategory2",
-      keywords: ["keyword2"],
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: Date.now(),
       messages: [2],
     };
@@ -112,9 +102,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 2,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword3"],
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: Date.now(),
       messages: [3],
     };
@@ -135,9 +123,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword1"],
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: now - 1000,
       messages: [1],
     };
@@ -145,9 +131,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category2",
       index1: "subcategory2",
-      keywords: ["keyword2"],
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: now,
       messages: [2],
     };
@@ -155,9 +139,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword3"],
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: now + 1000,
       messages: [3],
     };
@@ -178,9 +160,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword1"],
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: now - 1000,
       messages: [1],
     };
@@ -188,9 +168,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category2",
       index1: "subcategory2",
-      keywords: ["keyword2"],
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: now,
       messages: [2],
     };
@@ -198,9 +176,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword3"],
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: now + 1000,
       messages: [3],
     };
@@ -221,9 +197,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword1"],
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: now - 2000,
       messages: [1],
     };
@@ -231,9 +205,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category2",
       index1: "subcategory2",
-      keywords: ["keyword2"],
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: now,
       messages: [2],
     };
@@ -241,9 +213,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword3"],
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: now + 2000,
       messages: [3],
     };
@@ -266,9 +236,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword1"],
-      os: "Test OS 1",
-      statement: "Test statement 1",
+      memory: "Test statement 1",
       createdAt: now,
       messages: [1],
     };
@@ -276,9 +244,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 2,
       index0: "category2",
       index1: "subcategory2",
-      keywords: ["keyword2"],
-      os: "Test OS 2",
-      statement: "Test statement 2",
+      memory: "Test statement 2",
       createdAt: now,
       messages: [2],
     };
@@ -286,9 +252,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "category1",
       index1: "subcategory1",
-      keywords: ["keyword3"],
-      os: "Test OS 3",
-      statement: "Test statement 3",
+      memory: "Test statement 3",
       createdAt: now + 2000,
       messages: [3],
     };
@@ -305,35 +269,12 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
     expect(memories[0]).toEqual(mem1);
   });
 
-  test("should handle memories with multiple keywords", async () => {
-    const mem1: LongTermMemoryEntity = {
-      actorId: 1,
-      index0: "category1",
-      index1: "subcategory1",
-      keywords: ["keyword1", "keyword2", "keyword3"],
-      os: "Test OS",
-      statement: "Memory with multiple keywords",
-      createdAt: Date.now(),
-      messages: [1],
-    };
-
-    await db.appendLongTermMemory(mem1);
-    const memories = await db.listLongTermMemories({ actorId: 1 });
-    expect(memories).toHaveLength(1);
-    expect(memories[0].keywords).toHaveLength(3);
-    expect(memories[0].keywords).toContain("keyword1");
-    expect(memories[0].keywords).toContain("keyword2");
-    expect(memories[0].keywords).toContain("keyword3");
-  });
-
   test("should handle memories with different index hierarchies", async () => {
     const mem1: LongTermMemoryEntity = {
       actorId: 1,
       index0: "work",
       index1: "meetings",
-      keywords: ["meeting"],
-      os: "Test OS",
-      statement: "Work meeting memory",
+      memory: "Work meeting memory",
       createdAt: Date.now(),
       messages: [1],
     };
@@ -341,9 +282,7 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
       actorId: 1,
       index0: "personal",
       index1: "family",
-      keywords: ["family"],
-      os: "Test OS",
-      statement: "Family memory",
+      memory: "Family memory",
       createdAt: Date.now(),
       messages: [2],
     };

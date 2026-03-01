@@ -46,8 +46,60 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       }
       filter.conversationId = req.conversationId;
     }
+    if (req.createdBefore !== undefined || req.createdAfter !== undefined) {
+      if (
+        req.createdBefore !== undefined &&
+        typeof req.createdBefore !== "number"
+      ) {
+        throw new Error("createdBefore must be a number");
+      }
+      if (
+        req.createdAfter !== undefined &&
+        typeof req.createdAfter !== "number"
+      ) {
+        throw new Error("createdAfter must be a number");
+      }
+      const createdAtFilter: { $lte?: number; $gte?: number } = {};
+      if (req.createdBefore !== undefined) {
+        createdAtFilter.$lte = req.createdBefore;
+      }
+      if (req.createdAfter !== undefined) {
+        createdAtFilter.$gte = req.createdAfter;
+      }
+      filter.createdAt = createdAtFilter;
+    }
+    if (req.messageIds !== undefined) {
+      if (!Array.isArray(req.messageIds)) {
+        throw new Error("messageIds must be an array");
+      }
+      if (req.messageIds.some((id) => typeof id !== "number")) {
+        throw new Error("messageIds must contain only numbers");
+      }
+      filter.id = { $in: req.messageIds };
+    }
 
-    return (await collection.find(filter).toArray()).map(omitMongoId);
+    let cursor = collection.find(filter);
+    if (req.sort) {
+      cursor = cursor.sort({ createdAt: req.sort === "asc" ? 1 : -1 });
+    }
+    if (req.limit !== undefined) {
+      cursor = cursor.limit(req.limit);
+    }
+    return (await cursor.toArray()).map(omitMongoId);
+  }
+
+  /**
+   * Counts conversation messages in the database
+   * @param conversationId - The conversation ID to count messages for
+   * @returns Promise resolving to the number of matching messages
+   */
+  async countConversationMessages(conversationId: number): Promise<number> {
+    if (typeof conversationId !== "number") {
+      throw new Error("conversationId must be a number");
+    }
+    const db = this.mongo.getDb();
+    const collection = db.collection<ConversationMessageEntity>(this.$cn);
+    return collection.countDocuments({ conversationId });
   }
 
   /**
@@ -91,5 +143,16 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
    */
   async deleteConversationMessage(id: number): Promise<boolean> {
     return deleteEntity(this.mongo, this.$cn, id);
+  }
+
+  /**
+   * Creates indices for the conversation messages collection.
+   * @returns Promise resolving when indices are created.
+   */
+  async createIndices(): Promise<void> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<ConversationMessageEntity>(this.$cn);
+    await collection.createIndex({ id: 1 }, { unique: true });
+    await collection.createIndex({ conversationId: 1, createdAt: -1 });
   }
 }

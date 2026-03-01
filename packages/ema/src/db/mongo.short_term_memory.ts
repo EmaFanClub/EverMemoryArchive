@@ -55,8 +55,18 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
         filter.createdAt.$gte = req.createdAfter;
       }
     }
+    if (req.kind) {
+      filter.kind = req.kind;
+    }
 
-    return (await collection.find(filter).toArray()).map(omitMongoId);
+    let cursor = collection.find(filter);
+    if (req.sort) {
+      cursor = cursor.sort({ createdAt: req.sort === "asc" ? 1 : -1 });
+    }
+    if (req.limit !== undefined) {
+      cursor = cursor.limit(req.limit);
+    }
+    return (await cursor.toArray()).map(omitMongoId);
   }
 
   /**
@@ -78,5 +88,16 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
    */
   async deleteShortTermMemory(id: number): Promise<boolean> {
     return deleteEntity(this.mongo, this.$cn, id);
+  }
+
+  /**
+   * Creates indices for the short term memories collection.
+   * @returns Promise resolving when indices are created.
+   */
+  async createIndices(): Promise<void> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<ShortTermMemoryEntity>(this.$cn);
+    await collection.createIndex({ id: 1 }, { unique: true });
+    await collection.createIndex({ actorId: 1, kind: 1, createdAt: -1 });
   }
 }

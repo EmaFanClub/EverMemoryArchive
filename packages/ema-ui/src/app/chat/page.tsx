@@ -1,73 +1,163 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import styles from "./page.module.css";
-import type { Message, ActorEvent } from "ema";
+import type { ActorAgentEvent, ConversationMessage } from "ema";
+
+let initialLoadPromise: Promise<ConversationMessage[] | null> | null = null;
+let initialMessagesCache: ConversationMessage[] | null = null;
 
 // todo: consider adding tests for this component to verify message state management
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [initializing, setInitializing] = useState(true);
+  const [snapshotting, setSnapshotting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const chatAreaRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Set up SSE connection to subscribe to actor events
   useEffect(() => {
-    const eventSource = new EventSource("/api/actor/sse?userId=1&actorId=1");
+    let eventSource: EventSource | null = null;
+    let isActive = true;
 
-    eventSource.onmessage = (event) => {
+    const init = async () => {
+      setInitializing(true);
       try {
-        const response = JSON.parse(event.data);
-
-        // Process events from the actor
-        if (response.events && Array.isArray(response.events)) {
-          response.events.forEach((evt: ActorEvent) => {
-            console.log("evt", evt);
-
-            const content = evt.content;
-            // Handles LLM response which contains the assistant's message
-            if (
-              evt.type === "emaReplyReceived" &&
-              typeof content === "object" &&
-              "reply" in content
-            ) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "model",
-                  contents: [{ type: "text", text: content.reply.response }],
-                },
-              ]);
+        if (!initialLoadPromise) {
+          initialLoadPromise = (async () => {
+            try {
+              await fetch("/api/users/login");
+            } catch (error) {
+              console.error("Error logging in:", error);
             }
+
+            try {
+              const response = await fetch(
+                "/api/conversations/messages?conversationId=1&limit=100",
+              );
+              if (response.ok) {
+                const data = (await response.json()) as {
+                  messages: ConversationMessage[];
+                };
+                if (Array.isArray(data.messages)) {
+                  return data.messages;
+                }
+              }
+            } catch (error) {
+              console.error("Error loading history:", error);
+            }
+            return null;
+          })().catch((error) => {
+            initialLoadPromise = null;
+            throw error;
           });
         }
 
-        // Update loading state based on actor status
-        if (response.status === "idle") {
-          setIsLoading(false);
+        if (!initialMessagesCache) {
+          initialMessagesCache = await initialLoadPromise;
         }
-      } catch (error) {
-        console.error("Error parsing SSE event:", error);
+
+        if (isActive && Array.isArray(initialMessagesCache)) {
+          setMessages(initialMessagesCache);
+          setNotice("Conversation history loaded.");
+        }
+      } finally {
+        if (isActive) {
+          setInitializing(false);
+        }
       }
+
+      if (!isActive) {
+        return;
+      }
+
+      eventSource = new EventSource(
+        "/api/actor/sse?userId=1&actorId=1&conversationId=1",
+      );
+
+      eventSource.onmessage = (event) => {
+        try {
+          const evt = JSON.parse(event.data) as ActorAgentEvent;
+          const content = evt.content;
+          if (
+            evt.kind === "emaReplyReceived" &&
+            typeof content === "object" &&
+            content &&
+            "reply" in content
+          ) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                kind: "actor",
+                actorId: 1,
+                contents: [{ type: "text", text: content.reply.response }],
+              },
+            ]);
+          }
+        } catch (error) {
+          console.error("Error parsing SSE event:", error);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        // todo: reconnect
+        console.error("SSE connection error:", error);
+        eventSource?.close();
+      };
     };
 
-    eventSource.onerror = (error) => {
-      // todo: reconnect
-      console.error("SSE connection error:", error);
-      eventSource.close();
-    };
+    void init();
 
     // Cleanup on unmount (EventSource.close() is safe to call multiple times)
     return () => {
-      eventSource.close();
+      isActive = false;
+      eventSource?.close();
     };
   }, []);
 
+  useEffect(() => {
+    const chatArea = chatAreaRef.current;
+    if (!chatArea) {
+      return;
+    }
+    if (shouldAutoScrollRef.current) {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+    if (snapshotTimerRef.current) {
+      clearTimeout(snapshotTimerRef.current);
+    }
+    snapshotTimerRef.current = setTimeout(() => {
+      setNotice(null);
+      snapshotTimerRef.current = null;
+    }, 3200);
+    return () => {
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current);
+        snapshotTimerRef.current = null;
+      }
+    };
+  }, [notice]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputValue.trim() || isLoading) return;
+    if (!inputValue.trim()) return;
 
-    const userMessage: Message = {
-      role: "user",
+    const userMessage: ConversationMessage = {
+      kind: "user",
+      userId: 1,
       contents: [{ type: "text", text: inputValue.trim() }],
     };
 
@@ -75,8 +165,6 @@ export default function ChatPage() {
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInputValue("");
-    setIsLoading(true);
-
     try {
       // Send input to actor using the new API
       const response = await fetch("/api/actor/input", {
@@ -87,8 +175,9 @@ export default function ChatPage() {
         body: JSON.stringify({
           userId: 1,
           actorId: 1,
+          conversationId: 1,
           // TODO: If supporting more input types, need to adjust here
-          inputs: [{ kind: "text", content: userMessage.contents[0].text }],
+          inputs: userMessage.contents,
         }),
       });
 
@@ -99,12 +188,12 @@ export default function ChatPage() {
       }
 
       // Response will come through SSE, so we don't need to process it here
-      // Note: isLoading remains true until SSE event with status 'idle' arrives
     } catch (error) {
       console.error("Error:", error);
       // Add error message to chat
-      const errorMessage: Message = {
-        role: "model",
+      const errorMessage: ConversationMessage = {
+        kind: "actor",
+        actorId: 1,
         contents: [
           {
             type: "text",
@@ -113,18 +202,69 @@ export default function ChatPage() {
         ],
       };
       setMessages([...updatedMessages, errorMessage]);
-      // Reset loading state since no SSE event will come if the request failed
-      setIsLoading(false);
+    }
+  };
+
+  const handleSnapshot = async () => {
+    setNotice(null);
+    setSnapshotting(true);
+    try {
+      const response = await fetch("/api/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "default" }),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        setNotice(text || "Snapshot failed.");
+        return;
+      }
+      const data = (await response.json().catch(() => null)) as {
+        fileName?: string;
+      } | null;
+      setNotice(
+        data?.fileName
+          ? `Snapshot saved: ${data.fileName}`
+          : "Snapshot created.",
+      );
+    } catch (error) {
+      console.error("Snapshot error:", error);
+      setNotice("Snapshot failed.");
+    } finally {
+      setSnapshotting(false);
     }
   };
 
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>How can I help you?</h1>
+        <div>
+          <h1 className={styles.title}>How can I help you?</h1>
+        </div>
+        <button
+          className={styles.snapshotButton}
+          onClick={handleSnapshot}
+          disabled={snapshotting}
+        >
+          {snapshotting ? "Snapshotting..." : "Snapshot"}
+        </button>
       </div>
+      {notice ? <div className={styles.snapshotStatus}>{notice}</div> : null}
 
-      <div className={styles.chatArea}>
+      <div
+        className={styles.chatArea}
+        ref={chatAreaRef}
+        onScroll={() => {
+          const chatArea = chatAreaRef.current;
+          if (!chatArea) {
+            return;
+          }
+          const gap = 80;
+          const distanceToBottom =
+            chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight;
+          shouldAutoScrollRef.current = distanceToBottom <= gap;
+        }}
+      >
         {messages.length === 0 ? (
           <div className={styles.emptyState}>
             Start a conversation with MeowGPT
@@ -136,19 +276,20 @@ export default function ChatPage() {
               <div
                 key={index}
                 className={`${styles.message} ${
-                  message.role === "user"
+                  message.kind === "user"
                     ? styles.userMessage
                     : styles.assistantMessage
                 }`}
               >
                 <div className={styles.messageRole}>
-                  {message.role === "user" ? "You" : "Ema"}
+                  {message.kind === "user" ? "You" : "Ema"}
                 </div>
                 <div className={styles.messageContent}>
-                  {message.contents![0].text}
+                  {message.contents.map((content) => content.text).join("")}
                 </div>
               </div>
             ))}
+            <div ref={messagesEndRef} className={styles.messagesEnd} />
           </div>
         )}
       </div>
@@ -161,14 +302,14 @@ export default function ChatPage() {
           placeholder="Enter message..."
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          disabled={isLoading}
+          disabled={initializing}
         />
         <div className={styles.buttonGroup}>
           <button
             type="submit"
             aria-label="Send message"
             className={styles.sendButton}
-            disabled={isLoading || !inputValue.trim()}
+            disabled={initializing || !inputValue.trim()}
           >
             <svg
               width="16"

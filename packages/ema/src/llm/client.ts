@@ -58,7 +58,8 @@ export class LLMClient {
     messages: Message[],
     tools?: Tool[],
     systemPrompt?: string,
+    signal?: AbortSignal,
   ): Promise<LLMResponse> {
-    return this.client.generate(messages, tools, systemPrompt);
+    return this.client.generate(messages, tools, systemPrompt, signal);
   }
 }

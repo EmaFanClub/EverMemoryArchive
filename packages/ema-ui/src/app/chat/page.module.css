@@ -14,12 +14,63 @@
   justify-content: center;
   gap: 1rem;
   margin-bottom: 2rem;
+  position: relative;
 }
 
 .title {
   font-size: 2rem;
   font-weight: 600;
   color: #ededed;
+}
+
+.snapshotButton {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid #3a3a3a;
+  background: #242424;
+  color: #ededed;
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.snapshotButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.snapshotStatus {
+  position: fixed;
+  left: 50%;
+  top: 1rem;
+  transform: translateX(-50%);
+  max-width: 720px;
+  width: calc(100% - 2rem);
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: #cdd6f7;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #30354a;
+  font-size: 0.9rem;
+  text-align: center;
+  animation: toastFade 2.8s ease forwards;
+  z-index: 30;
+  pointer-events: none;
+}
+
+@keyframes toastFade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .chatArea {
@@ -32,6 +83,29 @@
   width: 100%;
   margin-left: auto;
   margin-right: auto;
+  padding-right: 0.5rem;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #4b4b4b #1f1f1f;
+}
+
+.chatArea::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chatArea::-webkit-scrollbar-track {
+  background: #1f1f1f;
+  border-radius: 999px;
+}
+
+.chatArea::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #3a3a3a, #555);
+  border-radius: 999px;
+  border: 2px solid #1f1f1f;
+}
+
+.chatArea::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #4a4a4a, #666);
 }
 
 .emptyState {
@@ -47,6 +121,11 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.messagesEnd {
+  height: 1px;
+  width: 100%;
 }
 
 .message {

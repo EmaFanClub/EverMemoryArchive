@@ -7,15 +7,16 @@ import { getServer } from "../../shared-server";
 import * as k from "arktype";
 import { postBody } from "../../utils";
 
-const ActorInput = k.type({
-  kind: "'text'",
-  content: "string",
+const Content = k.type({
+  type: "'text'",
+  text: "string",
 });
 
 const ActorInputRequest = k.type({
   userId: "number.integer",
   actorId: "number.integer",
-  inputs: ActorInput.array(),
+  conversationId: "number.integer",
+  inputs: Content.array(),
 });
 
 /**
@@ -24,11 +25,12 @@ const ActorInputRequest = k.type({
  * Body:
  *   - userId (`number`): User ID
  *   - actorId (`number`): Actor ID
- *   - inputs (`ActorInput[]`): Array of inputs
+ *   - conversationId (`number`): Conversation ID
+ *   - inputs (`Content[]`): Array of inputs
  *
- * ActorInput:
- *   - kind (`"text"`): The kind of the input.
- *   - content (`string`): The content of the input.
+ * Content:
+ *   - type (`"text"`): The content type.
+ *   - text (`string`): The text content.
  *
  * @example
  * ```ts
@@ -41,14 +43,19 @@ const ActorInputRequest = k.type({
  *   body: JSON.stringify({
  *     userId: 1,
  *     actorId: 1,
- *     inputs: [{ kind: "text", content: "Hello, world!" }],
+ *     conversationId: 1,
+ *     inputs: [{ type: "text", text: "Hello, world!" }],
  *   }),
  * });
  *
  */
 export const POST = postBody(ActorInputRequest)(async (body) => {
   const server = await getServer();
-  const actor = await server.getActor(body.userId, body.actorId);
+  const actor = await server.getActor(
+    body.userId,
+    body.actorId,
+    body.conversationId,
+  );
 
   // Processes input.
   await actor.work(body.inputs);

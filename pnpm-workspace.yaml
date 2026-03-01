@@ -1,3 +1,6 @@
 packages:
-  - "packages/*"
-  - "contrib/ema-dev/editor/vscode"
+  - packages/*
+  - contrib/ema-dev/editor/vscode
+
+patchedDependencies:
+  '@hokify/agenda@6.3.0': patches/@hokify__agenda@6.3.0.patch

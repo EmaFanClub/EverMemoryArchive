@@ -3,9 +3,27 @@
  * Connects to an actual MongoDB instance using connection string.
  */
 
-import { MongoClient, type Db } from "mongodb";
+import { createRequire } from "node:module";
+import { MongoClient } from "mongodb";
 import type { CreateMongoArgs } from "../mongo";
 import { Mongo } from "../mongo";
+
+type ConnectionString = {
+  pathname: string;
+  toString(): string;
+};
+
+type ConnectionStringConstructor = new (
+  uri: string,
+  options?: { looseValidation?: boolean },
+) => ConnectionString;
+
+const requireFromMongo = createRequire(
+  createRequire(import.meta.url).resolve("mongodb/package.json"),
+);
+const { default: MongoConnectionString } = requireFromMongo(
+  "mongodb-connection-string-url",
+) as { default: ConnectionStringConstructor };
 
 /**
  * Remote MongoDB implementation
@@ -63,6 +81,14 @@ export class RemoteMongo extends Mongo {
   }
 
   /**
+   * Gets the MongoDB connection URI.
+   * @returns The MongoDB connection URI
+   */
+  getUri(): string {
+    return this.buildUriWithDb();
+  }
+
+  /**
    * Closes the MongoDB connection
    * @returns Promise resolving when connection is closed
    */
@@ -71,5 +97,13 @@ export class RemoteMongo extends Mongo {
       await this.client.close();
       this.client = undefined;
     }
+  }
+
+  private buildUriWithDb(): string {
+    const connectionString = new MongoConnectionString(this.uri);
+    if (connectionString.pathname === "" || connectionString.pathname === "/") {
+      connectionString.pathname = `/${this.dbName}`;
+    }
+    return connectionString.toString();
   }
 }

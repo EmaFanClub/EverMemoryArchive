@@ -1,26 +1,66 @@
 import { LLMClientBase } from "./base";
 import {
-  type SchemaAdapter,
   isModelMessage,
-  isToolMessage,
   isUserMessage,
+  isFunctionCall,
+  isFunctionResponse,
+  isTextItem,
 } from "../schema";
-import { GoogleGenAI } from "@google/genai";
-import { type GoogleGenAIOptions, ThinkingLevel } from "@google/genai";
-import type { Tool } from "../tools/base";
-import { wrapWithRetry } from "../retry";
+import type { Content, LLMResponse, Message, SchemaAdapter } from "../schema";
+import type { Tool } from "../tools";
+import { wrapWithRetry } from "./retry";
+import { FetchWithProxy } from "./proxy";
+import {
+  GenerateContentResponse as GenAIResponse,
+  GoogleGenAI,
+  ThinkingLevel,
+} from "@google/genai";
 import type {
-  ToolCall,
-  Content,
-  Message,
-  ModelMessage,
-  LLMResponse,
-} from "../schema";
+  GoogleGenAIOptions,
+  Part as GenAIContent,
+  FunctionDeclaration,
+} from "@google/genai";
 import type { LLMApiConfig, RetryConfig } from "../config";
+
+export interface GenAIMessage {
+  role: "user" | "model";
+  parts: GenAIContent[];
+}
+
+/**
+ * A wrapper around the GoogleGenAI class that uses a custom fetch implementation.
+ */
+export class GenAI extends GoogleGenAI {
+  constructor(
+    options: GoogleGenAIOptions,
+    private readonly fetcher: (
+      url: string,
+      requestInit?: RequestInit,
+    ) => Promise<Response>,
+  ) {
+    super({ ...options });
+    if (!(this.apiClient as any).apiCall) {
+      throw new Error("apiCall cannot be patched");
+    }
+    // Monkey patches apiCall to use our fetch.
+    (this.apiClient as any).apiCall = async (url: string, requestInit: any) => {
+      return this.fetcher(url, requestInit).catch((e) => {
+        throw new Error(`exception ${e} sending request`);
+      });
+    };
+  }
+}
 
 /** Google Generative AI client that adapts EMA schema to the native Gemini API format. */
 export class GoogleClient extends LLMClientBase implements SchemaAdapter {
   private readonly client: GoogleGenAI;
+
+  private readonly thinkingLevelMap = new Map<string, ThinkingLevel>([
+    ["gemini-3-flash-preview", ThinkingLevel.MINIMAL],
+    ["gemini-3-flash", ThinkingLevel.MINIMAL],
+    ["gemini-3-pro-preview", ThinkingLevel.LOW],
+    ["gemini-3-pro", ThinkingLevel.LOW],
+  ]);
 
   constructor(
     readonly model: string,
@@ -28,140 +68,216 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
     readonly retryConfig: RetryConfig,
   ) {
     super();
-    const options: GoogleGenAIOptions = {
+    const vertexAIOptions: GoogleGenAIOptions = {
+      apiVersion: "v1",
+      vertexai: true,
+      project: process.env.GOOGLE_CLOUD_PROJECT,
+      location: process.env.GOOGLE_CLOUD_LOCATION,
+    };
+    const googleAIOptions: GoogleGenAIOptions = {
+      apiVersion: "v1",
       apiKey: config.key,
       httpOptions: {
         baseUrl: config.base_url,
       },
     };
-    this.client = new GoogleGenAI(options);
-  }
-
-  /** Map EMA message shape to Gemini request content. */
-  adaptMessageToAPI(message: Message): Record<string, unknown> {
-    if (isUserMessage(message)) {
-      const parts: any[] = message.contents.map((content) => {
-        if (content.type === "text") {
-          return { text: content.text };
-        }
-        throw new Error(`Unsupported content type: ${content.type}`);
-      });
-      return { role: "user", parts: parts };
-    }
-    if (isModelMessage(message)) {
-      const parts: any[] = message.contents.map((content) => {
-        if (content.type === "text") {
-          return { text: content.text };
-        }
-        throw new Error(`Unsupported content type: ${content.type}`);
-      });
-      (message.toolCalls ?? []).forEach((toolCall) => {
-        parts.push({
-          functionCall: {
-            name: toolCall.name,
-            args: toolCall.args,
-          },
-          thoughtSignature: toolCall.thoughtSignature,
-        });
-      });
-      return { role: "model", parts: parts };
-    }
-    if (isToolMessage(message)) {
-      const parts: any[] = [
-        {
-          functionResponse: {
-            name: message.name,
-            response: message.result,
-          },
-        },
-      ];
-      return { role: "user", parts: parts };
-    }
-    throw new Error(
-      `Unsupported message with role "${String(
-        (message as any)?.role,
-      )}": ${JSON.stringify(message)}`,
+    const options: GoogleGenAIOptions =
+      process.env.GOOGLE_GENAI_USE_VERTEXAI === "True"
+        ? vertexAIOptions
+        : googleAIOptions;
+    console.log("GoogleClient options:", options);
+    this.client = new GenAI(
+      options,
+      new FetchWithProxy(
+        process.env.HTTPS_PROXY || process.env.https_proxy,
+      ).createFetcher(),
     );
   }
 
+  /** Map EMA message shape to Gemini request content. */
+  adaptMessageToAPI(message: Message): GenAIMessage {
+    /** Handle user messages by converting tool responses and contents to Gemini parts. */
+    if (isUserMessage(message)) {
+      const contents: GenAIContent[] = [];
+      for (const content of message.contents) {
+        if (isFunctionResponse(content)) {
+          contents.push({
+            functionResponse: {
+              name: content.name,
+              response: content.result,
+            },
+          });
+          continue;
+        }
+        if (isTextItem(content)) {
+          contents.push({
+            text: content.text,
+            thoughtSignature: content.thoughtSignature,
+          });
+          continue;
+        }
+        /** Additional content types can be handled here. */
+        console.warn(
+          `Unsupported content type in user message: ${JSON.stringify(content)}`,
+        );
+      }
+      return { role: "user", parts: contents };
+    }
+    /** Handle model messages by converting contents and tool calls to Gemini parts. */
+    if (isModelMessage(message)) {
+      const contents: GenAIContent[] = [];
+      for (const content of message.contents) {
+        if (isFunctionCall(content)) {
+          contents.push({
+            functionCall: {
+              name: content.name,
+              args: content.args,
+            },
+            thoughtSignature: content.thoughtSignature,
+          });
+          continue;
+        }
+        if (isTextItem(content)) {
+          contents.push({
+            text: content.text,
+            thoughtSignature: content.thoughtSignature,
+          });
+          continue;
+        }
+        /** Additional content types can be handled here. */
+        console.warn(
+          `Unsupported content type in model message: ${JSON.stringify(content)}`,
+        );
+      }
+      return { role: "model", parts: contents };
+    }
+    throw new Error(`Unsupported message role: ${(message as Message).role}`);
+  }
+
   /** Map tool definition to Gemini function declaration. */
-  adaptToolToAPI(tool: Tool): Record<string, unknown> {
+  adaptToolToAPI(tool: Tool): FunctionDeclaration {
     return {
       name: tool.name,
       description: tool.description,
-      parameters: tool.parameters,
+      parametersJsonSchema: tool.parameters,
     };
   }
 
   /** Convert a batch of EMA messages. */
-  adaptMessages(messages: Message[]): Record<string, unknown>[] {
-    const apiMessages = messages.map((message) =>
-      this.adaptMessageToAPI(message),
-    );
-    return apiMessages;
+  adaptMessages(messages: Message[]): GenAIMessage[] {
+    const history: GenAIMessage[] = [];
+    for (const msg of messages) {
+      const converted = this.adaptMessageToAPI(msg);
+      const lastMsg = history[history.length - 1];
+      if (lastMsg && lastMsg.role === converted.role) {
+        lastMsg.parts.push(...converted.parts);
+      } else {
+        history.push(converted);
+      }
+    }
+    return history;
   }
 
   /** Convert a batch of tools. */
-  adaptTools(tools: Tool[]): Record<string, unknown>[] {
+  adaptTools(tools: Tool[]): FunctionDeclaration[] {
     return tools.map((tool) => this.adaptToolToAPI(tool));
   }
 
   /** Normalize Gemini response back into EMA schema. */
-  adaptResponseFromAPI(response: any): LLMResponse {
+  adaptResponseFromAPI(response: GenAIResponse): LLMResponse {
+    const usageMetadata = response.usageMetadata;
     const candidate = response.candidates?.[0];
-    if (!candidate?.content) {
-      throw new Error("Invalid Google response: missing message");
+    /** Handle some invalid response cases. */
+    if (!usageMetadata || typeof usageMetadata.totalTokenCount !== "number") {
+      throw new Error(
+        `Missing or invalid usage metadata in response: ${JSON.stringify(response)}`,
+      );
     }
-    const message = candidate.content;
+    if (!candidate || !candidate.content || !candidate.content.parts) {
+      console.warn(
+        `No valid candidate in response: ${JSON.stringify(response)}`,
+      );
+      return {
+        message: {
+          role: "model",
+          contents: [],
+        },
+        finishReason: "NO_CANDIDATE",
+        totalTokens: usageMetadata.totalTokenCount,
+      };
+    }
+    if (!candidate.finishReason || candidate.finishReason !== "STOP") {
+      console.warn(
+        `Non-stop finish reason in response: ${JSON.stringify(response)}`,
+      );
+      return {
+        message: {
+          role: "model",
+          contents: [],
+        },
+        finishReason: candidate.finishReason ?? "UNKNOWN",
+        totalTokens: usageMetadata.totalTokenCount,
+      };
+    }
+    /** Handle valid response content parts in response. */
     const contents: Content[] = [];
-    const toolCalls: ToolCall[] = [];
-    if (candidate.content.parts) {
-      for (const part of message.parts) {
-        if (part.text !== undefined) {
-          contents.push({ type: "text", text: part.text });
-        } else if (part.functionCall) {
-          toolCalls.push({
-            name: part.functionCall.name,
-            args: part.functionCall.args,
-            thoughtSignature: part.thoughtSignature,
-          });
-        } else {
-          console.warn(`Unknown message part: ${JSON.stringify(part)}`);
+    for (const part of candidate.content.parts) {
+      if (part.functionCall) {
+        if (!part.functionCall.name || !part.functionCall.args) {
+          console.warn(
+            `Invalid function call part in response: ${JSON.stringify(part)}`,
+          );
+          continue;
         }
+        contents.push({
+          type: "function_call",
+          id: part.functionCall.id,
+          name: part.functionCall.name,
+          args: part.functionCall.args,
+          thoughtSignature: part.thoughtSignature,
+        });
+        continue;
       }
+      if (part.text) {
+        contents.push({
+          type: "text",
+          text: part.text,
+          thoughtSignature: part.thoughtSignature,
+        });
+        continue;
+      }
+      /** Additional part types can be handled here. */
+      console.warn(`Unsupported part in response: ${JSON.stringify(part)}`);
     }
-    const modelMessage: ModelMessage = {
-      role: "model",
-      contents: contents,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    };
     return {
-      message: modelMessage,
-      finishReason: response.candidates[0].finishReason,
-      totalTokens: response.usageMetadata?.totalTokenCount,
+      message: {
+        role: "model",
+        contents: contents,
+      },
+      finishReason: candidate.finishReason,
+      totalTokens: usageMetadata.totalTokenCount,
     };
   }
 
   /** Execute a Gemini content-generation request. */
   makeApiRequest(
-    apiMessages: Record<string, unknown>[],
-    apiTools?: Record<string, unknown>[],
+    apiMessages: GenAIMessage[],
+    apiTools?: FunctionDeclaration[],
     systemPrompt?: string,
-  ): Promise<any> {
+    signal?: AbortSignal,
+  ): Promise<GenAIResponse> {
+    // console.log("API Request Messages:", JSON.stringify(apiMessages, null, 2));
     return this.client.models.generateContent({
       model: this.model,
       contents: apiMessages,
       config: {
         candidateCount: 1,
         systemInstruction: systemPrompt,
-        tools: apiTools ? [{ functionDeclarations: apiTools }] : [],
-        thinkingConfig: ["gemini-3-flash-preview", "gemini-3-flash"].includes(
-          this.model,
-        )
-          ? {
-              thinkingLevel: ThinkingLevel.MINIMAL,
-            }
-          : undefined,
+        tools: [{ functionDeclarations: apiTools }],
+        abortSignal: signal,
+        thinkingConfig: {
+          thinkingLevel: this.thinkingLevelMap.get(this.model),
+        },
       },
     });
   }
@@ -171,6 +287,7 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
     messages: Message[],
     tools?: Tool[],
     systemPrompt?: string,
+    signal?: AbortSignal,
   ): Promise<LLMResponse> {
     const apiMessages = this.adaptMessages(messages);
     const apiTools = tools ? this.adaptTools(tools) : undefined;
@@ -183,7 +300,12 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
         )
       : this.makeApiRequest.bind(this);
 
-    const response = await executor(apiMessages, apiTools, systemPrompt);
+    const response = await executor(
+      apiMessages,
+      apiTools,
+      systemPrompt,
+      signal,
+    );
 
     return this.adaptResponseFromAPI(response);
   }

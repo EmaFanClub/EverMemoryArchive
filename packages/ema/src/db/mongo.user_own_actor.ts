@@ -98,4 +98,16 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
 
     return result.deletedCount > 0;
   }
+
+  /**
+   * Creates indices for the user-own-actors collection.
+   * @returns Promise resolving when indices are created.
+   */
+  async createIndices(): Promise<void> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<UserOwnActorRelation>(this.$cn);
+    await collection.createIndex({ userId: 1, actorId: 1 }, { unique: true });
+    await collection.createIndex({ userId: 1 });
+    await collection.createIndex({ actorId: 1 });
+  }
 }

@@ -15,10 +15,10 @@ import { fileURLToPath } from "node:url";
 
 import yaml from "js-yaml";
 
-import { RetryConfig } from "./retry";
+import { RetryConfig } from "./llm/retry";
 import { type Tool, baseTools } from "./tools";
 import { skillsPrompt } from "./skills";
-export { RetryConfig } from "./retry";
+export { RetryConfig } from "./llm/retry";
 
 /**
  * MongoDB configuration.
@@ -451,7 +451,7 @@ export class Config {
     }
     return fs
       .readFileSync(path, "utf-8")
-      .replace("{SKILLS_METADATA}", skillsPrompt);
+      .replaceAll("{SKILLS_METADATA}", skillsPrompt);
   }
 
   // TODO: populate with concrete tool instances when tool wiring is ready.
