@@ -1,4 +1,4 @@
-import type { Agent, AgentState } from "./llm";
+import type { Agent } from "./llm";
 
 /**
  * A task is a unit of work that can be scheduled and run.
@@ -35,12 +35,12 @@ export interface Task {
  * scheduler.schedule(dailyTask);
  * ```
  */
-export interface AgentTask<S extends AgentState = AgentState> extends Task {
+export interface AgentTask extends Task {
   /**
    * The agent to run the task with.
    * If not provided, the task will run with a new agent.
    */
-  agent?: Agent<S>;
+  agent?: Agent;
 
   /**
    * Runs the task with the agent and schedule context.
@@ -49,7 +49,7 @@ export interface AgentTask<S extends AgentState = AgentState> extends Task {
    * @param scheduler - The scheduler to run the task with.
    * @returns Promise resolving when the task is completed.
    */
-  work(agent: Agent<S>, scheduler: AgentTaskScheduler): Promise<void>;
+  work(agent: Agent, scheduler: AgentTaskScheduler): Promise<void>;
 }
 
 /**
