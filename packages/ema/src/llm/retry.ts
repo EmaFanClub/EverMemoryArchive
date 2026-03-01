@@ -80,9 +80,11 @@ export function isAbortError(error: unknown): boolean {
 }
 
 /**
- * Async function retry decorator.
+ * Wrap a standalone async function with retry logic (non-decorator usage).
+ * Useful when you want a callable instead of applying a class method decorator.
  */
-export function asyncRetry(
+export function wrapWithRetry<T extends (...args: any[]) => Promise<any>>(
+  originalMethod: T,
   /**
    * Retry configuration
    */
@@ -91,66 +93,46 @@ export function asyncRetry(
    * Callback function on retry, receives exception and current attempt number
    */
   onRetry?: (exception: Error, attempt: number) => void,
-): (
-  target: any,
-  propertyKey: string,
-  descriptor: PropertyDescriptor,
-) => PropertyDescriptor {
-  return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
-    const originalMethod = descriptor.value;
-    descriptor.value = async function (...args: any[]) {
-      let lastException: Error | undefined;
-      for (let attempt = 0; attempt <= config.max_retries; attempt++) {
-        try {
-          return await originalMethod.apply(this, args);
-        } catch (exception) {
-          lastException = exception as Error;
-          if (isAbortError(lastException)) {
-            throw lastException;
-          }
-          if (attempt >= config.max_retries) {
-            console.error(
-              `Function ${propertyKey} retry failed, reached maximum retry count ${config.max_retries}`,
-            );
-            throw new RetryExhaustedError(lastException, attempt + 1);
-          }
-          const delay = calculateDelay(
-            attempt,
-            config.initial_delay,
-            config.exponential_base,
-            config.max_delay,
-          );
-          console.warn(
-            `Function ${propertyKey} call ${attempt + 1} failed: ${lastException.message}, retrying attempt ${attempt + 2} after ${delay.toFixed(2)} seconds`,
-          );
-          // Call callback function
-          if (onRetry) {
-            onRetry(lastException, attempt + 1);
-          }
-          // Wait before retry
-          await new Promise((resolve) => setTimeout(resolve, delay * 1000));
-        }
-      }
-      if (lastException) {
-        throw lastException;
-      }
-      throw new Error("Unknown error");
-    };
-    return descriptor;
-  };
-}
-
-/**
- * Wrap a standalone async function with retry logic (non-decorator usage).
- * Useful when you want a callable instead of applying a class method decorator.
- */
-export function wrapWithRetry<T extends (...args: any[]) => Promise<any>>(
-  fn: T,
-  config: RetryConfig = new RetryConfig(),
-  onRetry?: (exception: Error, attempt: number) => void,
 ): T {
-  const decorator = asyncRetry(config, onRetry);
-  const descriptor: PropertyDescriptor = { value: fn };
-  const wrappedDescriptor = decorator({}, "wrapped", descriptor) ?? descriptor;
-  return (wrappedDescriptor.value ?? fn) as T;
+  if (config.max_retries <= 0) {
+    throw new Error("Max retries must be greater than 0");
+  }
+  return async function (...args: any[]) {
+    let lastException: Error | undefined;
+    for (let attempt = 0; attempt <= config.max_retries; attempt++) {
+      try {
+        return await originalMethod(...args);
+      } catch (exception) {
+        lastException = exception as Error;
+        if (isAbortError(lastException)) {
+          throw lastException;
+        }
+        if (attempt >= config.max_retries) {
+          console.error(
+            `Function retry failed, reached maximum retry count ${config.max_retries}`,
+          );
+          throw new RetryExhaustedError(lastException, attempt + 1);
+        }
+        const delay = calculateDelay(
+          attempt,
+          config.initial_delay,
+          config.exponential_base,
+          config.max_delay,
+        );
+        console.warn(
+          `Function call ${attempt + 1} failed: ${lastException.message}, retrying attempt ${attempt + 2} after ${delay.toFixed(2)} seconds`,
+        );
+        // Call callback function
+        if (onRetry) {
+          onRetry(lastException, attempt + 1);
+        }
+        // Wait before retry
+        await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+      }
+    }
+    if (lastException) {
+      throw lastException;
+    }
+    throw new Error("Unknown error");
+  } as T;
 }

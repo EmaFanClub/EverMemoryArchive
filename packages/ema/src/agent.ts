@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { type LLMClient } from "./llm";
 import { AgentConfig } from "./config";
 import { Logger } from "./logger";
-import { RetryExhaustedError, isAbortError } from "./retry";
+import { RetryExhaustedError, isAbortError } from "./llm/retry";
 import type { LLMResponse, Message, Content, FunctionResponse } from "./schema";
 import type { Tool, ToolResult, ToolContext } from "./tools/base";
 import type { EmaReply } from "./tools/ema_reply_tool";

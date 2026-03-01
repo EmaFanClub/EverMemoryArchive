@@ -18,7 +18,7 @@ import {
 } from "../schema";
 import type { Content, LLMResponse, Message, ModelMessage } from "../schema";
 import type { Tool } from "../tools/base";
-import { wrapWithRetry } from "../retry";
+import { wrapWithRetry } from "./retry";
 import type { LLMApiConfig, RetryConfig } from "../config";
 import { FetchWithProxy } from "./proxy";
 
