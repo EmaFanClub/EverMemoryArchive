@@ -1,11 +1,4 @@
 import { LLMClientBase, MessageHistory } from "./base";
-import {
-  isModelMessage,
-  isUserMessage,
-  isFunctionCall,
-  isFunctionResponse,
-  isTextItem,
-} from "../schema";
 import type { Content, LLMResponse, Message, SchemaAdapter } from "../schema";
 import type { Tool } from "../tools";
 import { FetchWithProxy } from "./proxy";
@@ -96,64 +89,43 @@ export class GoogleClient
     );
   }
 
-  /** Adapts a EMA message to a Gemini request content. */
+  /** Adapts an EMA message to a Gemini request content. */
   adaptMessageToAPI(message: Message): GenAIMessage {
-    /** Handle user messages by converting tool responses and contents to Gemini parts. */
-    if (isUserMessage(message)) {
-      const contents: GenAIContent[] = [];
-      for (const content of message.contents) {
-        if (isFunctionResponse(content)) {
-          contents.push({
-            functionResponse: {
-              name: content.name,
-              response: content.result,
-            },
-          });
-          continue;
-        }
-        if (isTextItem(content)) {
-          contents.push({
-            text: content.text,
-            thoughtSignature: content.thoughtSignature,
-          });
-          continue;
-        }
-        /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in user message: ${JSON.stringify(content)}`,
-        );
-      }
-      return { role: "user", parts: contents };
+    if (message.role !== "user" && message.role !== "model") {
+      throw new Error(`Unsupported message role: ${(message as Message).role}`);
     }
-    /** Handle model messages by converting contents and tool calls to Gemini parts. */
-    if (isModelMessage(message)) {
-      const contents: GenAIContent[] = [];
-      for (const content of message.contents) {
-        if (isFunctionCall(content)) {
-          contents.push({
-            functionCall: {
-              name: content.name,
-              args: content.args,
-            },
-            thoughtSignature: content.thoughtSignature,
-          });
-          continue;
+    return {
+      role: message.role,
+      parts: message.contents.map((content): GenAIContent => {
+        switch (content.type) {
+          case "function_response":
+            return {
+              functionResponse: {
+                name: content.name,
+                response: content.result,
+              },
+            };
+          case "function_call":
+            return {
+              functionCall: {
+                name: content.name,
+                args: content.args,
+              },
+            };
+          case "text":
+            return {
+              text: content.text,
+              thoughtSignature: content.thoughtSignature,
+            };
+          default:
+            /** Additional content types can be handled here. */
+            console.warn(
+              `Unsupported content type in message: ${JSON.stringify(content)}`,
+            );
+            return {};
         }
-        if (isTextItem(content)) {
-          contents.push({
-            text: content.text,
-            thoughtSignature: content.thoughtSignature,
-          });
-          continue;
-        }
-        /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in model message: ${JSON.stringify(content)}`,
-        );
-      }
-      return { role: "model", parts: contents };
-    }
-    throw new Error(`Unsupported message role: ${(message as Message).role}`);
+      }),
+    };
   }
 
   /** Map tool definition to Gemini function declaration. */

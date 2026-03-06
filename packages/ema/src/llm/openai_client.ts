@@ -8,15 +8,7 @@ import type {
   FunctionTool,
 } from "openai/resources/responses/responses";
 import { LLMClientBase, MessageHistory } from "./base";
-import {
-  type SchemaAdapter,
-  isModelMessage,
-  isUserMessage,
-  isFunctionCall,
-  isFunctionResponse,
-  isTextItem,
-} from "../schema";
-import type { Content, LLMResponse, Message } from "../schema";
+import type { SchemaAdapter, Content, LLMResponse, Message } from "../schema";
 import type { Tool } from "../tools/base";
 import type { LLMApiConfig, RetryConfig } from "../config";
 import { FetchWithProxy } from "./proxy";
@@ -49,64 +41,38 @@ export class OpenAIClient
     this.client = new OpenAI(options);
   }
 
-  /** Map EMA message shape to OpenAI Responses input items. */
+  /** Adapts an EMA message to OpenAI Responses input items. */
   adaptMessageToAPI(message: Message): OpenAIMessage[] {
-    const items: OpenAIMessage[] = [];
-    if (isUserMessage(message)) {
-      for (const content of message.contents) {
-        if (isFunctionResponse(content)) {
-          items.push({
-            type: "function_call_output",
-            call_id: content.id!,
-            output: JSON.stringify(content.result),
-          });
-          continue;
-        }
-        if (isTextItem(content)) {
-          const lastItem = items[items.length - 1];
-          if (
-            lastItem &&
-            lastItem.type === "message" &&
-            lastItem.role === "user" &&
-            Array.isArray(lastItem.content)
-          ) {
-            lastItem.content.push({
-              type: "input_text",
-              text: content.text,
-            });
-          } else {
-            items.push({
-              type: "message",
-              role: "user",
-              content: [{ type: "input_text", text: content.text }],
-            });
-          }
-          continue;
-        }
-        /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in user message: ${JSON.stringify(content)}`,
-        );
-      }
-      return items;
+    if (message.role !== "user" && message.role !== "model") {
+      throw new Error(`Unsupported message role: ${(message as Message).role}`);
     }
-    if (isModelMessage(message)) {
-      for (const content of message.contents) {
-        if (isFunctionCall(content)) {
+    const items: OpenAIMessage[] = [];
+    for (const content of message.contents) {
+      switch (content.type) {
+        case "function_call": {
           items.push({
             type: "function_call",
             call_id: content.id!,
             name: content.name,
             arguments: JSON.stringify(content.args),
           });
-          continue;
+          break;
         }
-        if (isTextItem(content)) {
+        case "function_response": {
+          items.push({
+            type: "function_call_output",
+            call_id: content.id!,
+            output: JSON.stringify(content.result),
+          });
+          break;
+        }
+        case "text": {
+          const expectedRole = message.role === "user" ? "user" : "assistant";
           const lastItem = items[items.length - 1];
           if (
             lastItem &&
             lastItem.type === "message" &&
-            lastItem.role === "assistant" &&
+            lastItem.role === expectedRole &&
             Array.isArray(lastItem.content)
           ) {
             lastItem.content.push({
@@ -116,20 +82,21 @@ export class OpenAIClient
           } else {
             items.push({
               type: "message",
-              role: "assistant",
+              role: expectedRole,
               content: [{ type: "input_text", text: content.text }],
             });
           }
-          continue;
+          break;
         }
-        /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in model message: ${JSON.stringify(content)}`,
-        );
+        default: {
+          /** Additional content types can be handled here. */
+          console.warn(
+            `Unsupported content type in message: ${JSON.stringify(content)}`,
+          );
+        }
       }
-      return items;
     }
-    throw new Error(`Unsupported message role: ${(message as Message).role}`);
+    return items;
   }
 
   /** Map tool definition to OpenAI Responses tool schema. */
