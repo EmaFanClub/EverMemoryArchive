@@ -107,10 +107,7 @@ export class GoogleClient
             };
           case "function_call":
             return {
-              functionCall: {
-                name: content.name,
-                args: content.args,
-              },
+              functionCall: { name: content.name, args: content.args },
             };
           case "text":
             return {

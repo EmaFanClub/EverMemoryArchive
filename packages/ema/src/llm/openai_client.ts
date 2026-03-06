@@ -68,17 +68,14 @@ export class OpenAIClient
         }
         case "text": {
           const expectedRole = message.role === "user" ? "user" : "assistant";
-          const lastItem = items[items.length - 1];
+          const lastItem = items.at(-1);
           if (
             lastItem &&
             lastItem.type === "message" &&
             lastItem.role === expectedRole &&
             Array.isArray(lastItem.content)
           ) {
-            lastItem.content.push({
-              type: "input_text",
-              text: content.text,
-            });
+            lastItem.content.push({ type: "input_text", text: content.text });
           } else {
             items.push({
               type: "message",
