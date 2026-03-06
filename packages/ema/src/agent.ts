@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { type LLMClient } from "./llm";
 import { AgentConfig } from "./config";
 import { Logger } from "./logger";
-import { RetryExhaustedError, isAbortError } from "./llm/retry";
+import { MessageHistory, RetryExhaustedError, isAbortError } from "./llm/base";
 import type { LLMResponse, Message, Content, FunctionResponse } from "./schema";
 import type { Tool, ToolResult, ToolContext } from "./tools/base";
 import type { EmaReply } from "./tools/ema_reply_tool";
@@ -94,7 +94,7 @@ export class ContextManager {
   events: AgentEventsEmitter;
   logger: Logger;
 
-  state: AgentState = {
+  private _state: AgentState = {
     systemPrompt: "",
     messages: [],
     tools: [],
@@ -104,50 +104,53 @@ export class ContextManager {
     llmClient: LLMClient,
     events: AgentEventsEmitter,
     logger: Logger,
-    tokenLimit: number = 80000,
+    public history: MessageHistory = llmClient.createHistory(),
   ) {
     this.llmClient = llmClient;
     this.events = events;
     this.logger = logger;
   }
 
+  get state(): AgentState {
+    return this._state;
+  }
+
+  set state(v: AgentState) {
+    this._state = v;
+    // trigger the messages setter
+    this.messages = v.messages;
+  }
+
   get systemPrompt(): string {
-    return this.state.systemPrompt;
+    return this._state.systemPrompt;
   }
 
   set systemPrompt(v: string) {
-    this.state.systemPrompt = v;
+    this._state.systemPrompt = v;
   }
 
   get messages(): Message[] {
-    return this.state.messages;
+    return this._state.messages;
   }
 
   set messages(v: Message[]) {
-    this.state.messages = v;
+    this._state.messages = v;
+    this.history = v.reduce(
+      (acc, msg) => acc.appendMessage(msg),
+      this.llmClient.createHistory(),
+    );
   }
 
   get tools(): Tool[] {
-    return this.state.tools;
+    return this._state.tools;
   }
 
   set tools(v: Tool[]) {
-    this.state.tools = v;
+    this._state.tools = v;
   }
 
-  /** Add a user message to context. */
-  addUserMessage(contents: Content[]): void {
-    this.messages.push({ role: "user", contents: contents });
-  }
-
-  /** Add an model message to context. */
-  addModelMessage(response: LLMResponse): void {
-    this.messages.push(response.message);
-  }
-
-  /** Add a tool result message to context. */
-  addToolMessage(contents: FunctionResponse[]): void {
-    this.messages.push({ role: "user", contents: contents });
+  get toolContext(): ToolContext | undefined {
+    return this._state.toolContext;
   }
 
   /** Get message history (shallow copy). */
@@ -189,7 +192,6 @@ export class Agent {
       this.llm,
       this.events,
       this.logger,
-      this.config.tokenLimit,
     );
   }
 
@@ -243,6 +245,10 @@ export class Agent {
       this.contextManager.messages,
     );
 
+    const handler = this.llm.buildHandler(
+      this.contextManager.tools,
+      this.contextManager.systemPrompt,
+    );
     while (step < maxSteps) {
       if (this.abortRequested) {
         this.finishAborted();
@@ -253,10 +259,8 @@ export class Agent {
       // Call LLM with context from context manager
       let response: LLMResponse;
       try {
-        response = await this.llm.generate(
-          this.contextManager.messages,
-          this.contextManager.tools,
-          this.contextManager.systemPrompt,
+        response = await handler.generate(
+          this.contextManager.history,
           this.abortController?.signal,
         );
         this.logger.debug(`LLM response received.`, response);
@@ -291,7 +295,7 @@ export class Agent {
       }
 
       // Add model message to context
-      this.contextManager.addModelMessage(response);
+      this.contextManager.history.addModelMessage(response);
 
       // Check if task is complete (no tool calls)
       if (checkCompleteMessages(this.contextManager.messages)) {
@@ -341,7 +345,7 @@ export class Agent {
           try {
             result = await tool.execute(
               callArgs,
-              this.contextManager.state.toolContext,
+              this.contextManager.toolContext,
             );
           } catch (err) {
             const errorDetail = `${(err as Error).name}: ${(err as Error).message}`;
@@ -376,7 +380,7 @@ export class Agent {
       }
 
       // Add all function responses to context
-      this.contextManager.addToolMessage(functionResponses);
+      this.contextManager.history.addToolMessage(functionResponses);
 
       step += 1;
     }

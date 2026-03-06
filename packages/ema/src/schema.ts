@@ -76,30 +76,3 @@ export interface SchemaAdapter {
   /** Converts a provider response back to the EMA schema. */
   adaptResponseFromAPI(response: any): LLMResponse;
 }
-
-/** Type guard for model messages. */
-export function isModelMessage(message: Message): message is ModelMessage {
-  return message.role === "model";
-}
-
-/** Type guard for user messages. */
-export function isUserMessage(message: Message): message is UserMessage {
-  return message.role === "user";
-}
-
-/** Type guard for tool response content. */
-export function isTextItem(content: Content): content is TextItem {
-  return content.type === "text";
-}
-
-/** Type guard for function call content. */
-export function isFunctionCall(content: Content): content is FunctionCall {
-  return content.type === "function_call";
-}
-
-/** Type guard for function response content. */
-export function isFunctionResponse(
-  content: Content,
-): content is FunctionResponse {
-  return content.type === "function_response";
-}

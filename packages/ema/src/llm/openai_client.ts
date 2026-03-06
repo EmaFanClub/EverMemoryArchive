@@ -7,18 +7,9 @@ import type {
   Response as OpenAIResponse,
   FunctionTool,
 } from "openai/resources/responses/responses";
-import { LLMClientBase } from "./base";
-import {
-  type SchemaAdapter,
-  isModelMessage,
-  isUserMessage,
-  isFunctionCall,
-  isFunctionResponse,
-  isTextItem,
-} from "../schema";
-import type { Content, LLMResponse, Message, ModelMessage } from "../schema";
+import { LLMClientBase, MessageHistory } from "./base";
+import type { SchemaAdapter, Content, LLMResponse, Message } from "../schema";
 import type { Tool } from "../tools/base";
-import { wrapWithRetry } from "./retry";
 import type { LLMApiConfig, RetryConfig } from "../config";
 import { FetchWithProxy } from "./proxy";
 
@@ -28,7 +19,10 @@ type OpenAIMessage =
   | EasyInputMessage;
 
 /** OpenAI-compatible client that adapts EMA schema to Responses API. */
-export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
+export class OpenAIClient
+  extends LLMClientBase<OpenAIMessage>
+  implements SchemaAdapter
+{
   private readonly client: OpenAI;
 
   constructor(
@@ -47,87 +41,59 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
     this.client = new OpenAI(options);
   }
 
-  /** Map EMA message shape to OpenAI Responses input items. */
+  /** Adapts an EMA message to OpenAI Responses input items. */
   adaptMessageToAPI(message: Message): OpenAIMessage[] {
-    const items: OpenAIMessage[] = [];
-    if (isUserMessage(message)) {
-      for (const content of message.contents) {
-        if (isFunctionResponse(content)) {
-          items.push({
-            type: "function_call_output",
-            call_id: content.id!,
-            output: JSON.stringify(content.result),
-          });
-          continue;
-        }
-        if (isTextItem(content)) {
-          const lastItem = items[items.length - 1];
-          if (
-            lastItem &&
-            lastItem.type === "message" &&
-            lastItem.role === "user" &&
-            Array.isArray(lastItem.content)
-          ) {
-            lastItem.content.push({
-              type: "input_text",
-              text: content.text,
-            });
-          } else {
-            items.push({
-              type: "message",
-              role: "user",
-              content: [{ type: "input_text", text: content.text }],
-            });
-          }
-          continue;
-        }
-        /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in user message: ${JSON.stringify(content)}`,
-        );
-      }
-      return items;
+    if (message.role !== "user" && message.role !== "model") {
+      throw new Error(`Unsupported message role: ${(message as Message).role}`);
     }
-    if (isModelMessage(message)) {
-      for (const content of message.contents) {
-        if (isFunctionCall(content)) {
+    const items: OpenAIMessage[] = [];
+    for (const content of message.contents) {
+      switch (content.type) {
+        case "function_call": {
           items.push({
             type: "function_call",
             call_id: content.id!,
             name: content.name,
             arguments: JSON.stringify(content.args),
           });
-          continue;
+          break;
         }
-        if (isTextItem(content)) {
-          const lastItem = items[items.length - 1];
+        case "function_response": {
+          items.push({
+            type: "function_call_output",
+            call_id: content.id!,
+            output: JSON.stringify(content.result),
+          });
+          break;
+        }
+        case "text": {
+          const expectedRole = message.role === "user" ? "user" : "assistant";
+          const lastItem = items.at(-1);
           if (
             lastItem &&
             lastItem.type === "message" &&
-            lastItem.role === "assistant" &&
+            lastItem.role === expectedRole &&
             Array.isArray(lastItem.content)
           ) {
-            lastItem.content.push({
-              type: "input_text",
-              text: content.text,
-            });
+            lastItem.content.push({ type: "input_text", text: content.text });
           } else {
             items.push({
               type: "message",
-              role: "assistant",
+              role: expectedRole,
               content: [{ type: "input_text", text: content.text }],
             });
           }
-          continue;
+          break;
         }
-        /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in model message: ${JSON.stringify(content)}`,
-        );
+        default: {
+          /** Additional content types can be handled here. */
+          console.warn(
+            `Unsupported content type in message: ${JSON.stringify(content)}`,
+          );
+        }
       }
-      return items;
     }
-    throw new Error(`Unsupported message role: ${(message as Message).role}`);
+    return items;
   }
 
   /** Map tool definition to OpenAI Responses tool schema. */
@@ -141,12 +107,9 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
     };
   }
 
-  /** Convert a batch of EMA messages. */
-  adaptMessages(messages: Message[]): OpenAIMessage[] {
-    const history: OpenAIMessage[] = [];
-    for (const message of messages) {
-      history.push(...this.adaptMessageToAPI(message));
-    }
+  /** Converts a EMA message to a OpenAI Responses input item. */
+  appendMessage(history: OpenAIMessage[], message: Message): OpenAIMessage[] {
+    history.push(...this.adaptMessageToAPI(message));
     return history;
   }
 
@@ -236,49 +199,22 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
   }
 
   /** Execute a Responses API request. */
-  makeApiRequest(
-    apiMessages: OpenAIMessage[],
+  async makeApiRequest(
+    history: MessageHistory<OpenAIMessage>,
     apiTools?: FunctionTool[],
     systemPrompt?: string,
     signal?: AbortSignal,
-  ): Promise<OpenAIResponse> {
-    console.log("API Request Messages:", JSON.stringify(apiMessages, null, 2));
-    return this.client.responses.create(
-      {
-        model: this.model,
-        input: apiMessages,
-        tools: apiTools,
-        instructions: systemPrompt,
-      },
-      { signal },
-    );
-  }
-
-  /** Public generate entrypoint matching LLMClientBase. */
-  async generate(
-    messages: Message[],
-    tools?: Tool[],
-    systemPrompt?: string,
-    signal?: AbortSignal,
   ): Promise<LLMResponse> {
-    const apiMessages = this.adaptMessages(messages);
-    const apiTools = tools ? this.adaptTools(tools) : undefined;
-
-    const executor = this.retryConfig.enabled
-      ? wrapWithRetry(
-          this.makeApiRequest.bind(this),
-          this.retryConfig,
-          this.retryCallback,
-        )
-      : this.makeApiRequest.bind(this);
-
-    const response = await executor(
-      apiMessages,
-      apiTools,
-      systemPrompt,
-      signal,
+    return this.adaptResponseFromAPI(
+      await this.client.responses.create(
+        {
+          model: this.model,
+          input: history.getApiMessagesForClient(this),
+          tools: apiTools,
+          instructions: systemPrompt,
+        },
+        { signal },
+      ),
     );
-
-    return this.adaptResponseFromAPI(response);
   }
 }
