@@ -12,6 +12,7 @@ export interface RunFinishedEvent {
   ok: boolean;
   msg: string;
   error?: Error;
+  metadata: any;
 }
 
 /* Emitted when the ema_reply tool is called successfully. */
@@ -205,13 +206,13 @@ export class Agent {
     this.abortController?.abort();
   }
 
-  async runWithState(state: AgentState): Promise<void> {
-    return this.run(async (loop) => {
+  async runWithState(metadata: any, state: AgentState): Promise<void> {
+    return this.run(metadata, async (loop) => {
       await loop(state);
     });
   }
 
-  async run(callback: AgentStateCallback): Promise<void> {
+  async run(metadata: any, callback: AgentStateCallback): Promise<void> {
     this.status = "running";
     this.abortRequested = false;
     this.abortController = new AbortController();
@@ -222,7 +223,7 @@ export class Agent {
       }
       called = true;
       this.contextManager.state = state;
-      await this.mainLoop();
+      await this.mainLoop(metadata);
     };
     try {
       await callback(loop);
@@ -233,7 +234,7 @@ export class Agent {
   }
 
   /** Execute agent loop until task is complete or max steps reached. */
-  async mainLoop(): Promise<void> {
+  async mainLoop(metadata: any): Promise<void> {
     const toolDict = new Map(this.contextManager.tools.map((t) => [t.name, t]));
     const maxSteps = this.config.maxSteps;
     let step = 0;
@@ -245,7 +246,7 @@ export class Agent {
 
     while (step < maxSteps) {
       if (this.abortRequested) {
-        this.finishAborted();
+        this.finishAborted(metadata);
         return;
       }
       this.logger.debug(`Step ${step + 1}/${maxSteps}`);
@@ -262,7 +263,7 @@ export class Agent {
         this.logger.debug(`LLM response received.`, response);
       } catch (error) {
         if (isAbortError(error)) {
-          this.finishAborted();
+          this.finishAborted(metadata);
           return;
         }
         if (error instanceof RetryExhaustedError) {
@@ -271,6 +272,7 @@ export class Agent {
             ok: false,
             msg: errorMsg,
             error: error as RetryExhaustedError,
+            metadata,
           });
           this.logger.error(errorMsg);
           return;
@@ -280,13 +282,14 @@ export class Agent {
           ok: false,
           msg: errorMsg,
           error: error as Error,
+          metadata,
         });
         this.logger.error(errorMsg);
         return;
       }
 
       if (this.abortRequested) {
-        this.finishAborted();
+        this.finishAborted(metadata);
         return;
       }
 
@@ -298,6 +301,7 @@ export class Agent {
         this.events.emit("runFinished", {
           ok: true,
           msg: response.finishReason,
+          metadata,
         });
         this.logger.debug(`Run finished: ${response.finishReason}`);
         return;
@@ -385,6 +389,7 @@ export class Agent {
     const errorMsg = `Task couldn't be completed after ${maxSteps} steps.`;
     this.events.emit("runFinished", {
       ok: false,
+      metadata,
       msg: errorMsg,
       error: new Error(errorMsg),
     });
@@ -392,12 +397,13 @@ export class Agent {
     return;
   }
 
-  private finishAborted(): void {
+  private finishAborted(metadata: any): void {
     const error = new Error("Aborted");
     this.events.emit("runFinished", {
       ok: false,
       msg: error.message,
       error,
+      metadata,
     });
   }
 
