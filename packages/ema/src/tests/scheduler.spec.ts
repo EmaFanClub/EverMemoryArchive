@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { createMongo } from "../db";
 import type { Mongo } from "../db";
 import { AgendaScheduler, isJob, type JobHandlerMap } from "../scheduler";
+import { computeDailyRollupKinds } from "../scheduler/jobs/actor.job";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -36,6 +37,15 @@ describe("AgendaScheduler", () => {
       data: { message: "not-started" },
     });
     expect(jobId).toBeDefined();
+  });
+
+  test("computes daily rollup kinds from the execution date", () => {
+    expect(
+      computeDailyRollupKinds(new Date(2024, 4, 13, 0, 5, 0).getTime()),
+    ).toEqual(["week", "month"]);
+    expect(
+      computeDailyRollupKinds(new Date(2024, 5, 1, 0, 5, 0).getTime()),
+    ).toEqual(["week", "year"]);
   });
 
   test("executes a scheduled job", async () => {

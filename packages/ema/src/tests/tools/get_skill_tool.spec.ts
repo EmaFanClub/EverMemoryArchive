@@ -4,13 +4,11 @@ import type { ToolResult } from "../../tools/base";
 import { Skill } from "../../skills/base";
 
 class StubSkill extends Skill {
+  description = "stub";
   playbook: string;
   constructor(playbook: string, name: string = "stub") {
     super("/tmp", name);
     this.playbook = playbook;
-  }
-  get description() {
-    return "stub";
   }
   get parameters() {
     return {};

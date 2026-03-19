@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { ActorScope } from "../../actor";
 import type { Server } from "../../server";
 import type { ToolResult } from "../../tools/base";
 import { formatRunAt } from "./utils";
@@ -15,15 +14,15 @@ export type ListReminderInput = z.infer<typeof ListReminderSchema>;
 /**
  * Lists reminder jobs owned by the current actor.
  * @param server - Server instance providing scheduling.
- * @param actorScope - Actor scope for ownership and routing.
+ * @param actorId - Actor identifier for ownership and routing.
  */
 export async function executeListReminders(
   server: Server,
-  actorScope: ActorScope,
+  actorId: number,
 ): Promise<ToolResult> {
   const jobs = await server.scheduler.listJobs({
     name: "actor_foreground",
-    "data.ownerId": actorScope.actorId,
+    "data.ownerId": actorId,
   });
 
   const reminders = jobs.map((job) => {

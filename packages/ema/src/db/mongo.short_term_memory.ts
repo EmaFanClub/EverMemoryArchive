@@ -78,6 +78,15 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
     if (entity.id) {
       throw new Error("id must not be provided");
     }
+    return this.upsertShortTermMemory(entity);
+  }
+
+  /**
+   * Upserts a short term memory in the database
+   * @param entity - The short term memory to upsert
+   * @returns Promise resolving to the ID of the created or updated memory
+   */
+  async upsertShortTermMemory(entity: ShortTermMemoryEntity): Promise<number> {
     return upsertEntity(this.mongo, this.$cn, entity);
   }
 

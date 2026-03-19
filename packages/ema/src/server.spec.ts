@@ -3,6 +3,7 @@ import { Server } from "./server";
 import { MemFs } from "./fs";
 import type { RoleEntity } from "./db";
 import { createMongo, type Mongo } from "./db";
+import { AgendaScheduler } from "./scheduler";
 import {
   Config,
   LLMConfig,
@@ -29,12 +30,114 @@ const createTestConfig = () =>
 
 describe("Server", () => {
   test("should return user on login", async () => {
-    const server = await Server.create(new MemFs(), createTestConfig());
-    const user = await server.login();
-    expect(user).toBeDefined();
-    expect(user.id).toBe(1);
-    expect(user.name).toBe("alice");
-    expect(user.email).toBe("alice@example.com");
+    const previousQqUid = process.env.EMA_QQ_UID;
+    const previousQqGroupId = process.env.EMA_QQ_GROUP_ID;
+    process.env.EMA_QQ_UID = "10726371";
+    process.env.EMA_QQ_GROUP_ID = "114514";
+    const fs = new MemFs();
+    const mongo = await createMongo("", "test_login", "memory");
+    await mongo.connect();
+    const lance = await lancedb.connect("memory://ema-login");
+    const server = Server.createSync(fs, mongo, lance, createTestConfig());
+
+    try {
+      const user = await server.login();
+      expect(user).toBeDefined();
+      expect(user.id).toBe(1);
+      expect(user.name).toBe("alice");
+      expect(user.email).toBe("alice@example.com");
+      const userBinding =
+        await server.externalIdentityBindingDB.getExternalIdentityBindingByUid(
+          "1",
+        );
+      expect(userBinding).toMatchObject({
+        userId: 1,
+        channel: "web",
+        uid: "1",
+      });
+      const qqBinding =
+        await server.externalIdentityBindingDB.getExternalIdentityBindingByUid(
+          "10726371",
+        );
+      expect(qqBinding).toMatchObject({
+        userId: 1,
+        channel: "qq",
+        uid: "10726371",
+      });
+      const qqConversation =
+        await server.conversationDB.getConversationByActorAndSession(
+          1,
+          "qq-chat-10726371",
+        );
+      expect(qqConversation).toMatchObject({
+        actorId: 1,
+        session: "qq-chat-10726371",
+      });
+      const qqGroupConversation =
+        await server.conversationDB.getConversationByActorAndSession(
+          1,
+          "qq-group-114514",
+        );
+      expect(qqGroupConversation).toMatchObject({
+        actorId: 1,
+        session: "qq-group-114514",
+      });
+    } finally {
+      if (typeof previousQqUid === "undefined") {
+        delete process.env.EMA_QQ_UID;
+      } else {
+        process.env.EMA_QQ_UID = previousQqUid;
+      }
+      if (typeof previousQqGroupId === "undefined") {
+        delete process.env.EMA_QQ_GROUP_ID;
+      } else {
+        process.env.EMA_QQ_GROUP_ID = previousQqGroupId;
+      }
+      await mongo.close();
+      await lance.close();
+    }
+  });
+
+  test("login should schedule default recurring jobs only once", async () => {
+    const fs = new MemFs();
+    const mongo = await createMongo("", "test_login_jobs", "memory");
+    await mongo.connect();
+    const lance = await lancedb.connect("memory://ema-login-jobs");
+    const server = Server.createSync(fs, mongo, lance, createTestConfig());
+    server.scheduler = await AgendaScheduler.create(mongo, {
+      processEvery: 20,
+    });
+
+    try {
+      await server.login();
+      await server.login();
+
+      const conversation =
+        await server.conversationDB.getConversationByActorAndSession(
+          1,
+          "web-chat-1",
+        );
+      expect(conversation).toMatchObject({
+        actorId: 1,
+        session: "web-chat-1",
+        description: "这是你和你的拥有者之间在网页端进行的对话。",
+      });
+
+      const backgroundJobs = await server.scheduler.listJobs({
+        name: "actor_background",
+        "data.actorId": 1,
+      });
+      const foregroundJobs = await server.scheduler.listJobs({
+        name: "actor_foreground",
+        "data.actorId": 1,
+      });
+      expect(backgroundJobs).toHaveLength(1);
+      expect(foregroundJobs).toHaveLength(0);
+    } finally {
+      await server.scheduler.stop();
+      await mongo.close();
+      await lance.close();
+    }
   });
 });
 
@@ -68,7 +171,6 @@ describe("Server with MemFs and snapshot functions", () => {
   test("should insert roles", async () => {
     const role1: RoleEntity = {
       name: "Role 1",
-      description: "Description 1",
       prompt: "Prompt 1",
     };
 
@@ -85,7 +187,6 @@ describe("Server with MemFs and snapshot functions", () => {
   test("should save snapshot with roles [r1]", async () => {
     const role1: RoleEntity = {
       name: "Role 1",
-      description: "Description 1",
       prompt: "Prompt 1",
     };
 
@@ -109,13 +210,11 @@ describe("Server with MemFs and snapshot functions", () => {
   test("should save snapshot with roles [r2, r3]", async () => {
     const role2: RoleEntity = {
       name: "Role 2",
-      description: "Description 2",
       prompt: "Prompt 2",
     };
 
     const role3: RoleEntity = {
       name: "Role 3",
-      description: "Description 3",
       prompt: "Prompt 3",
     };
 
@@ -143,7 +242,6 @@ describe("Server with MemFs and snapshot functions", () => {
   test("should restore from snapshot containing roles [r1]", async () => {
     const role1: RoleEntity = {
       name: "Role 1",
-      description: "Description 1",
       prompt: "Prompt 1",
     };
 
@@ -169,5 +267,24 @@ describe("Server with MemFs and snapshot functions", () => {
   test("should return false when restoring from non-existent snapshot", async () => {
     const restored = await server.restoreFromSnapshot("non-existent-snapshot");
     expect(restored).toBe(false);
+  });
+
+  test("getActor should only load actors that already exist in database", async () => {
+    await expect(server.getActor(1)).rejects.toThrow("Actor 1 not found.");
+
+    await server.login();
+
+    const actor = await server.getActor(1);
+    const actorAgain = await server.getActor(1);
+    expect(actor).toBe(actorAgain);
+
+    const conversation =
+      await server.conversationDB.getConversationByActorAndSession(
+        1,
+        "web-chat-1",
+      );
+    expect(conversation?.description).toBe(
+      "这是你和你的拥有者之间在网页端进行的对话。",
+    );
   });
 });

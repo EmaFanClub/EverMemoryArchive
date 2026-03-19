@@ -1,11 +1,14 @@
 import { z } from "zod";
-import type { InputContent, UserMessage } from "../schema";
-import type { EmaReply } from "../tools/ema_reply_tool";
+import { collapseContents, type TextItem } from "../schema";
 import { formatTimestamp } from "../utils";
-import type { BufferMessage } from "./base";
+import { formatReplyRef } from "../channel";
+import {
+  type BufferMessage,
+  type BufferUserMessage,
+  type BufferWriteMessage,
+} from "./base";
 
 export const LONG_TERM_INDEX_MAP = {
-  自我认知: [""],
   用户画像: [""],
   人物画像: [""],
   过往事件: ["用户事件", "其他事件"],
@@ -44,81 +47,56 @@ export function isAllowedIndex1(
   return allowed.includes(index1);
 }
 
-/**
- * Converts a buffer message into a user message with a context header.
- * @param message - Buffer message to convert.
- * @returns UserMessage with a context header prepended.
- */
-export function bufferMessageToUserMessage(
-  message: BufferMessage,
-): UserMessage {
-  if (message.kind !== "user") {
-    throw new Error(`Expected user message, got ${message.kind}`);
-  }
-  const time = formatTimestamp("YYYY-MM-DD HH:mm:ss", message.time);
-  const msgId = message.msg_id ?? "";
-  return {
-    role: "user",
-    contents: [
-      {
-        type: "text",
-        text: `<user time="${time}" role_id="${message.role_id}" msg_id="${msgId}">`,
-      },
-      ...message.contents,
-      { type: "text", text: `</user>` },
-    ],
-  };
+export function isActorChatResponse(
+  message: BufferWriteMessage,
+): message is Extract<BufferWriteMessage, { ema_reply: unknown }> {
+  return "ema_reply" in message;
+}
+
+export function isActorChatInput(
+  message: BufferWriteMessage,
+): message is Extract<BufferWriteMessage, { speaker: unknown }> {
+  return !isActorChatResponse(message);
 }
 
 /**
  * Formats a buffer message as a single prompt line.
  * @param message - Buffer message to format.
- * @returns Prompt line containing time, role, id, and content.
+ * @param ownerUid - Known owner uid for speaker classification.
+ * @returns Prompt line containing time, session metadata, message ID, and content.
  */
-export function bufferMessageToPrompt(message: BufferMessage): string {
-  const contents = message.contents
-    .map((part) => (part.type === "text" ? part.text : JSON.stringify(part)))
-    .join("\n");
-  const msgId = message.msg_id ?? "";
-  return `- [${formatTimestamp("YYYY-MM-DD HH:mm:ss", message.time)}][${message.kind} role_id=${message.role_id} msg_id=${msgId}] ${contents}`;
-}
-
-/**
- * Builds a buffer message from user inputs.
- * @param userId - User identifier.
- * @param inputs - User message contents.
- * @param time - Optional timestamp (milliseconds since epoch).
- * @returns BufferMessage representing the user message.
- */
-export function bufferMessageFromUser(
-  userId: number,
-  inputs: InputContent[],
-  time: number = Date.now(),
-): BufferMessage {
-  return {
-    kind: "user",
-    role_id: userId,
-    contents: inputs,
-    time,
-  };
-}
-
-/**
- * Builds a buffer message from an EMA reply.
- * @param actorId - Actor identifier.
- * @param reply - EMA reply response.
- * @param time - Optional timestamp (milliseconds since epoch).
- * @returns BufferMessage representing the EMA reply.
- */
-export function bufferMessageFromEma(
-  actorId: number,
-  reply: EmaReply,
-  time: number = Date.now(),
-): BufferMessage {
-  return {
-    kind: "actor",
-    role_id: actorId,
-    contents: [{ type: "text", text: reply.response }],
-    time,
-  };
+export function buildPromptFromBufferMessage(
+  message: BufferMessage,
+  ownerUid: string | null,
+): string {
+  const contents = (collapseContents(message.contents, false) as TextItem[])
+    .map((part) => part.text)
+    .join(" ")
+    .replaceAll("\n", " ");
+  if (message.kind === "actor") {
+    const metadata = [`speaker="self"`, `msg_id="${message.msgId}"`];
+    if (message.replyTo) {
+      metadata.push(`reply_to="${formatReplyRef(message.replyTo)}"`);
+    }
+    if (message.think && message.think.length > 0) {
+      metadata.push(`think="${message.think}"`);
+    }
+    return `- [${formatTimestamp("YYYY-MM-DD HH:mm:ss", message.time)}][${metadata.join(" ")}] ${contents}`;
+  }
+  const userMessage = message as BufferUserMessage;
+  const speaker =
+    ownerUid !== null && userMessage.speaker.uid === ownerUid
+      ? "owner"
+      : "other";
+  const metadata = [
+    `speaker="${speaker}"`,
+    `session="${userMessage.speaker.session}"`,
+    `uid="${userMessage.speaker.uid}"`,
+    `name="${userMessage.speaker.name}"`,
+    `msg_id="${userMessage.msgId}"`,
+  ];
+  if (userMessage.replyTo) {
+    metadata.push(`reply_to="${formatReplyRef(userMessage.replyTo)}"`);
+  }
+  return `- [${formatTimestamp("YYYY-MM-DD HH:mm:ss", userMessage.time)}][${metadata.join(" ")}] ${contents}`;
 }

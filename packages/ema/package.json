@@ -17,6 +17,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./shared": {
+      "types": "./src/shared/export.ts",
+      "default": "./src/shared/export.ts"
     }
   },
   "files": [

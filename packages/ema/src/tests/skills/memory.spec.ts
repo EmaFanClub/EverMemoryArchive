@@ -7,8 +7,10 @@ import {
   MongoShortTermMemoryDB,
   MongoLongTermMemoryDB,
   MongoRoleDB,
+  MongoPersonalityDB,
   MongoUserDB,
   MongoUserOwnActorDB,
+  MongoExternalIdentityBindingDB,
   LanceMemoryVectorSearcher,
 } from "../../db";
 import type { Mongo } from "../../db";
@@ -53,9 +55,11 @@ describeLLM("MemorySkill", () => {
     const scheduler = await AgendaScheduler.create(mongo);
     memoryManager = new MemoryManager(
       new MongoRoleDB(mongo),
+      new MongoPersonalityDB(mongo),
       new MongoActorDB(mongo),
       new MongoUserDB(mongo),
       new MongoUserOwnActorDB(mongo),
+      new MongoExternalIdentityBindingDB(mongo),
       new MongoConversationDB(mongo),
       new MongoConversationMessageDB(mongo),
       new MongoShortTermMemoryDB(mongo),

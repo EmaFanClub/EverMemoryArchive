@@ -1,24 +1,26 @@
+import type { ActorChatInput, ActorChatResponse } from "../actor";
+import type { MessageReplyRef, SpeakerInformation } from "../channel";
 import type { InputContent } from "../schema";
 
+export type BufferWriteMessage = ActorChatInput | ActorChatResponse;
+
 /**
- * Represents a persisted message with metadata for buffer history.
+ * Shared fields for persisted buffer messages.
  */
-export interface BufferMessage {
+export interface BufferMessageBase<
+  K extends "user" | "actor" = "user" | "actor",
+> {
+  kind: K;
   /**
-   * The role that produced the message.
+   * The actor-scoped readable message identifier.
    */
-  kind: "user" | "actor";
+  msgId: number;
   /**
-   * The identifier of the message author (userId / actorId).
+   * Optional message reply reference.
    */
-  role_id: number;
+  replyTo?: MessageReplyRef;
   /**
-   * The unique identifier of the persisted message.
-   * May be absent before the message is stored.
-   */
-  msg_id?: number;
-  /**
-   * The message contents.
+   * Visible contents of the message.
    */
   contents: InputContent[];
   /**
@@ -26,6 +28,19 @@ export interface BufferMessage {
    */
   time: number;
 }
+
+export interface BufferUserMessage extends BufferMessageBase<"user"> {
+  speaker: SpeakerInformation;
+}
+
+export interface BufferActorMessage extends BufferMessageBase<"actor"> {
+  think?: string;
+}
+
+/**
+ * Represents a persisted message with metadata for buffer history.
+ */
+export type BufferMessage = BufferUserMessage | BufferActorMessage;
 
 /**
  * Interface for persisting and reading buffer messages.
@@ -40,11 +55,10 @@ export interface BufferStorage {
   getBuffer(conversationId: number, count: number): Promise<BufferMessage[]>;
   /**
    * Adds a buffer message.
-   * @param conversationId - The conversation identifier to write.
-   * @param message - The buffer message to add.
+   * @param message - The runtime message to persist.
    * @returns Promise resolving when the message is stored.
    */
-  addBuffer(conversationId: number, message: BufferMessage): Promise<void>;
+  addBuffer(message: BufferWriteMessage): Promise<void>;
 }
 
 /**

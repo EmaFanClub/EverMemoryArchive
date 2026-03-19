@@ -14,6 +14,7 @@ import {
   isUserMessage,
   isFunctionCall,
   isFunctionResponse,
+  isInlineDataItem,
   isTextItem,
 } from "../schema";
 import type { Content, LLMResponse, Message, ModelMessage } from "../schema";
@@ -81,6 +82,12 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
           }
           continue;
         }
+        if (isInlineDataItem(content)) {
+          console.log(
+            `[OpenAIClient] Inline data in user message is not supported yet and will be implemented later.`,
+          );
+          continue;
+        }
         /** Additional content types can be handled here. */
         console.warn(
           `Unsupported content type in user message: ${JSON.stringify(content)}`,
@@ -118,6 +125,12 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
               content: [{ type: "input_text", text: content.text }],
             });
           }
+          continue;
+        }
+        if (isInlineDataItem(content)) {
+          console.log(
+            `[OpenAIClient] Inline data in model message is not supported yet and will be implemented later.`,
+          );
           continue;
         }
         /** Additional content types can be handled here. */

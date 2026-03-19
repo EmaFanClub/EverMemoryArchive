@@ -4,7 +4,12 @@ import type {
   ListConversationMessagesRequest,
 } from "./base";
 import type { Mongo } from "./mongo";
-import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
+import {
+  deleteEntity,
+  getNextId,
+  omitMongoId,
+  upsertEntity,
+} from "./mongo.util";
 
 /**
  * MongoDB-based implementation of ConversationMessageDB
@@ -46,6 +51,12 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       }
       filter.conversationId = req.conversationId;
     }
+    if (req.actorId !== undefined) {
+      if (typeof req.actorId !== "number") {
+        throw new Error("actorId must be a number");
+      }
+      filter.actorId = req.actorId;
+    }
     if (req.createdBefore !== undefined || req.createdAfter !== undefined) {
       if (
         req.createdBefore !== undefined &&
@@ -68,14 +79,26 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       }
       filter.createdAt = createdAtFilter;
     }
-    if (req.messageIds !== undefined) {
-      if (!Array.isArray(req.messageIds)) {
-        throw new Error("messageIds must be an array");
+    if (req.msgIds !== undefined) {
+      if (!Array.isArray(req.msgIds)) {
+        throw new Error("msgIds must be an array");
       }
-      if (req.messageIds.some((id) => typeof id !== "number")) {
-        throw new Error("messageIds must contain only numbers");
+      if (req.msgIds.some((id) => typeof id !== "number")) {
+        throw new Error("msgIds must contain only numbers");
       }
-      filter.id = { $in: req.messageIds };
+      filter.msgId = { $in: req.msgIds };
+    }
+    if (req.channelMessageId !== undefined) {
+      if (typeof req.channelMessageId !== "string") {
+        throw new Error("channelMessageId must be a string");
+      }
+      filter.channelMessageId = req.channelMessageId;
+    }
+    if (req.resumed !== undefined) {
+      if (typeof req.resumed !== "boolean") {
+        throw new Error("resumed must be a boolean");
+      }
+      filter.resumed = req.resumed ? { $ne: false } : false;
     }
 
     let cursor = collection.find(filter);
@@ -100,6 +123,13 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     const db = this.mongo.getDb();
     const collection = db.collection<ConversationMessageEntity>(this.$cn);
     return collection.countDocuments({ conversationId });
+  }
+
+  async reserveMessageId(conversationId: number): Promise<number> {
+    if (typeof conversationId !== "number") {
+      throw new Error("conversationId must be a number");
+    }
+    return getNextId(this.mongo, `${this.$cn}:conversation:${conversationId}`);
   }
 
   /**
@@ -128,12 +158,86 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
    * @returns Promise resolving to the ID of the created message
    */
   async addConversationMessage(
-    entity: ConversationMessageEntity,
-  ): Promise<number> {
-    if (entity.id) {
+    entity: Omit<ConversationMessageEntity, "id" | "msgId"> & {
+      msgId?: number;
+    },
+  ): Promise<ConversationMessageEntity & { id: number; msgId: number }> {
+    if ((entity as ConversationMessageEntity).id) {
       throw new Error("id must not be provided");
     }
-    return upsertEntity(this.mongo, this.$cn, entity);
+    const nextMsgId =
+      entity.msgId ?? (await this.reserveMessageId(entity.conversationId));
+    const storedEntity: ConversationMessageEntity = {
+      ...entity,
+      msgId: nextMsgId,
+    };
+    const id = await upsertEntity(this.mongo, this.$cn, storedEntity);
+    return {
+      ...storedEntity,
+      id,
+      msgId: nextMsgId,
+    };
+  }
+
+  async updateConversationMessageChannelMessageId(
+    conversationId: number,
+    msgId: number,
+    channelMessageId: string,
+  ): Promise<boolean> {
+    if (typeof conversationId !== "number") {
+      throw new Error("conversationId must be a number");
+    }
+    if (typeof msgId !== "number") {
+      throw new Error("msgId must be a number");
+    }
+    if (typeof channelMessageId !== "string") {
+      throw new Error("channelMessageId must be a string");
+    }
+
+    const db = this.mongo.getDb();
+    const collection = db.collection<ConversationMessageEntity>(this.$cn);
+    const result = await collection.updateOne(
+      { conversationId, msgId },
+      {
+        $set: {
+          channelMessageId,
+        },
+      },
+    );
+    return result.matchedCount > 0;
+  }
+
+  async markConversationMessagesResumed(
+    conversationId: number,
+    msgIds: number[],
+  ): Promise<number> {
+    if (typeof conversationId !== "number") {
+      throw new Error("conversationId must be a number");
+    }
+    if (!Array.isArray(msgIds)) {
+      throw new Error("msgIds must be an array");
+    }
+    if (msgIds.some((id) => typeof id !== "number")) {
+      throw new Error("msgIds must contain only numbers");
+    }
+    if (msgIds.length === 0) {
+      return 0;
+    }
+
+    const db = this.mongo.getDb();
+    const collection = db.collection<ConversationMessageEntity>(this.$cn);
+    const result = await collection.updateMany(
+      {
+        conversationId,
+        msgId: { $in: msgIds },
+      },
+      {
+        $set: {
+          resumed: true,
+        },
+      },
+    );
+    return result.modifiedCount;
   }
 
   /**
@@ -154,5 +258,15 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     const collection = db.collection<ConversationMessageEntity>(this.$cn);
     await collection.createIndex({ id: 1 }, { unique: true });
     await collection.createIndex({ conversationId: 1, createdAt: -1 });
+    await collection.createIndex({
+      conversationId: 1,
+      resumed: 1,
+      createdAt: -1,
+    });
+    await collection.createIndex(
+      { conversationId: 1, msgId: 1 },
+      { unique: true },
+    );
+    await collection.createIndex({ conversationId: 1, channelMessageId: 1 });
   }
 }

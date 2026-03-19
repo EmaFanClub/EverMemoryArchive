@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { ActorScope } from "../../actor";
 import type { Server } from "../../server";
 import type { ToolResult } from "../../tools/base";
 import { parseRunAt } from "./utils";
@@ -39,17 +38,20 @@ export type CreateReminderInput = z.infer<typeof CreateReminderSchema>;
 /**
  * Creates a reminder job for the current actor.
  * @param server - Server instance providing scheduling.
- * @param actorScope - Actor scope for ownership and routing.
+ * @param actorId - Actor identifier for ownership and routing.
+ * @param conversationId - Conversation identifier for routing.
  * @param payload - Parsed create reminder payload.
  */
 export async function executeCreateReminder(
   server: Server,
-  actorScope: ActorScope,
+  actorId: number,
+  conversationId: number,
   payload: CreateReminderInput,
 ): Promise<ToolResult> {
   const baseData = {
-    actorScope,
-    ownerId: actorScope.actorId,
+    actorId,
+    conversationId,
+    ownerId: actorId,
     prompt: payload.prompt,
   };
   let runAt: number;

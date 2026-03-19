@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { ActorScope } from "../../actor";
 import type { Server } from "../../server";
 import { isJob } from "../../scheduler/base";
 import type { ToolResult } from "../../tools/base";
@@ -16,12 +15,12 @@ export type DeleteReminderInput = z.infer<typeof DeleteReminderSchema>;
 /**
  * Deletes a reminder job owned by the current actor.
  * @param server - Server instance providing scheduling.
- * @param actorScope - Actor scope for ownership and routing.
+ * @param actorId - Actor identifier for ownership and routing.
  * @param payload - Parsed delete reminder payload.
  */
 export async function executeDeleteReminder(
   server: Server,
-  actorScope: ActorScope,
+  actorId: number,
   payload: DeleteReminderInput,
 ): Promise<ToolResult> {
   const job = await server.scheduler.getJob(payload.jobId);
@@ -33,7 +32,7 @@ export async function executeDeleteReminder(
   }
 
   const data = job.attrs.data;
-  if (data?.ownerId !== actorScope.actorId) {
+  if (data?.ownerId !== actorId) {
     return {
       success: false,
       error: "Reminder job does not belong to the current actor.",

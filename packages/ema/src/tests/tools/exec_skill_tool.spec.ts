@@ -4,13 +4,11 @@ import type { ToolResult } from "../../tools/base";
 import { Skill } from "../../skills/base";
 
 class StubSkill extends Skill {
+  description = "stub";
   executeFn: (args?: any) => Promise<ToolResult>;
   constructor(executeFn: (args?: any) => Promise<ToolResult>, name = "stub") {
     super("/tmp", name);
     this.executeFn = executeFn;
-  }
-  get description() {
-    return "stub";
   }
   get parameters() {
     return {};

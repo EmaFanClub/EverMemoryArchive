@@ -57,6 +57,21 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
   }
 
   /**
+   * Gets the owner user ID for the given actor.
+   * @param actorId - The actor ID.
+   * @returns Owner user ID or null when no owner exists.
+   */
+  async getActorOwner(actorId: number): Promise<number | null> {
+    if (typeof actorId !== "number") {
+      throw new Error("actorId must be a number");
+    }
+    const db = this.mongo.getDb();
+    const collection = db.collection<UserOwnActorRelation>(this.$cn);
+    const relation = await collection.findOne({ actorId });
+    return relation?.userId ?? null;
+  }
+
+  /**
    * Adds an actor to a user
    * @param entity - The user own actor relation data to add
    * @returns Promise resolving to true if added, false if already exists
@@ -65,19 +80,17 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
     const db = this.mongo.getDb();
     const collection = db.collection<UserOwnActorRelation>(this.$cn);
 
-    // Check if relation already exists
-    const existing = await collection.findOne({
-      userId: entity.userId,
-      actorId: entity.actorId,
-    });
-
+    const existing = await collection.findOne({ actorId: entity.actorId });
     if (existing) {
-      return false;
+      if (existing.userId === entity.userId) {
+        return false;
+      }
+      throw new Error(
+        `Actor ${entity.actorId} already belongs to user ${existing.userId}.`,
+      );
     }
 
-    // Insert the relation
     await collection.insertOne({ ...entity });
-
     return true;
   }
 
@@ -106,8 +119,7 @@ export class MongoUserOwnActorDB implements UserOwnActorDB {
   async createIndices(): Promise<void> {
     const db = this.mongo.getDb();
     const collection = db.collection<UserOwnActorRelation>(this.$cn);
-    await collection.createIndex({ userId: 1, actorId: 1 }, { unique: true });
+    await collection.createIndex({ actorId: 1 }, { unique: true });
     await collection.createIndex({ userId: 1 });
-    await collection.createIndex({ actorId: 1 });
   }
 }

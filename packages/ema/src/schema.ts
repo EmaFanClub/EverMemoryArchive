@@ -1,5 +1,46 @@
 import type { Tool, ToolResult } from "./tools/base";
 
+export const IMAGE_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
+
+export const VIDEO_MIME_TYPES = [
+  "video/mp4",
+  "video/mpeg",
+  "video/quicktime",
+  "video/x-msvideo",
+  "video/x-flv",
+  "video/webm",
+  "video/x-ms-wmv",
+  "video/3gpp",
+] as const;
+
+export const AUDIO_MIME_TYPES = [
+  "audio/wav",
+  "audio/mpeg",
+  "audio/aiff",
+  "audio/aac",
+  "audio/ogg",
+  "audio/flac",
+] as const;
+
+export const DOCUMENT_MIME_TYPES = [
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+  "text/html",
+] as const;
+
+export type ImageMIME = (typeof IMAGE_MIME_TYPES)[number];
+export type VideoMIME = (typeof VIDEO_MIME_TYPES)[number];
+export type AudioMIME = (typeof AUDIO_MIME_TYPES)[number];
+export type DocumentMIME = (typeof DOCUMENT_MIME_TYPES)[number];
+export type MIME = ImageMIME | VideoMIME | AudioMIME | DocumentMIME;
+
 /** Tool invocation request emitted by the LLM. */
 export interface FunctionCall {
   type: "function_call";
@@ -22,6 +63,8 @@ export interface FunctionResponse {
   name: string;
   /** Execution outcome payload. */
   result: ToolResult;
+  /** Optional media parts returned by the tool for multimodal providers. */
+  parts?: InlineDataItem[];
 }
 
 export interface TextItem {
@@ -30,11 +73,16 @@ export interface TextItem {
   thoughtSignature?: string;
 }
 
+export interface InlineDataItem {
+  type: "inline_data";
+  mimeType: MIME;
+  data: string;
+}
+
 /**
  * Single content block within a chat message.
- * TODO: extend with other types if necessary.
  */
-export type InputContent = TextItem;
+export type InputContent = TextItem | InlineDataItem;
 
 export type Content = InputContent | FunctionCall | FunctionResponse;
 
@@ -90,6 +138,32 @@ export function isUserMessage(message: Message): message is UserMessage {
 /** Type guard for tool response content. */
 export function isTextItem(content: Content): content is TextItem {
   return content.type === "text";
+}
+
+/** Type guard for inline data content. */
+export function isInlineDataItem(content: Content): content is InlineDataItem {
+  return content.type === "inline_data";
+}
+
+/**
+ * Collapses contents for prompt rendering.
+ */
+export function collapseContents(
+  contents: InputContent[],
+  preserveInlineImages = true,
+): InputContent[] {
+  return contents.map((content): InputContent => {
+    if (
+      content.type === "text" ||
+      (preserveInlineImages && content.mimeType.startsWith("image/"))
+    ) {
+      return content;
+    }
+    return {
+      type: "text",
+      text: `（${content.mimeType}）`,
+    };
+  });
 }
 
 /** Type guard for function call content. */

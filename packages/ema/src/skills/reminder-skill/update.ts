@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { ActorScope } from "../../actor";
 import type { Server } from "../../server";
 import { isJob } from "../../scheduler/base";
 import type { ToolResult } from "../../tools/base";
@@ -37,12 +36,14 @@ export type UpdateReminderInput = z.infer<typeof UpdateReminderSchema>;
 /**
  * Updates a reminder job owned by the current actor.
  * @param server - Server instance providing scheduling.
- * @param actorScope - Actor scope for ownership and routing.
+ * @param actorId - Actor identifier for ownership and routing.
+ * @param conversationId - Conversation identifier for routing.
  * @param payload - Parsed update reminder payload.
  */
 export async function executeUpdateReminder(
   server: Server,
-  actorScope: ActorScope,
+  actorId: number,
+  conversationId: number,
   payload: UpdateReminderInput,
 ): Promise<ToolResult> {
   const job = await server.scheduler.getJob(payload.jobId);
@@ -54,7 +55,7 @@ export async function executeUpdateReminder(
   }
 
   const data = job.attrs.data;
-  if (data?.ownerId !== actorScope.actorId) {
+  if (data?.ownerId !== actorId) {
     return {
       success: false,
       error: "Reminder job does not belong to the current actor.",
@@ -104,8 +105,9 @@ export async function executeUpdateReminder(
 
   const interval = payload.interval ?? job.attrs.repeatInterval;
   const nextData = {
-    actorScope,
-    ownerId: actorScope.actorId,
+    actorId,
+    conversationId,
+    ownerId: actorId,
     prompt,
   };
 

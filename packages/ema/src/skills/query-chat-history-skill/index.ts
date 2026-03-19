@@ -2,7 +2,10 @@ import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
 import type { ConversationMessageEntity } from "../../db/base";
-import { formatTimestamp, parseTimestamp } from "../../utils";
+import { resolveSession } from "../../channel";
+import type { BufferMessage } from "../../memory/base";
+import { buildPromptFromBufferMessage } from "../../memory/utils";
+import { parseTimestamp } from "../../utils";
 
 const TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
 const DEFAULT_LIMIT = 50;
@@ -51,9 +54,19 @@ const QueryByIdsSchema = z
   })
   .strict();
 
+const QueryExpandOneSchema = z
+  .object({
+    mode: z
+      .literal("expand_one")
+      .describe("展开单条消息中的原始图片或文件内容"),
+    msg_id: z.number().int().positive().describe("需要展开的消息ID"),
+  })
+  .strict();
+
 const QueryChatHistorySchema = z.discriminatedUnion("mode", [
   QueryByTimeRangeSchema,
   QueryByIdsSchema,
+  QueryExpandOneSchema,
 ]);
 
 type QueryChatHistoryInput = z.infer<typeof QueryChatHistorySchema>;
@@ -73,26 +86,58 @@ function parseTime(value: string, field: string): number {
 }
 
 /**
- * Formats a conversation message entity into a serializable DTO.
+ * Formats a conversation message entity into the same summary style used by buffer prompts.
  * @param entity - Conversation message entity.
- * @returns Serialized message object.
+ * @param session - Conversation session string.
+ * @param ownerUid - Current owner uid used for speaker classification.
+ * @returns Prompt-friendly summary line.
  */
-function formatMessage(entity: ConversationMessageEntity) {
-  if (typeof entity.id !== "number") {
-    throw new Error("Conversation message is missing id.");
+function formatMessage(
+  entity: ConversationMessageEntity,
+  session: string,
+  ownerUid: string | null,
+): string {
+  if (typeof entity.msgId !== "number") {
+    throw new Error("Conversation message is missing msgId.");
   }
   const message = entity.message;
-  return {
-    msg_id: entity.id,
-    role: message.kind,
-    role_id: message.kind === "user" ? message.userId : message.actorId,
-    time: formatTimestamp(TIME_FORMAT, entity.createdAt ?? Date.now()),
-    contents: message.contents,
-  };
+  const bufferMessage: BufferMessage =
+    message.kind === "user"
+      ? {
+          kind: "user",
+          speaker: {
+            session,
+            uid: message.uid,
+            name: message.name,
+          },
+          msgId: entity.msgId,
+          ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+          contents: message.contents,
+          time: entity.createdAt ?? Date.now(),
+        }
+      : {
+          kind: "actor",
+          msgId: entity.msgId,
+          ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+          contents: message.contents,
+          ...(message.think ? { think: message.think } : {}),
+          time: entity.createdAt ?? Date.now(),
+        };
+  return buildPromptFromBufferMessage(bufferMessage, ownerUid);
+}
+
+function extractMediaParts(
+  entity: ConversationMessageEntity,
+): NonNullable<ToolResult["parts"]> {
+  return entity.message.contents.filter(
+    (content): content is NonNullable<ToolResult["parts"]>[number] =>
+      content.type === "inline_data",
+  );
 }
 
 export default class QueryChatHistorySkill extends Skill {
-  description = "按时间范围或消息ID检索当前会话的聊天记录，支持分页状态返回。";
+  description =
+    "该技能用于查询当前会话中的真实聊天记录，或者查看某条消息中的媒体内容。需要精确回溯某条消息内容、查看消息中的图片或文件的具体内容时使用。";
 
   parameters = QueryChatHistorySchema.toJSONSchema();
 
@@ -113,14 +158,15 @@ export default class QueryChatHistorySkill extends Skill {
     }
 
     const server = context?.server;
-    const actorScope = context?.actorScope;
+    const actorId = context?.actorId;
+    const conversationId = context?.conversationId;
     if (!server) {
       return {
         success: false,
         error: "Missing server in skill context.",
       };
     }
-    if (!actorScope?.conversationId) {
+    if (!conversationId) {
       return {
         success: false,
         error: "Missing conversationId in skill context.",
@@ -128,19 +174,68 @@ export default class QueryChatHistorySkill extends Skill {
     }
 
     try {
+      const conversation =
+        await server.conversationDB.getConversation(conversationId);
+      if (!conversation) {
+        return {
+          success: false,
+          error: "Conversation not found.",
+        };
+      }
+      const ownerUid = (() => {
+        if (!actorId) {
+          return Promise.resolve<string | null>(null);
+        }
+        const sessionInfo = resolveSession(conversation.session);
+        if (!sessionInfo) {
+          return Promise.resolve<string | null>(null);
+        }
+        return server.memoryManager.getOwnerUid(actorId, sessionInfo.channel);
+      })();
+      const resolvedOwnerUid = await ownerUid;
+
+      if (payload.mode === "expand_one") {
+        const rows =
+          await server.conversationMessageDB.listConversationMessages({
+            conversationId,
+            actorId,
+            msgIds: [payload.msg_id],
+            limit: 1,
+          });
+        const row = rows[0];
+        if (!row) {
+          return {
+            success: false,
+            error: `Message ${payload.msg_id} not found.`,
+          };
+        }
+        const parts = extractMediaParts(row);
+        if (parts.length === 0) {
+          return {
+            success: false,
+            error: `Message ${payload.msg_id} has no expandable media parts.`,
+          };
+        }
+        return {
+          success: true,
+          parts,
+        };
+      }
+
       if (payload.mode === "by_ids") {
         const rows =
           await server.conversationMessageDB.listConversationMessages({
-            conversationId: actorScope.conversationId,
-            messageIds: payload.msg_ids,
+            conversationId,
+            actorId,
+            msgIds: payload.msg_ids,
           });
         const byId = new Map(
           rows
             .filter(
-              (item): item is ConversationMessageEntity & { id: number } =>
-                typeof item.id === "number",
+              (item): item is ConversationMessageEntity & { msgId: number } =>
+                typeof item.msgId === "number",
             )
-            .map((item) => [item.id, item]),
+            .map((item) => [item.msgId, item]),
         );
         const orderedEntities: ConversationMessageEntity[] = [];
         for (const id of payload.msg_ids) {
@@ -149,16 +244,12 @@ export default class QueryChatHistorySkill extends Skill {
             orderedEntities.push(item);
           }
         }
-        const ordered = orderedEntities.map(formatMessage);
+        const ordered = orderedEntities.map((item) =>
+          formatMessage(item, conversation.session, resolvedOwnerUid),
+        );
         return {
           success: true,
-          content: JSON.stringify({
-            mode: payload.mode,
-            requested_msg_ids: payload.msg_ids,
-            found_count: ordered.length,
-            missing_msg_ids: payload.msg_ids.filter((id) => !byId.has(id)),
-            messages: ordered,
-          }),
+          content: ordered.length > 0 ? ordered.join("\n") : "None.",
         };
       }
 
@@ -172,7 +263,7 @@ export default class QueryChatHistorySkill extends Skill {
       }
 
       const rows = await server.conversationMessageDB.listConversationMessages({
-        conversationId: actorScope.conversationId,
+        conversationId,
         createdAfter: startTime,
         createdBefore: endTime,
         sort: "asc",
@@ -180,22 +271,13 @@ export default class QueryChatHistorySkill extends Skill {
       });
       const hasMore = rows.length > payload.limit;
       const page = hasMore ? rows.slice(0, payload.limit) : rows;
-      const messages = page.map(formatMessage);
-      const last = messages[messages.length - 1];
+      const messages = page.map((item) =>
+        formatMessage(item, conversation.session, resolvedOwnerUid),
+      );
+      const content = messages.length > 0 ? messages.join("\n") : "None.";
       return {
         success: true,
-        content: JSON.stringify({
-          mode: payload.mode,
-          range: {
-            start_time: payload.start_time,
-            end_time: payload.end_time,
-          },
-          limit: payload.limit,
-          has_more: hasMore,
-          last_message_time: last?.time ?? null,
-          last_msg_id: last?.msg_id ?? null,
-          messages,
-        }),
+        content: hasMore ? `${content}\n(more messages omitted.)` : content,
       };
     } catch (error) {
       return {

@@ -86,7 +86,7 @@ describe("MongoUserOwnActorDB with in-memory MongoDB", () => {
     };
     const relation3: UserOwnActorRelation = {
       userId: 2,
-      actorId: 1,
+      actorId: 3,
     };
 
     await db.addActorToUser(relation1);
@@ -108,19 +108,13 @@ describe("MongoUserOwnActorDB with in-memory MongoDB", () => {
       userId: 1,
       actorId: 2,
     };
-    const relation3: UserOwnActorRelation = {
-      userId: 2,
-      actorId: 1,
-    };
 
     await db.addActorToUser(relation1);
     await db.addActorToUser(relation2);
-    await db.addActorToUser(relation3);
 
     const relations = await db.listUserOwnActorRelations({ actorId: 1 });
-    expect(relations).toHaveLength(2);
-    expect(relations).toContainEqual(relation1);
-    expect(relations).toContainEqual(relation3);
+    expect(relations).toHaveLength(1);
+    expect(relations[0]).toEqual(relation1);
   });
 
   test("should list relations filtered by both userId and actorId", async () => {
@@ -134,7 +128,7 @@ describe("MongoUserOwnActorDB with in-memory MongoDB", () => {
     };
     const relation3: UserOwnActorRelation = {
       userId: 2,
-      actorId: 1,
+      actorId: 3,
     };
 
     await db.addActorToUser(relation1);
@@ -147,6 +141,26 @@ describe("MongoUserOwnActorDB with in-memory MongoDB", () => {
     });
     expect(relations).toHaveLength(1);
     expect(relations[0]).toEqual(relation1);
+  });
+
+  test("should get actor owner when exactly one owner exists", async () => {
+    await db.addActorToUser({ userId: 7, actorId: 1 });
+
+    const ownerId = await db.getActorOwner(1);
+    expect(ownerId).toBe(7);
+  });
+
+  test("should return null when actor owner does not exist", async () => {
+    const ownerId = await db.getActorOwner(999);
+    expect(ownerId).toBeNull();
+  });
+
+  test("should reject binding an actor to another user", async () => {
+    await db.addActorToUser({ userId: 7, actorId: 1 });
+
+    await expect(db.addActorToUser({ userId: 8, actorId: 1 })).rejects.toThrow(
+      "Actor 1 already belongs to user 7.",
+    );
   });
 
   test("should handle multiple relations for same user", async () => {

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import type { ToolResult, ToolContext } from "../tools/base";
 
 /** Skill name -> Skill instance registry. */
@@ -57,10 +57,21 @@ export abstract class Skill {
     const content = await fs.promises.readFile(skillMdPath, "utf-8");
     const playbook = stripYamlFrontmatter(content).body;
     const parametersHint =
-      "\n\n## 执行该skill需要提供的参数(Parameters)\n\n" +
-      JSON.stringify(this.parameters, null, 2);
+      "\n## 参数Schema：\n" + JSON.stringify(this.parameters, null, 2);
     return `${playbook.trim()}${parametersHint}`;
   }
+}
+
+/**
+ * Counts text length approximately for memory-like text:
+ * - each Han character counts as 1
+ * - each contiguous word counts as 1
+ * - each contiguous number counts as 1
+ * Whitespace and punctuation are ignored.
+ */
+export function countApproxTextLength(value: string): number {
+  const tokens = value.match(/\p{Script=Han}|[\p{L}]+|[\p{N}]+/gu);
+  return tokens?.length ?? 0;
 }
 
 /**
@@ -71,7 +82,7 @@ export function buildSkillsPrompt(registry: SkillRegistry): string {
   if (!skills.length) {
     return "";
   }
-  const lines = ["## Available Skills", ""];
+  const lines = [];
   for (const skill of skills) {
     lines.push(`- \`${skill.name}\`: ${skill.description}`);
   }

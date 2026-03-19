@@ -1,4 +1,5 @@
 import type { InputContent } from "../schema";
+import type { MessageReplyRef } from "../channel";
 
 /**
  * Represents an entity in the database
@@ -26,17 +27,13 @@ export interface RoleEntity extends Entity {
   /**
    * The name of the role
    */
-  name?: string;
-  /**
-   * The description of the role
-   */
-  description?: string;
+  name: string;
   /**
    * The prompt of the role
    */
-  prompt?: string;
+  prompt: string;
   /**
-   * The date and time the user was last updated
+   * The date and time the role was last updated
    */
   updatedAt?: DbDate;
 }
@@ -89,6 +86,56 @@ export interface RoleDB {
    * @returns Promise resolving to true if deleted, false if not found
    */
   deleteRole(id: number): Promise<boolean>;
+}
+
+/**
+ * Represents actor personality data structure
+ */
+export interface PersonalityEntity extends Entity {
+  /**
+   * The actor ID owning this personality memory.
+   */
+  actorId: number;
+  /**
+   * The actor personality memory in markdown text.
+   */
+  memory: string;
+  /**
+   * The date and time the personality was last updated.
+   */
+  updatedAt?: DbDate;
+}
+
+/**
+ * Interface for personality database operations
+ */
+export interface PersonalityDB {
+  /**
+   * lists all personality records in the database
+   * @returns Promise resolving to an array of personality data
+   */
+  listPersonalities(): Promise<PersonalityEntity[]>;
+
+  /**
+   * gets personality by actor id
+   * @param actorId - The unique identifier for the actor
+   * @returns Promise resolving to the personality data or null if not found
+   */
+  getPersonality(actorId: number): Promise<PersonalityEntity | null>;
+
+  /**
+   * inserts or updates personality in the database
+   * @param entity - The personality data to upsert
+   * @returns Promise resolving to the ID of the created or updated personality
+   */
+  upsertPersonality(entity: PersonalityEntity): Promise<number>;
+
+  /**
+   * deletes personality from the database by actor id
+   * @param actorId - The unique identifier for the actor
+   * @returns Promise resolving to true if deleted, false if not found
+   */
+  deletePersonality(actorId: number): Promise<boolean>;
 }
 
 /**
@@ -214,6 +261,12 @@ export interface UserOwnActorDB {
     req: ListUserOwnActorRelationsRequest,
   ): Promise<UserOwnActorRelation[]>;
   /**
+   * Gets the owner user ID for the given actor.
+   * Returns null when no owner exists and throws if multiple owners are found.
+   * @param actorId - The actor ID.
+   */
+  getActorOwner(actorId: number): Promise<number | null>;
+  /**
    * adds an actor to a user
    * @param entity - The user own actor relation data to add
    * @returns Promise resolving when the operation completes
@@ -239,23 +292,113 @@ export interface ListUserOwnActorRelationsRequest {
 }
 
 /**
+ * Represents an external identity binding.
+ */
+export interface ExternalIdentityBindingEntity extends Entity {
+  /**
+   * The local user mapped to the external UID.
+   */
+  userId: number;
+  /**
+   * The channel name for this binding.
+   */
+  channel: string;
+  /**
+   * The external UID bound to the local entity.
+   */
+  uid: string;
+  /**
+   * The date and time the binding was last updated.
+   */
+  updatedAt?: DbDate;
+}
+
+/**
+ * Interface for external identity binding database operations.
+ */
+export interface ExternalIdentityBindingDB {
+  /**
+   * Lists identity bindings in the database.
+   * @param req - Optional filters for the listing.
+   * @returns Promise resolving to matching identity bindings.
+   */
+  listExternalIdentityBindings(
+    req: ListExternalIdentityBindingsRequest,
+  ): Promise<ExternalIdentityBindingEntity[]>;
+
+  /**
+   * Gets a specific identity binding by ID.
+   * @param id - The unique identifier for the binding.
+   * @returns Promise resolving to the binding data or null if not found.
+   */
+  getExternalIdentityBinding(
+    id: number,
+  ): Promise<ExternalIdentityBindingEntity | null>;
+
+  /**
+   * Gets an identity binding by external speaker identifier.
+   * @param uid - External UID.
+   * @returns Promise resolving to the binding data or null if not found.
+   */
+  getExternalIdentityBindingByUid(
+    uid: string,
+  ): Promise<ExternalIdentityBindingEntity | null>;
+
+  /**
+   * Inserts or updates an identity binding.
+   * @param entity - The identity binding to upsert.
+   * @returns Promise resolving to the created or updated binding ID.
+   */
+  upsertExternalIdentityBinding(
+    entity: ExternalIdentityBindingEntity,
+  ): Promise<number>;
+
+  /**
+   * Deletes an identity binding.
+   * @param id - The unique identifier for the binding to delete.
+   * @returns Promise resolving to true if deleted, false if not found.
+   */
+  deleteExternalIdentityBinding(id: number): Promise<boolean>;
+}
+
+export interface ListExternalIdentityBindingsRequest {
+  /**
+   * The local user ID to filter by.
+   */
+  userId?: number;
+  /**
+   * The channel name to filter by.
+   */
+  channel?: string;
+  /**
+   * The external UID to filter by.
+   */
+  uid?: string;
+}
+
+/**
  * Represents conversation data structure
  */
 export interface ConversationEntity extends Entity {
   /**
-   * The name of the conversation
+   * The display name of the conversation.
    */
   name: string;
   /**
-   * Which actor is the owner of this conversation
+   * Description of the conversation source/context.
+   * Defaults to "None." when no explicit source is provided.
+   */
+  description: string;
+  /**
+   * The actor owning this conversation session.
    */
   actorId: number;
   /**
-   * The user ID that issues this conversation
+   * Session identifier bound to this conversation.
    */
-  userId: number;
+  session: string;
   /**
-   * The date and time the conversation was last updated
+   * The date and time the conversation was last updated.
    */
   updatedAt?: DbDate;
 }
@@ -280,6 +423,17 @@ export interface ConversationDB {
   getConversation(id: number): Promise<ConversationEntity | null>;
 
   /**
+   * Gets a specific conversation by actor and session.
+   * @param actorId - The actor identifier owning the conversation.
+   * @param session - Session identifier.
+   * @returns Promise resolving to the conversation data or null if not found.
+   */
+  getConversationByActorAndSession(
+    actorId: number,
+    session: string,
+  ): Promise<ConversationEntity | null>;
+
+  /**
    * inserts or updates a conversation in the database
    * @param entity - The conversation data to upsert
    * @returns Promise resolving to the ID of the created or updated conversation
@@ -300,9 +454,9 @@ export interface ListConversationsRequest {
    */
   actorId?: number;
   /**
-   * The user ID to filter conversations by
+   * The session identifier to filter conversations by.
    */
-  userId?: number;
+  session?: string;
 }
 
 /**
@@ -313,6 +467,23 @@ export interface ConversationMessageEntity extends Entity {
    * The conversation ID
    */
   conversationId: number;
+  /**
+   * The actor identifier owning the actor-scoped message index.
+   */
+  actorId: number;
+  /**
+   * The actor-scoped readable message ID.
+   */
+  msgId: number;
+  /**
+   * Platform-scoped message identifier.
+   */
+  channelMessageId?: string;
+  /**
+   * Whether the message has already been merged into actor runtime state and
+   * is therefore eligible to appear in rebuilt buffer prompts.
+   */
+  resumed?: boolean;
   /**
    * The conversation message
    */
@@ -326,40 +497,39 @@ export type ConversationMessage =
   | ConversationUserMessage
   | ConversationActorMessage;
 
+export interface ConversationMessageBase<K extends "user" | "actor"> {
+  kind: K;
+  msgId?: number;
+  contents: InputContent[];
+  replyTo?: MessageReplyRef;
+}
+
 /**
  * Represents conversation message from the user
  */
-export interface ConversationUserMessage {
+export interface ConversationUserMessage extends ConversationMessageBase<"user"> {
   /**
-   * `user`: a message from the user
+   * External UID visible to the model.
    */
-  kind: "user";
+  uid: string;
   /**
-   * The user ID
+   * Display name shown to the model.
    */
-  userId: number;
-  /**
-   * The message content
-   */
-  contents: InputContent[];
+  name: string;
 }
 
 /**
  * Represents conversation message from the actor
  */
-export interface ConversationActorMessage {
+export interface ConversationActorMessage extends ConversationMessageBase<"actor"> {
   /**
-   * `actor`: a message from the actor
+   * Display name shown to the model.
    */
-  kind: "actor";
+  name: string;
   /**
-   * The actor ID
+   * Internal thought persisted with the actor reply.
    */
-  actorId: number;
-  /**
-   * The message content
-   */
-  contents: InputContent[];
+  think?: string;
 }
 
 /**
@@ -382,6 +552,13 @@ export interface ConversationMessageDB {
   countConversationMessages(conversationId: number): Promise<number>;
 
   /**
+   * Reserves the next message ID for a conversation.
+   * @param conversationId - The conversation ID to reserve a message ID for
+   * @returns Promise resolving to the reserved conversation-scoped msgId
+   */
+  reserveMessageId(conversationId: number): Promise<number>;
+
+  /**
    * gets a conversation message by id
    * @param id - The unique identifier for the conversation message
    * @returns Promise resolving to the conversation message data or null if not found
@@ -391,9 +568,38 @@ export interface ConversationMessageDB {
   /**
    * inserts a conversation message in the database
    * @param entity - The conversation message to add
-   * @returns Promise resolving to the ID of the created message
+   * @returns Promise resolving to the stored message entity with assigned IDs
    */
-  addConversationMessage(entity: ConversationMessageEntity): Promise<number>;
+  addConversationMessage(
+    entity: Omit<ConversationMessageEntity, "id" | "msgId"> & {
+      msgId?: number;
+    },
+  ): Promise<ConversationMessageEntity & { id: number; msgId: number }>;
+
+  /**
+   * Updates the platform-scoped message identifier for a stored conversation message.
+   * @param conversationId - The conversation ID of the target message
+   * @param msgId - The conversation-scoped msgId of the target message
+   * @param channelMessageId - The platform message identifier to persist
+   * @returns Promise resolving to true if the message exists and was updated
+   */
+  updateConversationMessageChannelMessageId(
+    conversationId: number,
+    msgId: number,
+    channelMessageId: string,
+  ): Promise<boolean>;
+
+  /**
+   * Marks conversation-scoped messages as resumed so they can participate in
+   * rebuilt buffer prompts.
+   * @param conversationId - The conversation ID of the target messages
+   * @param msgIds - Conversation-scoped msgIds to update
+   * @returns Promise resolving to the number of updated rows
+   */
+  markConversationMessagesResumed(
+    conversationId: number,
+    msgIds: number[],
+  ): Promise<number>;
 
   /**
    * deletes a conversation message from the database
@@ -408,6 +614,10 @@ export interface ListConversationMessagesRequest {
    * The conversation ID to filter conversation messages by
    */
   conversationId?: number;
+  /**
+   * The actor ID to filter conversation messages by.
+   */
+  actorId?: number;
   /**
    * Max number of messages to return
    */
@@ -425,9 +635,15 @@ export interface ListConversationMessagesRequest {
    */
   createdAfter?: DbDate;
   /**
-   * Filter conversation messages by message IDs
+   * Filter conversation messages by actor-scoped message IDs.
    */
-  messageIds?: number[];
+  msgIds?: number[];
+  channelMessageId?: string;
+  /**
+   * Filter messages by resumed state. `true` should also include legacy rows
+   * where the field is absent.
+   */
+  resumed?: boolean;
 }
 
 /**
@@ -446,6 +662,10 @@ export interface ShortTermMemoryEntity extends Entity {
    * The memory text when the actor saw the messages.
    */
   memory: string;
+  /**
+   * The date and time the short term memory was last updated.
+   */
+  updatedAt?: DbDate;
   /**
    * The messages ids facilitating the short term memory, for debugging purpose.
    */
@@ -469,6 +689,12 @@ export interface ShortTermMemoryDB {
    * @returns Promise resolving to the ID of the created memory
    */
   appendShortTermMemory(entity: ShortTermMemoryEntity): Promise<number>;
+  /**
+   * upserts a short term memory in the database
+   * @param entity - The short term memory to upsert
+   * @returns Promise resolving to the ID of the created or updated memory
+   */
+  upsertShortTermMemory(entity: ShortTermMemoryEntity): Promise<number>;
   /**
    * deletes a short term memory from the database
    * @param id - The unique identifier for the short term memory to delete

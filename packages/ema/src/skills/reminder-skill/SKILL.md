@@ -1,6 +1,6 @@
 ---
 name: reminder-skill
-description: 创建、查询、修改或删除提醒任务。
+description: 该技能用于创建、查询、修改或删除提醒任务。人类明确要求你在未来某个时间点提醒、重复提醒、修改提醒或查看已有提醒时使用。
 ---
 
 # reminder-skill

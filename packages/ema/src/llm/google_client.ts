@@ -4,6 +4,7 @@ import {
   isUserMessage,
   isFunctionCall,
   isFunctionResponse,
+  isInlineDataItem,
   isTextItem,
 } from "../schema";
 import type { Content, LLMResponse, Message, SchemaAdapter } from "../schema";
@@ -56,10 +57,12 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
   private readonly client: GoogleGenAI;
 
   private readonly thinkingLevelMap = new Map<string, ThinkingLevel>([
-    ["gemini-3-flash-preview", ThinkingLevel.MINIMAL],
-    ["gemini-3-flash", ThinkingLevel.MINIMAL],
+    ["gemini-3.1-flash-lite-preview", ThinkingLevel.LOW],
+    ["gemini-3-flash-preview", ThinkingLevel.LOW],
+    ["gemini-3-flash", ThinkingLevel.LOW],
+    ["gemini-3.1-pro-preview-customtools", ThinkingLevel.LOW],
+    ["gemini-3.1-pro-preview", ThinkingLevel.LOW],
     ["gemini-3-pro-preview", ThinkingLevel.LOW],
-    ["gemini-3-pro", ThinkingLevel.LOW],
   ]);
 
   constructor(
@@ -85,7 +88,6 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
       process.env.GOOGLE_GENAI_USE_VERTEXAI === "True"
         ? vertexAIOptions
         : googleAIOptions;
-    console.log("GoogleClient options:", options);
     this.client = new GenAI(
       options,
       new FetchWithProxy(
@@ -105,6 +107,16 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
             functionResponse: {
               name: content.name,
               response: content.result,
+              ...(content.parts
+                ? {
+                    parts: content.parts.map((part) => ({
+                      inlineData: {
+                        mimeType: part.mimeType,
+                        data: part.data,
+                      },
+                    })),
+                  }
+                : {}),
             },
           });
           continue;
@@ -113,6 +125,15 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
           contents.push({
             text: content.text,
             thoughtSignature: content.thoughtSignature,
+          });
+          continue;
+        }
+        if (isInlineDataItem(content)) {
+          contents.push({
+            inlineData: {
+              mimeType: content.mimeType,
+              data: content.data,
+            },
           });
           continue;
         }
@@ -141,6 +162,15 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
           contents.push({
             text: content.text,
             thoughtSignature: content.thoughtSignature,
+          });
+          continue;
+        }
+        if (isInlineDataItem(content)) {
+          contents.push({
+            inlineData: {
+              mimeType: content.mimeType,
+              data: content.data,
+            },
           });
           continue;
         }

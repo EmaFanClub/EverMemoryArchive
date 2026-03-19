@@ -234,6 +234,8 @@ export class Agent {
 
   /** Execute agent loop until task is complete or max steps reached. */
   async mainLoop(): Promise<void> {
+    console.log(this.contextManager.state.systemPrompt);
+
     const toolDict = new Map(this.contextManager.tools.map((t) => [t.name, t]));
     const maxSteps = this.config.maxSteps;
     let step = 0;
@@ -326,6 +328,9 @@ export class Agent {
               error: `Don't call multiple functions parallely.`,
             },
           });
+          this.logger.error(
+            `Multiple tool calls in a single response are not supported. Skipping tool [${functionName}].`,
+          );
           continue;
         }
 
@@ -366,12 +371,18 @@ export class Agent {
           this.logger.error(`Tool [${functionName}] failed.`, result.error);
         }
 
+        const functionResponseParts = result.parts;
+        if (functionResponseParts) {
+          result.parts = undefined;
+        }
+
         // Add function response to list
         functionResponses.push({
           type: "function_response",
           id: toolCallId,
           name: functionName,
           result: result,
+          ...(functionResponseParts ? { parts: functionResponseParts } : {}),
         });
       }
 

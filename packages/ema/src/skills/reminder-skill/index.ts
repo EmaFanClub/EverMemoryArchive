@@ -14,7 +14,8 @@ const ReminderSkillSchema = z.discriminatedUnion("action", [
 ]);
 
 export default class ReminderSkill extends Skill {
-  description = "创建、查询、修改或删除提醒任务。";
+  description =
+    "该技能用于创建、查询、修改或删除提醒任务。人类明确要求你在未来某个时间点提醒、重复提醒、修改提醒或查看已有提醒时使用。";
 
   parameters = ReminderSkillSchema.toJSONSchema();
 
@@ -35,29 +36,30 @@ export default class ReminderSkill extends Skill {
     }
 
     const server = context?.server;
-    const actorScope = context?.actorScope;
+    const actorId = context?.actorId;
+    const conversationId = context?.conversationId;
     if (!server) {
       return {
         success: false,
         error: "Missing server in skill context.",
       };
     }
-    if (!actorScope) {
+    if (!actorId || !conversationId) {
       return {
         success: false,
-        error: "Missing actorScope in skill context.",
+        error: "Missing actorId or conversationId in skill context.",
       };
     }
 
     switch (payload.action) {
       case "create":
-        return executeCreateReminder(server, actorScope, payload);
+        return executeCreateReminder(server, actorId, conversationId, payload);
       case "list":
-        return executeListReminders(server, actorScope);
+        return executeListReminders(server, actorId);
       case "update":
-        return executeUpdateReminder(server, actorScope, payload);
+        return executeUpdateReminder(server, actorId, conversationId, payload);
       case "delete":
-        return executeDeleteReminder(server, actorScope, payload);
+        return executeDeleteReminder(server, actorId, payload);
       default:
         return {
           success: false,

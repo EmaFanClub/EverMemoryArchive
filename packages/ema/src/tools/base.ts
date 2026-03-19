@@ -1,10 +1,12 @@
-import type { ActorScope } from "../actor";
+import type { ShortTermMemory } from "../memory/base";
+import type { InlineDataItem } from "../schema";
 import type { Server } from "../server";
 
 /** Tool execution result. */
 export interface ToolResult extends Record<string, unknown> {
   success: boolean;
   content?: string;
+  parts?: InlineDataItem[];
   error?: string;
 }
 
@@ -16,10 +18,12 @@ export interface ToolContext {
    * Server instance for accessing shared services.
    */
   server?: Server;
+  actorId?: number;
+  conversationId?: number;
   /**
-   * Actor scope associated with the tool invocation.
+   * Allowed short-term memory kinds for the current memory update job.
    */
-  actorScope?: ActorScope;
+  updateMemoryKinds?: ShortTermMemory["kind"][];
 }
 
 /** Base class for all tools. */
@@ -36,7 +40,7 @@ export abstract class Tool {
   /**
    * Executes the tool with arbitrary arguments.
    * @param args - Tool-specific arguments.
-   * @param context - Optional tool context (e.g. actor scope).
+   * @param context - Optional tool context.
    */
   abstract execute(args: unknown, context?: ToolContext): Promise<ToolResult>;
 }

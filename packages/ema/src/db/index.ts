@@ -11,6 +11,7 @@
  *   for debugging purpose).
  * + We can create long term memories for actors. The long term memories are associated with conversation messages (
  *   for debugging purpose).
+ * + We can store personality memory for actors to keep prompt-level persona instructions.
  * + We can search long term memories. We can have multiple implementations, such as text-based searcher, vector-
  *   based searcher.
  *
@@ -24,9 +25,11 @@ export * from "./base";
 
 export * from "./mongo";
 export * from "./mongo.role";
+export * from "./mongo.personality";
 export * from "./mongo.actor";
 export * from "./mongo.user";
 export * from "./mongo.user_own_actor";
+export * from "./mongo.external_identity_binding";
 export * from "./mongo.conversation";
 export * from "./mongo.conversation_message";
 export * from "./mongo.short_term_memory";

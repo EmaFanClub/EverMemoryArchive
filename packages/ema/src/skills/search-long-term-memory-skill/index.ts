@@ -3,6 +3,7 @@ import { Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
 import { Index0Enum, Index1Enum, isAllowedIndex1 } from "../../memory/utils";
 import { formatTimestamp } from "../../utils";
+import { Logger } from "../../logger";
 
 export const SearchLongTermMemorySchema = z
   .object({
@@ -36,9 +37,16 @@ export const SearchLongTermMemorySchema = z
   });
 
 export default class SearchLongTermMemorySkill extends Skill {
-  description = "检索长期记忆。";
+  description =
+    "该技能用于检索与当前对话相关的长期记忆，用于补足当前上下文之外的重要事实与关系背景。在回复前必须进行检索，以补充和说话者、话题、事件相关的长期记忆，以便更好地理解当前对话环境和历史背景。";
 
   parameters = SearchLongTermMemorySchema.toJSONSchema();
+
+  private logger: Logger = Logger.create({
+    name: "SearchLongTermMemorySkill",
+    level: "debug",
+    transport: "console",
+  });
 
   /**
    * Searches long-term memory records for the current actor.
@@ -55,16 +63,16 @@ export default class SearchLongTermMemorySkill extends Skill {
         error: `Invalid search-long-term-memory-skill input: ${(err as Error).message}`,
       };
     }
-
+    this.logger.debug("Searching long-term memory:", payload);
     const server = context?.server;
-    const actorScope = context?.actorScope;
+    const actorId = context?.actorId;
     if (!server) {
       return {
         success: false,
         error: "Missing server in skill context.",
       };
     }
-    if (!actorScope?.actorId) {
+    if (!actorId) {
       return {
         success: false,
         error: "Missing actorId in skill context.",
@@ -72,7 +80,7 @@ export default class SearchLongTermMemorySkill extends Skill {
     }
 
     const records = await server.memoryManager.search(
-      actorScope.actorId,
+      actorId,
       payload.memory,
       payload.limit,
       payload.index0,

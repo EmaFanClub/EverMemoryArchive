@@ -46,11 +46,11 @@ export class MongoConversationDB implements ConversationDB {
       }
       filter.actorId = req.actorId;
     }
-    if (req.userId) {
-      if (typeof req.userId !== "number") {
-        throw new Error("userId must be a number");
+    if (req.session !== undefined) {
+      if (typeof req.session !== "string") {
+        throw new Error("session must be a string");
       }
-      filter.userId = req.userId;
+      filter.session = req.session;
     }
 
     return (await collection.find(filter).toArray()).map(omitMongoId);
@@ -71,6 +71,28 @@ export class MongoConversationDB implements ConversationDB {
       return null;
     }
 
+    return omitMongoId(conversation);
+  }
+
+  /**
+   * Gets a specific conversation by actor and session.
+   * @param actorId - The actor identifier owning the conversation.
+   * @param session - Session identifier.
+   * @returns Promise resolving to the conversation data or null if not found.
+   */
+  async getConversationByActorAndSession(
+    actorId: number,
+    session: string,
+  ): Promise<ConversationEntity | null> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<ConversationEntity>(this.$cn);
+    const conversation = await collection.findOne({
+      actorId,
+      session,
+    });
+    if (!conversation) {
+      return null;
+    }
     return omitMongoId(conversation);
   }
 
@@ -101,7 +123,7 @@ export class MongoConversationDB implements ConversationDB {
     const db = this.mongo.getDb();
     const collection = db.collection<ConversationEntity>(this.$cn);
     await collection.createIndex({ id: 1 }, { unique: true });
-    await collection.createIndex({ actorId: 1, userId: 1 });
+    await collection.createIndex({ actorId: 1, session: 1 }, { unique: true });
     await collection.createIndex({ updatedAt: -1 });
   }
 }

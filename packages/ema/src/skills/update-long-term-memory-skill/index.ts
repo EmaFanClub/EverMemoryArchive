@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Skill } from "../base";
+import { countApproxTextLength, Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
 import type { LongTermMemory } from "../../memory/base";
 import { Logger } from "../../logger";
@@ -9,6 +9,8 @@ import {
   Index1Enum,
   isAllowedIndex1,
 } from "../../memory/utils";
+
+const LONG_TERM_MEMORY_MAX_LENGTH = 100;
 
 export const UpdateLongTermMemorySchema: z.ZodType<UpdateLongTermMemoryDTO> = z
   .object({
@@ -32,13 +34,14 @@ export const UpdateLongTermMemorySchema: z.ZodType<UpdateLongTermMemoryDTO> = z
   });
 
 export default class UpdateLongTermMemorySkill extends Skill {
-  description = "基于近期对话与已有记忆，提炼跨会话可复用的长期记忆条目。";
+  description =
+    "该技能用于写入跨会话可复用的长期事实、关系线索、历史事件与知识，用于补足当前上下文之外的重要背景。";
 
   parameters = UpdateLongTermMemorySchema.toJSONSchema();
 
   private logger: Logger = Logger.create({
     name: "UpdateLongTermMemorySkill",
-    level: "full",
+    level: "debug",
     transport: "console",
   });
 
@@ -59,17 +62,25 @@ export default class UpdateLongTermMemorySkill extends Skill {
     }
 
     const server = context?.server;
-    const actorScope = context?.actorScope;
+    const actorId = context?.actorId;
     if (!server) {
       return {
         success: false,
         error: "Missing server in skill context.",
       };
     }
-    if (!actorScope?.actorId) {
+    if (!actorId) {
       return {
         success: false,
         error: "Missing actorId in skill context.",
+      };
+    }
+
+    const actualLength = countApproxTextLength(payload.memory);
+    if (actualLength > LONG_TERM_MEMORY_MAX_LENGTH) {
+      return {
+        success: false,
+        error: `memory is too long: got approximately ${actualLength}, max ${LONG_TERM_MEMORY_MAX_LENGTH}.`,
       };
     }
 
@@ -79,7 +90,7 @@ export default class UpdateLongTermMemorySkill extends Skill {
       memory: payload.memory,
       messages: payload.msg_ids,
     };
-    await server.memoryManager.addLongTermMemory(actorScope.actorId, record);
+    await server.memoryManager.addLongTermMemory(actorId, record);
     this.logger.debug("Updated long-term memory:", record);
     return {
       success: true,

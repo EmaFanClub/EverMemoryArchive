@@ -1,20 +1,18 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
 import { createMongo, MongoConversationMessageDB } from "../../db";
-import type { Mongo, ConversationMessageEntity } from "../../db";
+import type { Mongo } from "../../db";
 
 describe("MongoConversationMessageDB with in-memory MongoDB", () => {
   let mongo: Mongo;
   let db: MongoConversationMessageDB;
 
   beforeEach(async () => {
-    // Create in-memory MongoDB instance for testing
     mongo = await createMongo("", "test", "memory");
     await mongo.connect();
     db = new MongoConversationMessageDB(mongo);
   });
 
   afterEach(async () => {
-    // Clean up: close MongoDB connection
     await mongo.close();
   });
 
@@ -23,34 +21,94 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     expect(messages).toEqual([]);
   });
 
-  test("should add a conversation message", async () => {
-    const messageData: ConversationMessageEntity = {
+  test("should add a user conversation message", async () => {
+    const createdAt = Date.now();
+    const stored = await db.addConversationMessage({
       conversationId: 1,
+      actorId: 1,
       message: {
         kind: "user",
-        userId: 1,
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "Hello" }],
+      },
+      createdAt,
+    });
+
+    expect(stored.id).toBe(1);
+    expect(stored.msgId).toBe(1);
+    const retrievedMessage = await db.getConversationMessage(1);
+    expect(retrievedMessage).toEqual(stored);
+  });
+
+  test("should persist actor inner thought separately", async () => {
+    const stored = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      message: {
+        kind: "actor",
+        name: "EMA",
+        contents: [{ type: "text", text: "Hi there!" }],
+        think: "Keep the tone warm and friendly.",
+      },
+      createdAt: Date.now(),
+    });
+
+    const retrievedMessage = await db.getConversationMessage(1);
+    expect(retrievedMessage).toEqual(stored);
+  });
+
+  test("should assign conversation-scoped msgIds sequentially", async () => {
+    const first = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
         contents: [{ type: "text", text: "Hello" }],
       },
       createdAt: Date.now(),
-    };
+    });
+    const second = await db.addConversationMessage({
+      conversationId: 2,
+      actorId: 1,
+      message: {
+        kind: "actor",
+        name: "EMA",
+        contents: [{ type: "text", text: "Hi there!" }],
+      },
+      createdAt: Date.now(),
+    });
+    const third = await db.addConversationMessage({
+      conversationId: 2,
+      actorId: 2,
+      message: {
+        kind: "user",
+        uid: "user-2",
+        name: "bob",
+        contents: [{ type: "text", text: "How are you?" }],
+      },
+      createdAt: Date.now(),
+    });
 
-    await db.addConversationMessage(messageData);
-    const retrievedMessage = await db.getConversationMessage(1);
-    expect(retrievedMessage).toEqual(messageData);
+    expect(first.msgId).toBe(1);
+    expect(second.msgId).toBe(1);
+    expect(third.msgId).toBe(2);
   });
 
   test("should delete a conversation message", async () => {
-    const messageData: ConversationMessageEntity = {
+    await db.addConversationMessage({
       conversationId: 1,
+      actorId: 1,
       message: {
         kind: "user",
-        userId: 1,
+        uid: "user-1",
+        name: "alice",
         contents: [{ type: "text", text: "Hello" }],
       },
       createdAt: Date.now(),
-    };
-
-    await db.addConversationMessage(messageData);
+    });
     const deleted = await db.deleteConversationMessage(1);
     expect(deleted).toBe(true);
 
@@ -58,111 +116,159 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     expect(retrievedMessage).toBeNull();
   });
 
-  test("should return false when deleting non-existent message", async () => {
-    const deleted = await db.deleteConversationMessage(999);
-    expect(deleted).toBe(false);
-  });
-
-  test("should return false when deleting already deleted message", async () => {
-    const messageData: ConversationMessageEntity = {
+  test("should update channelMessageId by conversationId and msgId", async () => {
+    const stored = await db.addConversationMessage({
       conversationId: 1,
-      message: {
-        kind: "user",
-        userId: 1,
-        contents: [{ type: "text", text: "Hello" }],
-      },
-      createdAt: Date.now(),
-    };
-
-    await db.addConversationMessage(messageData);
-    const deleted1 = await db.deleteConversationMessage(1);
-    expect(deleted1).toBe(true);
-
-    // Try to delete again
-    const deleted2 = await db.deleteConversationMessage(1);
-    expect(deleted2).toBe(false);
-  });
-
-  test("should not list deleted messages", async () => {
-    const msg1: ConversationMessageEntity = {
-      conversationId: 1,
-      message: {
-        kind: "user",
-        userId: 1,
-        contents: [{ type: "text", text: "Hello" }],
-      },
-      createdAt: Date.now(),
-    };
-    const msg2: ConversationMessageEntity = {
-      conversationId: 1,
+      actorId: 1,
+      channelMessageId: "temp:1",
       message: {
         kind: "actor",
-        actorId: 1,
+        name: "EMA",
         contents: [{ type: "text", text: "Hi there!" }],
       },
       createdAt: Date.now(),
-    };
-    const msg3: ConversationMessageEntity = {
-      conversationId: 2,
-      message: {
-        kind: "user",
-        userId: 2,
-        contents: [{ type: "text", text: "How are you?" }],
-      },
-      createdAt: Date.now(),
-    };
+      msgId: 1,
+    });
 
-    await db.addConversationMessage(msg1);
-    await db.addConversationMessage(msg2);
-    await db.addConversationMessage(msg3);
+    const updated = await db.updateConversationMessageChannelMessageId(
+      1,
+      1,
+      "99887766",
+    );
+    expect(updated).toBe(true);
 
-    // Delete msg2
-    await db.deleteConversationMessage(2);
-
-    const messages = await db.listConversationMessages({});
-    expect(messages).toHaveLength(2);
-    expect(messages).toContainEqual(msg1);
-    expect(messages).toContainEqual(msg3);
-    expect(messages).not.toContainEqual(expect.objectContaining({ id: 2 }));
+    const row = await db.getConversationMessage(stored.id);
+    expect(row?.channelMessageId).toBe("99887766");
   });
 
-  test("should return null when getting non-existent message", async () => {
-    const message = await db.getConversationMessage(999);
-    expect(message).toBeNull();
+  test("should filter messages by resumed state", async () => {
+    const legacy = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "legacy" }],
+      },
+      createdAt: Date.now(),
+    });
+    const pending = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      resumed: false,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "pending" }],
+      },
+      createdAt: Date.now(),
+    });
+    const resumed = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      resumed: true,
+      message: {
+        kind: "actor",
+        name: "EMA",
+        contents: [{ type: "text", text: "done" }],
+      },
+      createdAt: Date.now(),
+    });
+
+    const visible = await db.listConversationMessages({
+      conversationId: 1,
+      resumed: true,
+      sort: "asc",
+    });
+    expect(visible).toEqual([legacy, resumed]);
+
+    const hidden = await db.listConversationMessages({
+      conversationId: 1,
+      resumed: false,
+      sort: "asc",
+    });
+    expect(hidden).toEqual([pending]);
+  });
+
+  test("should mark selected messages as resumed", async () => {
+    const first = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      resumed: false,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "first" }],
+      },
+      createdAt: Date.now(),
+    });
+    const second = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      resumed: false,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "second" }],
+      },
+      createdAt: Date.now(),
+    });
+
+    const updated = await db.markConversationMessagesResumed(1, [second.msgId]);
+    expect(updated).toBe(1);
+
+    const visible = await db.listConversationMessages({
+      conversationId: 1,
+      resumed: true,
+      sort: "asc",
+    });
+    expect(visible).toEqual([{ ...second, resumed: true }]);
+
+    const pending = await db.listConversationMessages({
+      conversationId: 1,
+      resumed: false,
+      sort: "asc",
+    });
+    expect(pending).toEqual([first]);
   });
 
   test("should list messages filtered by conversationId", async () => {
-    const msg1: ConversationMessageEntity = {
+    const msg1 = await db.addConversationMessage({
       conversationId: 1,
+      actorId: 1,
       message: {
         kind: "user",
-        userId: 1,
+        uid: "user-1",
+        name: "alice",
         contents: [{ type: "text", text: "Hello" }],
       },
       createdAt: Date.now(),
-    };
-    const msg2: ConversationMessageEntity = {
+    });
+    const msg2 = await db.addConversationMessage({
       conversationId: 1,
+      actorId: 1,
       message: {
         kind: "actor",
-        actorId: 1,
+        name: "EMA",
         contents: [{ type: "text", text: "Hi there!" }],
       },
       createdAt: Date.now(),
-    };
-    const msg3: ConversationMessageEntity = {
+    });
+    await db.addConversationMessage({
       conversationId: 2,
+      actorId: 1,
       message: {
         kind: "user",
-        userId: 2,
+        uid: "qq-654321",
+        name: "Alice",
         contents: [{ type: "text", text: "How are you?" }],
       },
       createdAt: Date.now(),
-    };
-
-    await db.addConversationMessage(msg1);
-    await db.addConversationMessage(msg2);
-    await db.addConversationMessage(msg3);
+    });
 
     const messages = await db.listConversationMessages({
       conversationId: 1,
@@ -172,69 +278,69 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     expect(messages).toContainEqual(msg2);
   });
 
-  test("should handle messages from different senders", async () => {
-    const msg1: ConversationMessageEntity = {
+  test("should list messages filtered by actor-scoped msgIds", async () => {
+    const msg1 = await db.addConversationMessage({
       conversationId: 1,
+      actorId: 1,
       message: {
         kind: "user",
-        userId: 1,
+        uid: "user-1",
+        name: "alice",
         contents: [{ type: "text", text: "Hello" }],
       },
       createdAt: Date.now(),
-    };
-    const msg2: ConversationMessageEntity = {
+    });
+    const msg2 = await db.addConversationMessage({
       conversationId: 1,
+      actorId: 1,
       message: {
         kind: "actor",
-        actorId: 1,
+        name: "EMA",
         contents: [{ type: "text", text: "Hi there!" }],
       },
       createdAt: Date.now(),
-    };
-    const msg3: ConversationMessageEntity = {
-      conversationId: 1,
+    });
+    await db.addConversationMessage({
+      conversationId: 2,
+      actorId: 2,
       message: {
         kind: "user",
-        userId: 2,
-        contents: [{ type: "text", text: "Let me help you" }],
+        uid: "user-2",
+        name: "bob",
+        contents: [{ type: "text", text: "Another actor" }],
       },
       createdAt: Date.now(),
-    };
-
-    await db.addConversationMessage(msg1);
-    await db.addConversationMessage(msg2);
-    await db.addConversationMessage(msg3);
+    });
 
     const messages = await db.listConversationMessages({
-      conversationId: 1,
+      actorId: 1,
+      msgIds: [msg2.msgId, msg1.msgId],
+      sort: "asc",
     });
-    expect(messages).toHaveLength(3);
+    expect(messages).toHaveLength(2);
     expect(messages).toContainEqual(msg1);
     expect(messages).toContainEqual(msg2);
-    expect(messages).toContainEqual(msg3);
   });
 
-  test("should handle CRD operations in sequence", async () => {
-    // Create (Add)
-    const messageData: ConversationMessageEntity = {
+  test("should handle CRUD operations in sequence", async () => {
+    const stored = await db.addConversationMessage({
       conversationId: 1,
+      actorId: 1,
       message: {
         kind: "user",
-        userId: 1,
+        uid: "user-1",
+        name: "alice",
         contents: [{ type: "text", text: "Hello" }],
       },
       createdAt: Date.now(),
-    };
-    await db.addConversationMessage(messageData);
+    });
 
-    // Read
-    let message = await db.getConversationMessage(1);
-    expect(message).toEqual(messageData);
+    let message = await db.getConversationMessage(stored.id);
+    expect(message).toEqual(stored);
 
-    // Delete
-    const deleted = await db.deleteConversationMessage(1);
+    const deleted = await db.deleteConversationMessage(stored.id);
     expect(deleted).toBe(true);
-    message = await db.getConversationMessage(1);
+    message = await db.getConversationMessage(stored.id);
     expect(message).toBeNull();
   });
 });

@@ -1,120 +1,155 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./page.module.css";
-import type { ActorAgentEvent, ConversationMessage } from "ema";
+import {
+  collapseContents,
+  parseReplyRef,
+  type ActorResponse,
+  type ConversationMessage,
+  type InputContent,
+  type TextItem,
+} from "ema/shared";
 
-let initialLoadPromise: Promise<ConversationMessage[] | null> | null = null;
-let initialMessagesCache: ConversationMessage[] | null = null;
+const DEFAULT_USER_ID = 1;
+const DEFAULT_ACTOR_ID = 1;
+const DEFAULT_USER_UID = "1";
+const DEFAULT_USER_NAME = "alice";
+const DEFAULT_ACTOR_NAME = "Ema";
+const DEFAULT_WEB_SESSION = `web-chat-${DEFAULT_USER_UID}`;
 
-// todo: consider adding tests for this component to verify message state management
+interface InitialChatState {
+  session: string;
+  messages: ConversationMessage[];
+}
+
+let chatInitPromise: Promise<InitialChatState> | null = null;
+let chatInitCache: InitialChatState | null = null;
+
+async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, init);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `${response.status} ${response.statusText}`);
+  }
+  return (await response.json()) as T;
+}
+
+function renderContents(contents: InputContent[]): string {
+  return (collapseContents(contents, false) as TextItem[])
+    .map((content) => content.text)
+    .join("");
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [initializing, setInitializing] = useState(true);
+  const [connected, setConnected] = useState(false);
   const [snapshotting, setSnapshotting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const chatAreaRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRef = useRef<string | null>(null);
 
-  // Set up SSE connection to subscribe to actor events
   useEffect(() => {
+    let active = true;
     let eventSource: EventSource | null = null;
-    let isActive = true;
 
     const init = async () => {
       setInitializing(true);
       try {
-        if (!initialLoadPromise) {
-          initialLoadPromise = (async () => {
-            try {
-              await fetch("/api/users/login");
-            } catch (error) {
-              console.error("Error logging in:", error);
-            }
+        if (!chatInitPromise) {
+          chatInitPromise = (async () => {
+            const history = await fetchJson<{
+              messages: ConversationMessage[];
+            }>(
+              `/api/v1/chat/${encodeURIComponent(DEFAULT_WEB_SESSION)}/history?limit=100`,
+            );
 
-            try {
-              const response = await fetch(
-                "/api/conversations/messages?conversationId=1&limit=100",
-              );
-              if (response.ok) {
-                const data = (await response.json()) as {
-                  messages: ConversationMessage[];
-                };
-                if (Array.isArray(data.messages)) {
-                  return data.messages;
-                }
-              }
-            } catch (error) {
-              console.error("Error loading history:", error);
-            }
-            return null;
+            return {
+              session: DEFAULT_WEB_SESSION,
+              messages: history.messages,
+            };
           })().catch((error) => {
-            initialLoadPromise = null;
+            chatInitPromise = null;
             throw error;
           });
         }
 
-        if (!initialMessagesCache) {
-          initialMessagesCache = await initialLoadPromise;
+        if (!chatInitCache) {
+          chatInitCache = await chatInitPromise;
         }
 
-        if (isActive && Array.isArray(initialMessagesCache)) {
-          setMessages(initialMessagesCache);
-          setNotice("Conversation history loaded.");
+        if (!active) {
+          return;
         }
-      } finally {
-        if (isActive) {
-          setInitializing(false);
-        }
-      }
 
-      if (!isActive) {
-        return;
-      }
+        sessionRef.current = chatInitCache.session;
+        setMessages(chatInitCache.messages);
+        setNotice("Conversation history loaded.");
 
-      eventSource = new EventSource(
-        "/api/actor/sse?userId=1&actorId=1&conversationId=1",
-      );
+        eventSource = new EventSource(
+          `/api/v1/chat/${encodeURIComponent(chatInitCache.session)}/sse`,
+        );
 
-      eventSource.onmessage = (event) => {
-        try {
-          const evt = JSON.parse(event.data) as ActorAgentEvent;
-          const content = evt.content;
-          if (
-            evt.kind === "emaReplyReceived" &&
-            typeof content === "object" &&
-            content &&
-            "reply" in content
-          ) {
+        eventSource.onopen = () => {
+          setConnected(true);
+        };
+
+        eventSource.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data) as
+              | ActorResponse
+              | { kind: "ready" };
+            setConnected(true);
+            if (payload.kind !== "chat") {
+              return;
+            }
             setMessages((prev) => [
               ...prev,
               {
                 kind: "actor",
-                actorId: 1,
-                contents: [{ type: "text", text: content.reply.response }],
+                msgId: payload.msgId,
+                name: DEFAULT_ACTOR_NAME,
+                contents: [{ type: "text", text: payload.ema_reply.contents }],
+                ...(payload.ema_reply.reply_to
+                  ? (() => {
+                      const replyTo = parseReplyRef(payload.ema_reply.reply_to);
+                      return replyTo ? { replyTo } : {};
+                    })()
+                  : {}),
               },
             ]);
+          } catch (error) {
+            console.error("Failed to parse SSE payload:", error);
           }
-        } catch (error) {
-          console.error("Error parsing SSE event:", error);
-        }
-      };
+        };
 
-      eventSource.onerror = (error) => {
-        // todo: reconnect
-        console.error("SSE connection error:", error);
-        eventSource?.close();
-      };
+        eventSource.onerror = () => {
+          setConnected(false);
+          setNotice("SSE connection error.");
+        };
+      } catch (error) {
+        console.error("Failed to initialize chat:", error);
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : "Chat initialization failed.",
+        );
+      } finally {
+        if (active) {
+          setInitializing(false);
+        }
+      }
     };
 
     void init();
 
-    // Cleanup on unmount (EventSource.close() is safe to call multiple times)
     return () => {
-      isActive = false;
+      active = false;
       eventSource?.close();
     };
   }, []);
@@ -151,57 +186,59 @@ export default function ChatPage() {
     };
   }, [notice]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputValue.trim()) return;
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const text = inputValue.trim();
+    const session = sessionRef.current;
+    if (!text || !session) {
+      return;
+    }
 
     const userMessage: ConversationMessage = {
       kind: "user",
-      userId: 1,
-      contents: [{ type: "text", text: inputValue.trim() }],
+      uid: DEFAULT_USER_UID,
+      name: DEFAULT_USER_NAME,
+      contents: [{ type: "text", text }],
     };
 
-    // Add user message to conversation
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
+    setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
+
     try {
-      // Send input to actor using the new API
-      const response = await fetch("/api/actor/input", {
+      const result = await fetchJson<{
+        ok: boolean;
+        msgId?: number;
+      }>(`/api/v1/chat/${encodeURIComponent(session)}/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: 1,
-          actorId: 1,
-          conversationId: 1,
-          // TODO: If supporting more input types, need to adjust here
-          inputs: userMessage.contents,
+          userId: DEFAULT_USER_ID,
+          actorId: DEFAULT_ACTOR_ID,
+          uid: DEFAULT_USER_UID,
+          name: DEFAULT_USER_NAME,
+          text,
+          time: Date.now(),
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to send message: ${response.status} ${response.statusText}`,
+      if (result.ok && typeof result.msgId === "number") {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message === userMessage
+              ? {
+                  ...message,
+                  msgId: result.msgId,
+                }
+              : message,
+          ),
         );
       }
-
-      // Response will come through SSE, so we don't need to process it here
     } catch (error) {
-      console.error("Error:", error);
-      // Add error message to chat
-      const errorMessage: ConversationMessage = {
-        kind: "actor",
-        actorId: 1,
-        contents: [
-          {
-            type: "text",
-            text: "Sorry, I encountered an error. Please try again.",
-          },
-        ],
-      };
-      setMessages([...updatedMessages, errorMessage]);
+      console.error("Failed to send chat message:", error);
+      setNotice(
+        error instanceof Error ? error.message : "Failed to send message.",
+      );
     }
   };
 
@@ -209,21 +246,13 @@ export default function ChatPage() {
     setNotice(null);
     setSnapshotting(true);
     try {
-      const response = await fetch("/api/snapshot", {
+      const data = await fetchJson<{ fileName?: string }>("/api/v1/snapshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "default" }),
       });
-      if (!response.ok) {
-        const text = await response.text();
-        setNotice(text || "Snapshot failed.");
-        return;
-      }
-      const data = (await response.json().catch(() => null)) as {
-        fileName?: string;
-      } | null;
       setNotice(
-        data?.fileName
+        data.fileName
           ? `Snapshot saved: ${data.fileName}`
           : "Snapshot created.",
       );
@@ -267,12 +296,11 @@ export default function ChatPage() {
       >
         {messages.length === 0 ? (
           <div className={styles.emptyState}>
-            Start a conversation with MeowGPT
+            {initializing ? "Connecting to EMA..." : "Start a conversation"}
           </div>
         ) : (
           <div className={styles.messages}>
             {messages.map((message, index) => (
-              // Consider adding a unique identifier to each message (e.g., timestamp or UUID) and use that as the key instead.
               <div
                 key={index}
                 className={`${styles.message} ${
@@ -281,11 +309,9 @@ export default function ChatPage() {
                     : styles.assistantMessage
                 }`}
               >
-                <div className={styles.messageRole}>
-                  {message.kind === "user" ? "You" : "Ema"}
-                </div>
+                <div className={styles.messageRole}>{message.name}</div>
                 <div className={styles.messageContent}>
-                  {message.contents.map((content) => content.text).join("")}
+                  {renderContents(message.contents)}
                 </div>
               </div>
             ))}
@@ -299,17 +325,17 @@ export default function ChatPage() {
           type="text"
           aria-label="Chat message input"
           className={styles.input}
-          placeholder="Enter message..."
+          placeholder={connected ? "Enter message..." : "Connecting..."}
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          disabled={initializing}
+          onChange={(event) => setInputValue(event.target.value)}
+          disabled={initializing || !connected}
         />
         <div className={styles.buttonGroup}>
           <button
             type="submit"
             aria-label="Send message"
             className={styles.sendButton}
-            disabled={initializing || !inputValue.trim()}
+            disabled={initializing || !connected || !inputValue.trim()}
           >
             <svg
               width="16"

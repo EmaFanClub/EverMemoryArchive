@@ -26,7 +26,6 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   test("should create a role", async () => {
     const roleData: RoleEntity = {
       name: "Test Role",
-      description: "A test role",
       prompt: "This is a test role",
     };
 
@@ -39,7 +38,6 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   test("should update an existing role", async () => {
     const roleData: RoleEntity = {
       name: "Test Role",
-      description: "This is a test role",
       prompt: "This is a test role",
     };
 
@@ -49,7 +47,6 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     const updatedRole: RoleEntity = {
       id,
       name: "Updated Role",
-      description: "Updated description",
       prompt: "Updated prompt",
     };
 
@@ -61,7 +58,6 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   test("should soft delete a role", async () => {
     const roleData: RoleEntity = {
       name: "Test Role",
-      description: "This is a test role",
       prompt: "This is a test role",
     };
 
@@ -83,7 +79,6 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   test("should return false when deleting already deleted role", async () => {
     const roleData: RoleEntity = {
       name: "Test Role",
-      description: "This is a test role",
       prompt: "This is a test role",
     };
 
@@ -100,17 +95,14 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   test("should not list soft-deleted roles", async () => {
     const role1: RoleEntity = {
       name: "Role 1",
-      description: "Description 1",
       prompt: "This is a test role",
     };
     const role2: RoleEntity = {
       name: "Role 2",
-      description: "Description 2",
       prompt: "This is a test role",
     };
     const role3: RoleEntity = {
       name: "Role 3",
-      description: "Description 3",
       prompt: "This is a test role",
     };
 
@@ -139,17 +131,14 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   test("should list multiple roles", async () => {
     const role1: RoleEntity = {
       name: "Role 1",
-      description: "Description 1",
       prompt: "This is a test role",
     };
     const role2: RoleEntity = {
       name: "Role 2",
-      description: "Description 2",
       prompt: "This is a test role",
     };
     const role3: RoleEntity = {
       name: "Role 3",
-      description: "Description 3",
       prompt: "This is a test role",
     };
 
@@ -171,7 +160,6 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     // Create
     const roleData: RoleEntity = {
       name: "Test Role",
-      description: "This is a test role",
       prompt: "This is a test role",
     };
     const id = await db.upsertRole(roleData);
@@ -185,7 +173,6 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     const updatedRole: RoleEntity = {
       id,
       name: "Updated Role",
-      description: "Updated description",
       prompt: "Updated prompt",
     };
     await db.upsertRole(updatedRole);
@@ -202,7 +189,6 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
   test("should set createTime and delete correctly", async () => {
     const roleData: RoleEntity = {
       name: "Test Role",
-      description: "A test role",
       prompt: "This is a test role",
     };
 

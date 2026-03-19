@@ -19,11 +19,11 @@ describe("EmaReplyTool", () => {
     expect(params.properties).toHaveProperty("think");
     expect(params.properties).toHaveProperty("expression");
     expect(params.properties).toHaveProperty("action");
-    expect(params.properties).toHaveProperty("response");
+    expect(params.properties).toHaveProperty("contents");
     expect(params.required).toContain("think");
     expect(params.required).toContain("expression");
     expect(params.required).toContain("action");
-    expect(params.required).toContain("response");
+    expect(params.required).toContain("contents");
   });
 
   it("should execute successfully with valid inputs", async () => {
@@ -31,7 +31,7 @@ describe("EmaReplyTool", () => {
       think: "  我应该回复用户  ",
       expression: "微笑",
       action: "点头",
-      response: "  你好，很高兴见到你  ",
+      contents: "  你好，很高兴见到你  ",
     });
 
     expect(result.success).toBe(true);
@@ -41,7 +41,7 @@ describe("EmaReplyTool", () => {
     expect(parsed.think).toBe("  我应该回复用户  ");
     expect(parsed.expression).toBe("微笑");
     expect(parsed.action).toBe("点头");
-    expect(parsed.response).toBe("  你好，很高兴见到你  ");
+    expect(parsed.contents).toBe("  你好，很高兴见到你  ");
   });
 
   it("accepts arbitrary expression values", async () => {
@@ -49,7 +49,7 @@ describe("EmaReplyTool", () => {
       think: "想法",
       expression: "生气",
       action: "无",
-      response: "回复",
+      contents: "回复",
     });
 
     expect(result.success).toBe(true);
@@ -60,7 +60,18 @@ describe("EmaReplyTool", () => {
       think: "想法",
       expression: "普通",
       action: "跳舞",
-      response: "回复",
+      contents: "回复",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts empty reply text", async () => {
+    const result = await tool.execute({
+      think: "先不说话",
+      expression: "普通",
+      action: "无",
+      contents: "",
     });
 
     expect(result.success).toBe(true);
@@ -71,7 +82,7 @@ describe("EmaReplyTool", () => {
       think: "",
       expression: "普通",
       action: "无",
-      response: "",
+      contents: "",
     });
 
     expect(result.success).toBe(false);

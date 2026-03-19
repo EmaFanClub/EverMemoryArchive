@@ -38,6 +38,40 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     expect(memories[0]).toEqual(memoryData);
   });
 
+  test("should upsert a short term memory by id", async () => {
+    const createdAt = Date.now();
+    await db.appendShortTermMemory({
+      kind: "day",
+      actorId: 1,
+      memory: "Before",
+      createdAt,
+      messages: [1],
+    });
+
+    const id = await db.upsertShortTermMemory({
+      id: 1,
+      kind: "day",
+      actorId: 1,
+      memory: "After",
+      createdAt,
+      updatedAt: createdAt + 1000,
+      messages: [2],
+    });
+    expect(id).toBe(1);
+
+    const memories = await db.listShortTermMemories({ actorId: 1 });
+    expect(memories).toHaveLength(1);
+    expect(memories[0]).toMatchObject({
+      id: 1,
+      kind: "day",
+      actorId: 1,
+      memory: "After",
+      createdAt,
+      updatedAt: createdAt + 1000,
+      messages: [2],
+    });
+  });
+
   test("should delete a short term memory", async () => {
     const memoryData: ShortTermMemoryEntity = {
       kind: "day",
