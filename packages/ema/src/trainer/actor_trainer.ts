@@ -6,12 +6,11 @@ import type {
   BufferWriteMessage,
   ShortTermMemory,
 } from "../memory/base";
-import { computeDailyRollupKinds } from "../scheduler/jobs/actor.job";
 import {
-  EMA_DAILY_ROLLUP_PROMPT,
-  EMA_DIALOGUE_TICK_PROMPT,
-} from "../memory/prompts";
-import { runActorBackgroundExecution } from "../scheduler/jobs/actor.job";
+  computeDailyRollupKinds,
+  runActorCalendarRollupJob,
+  runActorDialogueTickJob,
+} from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import { formatTimestamp, parseTimestamp } from "../utils";
 import type {
@@ -105,7 +104,6 @@ export class ActorTrainer {
     let stepCount = 0;
     let messageCount = 0;
     let pendingDialogueCount = 0;
-    let lastTimestamp = normalizedInputs[0].timestamp;
     let currentDayKey = normalizedInputs[0].dayKey;
 
     try {
@@ -122,12 +120,11 @@ export class ActorTrainer {
               actorId,
               conversationId,
               req.bufferWindowSize,
-              EMA_DAILY_ROLLUP_PROMPT,
-              computeDailyRollupKinds(rollupTimestamp),
               rollupTimestamp,
+              "calendar_rollup",
             );
             ({ checkpointId, stepCount } = await this.advanceStep(
-              "daily-rollup",
+              "calendar-rollup",
               checkpointId,
               stepCount,
               saveEverySteps,
@@ -147,23 +144,23 @@ export class ActorTrainer {
           characterUid,
           req.actorId,
         );
-        messageCount =
-          await this.server.memoryManager.addBufferWithoutScheduling(message);
-        await this.server.conversationMessageDB.markConversationMessagesResumed(
+        await this.server.memoryManager.persistChatMessage(message);
+        await this.server.memoryManager.addToBuffer(
           conversationId,
-          [message.msgId],
+          message.msgId,
+          false,
+          input.timestamp,
         );
+        messageCount = message.msgId;
         pendingDialogueCount += 1;
-        lastTimestamp = input.timestamp;
 
         if (pendingDialogueCount >= req.diaryUpdateEvery) {
           await this.runMemoryUpdate(
             actorId,
             conversationId,
             req.bufferWindowSize,
-            EMA_DIALOGUE_TICK_PROMPT,
-            ["day"],
             input.timestamp,
+            "dialogue_tick",
           );
           ({ checkpointId, stepCount } = await this.advanceStep(
             "dialogue-tick",
@@ -179,29 +176,6 @@ export class ActorTrainer {
           ));
           pendingDialogueCount = 0;
         }
-      }
-
-      if (pendingDialogueCount > 0) {
-        await this.runMemoryUpdate(
-          actorId,
-          conversationId,
-          req.bufferWindowSize,
-          EMA_DIALOGUE_TICK_PROMPT,
-          ["day"],
-          lastTimestamp,
-        );
-        ({ checkpointId, stepCount } = await this.advanceStep(
-          "final-dialogue-tick-flush",
-          checkpointId,
-          stepCount,
-          saveEverySteps,
-          messageCount,
-          actorId,
-          conversationId,
-          checkpointRoot,
-          lastTimestamp,
-          ["day"],
-        ));
       }
       checkpointId += 1;
       await this.saveCheckpoint(
@@ -404,20 +378,24 @@ export class ActorTrainer {
     actorId: number,
     conversationId: number,
     bufferWindowSize: number,
-    prompt: string,
-    updateMemoryKinds: ShortTermMemory["kind"][],
     triggeredAt: number,
+    task: "dialogue_tick" | "calendar_rollup",
   ): Promise<void> {
-    await runActorBackgroundExecution(this.server, {
-      actorId,
-      conversationId,
-      actorState: await this.buildTrainingActorState(
+    if (task === "dialogue_tick") {
+      await runActorDialogueTickJob(this.server, {
         actorId,
         conversationId,
-        bufferWindowSize,
-      ),
-      prompt,
-      updateMemoryKinds,
+        actorState: await this.buildTrainingActorState(
+          actorId,
+          conversationId,
+          bufferWindowSize,
+        ),
+        triggeredAt,
+      });
+      return;
+    }
+    await runActorCalendarRollupJob(this.server, {
+      actorId,
       triggeredAt,
     });
   }

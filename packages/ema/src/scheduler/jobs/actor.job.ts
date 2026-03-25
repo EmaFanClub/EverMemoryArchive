@@ -1,215 +1,193 @@
-import type { JobHandler } from "../base";
 import { buildUserMessageFromActorInput } from "../../actor";
-import type { ActorState, ShortTermMemory } from "../../memory/base";
-import type { Server } from "../../server";
 import { Agent, type AgentState } from "../../agent";
 import { LLMClient } from "../../llm";
 import { Logger } from "../../logger";
-
-type ShortTermMemoryKind = ShortTermMemory["kind"];
+import {
+  EMA_CALENDAR_ROLLUP_PROMPT,
+  EMA_DIALOGUE_TICK_PROMPT,
+} from "../../memory/prompts";
+import {
+  computeDailyRollupKinds,
+  injectAllowedMemoryKinds,
+} from "../../memory/update_tasks";
+import type { ActorState } from "../../memory/base";
+import type { Server } from "../../server";
+import type { JobHandler } from "../base";
 
 /**
- * Input for directly executing a background memory-update run.
+ * Data for actor foreground jobs.
  */
-export interface ActorBackgroundExecutionInput {
+export interface ActorForegroundJobData {
+  actorId: number;
+  prompt: string;
+  conversationId?: number;
+}
+
+/**
+ * Data for dialogue-tick memory update jobs.
+ */
+export interface ActorDialogueTickJobData {
   actorId: number;
   conversationId: number;
+  triggeredAt: number;
   /**
-   * The prompt for the agent to process.
-   */
-  prompt: string;
-  /**
-   * Optional preloaded actor state used to build the system prompt.
+   * Optional preloaded actor state used to freeze the triggering context.
    */
   actorState?: ActorState;
-  /**
-   * Allowed short-term memory kinds for this execution.
-   */
-  updateMemoryKinds?: ShortTermMemoryKind[];
-  /**
-   * Trigger timestamp in milliseconds. Defaults to now.
-   */
+}
+
+/**
+ * Data for calendar-triggered rollup jobs.
+ */
+export interface ActorCalendarRollupJobData {
+  actorId: number;
   triggeredAt?: number;
 }
 
 /**
- * Input for directly executing a foreground system run.
- */
-export interface ActorForegroundExecutionInput {
-  actorId: number;
-  conversationId: number;
-  /**
-   * The prompt for the actor to process.
-   */
-  prompt: string;
-  /**
-   * Trigger timestamp in milliseconds. Defaults to now.
-   */
-  triggeredAt?: number;
-}
-
-/**
- * Data shape for the agent job.
- */
-export interface ActorJobData {
-  /**
-   * The id of the job owner (actor who created it). If not specified, means system.
-   */
-  ownerId?: number;
-  actorId: number;
-  conversationId: number;
-  /**
-   * The prompt for the agent to process.
-   */
-  prompt: string;
-  /**
-   * BufferMessages to provide context for the agent. If not provided, the agent
-   * will read database to get the newest memory state.
-   */
-  actorState?: ActorState;
-  /**
-   * Allowed short-term memory kinds for this job.
-   */
-  updateMemoryKinds?: ShortTermMemoryKind[];
-}
-
-/**
- * Deduplicates and orders update kinds.
- * @param kinds - Input update kinds.
- * @returns Ordered update kinds.
- */
-function normalizeUpdateKinds(
-  kinds: ShortTermMemoryKind[],
-): ShortTermMemoryKind[] {
-  const order: ShortTermMemoryKind[] = ["day", "week", "month", "year"];
-  const set = new Set<ShortTermMemoryKind>(kinds);
-  return order.filter((kind) => set.has(kind));
-}
-
-/**
- * Computes update kinds for daily rollup jobs.
- * @param timestamp - Trigger timestamp in milliseconds.
- * @returns Ordered update kinds for the current rollup.
- */
-export function computeDailyRollupKinds(
-  timestamp: number,
-): ShortTermMemoryKind[] {
-  const date = new Date(timestamp);
-  const kinds: ShortTermMemoryKind[] = ["week"];
-  if (date.getDay() === 1) {
-    kinds.push("month");
-  }
-  if (date.getDate() === 1) {
-    kinds.push("year");
-  }
-  return kinds;
-}
-
-/**
- * Builds the final background prompt with resolved memory update metadata.
- * @param prompt - Original task prompt.
- * @param updateMemoryKinds - Allowed memory kinds for this execution.
- * @returns Prompt text to send to the model.
- */
-function buildBackgroundPrompt(
-  prompt: string,
-  updateMemoryKinds: ShortTermMemoryKind[] | undefined,
-): string {
-  if (!updateMemoryKinds) {
-    return prompt;
-  }
-  return prompt.replaceAll("{MEMORY_KINDS}", updateMemoryKinds.join(", "));
-}
-
-/**
- * Runs the background memory-update execution directly without scheduler glue.
+ * Runs the foreground actor execution directly without scheduler glue.
  * @param server - Server instance for shared resources.
- * @param input - Execution input for the background run.
+ * @param job - Foreground job data.
  */
-export async function runActorBackgroundExecution(
+export async function runActorForegroundJob(
   server: Server,
-  input: ActorBackgroundExecutionInput,
+  job: ActorForegroundJobData,
 ): Promise<void> {
-  const triggeredAt = input.triggeredAt ?? Date.now();
-  const updateMemoryKinds = input.updateMemoryKinds
-    ? normalizeUpdateKinds(input.updateMemoryKinds)
-    : computeDailyRollupKinds(triggeredAt);
-  const backgroundPrompt = buildBackgroundPrompt(
-    input.prompt,
-    updateMemoryKinds,
+  if (typeof job.conversationId !== "number") {
+    throw new Error(
+      "Foreground jobs without conversationId are not yet supported.",
+    );
+  }
+  const actor = await server.getActor(job.actorId);
+  await actor.enqueueActorInput(job.conversationId, {
+    kind: "system",
+    conversationId: job.conversationId,
+    time: Date.now(),
+    inputs: [{ type: "text", text: job.prompt }],
+  });
+}
+
+/**
+ * Runs a dialogue-tick memory update job.
+ * @param server - Server instance for shared resources.
+ * @param job - Dialogue-tick job data.
+ */
+export async function runActorDialogueTickJob(
+  server: Server,
+  job: ActorDialogueTickJobData,
+): Promise<void> {
+  const prompt = injectAllowedMemoryKinds(
+    EMA_DIALOGUE_TICK_PROMPT,
+    "dialogue_tick",
+    job.triggeredAt,
   );
-  const agent = new Agent(
-    server.config.agent,
-    new LLMClient(server.config.llm),
-    Logger.create({
-      name: "ActorBackgroundJob",
-      level: "full",
-      transport: "file",
-      filePath: `ActorBackgroundJob/actor-${input.actorId}-${triggeredAt}.log`,
-    }),
+  const agent = createBackgroundAgent(
+    server,
+    "ActorDialogueTickJob",
+    job.actorId,
+    job.triggeredAt,
   );
   const agentState: AgentState = {
     systemPrompt: await server.memoryManager.buildSystemPrompt(
-      input.actorId,
-      input.conversationId,
       server.config.systemPrompt,
-      input.actorState,
+      job.actorId,
+      job.conversationId,
+      job.actorState,
     ),
     messages: [
-      buildUserMessageFromActorInput(
-        {
-          kind: "system",
-          conversationId: input.conversationId,
-          time: triggeredAt,
-          inputs: [{ type: "text", text: backgroundPrompt }],
-        },
-        null,
-      ),
+      buildUserMessageFromActorInput({
+        kind: "system",
+        conversationId: job.conversationId,
+        time: job.triggeredAt,
+        inputs: [{ type: "text", text: prompt }],
+      }),
     ],
     tools: server.config.baseTools,
     toolContext: {
-      actorId: input.actorId,
-      conversationId: input.conversationId,
+      actorId: job.actorId,
+      conversationId: job.conversationId,
       server,
-      updateMemoryKinds,
+      data: {
+        task: "dialogue_tick",
+        triggeredAt: job.triggeredAt,
+      },
     },
   };
   await agent.runWithState(agentState);
 }
 
 /**
- * Runs the foreground actor execution directly without scheduler glue.
+ * Runs a calendar-triggered memory rollup job.
  * @param server - Server instance for shared resources.
- * @param input - Execution input for the foreground run.
+ * @param job - Calendar rollup job data.
  */
-export async function runActorForegroundExecution(
+export async function runActorCalendarRollupJob(
   server: Server,
-  input: ActorForegroundExecutionInput,
+  job: ActorCalendarRollupJobData,
 ): Promise<void> {
-  const actor = await server.getActor(input.actorId);
-  await actor.enqueueActorInput(input.conversationId, {
-    kind: "system",
-    conversationId: input.conversationId,
-    time: input.triggeredAt ?? Date.now(),
-    inputs: [{ type: "text", text: input.prompt }],
-  });
+  const triggeredAt = job.triggeredAt ?? Date.now();
+  const prompt = injectAllowedMemoryKinds(
+    EMA_CALENDAR_ROLLUP_PROMPT,
+    "calendar_rollup",
+    triggeredAt,
+  );
+  const agent = createBackgroundAgent(
+    server,
+    "ActorCalendarRollupJob",
+    job.actorId,
+    triggeredAt,
+  );
+  const agentState: AgentState = {
+    systemPrompt: await server.memoryManager.buildSystemPrompt(
+      server.config.systemPrompt,
+      job.actorId,
+    ),
+    messages: [
+      buildUserMessageFromActorInput({
+        kind: "system",
+        time: triggeredAt,
+        inputs: [{ type: "text", text: prompt }],
+      }),
+    ],
+    tools: server.config.baseTools,
+    toolContext: {
+      actorId: job.actorId,
+      server,
+      data: {
+        task: "calendar_rollup",
+        triggeredAt,
+      },
+    },
+  };
+  await agent.runWithState(agentState);
 }
 
 /**
- * ActorBackground job handler implementation.
+ * ActorDialogueTick job handler implementation.
  */
-export function createActorBackgroundJobHandler(
+export function createActorDialogueTickJobHandler(
   server: Server,
-): JobHandler<"actor_background"> {
+): JobHandler<"actor_dialogue_tick"> {
   return async (job) => {
     try {
-      await runActorBackgroundExecution(server, {
-        actorId: job.attrs.data.actorId,
-        conversationId: job.attrs.data.conversationId,
-        prompt: job.attrs.data.prompt,
-        actorState: job.attrs.data.actorState,
-        updateMemoryKinds: job.attrs.data.updateMemoryKinds,
-        triggeredAt: Date.now(),
+      await runActorDialogueTickJob(server, job.attrs.data);
+    } catch (error) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+  };
+}
+
+/**
+ * ActorCalendarRollup job handler implementation.
+ */
+export function createActorCalendarRollupJobHandler(
+  server: Server,
+): JobHandler<"actor_calendar_rollup"> {
+  return async (job) => {
+    try {
+      await runActorCalendarRollupJob(server, {
+        ...job.attrs.data,
+        triggeredAt: job.attrs.data.triggeredAt ?? Date.now(),
       });
     } catch (error) {
       throw error instanceof Error ? error : new Error(String(error));
@@ -225,14 +203,33 @@ export function createActorForegroundJobHandler(
 ): JobHandler<"actor_foreground"> {
   return async (job) => {
     try {
-      await runActorForegroundExecution(server, {
-        actorId: job.attrs.data.actorId,
-        conversationId: job.attrs.data.conversationId,
-        prompt: job.attrs.data.prompt,
-        triggeredAt: Date.now(),
-      });
+      await runActorForegroundJob(server, job.attrs.data);
     } catch (error) {
       throw error instanceof Error ? error : new Error(String(error));
     }
   };
+}
+
+/**
+ * Computes update kinds for daily rollup jobs.
+ * @param timestamp - Trigger timestamp in milliseconds.
+ * @returns Ordered update kinds for the current rollup.
+ */
+export { computeDailyRollupKinds };
+
+function createBackgroundAgent(
+  server: Server,
+  name: string,
+  actorId: number,
+  triggeredAt: number,
+): Agent {
+  return new Agent(
+    server.config.agent,
+    new LLMClient(server.config.llm),
+    Logger.create({
+      name,
+      level: "debug",
+      transport: "console",
+    }),
+  );
 }

@@ -16,7 +16,6 @@ import {
 import type { Mongo } from "../../db";
 import { Config } from "../../config";
 import { MemoryManager } from "../../memory/manager";
-import { AgendaScheduler } from "../../scheduler";
 import * as lancedb from "@lancedb/lancedb";
 
 const describeLLM = describe.runIf(
@@ -52,7 +51,6 @@ describeLLM("MemorySkill", () => {
     await mongo.connect();
 
     const searcher = new LanceMemoryVectorSearcher(mongo, lance);
-    const scheduler = await AgendaScheduler.create(mongo);
     memoryManager = new MemoryManager(
       new MongoRoleDB(mongo),
       new MongoPersonalityDB(mongo),
@@ -65,7 +63,6 @@ describeLLM("MemorySkill", () => {
       new MongoShortTermMemoryDB(mongo),
       new MongoLongTermMemoryDB(mongo),
       searcher,
-      scheduler,
     );
 
     await searcher.createIndices();

@@ -54,11 +54,24 @@ export interface BufferStorage {
    */
   getBuffer(conversationId: number, count: number): Promise<BufferMessage[]>;
   /**
-   * Adds a buffer message.
+   * Saves a chat message before it is added to the resumed buffer.
    * @param message - The runtime message to persist.
    * @returns Promise resolving when the message is stored.
    */
-  addBuffer(message: BufferWriteMessage): Promise<void>;
+  persistChatMessage(message: BufferWriteMessage): Promise<void>;
+  /**
+   * Adds a persisted chat message into the resumed buffer.
+   * @param conversationId - The conversation identifier.
+   * @param msgId - Conversation-scoped message identifier.
+   * @param triggerDialogueTick - Whether this add should participate in online dialogue-tick triggering.
+   * @param triggeredAt - Optional timestamp used when triggering dialogue-tick jobs.
+   */
+  addToBuffer(
+    conversationId: number,
+    msgId: number,
+    triggerDialogueTick: boolean,
+    triggeredAt?: number,
+  ): Promise<void>;
 }
 
 /**
@@ -68,10 +81,10 @@ export interface ActorStateStorage {
   /**
    * Gets the state of the actor
    * @param actorId - The actor identifier to read.
-   * @param conversationId - The conversation identifier to read.
+   * @param conversationId - Optional conversation identifier used to read buffer history.
    * @returns Promise resolving to the state of the actor
    */
-  getState(actorId: number, conversationId: number): Promise<ActorState>;
+  getState(actorId: number, conversationId?: number): Promise<ActorState>;
 }
 
 /**
@@ -86,9 +99,9 @@ export interface ActorState {
   memoryMonth: ShortTermMemory;
   memoryYear: ShortTermMemory;
   /**
-   * The buffer messages for the actor.
+   * The buffer messages for the actor when a conversation scope is available.
    */
-  buffer: BufferMessage[];
+  buffer?: BufferMessage[];
 }
 
 /**

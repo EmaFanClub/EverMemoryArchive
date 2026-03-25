@@ -32,7 +32,7 @@ export async function executeDeleteReminder(
   }
 
   const data = job.attrs.data;
-  if (data?.ownerId !== actorId) {
+  if (data?.actorId !== actorId) {
     return {
       success: false,
       error: "Reminder job does not belong to the current actor.",

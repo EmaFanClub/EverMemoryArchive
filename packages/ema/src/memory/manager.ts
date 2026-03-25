@@ -23,14 +23,11 @@ import type {
   UserOwnActorDB,
   ConversationDB,
 } from "../db";
-import type { AgendaScheduler } from "../scheduler";
-import { EMA_DIALOGUE_TICK_PROMPT } from "./prompts";
-import {
-  buildPromptFromBufferMessage,
-  isActorChatInput,
-  isActorChatResponse,
-} from "./utils";
+import { Logger } from "../logger";
+import { runActorDialogueTickJob } from "../scheduler/jobs/actor.job";
+import { buildPromptFromBufferMessage, isActorChatInput } from "./utils";
 import { parseReplyRef, resolveSession } from "../channel";
+import type { Server } from "../server";
 
 /**
  * Memory manager implementation backed by database interfaces.
@@ -41,8 +38,12 @@ export class MemoryManager
   /** Number of buffer additions required before triggering diary update. */
   readonly bufferWindowSize = 30;
   readonly diaryUpdateEvery = 20;
-  private readonly messageCounter = new Map<number, number>();
   private readonly shortTermUpdateLocks = new Map<number, Promise<void>>();
+  private readonly logger: Logger = Logger.create({
+    name: "MemoryManager",
+    level: "debug",
+    transport: "console",
+  });
   /**
    * Creates a new MemoryManager instance.
    * @param roleDB - Role persistence interface.
@@ -56,7 +57,7 @@ export class MemoryManager
    * @param shortTermMemoryDB - Short-term memory persistence interface.
    * @param longTermMemoryDB - Long-term memory persistence interface.
    * @param longTermMemorySearcher - Long-term memory search interface.
-   * @param scheduler - Scheduler instance for background jobs.
+   * @param server - Optional server runtime used for direct dialogue-tick execution.
    */
   constructor(
     private readonly roleDB: RoleDB,
@@ -70,7 +71,7 @@ export class MemoryManager
     private readonly shortTermMemoryDB: ShortTermMemoryDB,
     private readonly longTermMemoryDB: LongTermMemoryDB,
     private readonly longTermMemorySearcher: LongTermMemorySearcher,
-    private readonly scheduler?: AgendaScheduler,
+    private readonly server?: Server,
   ) {}
 
   private async getActorIdByConversation(
@@ -87,23 +88,29 @@ export class MemoryManager
   /**
    * Gets the state of the actor.
    * @param actorId - The actor identifier to read.
+   * @param conversationId - Optional conversation identifier used for buffer history.
    * @returns The state of the actor.
    */
-  async getState(actorId: number, conversationId: number): Promise<ActorState> {
+  async getState(
+    actorId: number,
+    conversationId?: number,
+  ): Promise<ActorState> {
     const [memoryDay, memoryWeek, memoryMonth, memoryYear, buffer] =
       await Promise.all([
         this.getShortTermMemory(actorId, "day", 1),
         this.getShortTermMemory(actorId, "week", 1),
         this.getShortTermMemory(actorId, "month", 1),
         this.getShortTermMemory(actorId, "year", 1),
-        this.getBuffer(conversationId, this.bufferWindowSize),
+        conversationId === undefined
+          ? Promise.resolve<BufferMessage[] | undefined>(undefined)
+          : this.getBuffer(conversationId, this.bufferWindowSize),
       ]);
     return {
       memoryDay: memoryDay[0] ?? { kind: "day", memory: "None." },
       memoryWeek: memoryWeek[0] ?? { kind: "week", memory: "None." },
       memoryMonth: memoryMonth[0] ?? { kind: "month", memory: "None." },
       memoryYear: memoryYear[0] ?? { kind: "year", memory: "None." },
-      buffer,
+      ...(buffer ? { buffer } : {}),
     };
   }
 
@@ -122,16 +129,18 @@ export class MemoryManager
    * @returns The system prompt with memory injected.
    */
   async buildSystemPrompt(
-    actorId: number,
-    conversationId: number,
     systemPrompt: string,
+    actorId: number,
+    conversationId?: number,
     actorState?: ActorState,
   ): Promise<string> {
     const state = actorState ?? (await this.getState(actorId, conversationId));
     const [actor, personality, conversation] = await Promise.all([
       this.actorDB.getActor(actorId),
       this.personalityDB.getPersonality(actorId),
-      this.conversationDB.getConversation(conversationId),
+      conversationId === undefined
+        ? Promise.resolve(null)
+        : this.conversationDB.getConversation(conversationId),
     ]);
     const role = actor?.roleId ? await this.roleDB.getRole(actor.roleId) : null;
     const rolePrompt = role?.prompt ?? "None.";
@@ -143,10 +152,11 @@ export class MemoryManager
     const ownerUid = sessionInfo
       ? await this.getOwnerUid(actorId, sessionInfo.channel)
       : null;
+    const buffer = state.buffer ?? [];
     const bufferText =
-      state.buffer.length === 0
+      buffer.length === 0
         ? "None."
-        : state.buffer
+        : buffer
             .map((item) => buildPromptFromBufferMessage(item, ownerUid))
             .join("\n");
     return systemPrompt
@@ -212,59 +222,12 @@ export class MemoryManager
   }
 
   /**
-   * Adds a buffer message without scheduling background memory updates.
-   * @param message - The buffer message to add.
-   * @returns The total number of persisted conversation messages after insertion.
+   * Persists a chat message before it is added to the resumed buffer.
+   * @param message - The runtime chat message to persist.
    */
-  async addBufferWithoutScheduling(
-    message: BufferWriteMessage,
-  ): Promise<number> {
-    const { nextCount } = await this.persistBufferWriteMessage(message);
-    return nextCount;
-  }
-
-  /**
-   * Adds a buffer message and schedules online memory updates when needed.
-   * @param message - The buffer message to add.
-   */
-  async addBuffer(message: BufferWriteMessage): Promise<void> {
-    const { actorId, nextCount, conversationId } =
-      await this.persistBufferWriteMessage(message);
-    if (nextCount % this.diaryUpdateEvery === 0) {
-      if (!this.scheduler) {
-        return;
-      }
-      // Schedule an immediate background task to organize memory.
-      const actorState = await this.getState(actorId, conversationId);
-      await this.scheduler.schedule({
-        name: "actor_background",
-        runAt: Date.now() + 1000,
-        data: {
-          actorId,
-          conversationId,
-          actorState,
-          prompt: EMA_DIALOGUE_TICK_PROMPT,
-          updateMemoryKinds: ["day"],
-        },
-      });
-    }
-  }
-
-  /**
-   * Persists a single buffer-write message and updates local message counters.
-   * @param message - The runtime message to add.
-   * @returns The resolved actor scope and updated message count.
-   */
-  private async persistBufferWriteMessage(
-    message: BufferWriteMessage,
-  ): Promise<{ actorId: number; conversationId: number; nextCount: number }> {
+  async persistChatMessage(message: BufferWriteMessage): Promise<void> {
     const conversationId = message.conversationId;
     const actorId = await this.getActorIdByConversation(conversationId);
-    const current =
-      this.messageCounter.get(conversationId) ??
-      (await this.conversationMessageDB.countConversationMessages(
-        conversationId,
-      ));
     const payload = isActorChatInput(message)
       ? {
           kind: "user" as const,
@@ -302,18 +265,58 @@ export class MemoryManager
       channelMessageId: isActorChatInput(message)
         ? message.channelMessageId
         : `${message.conversationId}:${message.msgId}`,
-      resumed: isActorChatResponse(message),
+      resumed: false,
       message: payload,
       createdAt: message.time,
       msgId: message.msgId,
     });
-    const nextCount = Math.max(current, message.msgId);
-    this.messageCounter.set(conversationId, nextCount);
-    return {
+  }
+
+  /**
+   * Adds a single persisted message into the resumed buffer and triggers day updates when needed.
+   * @param conversationId - The conversation identifier.
+   * @param msgId - Conversation-scoped message identifier.
+   * @param triggerDialogueTick - Whether this add should participate in online dialogue-tick triggering.
+   * @param triggeredAt - Optional timestamp used when triggering dialogue-tick jobs.
+   */
+  async addToBuffer(
+    conversationId: number,
+    msgId: number,
+    triggerDialogueTick: boolean,
+    triggeredAt?: number,
+  ): Promise<void> {
+    const updated =
+      await this.conversationMessageDB.markConversationMessagesResumed(
+        conversationId,
+        [msgId],
+      );
+    if (updated === 0) {
+      return;
+    }
+
+    const resumedCount =
+      await this.conversationMessageDB.countConversationMessages(
+        conversationId,
+        true,
+      );
+    if (
+      !triggerDialogueTick ||
+      resumedCount % this.diaryUpdateEvery !== 0 ||
+      !this.server
+    ) {
+      return;
+    }
+
+    const actorId = await this.getActorIdByConversation(conversationId);
+    const actorState = await this.getState(actorId, conversationId);
+    void runActorDialogueTickJob(this.server, {
       actorId,
       conversationId,
-      nextCount,
-    };
+      actorState,
+      triggeredAt: triggeredAt ?? Date.now(),
+    }).catch((error) => {
+      this.logger.error("Failed to run actor dialogue tick job:", error);
+    });
   }
 
   /**

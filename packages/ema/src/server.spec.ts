@@ -124,7 +124,7 @@ describe("Server", () => {
       });
 
       const backgroundJobs = await server.scheduler.listJobs({
-        name: "actor_background",
+        name: "actor_calendar_rollup",
         "data.actorId": 1,
       });
       const foregroundJobs = await server.scheduler.listJobs({

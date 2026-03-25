@@ -17,14 +17,14 @@ function formatWeekday(timestamp: number): string {
 
 export function buildUserMessageFromActorInput(
   input: ActorInput,
-  ownerUid: string | null,
+  ownerUid?: string,
 ): UserMessage {
   const timestamp = input.time ?? Date.now();
   const time = formatTimestamp("YYYY-MM-DD HH:mm:ss", timestamp);
   const weekday = formatWeekday(timestamp);
   if (input.kind === "chat") {
     const speaker =
-      ownerUid !== null && input.speaker.uid === ownerUid ? "owner" : "other";
+      ownerUid && input.speaker.uid === ownerUid ? "owner" : "other";
     const metadata = [
       `time="${time}"`,
       `weekday="${weekday}"`,

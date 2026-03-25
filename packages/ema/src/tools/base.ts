@@ -1,4 +1,3 @@
-import type { ShortTermMemory } from "../memory/base";
 import type { InlineDataItem } from "../schema";
 import type { Server } from "../server";
 
@@ -20,10 +19,7 @@ export interface ToolContext {
   server?: Server;
   actorId?: number;
   conversationId?: number;
-  /**
-   * Allowed short-term memory kinds for the current memory update job.
-   */
-  updateMemoryKinds?: ShortTermMemory["kind"][];
+  data?: Record<string, unknown>;
 }
 
 /** Base class for all tools. */

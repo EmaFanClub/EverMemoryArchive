@@ -98,7 +98,13 @@ export class ActorWorker {
             ema_reply: reply,
             time: Date.now(),
           };
-          await this.server.memoryManager.addBuffer(response);
+          await this.server.memoryManager.persistChatMessage(response);
+          await this.server.memoryManager.addToBuffer(
+            this.conversationId,
+            msgId,
+            true,
+            response.time,
+          );
           this.emitEvent("actorResponsed", {
             response,
           });
@@ -108,7 +114,10 @@ export class ActorWorker {
   }
 
   async work(envelope: ActorInput): Promise<void> {
-    if (envelope.conversationId !== this.conversationId) {
+    if (
+      envelope.conversationId &&
+      envelope.conversationId !== this.conversationId
+    ) {
       throw new Error(
         `Conversation mismatch: expected ${this.conversationId}, got ${envelope.conversationId}.`,
       );
@@ -186,19 +195,19 @@ export class ActorWorker {
           }
           messages.push(
             ...batches.map((item) =>
-              buildUserMessageFromActorInput(item, this.ownerUid),
+              buildUserMessageFromActorInput(item, this.ownerUid ?? undefined),
             ),
           );
           await this.markInputMessagesResumed(batches);
         } else {
           this.agentState = {
             systemPrompt: await this.server.memoryManager.buildSystemPrompt(
+              this.config.systemPrompt,
               this.actorId,
               this.conversationId,
-              this.config.systemPrompt,
             ),
             messages: batches.map((item) =>
-              buildUserMessageFromActorInput(item, this.ownerUid),
+              buildUserMessageFromActorInput(item, this.ownerUid ?? undefined),
             ),
             tools: this.config.baseTools,
             toolContext: {
@@ -254,15 +263,16 @@ export class ActorWorker {
   }
 
   private async markInputMessagesResumed(batches: ActorInput[]): Promise<void> {
-    const msgIds = batches.flatMap((item) =>
-      item.kind === "chat" ? [item.msgId] : [],
-    );
-    if (msgIds.length === 0) {
-      return;
+    for (const item of batches) {
+      if (item.kind !== "chat") {
+        continue;
+      }
+      await this.server.memoryManager.addToBuffer(
+        this.conversationId,
+        item.msgId,
+        true,
+        item.time,
+      );
     }
-    await this.server.conversationMessageDB.markConversationMessagesResumed(
-      this.conversationId,
-      msgIds,
-    );
   }
 }

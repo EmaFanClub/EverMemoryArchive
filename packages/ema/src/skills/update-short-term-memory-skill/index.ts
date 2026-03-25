@@ -2,12 +2,16 @@ import { z } from "zod";
 import { countApproxTextLength, Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
 import type { ShortTermMemory } from "../../memory/base";
+import {
+  getMemoryUpdateTaskData,
+  resolveAllowedMemoryKinds,
+} from "../../memory/update_tasks";
 import { Logger } from "../../logger";
 
 const SHORT_TERM_MEMORY_MAX_LENGTH = {
   day: 500,
   week: 700,
-  month: 1000,
+  month: 300,
   year: 2000,
 } as const;
 
@@ -20,7 +24,7 @@ const UpdateShortTermMemorySchema = z
 
 export default class UpdateShortTermMemorySkill extends Skill {
   description =
-    "该技能用于更新短期记忆（年/月/周/日），用于记录角色最近一段时间的经历、情绪与关系惯性。只有在系统明确要求更新 day、week、month 或 year 时才可以更新。";
+    "该技能用于更新短期记忆（年/月/周/日），用于记录角色近期的短期记忆内容。只有在系统明确要求更新 day、week、month 或 year 时才可以更新。";
 
   parameters = UpdateShortTermMemorySchema.toJSONSchema();
 
@@ -42,7 +46,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid update-short-term-memory-skill input: ${(err as Error).message}`,
+        error: `Invalid update-short-term-memory-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
       };
     }
 
@@ -60,14 +64,18 @@ export default class UpdateShortTermMemorySkill extends Skill {
         error: "Missing actorId in skill context.",
       };
     }
-    if (
-      context?.updateMemoryKinds &&
-      !context.updateMemoryKinds.includes(payload.kind)
-    ) {
-      return {
-        success: false,
-        error: `Kind '${payload.kind}' is not allowed in current updateMemoryKinds: [${context.updateMemoryKinds.join(", ")}].`,
-      };
+    const taskData = getMemoryUpdateTaskData(context?.data);
+    if (taskData) {
+      const allowedKinds = resolveAllowedMemoryKinds(
+        taskData.task,
+        taskData.triggeredAt,
+      );
+      if (!allowedKinds.includes(payload.kind)) {
+        return {
+          success: false,
+          error: `Kind '${payload.kind}' is not allowed for task '${taskData.task}': [${allowedKinds.join(", ")}].`,
+        };
+      }
     }
 
     const maxLength = SHORT_TERM_MEMORY_MAX_LENGTH[payload.kind];

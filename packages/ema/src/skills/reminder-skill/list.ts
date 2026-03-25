@@ -22,7 +22,7 @@ export async function executeListReminders(
 ): Promise<ToolResult> {
   const jobs = await server.scheduler.listJobs({
     name: "actor_foreground",
-    "data.ownerId": actorId,
+    "data.actorId": actorId,
   });
 
   const reminders = jobs.map((job) => {

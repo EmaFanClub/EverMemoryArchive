@@ -6,9 +6,12 @@ import type { JobHandlerMap } from "../base";
 import type { Server } from "../../server";
 import { TestJobHandler, type TestJobData } from "./test.job";
 import {
+  createActorCalendarRollupJobHandler,
+  createActorDialogueTickJobHandler,
   createActorForegroundJobHandler,
-  createActorBackgroundJobHandler,
-  type ActorJobData,
+  type ActorCalendarRollupJobData,
+  type ActorDialogueTickJobData,
+  type ActorForegroundJobData,
 } from "./actor.job";
 
 /**
@@ -20,13 +23,17 @@ export interface JobDataMap {
    */
   test: TestJobData;
   /**
-   * ActorBackground job data mapping.
+   * ActorDialogueTick job data mapping.
    */
-  actor_background: ActorJobData;
+  actor_dialogue_tick: ActorDialogueTickJobData;
+  /**
+   * ActorCalendarRollup job data mapping.
+   */
+  actor_calendar_rollup: ActorCalendarRollupJobData;
   /**
    * ActorForeground job data mapping.
    */
-  actor_foreground: ActorJobData;
+  actor_foreground: ActorForegroundJobData;
 }
 
 /**
@@ -37,7 +44,8 @@ export interface JobDataMap {
 export function createJobHandlers(server: Server): JobHandlerMap {
   return {
     test: TestJobHandler,
-    actor_background: createActorBackgroundJobHandler(server),
+    actor_dialogue_tick: createActorDialogueTickJobHandler(server),
+    actor_calendar_rollup: createActorCalendarRollupJobHandler(server),
     actor_foreground: createActorForegroundJobHandler(server),
   };
 }

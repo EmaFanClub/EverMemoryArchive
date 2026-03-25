@@ -2,6 +2,7 @@ import { z } from "zod";
 import { countApproxTextLength, Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
 import type { LongTermMemory } from "../../memory/base";
+import { getMemoryUpdateTaskData } from "../../memory/update_tasks";
 import { Logger } from "../../logger";
 import {
   type UpdateLongTermMemoryDTO,
@@ -41,7 +42,7 @@ export default class UpdateLongTermMemorySkill extends Skill {
 
   private logger: Logger = Logger.create({
     name: "UpdateLongTermMemorySkill",
-    level: "debug",
+    level: "full",
     transport: "console",
   });
 
@@ -57,7 +58,7 @@ export default class UpdateLongTermMemorySkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid update-long-term-memory-skill input: ${(err as Error).message}`,
+        error: `Invalid update-long-term-memory-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
       };
     }
 
@@ -88,6 +89,7 @@ export default class UpdateLongTermMemorySkill extends Skill {
       index0: payload.index0,
       index1: payload.index1,
       memory: payload.memory,
+      createdAt: getMemoryUpdateTaskData(context?.data)?.triggeredAt,
       messages: payload.msg_ids,
     };
     await server.memoryManager.addLongTermMemory(actorId, record);

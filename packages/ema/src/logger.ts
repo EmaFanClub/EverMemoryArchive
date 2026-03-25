@@ -139,7 +139,7 @@ function buildTransport(
   // "full" means multiline output; other levels keep a single line.
   const singleLine = level !== "full";
   const prettyOptions = {
-    translateTime: "yyyy-mm-dd HH:MM:ss.l",
+    translateTime: "SYS:yyyy-mm-dd HH:MM:ss.l",
     ignore: "pid,hostname",
     singleLine,
   };

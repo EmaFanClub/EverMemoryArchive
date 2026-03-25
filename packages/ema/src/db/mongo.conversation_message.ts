@@ -114,15 +114,24 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
   /**
    * Counts conversation messages in the database
    * @param conversationId - The conversation ID to count messages for
+   * @param resumed - Optional resumed-state filter
    * @returns Promise resolving to the number of matching messages
    */
-  async countConversationMessages(conversationId: number): Promise<number> {
+  async countConversationMessages(
+    conversationId: number,
+    resumed?: boolean,
+  ): Promise<number> {
     if (typeof conversationId !== "number") {
       throw new Error("conversationId must be a number");
     }
     const db = this.mongo.getDb();
     const collection = db.collection<ConversationMessageEntity>(this.$cn);
-    return collection.countDocuments({ conversationId });
+    return collection.countDocuments({
+      conversationId,
+      ...(resumed === undefined
+        ? {}
+        : { resumed: resumed ? { $ne: false } : false }),
+    });
   }
 
   async reserveMessageId(conversationId: number): Promise<number> {

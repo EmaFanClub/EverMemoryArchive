@@ -190,6 +190,9 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
       sort: "asc",
     });
     expect(hidden).toEqual([pending]);
+
+    expect(await db.countConversationMessages(1, true)).toBe(2);
+    expect(await db.countConversationMessages(1, false)).toBe(1);
   });
 
   test("should mark selected messages as resumed", async () => {

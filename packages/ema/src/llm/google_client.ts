@@ -57,7 +57,7 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
   private readonly client: GoogleGenAI;
 
   private readonly thinkingLevelMap = new Map<string, ThinkingLevel>([
-    ["gemini-3.1-flash-lite-preview", ThinkingLevel.LOW],
+    ["gemini-3.1-flash-lite-preview", ThinkingLevel.HIGH],
     ["gemini-3-flash-preview", ThinkingLevel.LOW],
     ["gemini-3-flash", ThinkingLevel.LOW],
     ["gemini-3.1-pro-preview-customtools", ThinkingLevel.LOW],

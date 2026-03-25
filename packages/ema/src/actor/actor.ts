@@ -113,7 +113,7 @@ export class Actor {
     input: ActorInput,
   ): Promise<void> {
     if (input.kind === "chat") {
-      await this.server.memoryManager.addBuffer(input);
+      await this.server.memoryManager.persistChatMessage(input);
     }
     this.sessionManager.enqueue(conversationId, input);
     if (this.currentConversationId === null) {

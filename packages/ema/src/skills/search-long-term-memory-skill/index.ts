@@ -38,7 +38,7 @@ export const SearchLongTermMemorySchema = z
 
 export default class SearchLongTermMemorySkill extends Skill {
   description =
-    "该技能用于检索与当前对话相关的长期记忆，用于补足当前上下文之外的重要事实与关系背景。在回复前必须进行检索，以补充和说话者、话题、事件相关的长期记忆，以便更好地理解当前对话环境和历史背景。";
+    "该技能用于检索与当前对话相关的长期记忆，用于补足当前上下文之外的重要事实与关系背景。在回复前必须进行检索，以补充对话者身份、关系背景、重要事件等关键信息。";
 
   parameters = SearchLongTermMemorySchema.toJSONSchema();
 
@@ -60,7 +60,7 @@ export default class SearchLongTermMemorySkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid search-long-term-memory-skill input: ${(err as Error).message}`,
+        error: `Invalid search-long-term-memory-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
       };
     }
     this.logger.debug("Searching long-term memory:", payload);

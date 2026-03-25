@@ -547,9 +547,13 @@ export interface ConversationMessageDB {
   /**
    * counts conversation messages in the database
    * @param conversationId - The conversation ID to count messages for
+   * @param resumed - Optional resumed-state filter
    * @returns Promise resolving to the number of matching messages
    */
-  countConversationMessages(conversationId: number): Promise<number>;
+  countConversationMessages(
+    conversationId: number,
+    resumed?: boolean,
+  ): Promise<number>;
 
   /**
    * Reserves the next message ID for a conversation.

@@ -51,7 +51,6 @@ export async function executeCreateReminder(
   const baseData = {
     actorId,
     conversationId,
-    ownerId: actorId,
     prompt: payload.prompt,
   };
   let runAt: number;

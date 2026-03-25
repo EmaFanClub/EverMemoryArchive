@@ -35,7 +35,7 @@ export default class UpdateRoleBookSkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid update-role-book-skill input: ${(err as Error).message}`,
+        error: `Invalid update-role-book-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
       };
     }
 

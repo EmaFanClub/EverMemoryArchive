@@ -5,19 +5,21 @@ import type { EmaReply } from "../tools/ema_reply_tool";
 
 export interface ActorInputBase<K extends string = string> {
   kind: K;
-  conversationId: number;
   inputs: InputContent[];
   time?: number;
 }
 
 export interface ActorChatInput extends ActorInputBase<"chat"> {
+  conversationId: number;
   msgId: number;
   speaker: SpeakerInformation;
   channelMessageId: string;
   replyTo?: MessageReplyRef;
 }
 
-export interface ActorSystemInput extends ActorInputBase<"system"> {}
+export interface ActorSystemInput extends ActorInputBase<"system"> {
+  conversationId?: number;
+}
 
 export type ActorInput = ActorChatInput | ActorSystemInput;
 

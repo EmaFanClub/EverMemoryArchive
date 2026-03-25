@@ -55,7 +55,7 @@ export async function executeUpdateReminder(
   }
 
   const data = job.attrs.data;
-  if (data?.ownerId !== actorId) {
+  if (data?.actorId !== actorId) {
     return {
       success: false,
       error: "Reminder job does not belong to the current actor.",
@@ -107,7 +107,6 @@ export async function executeUpdateReminder(
   const nextData = {
     actorId,
     conversationId,
-    ownerId: actorId,
     prompt,
   };
 

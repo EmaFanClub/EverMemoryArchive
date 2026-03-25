@@ -51,6 +51,7 @@ describe("buildTrainingCheckpointSnapshot", () => {
       server.shortTermMemoryDB,
       server.longTermMemoryDB,
       server.longTermMemoryVectorSearcher,
+      server,
     );
   });
 
