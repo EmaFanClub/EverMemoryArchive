@@ -24,7 +24,7 @@ export class ExecSkillTool extends Tool {
   name = "exec_skill";
 
   description =
-    "执行指定 skill，并返回执行结果。当你确定需要使用某个 skill 来完成任务时，可以使用此工具来执行该 skill。";
+    "此工具用于执行指定的技能并返回执行结果。执行前必须确保已经使用 get_skill 工具查询过目标技能的详细说明，并且明确该技能能够完成当前任务。";
 
   parameters = ExeSkillSchema.toJSONSchema();
 

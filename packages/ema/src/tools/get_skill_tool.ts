@@ -23,7 +23,7 @@ export class GetSkillTool extends Tool {
   name = "get_skill";
 
   description =
-    "获取指定 skill 的使用手册。在你想使用某个 skill 之前，可以先使用此工具查看该 skill 的使用说明。";
+    "此工具用来查询某个技能的详细说明，在执行一个技能之前必须先使用该工具查询目标技能的详细说明。";
 
   parameters = GetSkillSchema.toJSONSchema();
 

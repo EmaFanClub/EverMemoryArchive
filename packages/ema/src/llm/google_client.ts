@@ -58,11 +58,8 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
 
   private readonly thinkingLevelMap = new Map<string, ThinkingLevel>([
     ["gemini-3.1-flash-lite-preview", ThinkingLevel.HIGH],
-    ["gemini-3-flash-preview", ThinkingLevel.LOW],
-    ["gemini-3-flash", ThinkingLevel.LOW],
     ["gemini-3.1-pro-preview-customtools", ThinkingLevel.LOW],
     ["gemini-3.1-pro-preview", ThinkingLevel.LOW],
-    ["gemini-3-pro-preview", ThinkingLevel.LOW],
   ]);
 
   constructor(
@@ -224,9 +221,9 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
       );
     }
     if (!candidate || !candidate.content || !candidate.content.parts) {
-      console.warn(
-        `No valid candidate in response: ${JSON.stringify(response)}`,
-      );
+      // console.warn(
+      //   `No valid candidate in response: ${JSON.stringify(response)}`,
+      // );
       return {
         message: {
           role: "model",
