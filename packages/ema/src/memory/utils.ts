@@ -9,11 +9,10 @@ import {
 } from "./base";
 
 export const LONG_TERM_INDEX_MAP = {
-  用户画像: [""],
-  人物画像: [""],
-  过往事件: ["用户事件", "其他事件"],
+  过往事件: ["owner", "other", "self"],
+  人物画像: ["owner", "other"],
   百科知识: ["文史", "理工", "生活", "娱乐", "梗知识", "其他"],
-  关系网络: ["人与人", "物与物", "人与物"],
+  经验方法: ["general"],
 } as const;
 
 export type LongTermIndex0 = keyof typeof LONG_TERM_INDEX_MAP;

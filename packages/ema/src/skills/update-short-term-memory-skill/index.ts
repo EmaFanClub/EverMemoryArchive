@@ -9,7 +9,7 @@ import {
 import { Logger } from "../../logger";
 
 const SHORT_TERM_MEMORY_MAX_LENGTH = {
-  day: 500,
+  day: 800,
   week: 700,
   month: 300,
   year: 2000,
@@ -24,7 +24,7 @@ const UpdateShortTermMemorySchema = z
 
 export default class UpdateShortTermMemorySkill extends Skill {
   description =
-    "该技能用于更新短期记忆（年/月/周/日），用于记录角色近期的短期记忆内容。只有在系统明确要求更新 day、week、month 或 year 时才可以更新。";
+    "此技能用于更新短期记忆（day/week/month/year），仅在系统明确要求更新某些类型的短期记忆时使用。";
 
   parameters = UpdateShortTermMemorySchema.toJSONSchema();
 

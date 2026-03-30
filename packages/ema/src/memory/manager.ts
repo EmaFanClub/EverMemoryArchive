@@ -352,6 +352,7 @@ export class MemoryManager
         index1: item.index1,
         memory: item.memory,
         createdAt: item.createdAt ?? Date.now(),
+        ...(item.messages ? { messages: item.messages } : {}),
       };
     });
   }

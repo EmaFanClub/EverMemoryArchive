@@ -41,8 +41,8 @@ describe("memory update skills", () => {
 
     const res = await skill.execute(
       {
-        index0: "用户画像",
-        index1: "",
+        index0: "人物画像",
+        index1: "owner",
         memory: "喜欢打招呼",
       },
       {

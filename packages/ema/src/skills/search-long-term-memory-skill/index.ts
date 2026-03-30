@@ -1,44 +1,35 @@
 import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
-import { Index0Enum, Index1Enum, isAllowedIndex1 } from "../../memory/utils";
+import { Index0Enum, Index1Enum } from "../../memory/utils";
 import { formatTimestamp } from "../../utils";
 import { Logger } from "../../logger";
 
+export const SearchLongTermMemoryQuerySchema = z
+  .object({
+    index0: Index0Enum.describe("一级分类（必填）"),
+    index1: z
+      .union([Index1Enum, z.literal("")])
+      .optional()
+      .default("")
+      .describe("二级分类（可选，不指定时填空字符串）"),
+    memory: z.string().min(1).describe("要检索的长期记忆内容"),
+    limit: z.number().int().min(10).max(50).describe("返回数量上限（10-50）"),
+  })
+  .strict();
+
 export const SearchLongTermMemorySchema = z
   .object({
-    memory: z.string().min(1).describe("要检索的记忆内容"),
-    limit: z.number().int().min(1).max(50).describe("返回数量上限"),
-    index0: Index0Enum.optional().describe("一级分类（可选）"),
-    index1: Index1Enum.optional().describe("二级分类（可选）"),
+    queries: z
+      .array(SearchLongTermMemoryQuerySchema)
+      .min(1)
+      .describe("批量长期记忆检索请求"),
   })
-  .strict()
-  .superRefine((val, ctx) => {
-    // disallow index1 without index0
-    if (!val.index0 && val.index1 !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["index1"],
-        message: "index1 cannot be provided without index0.",
-      });
-      return;
-    }
-
-    // if both provided, validate pair
-    if (val.index0 && val.index1 !== undefined) {
-      if (!isAllowedIndex1(val.index0, val.index1)) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["index1"],
-          message: `index1="${val.index1}" is not allowed for index0="${val.index0}".`,
-        });
-      }
-    }
-  });
+  .strict();
 
 export default class SearchLongTermMemorySkill extends Skill {
   description =
-    "该技能用于检索与当前对话相关的长期记忆，用于补足当前上下文之外的重要事实与关系背景。在回复前必须进行检索，以补充对话者身份、关系背景、重要事件等关键信息。";
+    "此技能用于检索长期记忆，从跨会话长期记忆中补充人物、事件、知识或经验信息。";
 
   parameters = SearchLongTermMemorySchema.toJSONSchema();
 
@@ -49,8 +40,8 @@ export default class SearchLongTermMemorySkill extends Skill {
   });
 
   /**
-   * Searches long-term memory records for the current actor.
-   * @param args - Arguments containing memory, limit, and optional indices.
+   * Searches long-term memory records for the current actor in grouped batches.
+   * @param args - Arguments containing grouped long-term-memory queries.
    * @param context - Tool context containing server and actor scope.
    */
   async execute(args: any, context?: ToolContext): Promise<ToolResult> {
@@ -79,23 +70,33 @@ export default class SearchLongTermMemorySkill extends Skill {
       };
     }
 
-    const records = await server.memoryManager.search(
-      actorId,
-      payload.memory,
-      payload.limit,
-      payload.index0,
-      payload.index1,
+    const results = await Promise.all(
+      payload.queries.map(async (query) => {
+        const records = await server.memoryManager.search(
+          actorId,
+          query.memory,
+          query.limit,
+          query.index0,
+          query.index1,
+        );
+        return {
+          query,
+          hints: records.map((record) => ({
+            id: record.id,
+            memory: record.memory,
+            createdAt: formatTimestamp(
+              "YYYY-MM-DD HH:mm:ss",
+              record.createdAt ?? Date.now(),
+            ),
+            ...(record.messages ? { msg_ids: record.messages } : {}),
+          })),
+        };
+      }),
     );
-    const formatted = records.map((record) => ({
-      ...record,
-      createdAt: formatTimestamp(
-        "YYYY-MM-DD HH:mm:ss",
-        record.createdAt ?? Date.now(),
-      ),
-    }));
+    this.logger.debug("Search-long-term-memory-skill results:", results);
     return {
       success: true,
-      content: JSON.stringify(formatted),
+      content: JSON.stringify({ results }),
     };
   }
 }

@@ -19,17 +19,12 @@ const EmaReplySchema = z
       .describe("肢体动作，如：无、点头、摇头、挥手、跳跃、指点"),
     contents: z
       .string()
-      .describe("真正发送的文本消息内容，如果为空字符串表示这次不说话"),
+      .describe("对方能看到的文本消息内容，如果不说话则为空字符串"),
     mention_uids: z
       .array(z.string().min(1))
       .optional()
-      .describe(
-        "需要提醒的人的uid列表，仅在群聊中需要明确提醒或通知某些人时使用",
-      ),
-    reply_to: z
-      .string()
-      .optional()
-      .describe("需要引用的消息的msg_id，仅在你确实要精确引用某条消息时再用"),
+      .describe("需要提醒的人的uid列表"),
+    reply_to: z.string().optional().describe("需要引用的消息的msg_id"),
   })
   .strict();
 
@@ -37,14 +32,13 @@ const EmaReplySchema = z
 export type EmaReply = z.infer<typeof EmaReplySchema>;
 
 const EMA_REPLY_TOOL_DESCRIPTION = `
-此工具用于发送一条消息，且是向外界发送消息的唯一方式。每次调用只能发送一条消息，连续发送多条消息需要分多次调用，而不要在消息内容中用\\n表示分句。
-发送多条消息方法如下：
+此工具是向外界发送消息的唯一方式，发送多条消息必须遵循以下流程，而不要用\\n分隔多条消息：
 1. 调用一次此工具发出第一条消息。
 2. 等待工具响应 \`success\` 后，再调用一次此工具发出第二条消息，以此类推。
 3. 直到最后一条消息发出后，停止调用此工具。
 注意事项：
-1. 不要频繁填写 \`reply_to\` 和 \`mention_uids\`，只有在对话复杂、对象不明确、必须精确指向某条消息或某个人时才使用。
-2. 如需要明确叫某个人，只填写 \`mention_uids\`，不要在正文里手写 \`@(XXX)\`、\`@某人\` 或其他人工模拟提及的文本。
+1. 尽量避免填写 \`reply_to\` 和 \`mention_uids\`，只有在对话复杂、对象不明确、必须精确指向某条消息或某个人时才使用。
+2. 如需要明确叫某个人，只填写 \`mention_uids\`，不要在正文里手写 \`@(XXX)\`、\`@某人\`。
 `;
 
 /** Tool that enforces JSON output matching the EmaReply shape. */
