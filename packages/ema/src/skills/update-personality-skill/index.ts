@@ -3,7 +3,7 @@ import { countApproxTextLength, Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
 import { Logger } from "../../logger";
 
-const PERSONALITY_MAX_LENGTH = 500;
+const PERSONALITY_MAX_LENGTH = 300;
 
 const UpdatePersonalitySchema = z
   .object({

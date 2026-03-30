@@ -10,7 +10,7 @@ import {
 
 export const LONG_TERM_INDEX_MAP = {
   过往事件: ["owner", "other", "self"],
-  人物画像: ["owner", "other"],
+  人物画像: ["owner", "other", "self"],
   百科知识: ["文史", "理工", "生活", "娱乐", "梗知识", "其他"],
   经验方法: ["general"],
 } as const;

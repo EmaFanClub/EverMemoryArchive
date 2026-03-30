@@ -147,9 +147,9 @@ export interface ActorMemory {
    * Adds long term memory
    * @param actorId - The actor identifier to update.
    * @param item - Long term memory item
-   * @returns Promise resolving when the memory is added
+   * @returns Promise resolving to the created memory identifier
    */
-  addLongTermMemory(actorId: number, item: LongTermMemory): Promise<void>;
+  addLongTermMemory(actorId: number, item: LongTermMemory): Promise<number>;
 }
 
 /**

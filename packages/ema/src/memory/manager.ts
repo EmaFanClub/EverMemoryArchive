@@ -527,8 +527,8 @@ export class MemoryManager
   async addLongTermMemory(
     actorId: number,
     item: LongTermMemory,
-  ): Promise<void> {
-    await this.longTermMemoryDB.appendLongTermMemory({
+  ): Promise<number> {
+    return await this.longTermMemoryDB.appendLongTermMemory({
       actorId,
       ...item,
     });

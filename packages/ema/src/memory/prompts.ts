@@ -1,47 +1,49 @@
 /**
  * Background prompt used for dialogue-tick diary updates.
  */
-export const EMA_DIALOGUE_TICK_PROMPT = [
-  "<task>",
-  "这是一个由对话数量触发的日记更新任务，用于把近期对话总结到日记中。",
-  "本次允许更新的短期记忆类型：{ALLOWED_MEMORY_KINDS}",
-  "</task>",
-  "",
-  "<instructions>",
-  "1) 调用 get_skill 读取 update-short-term-memory-skill 技能说明，并严格按其要求执行。",
-  "2) 基于当前已有的角色、人格、短期记忆、长期记忆、近期对话生成更新后的日记内容。",
-  "3) 更新完后遵循 update-short-term-memory-skill 技能的工作流程，考虑长期记忆、角色书和人格记忆是否需要更新，并使用相应技能进行更新。",
-  "4) 这是一个后台任务，更新完后不要产生任何额外的回复和输出。",
-  "</instructions>",
-  "",
-  "<constraints>",
-  "- 必须更新 day 记忆。",
-  "- 禁止修改 year / month / week 记忆。",
-  "- 不得脱离角色和人格的约束，不得编造不存在于短期记忆、长期记忆、近期对话中的事实。",
-  "</constraints>",
-].join("\n");
+export const EMA_DIALOGUE_TICK_PROMPT = `
+# Task
+
+这是一个由对话数量触发的日记更新任务，用于把近期对话总结到日记中。本次允许更新的短期记忆类型：{ALLOWED_MEMORY_KINDS}
+
+# Workflow
+
+1. 调用 get_skill 读取 update-short-term-memory-skill 技能说明。
+2. 基于当前已有的角色、人格、短期记忆、长期记忆、近期对话，严格按照 update-short-term-memory-skill 技能的工作流程进行更新。
+3. 调用 get_skill 读取 update-long-term-memory-skill 技能说明，判断是否需要更新长期记忆，并使用相应技能进行更新。
+4. 调用 get_skill 读取 update-role-book-skill 技能说明，判断是否需要更新角色书，并使用相应技能进行更新。
+5. 调用 get_skill 读取 update-personality-skill 技能说明，判断是否需要更新人格记忆，并使用相应技能进行更新。
+
+# Constraints
+
+- 必须更新 day 记忆。
+- 禁止修改 year / month / week 记忆。
+- 不得脱离角色和人格的约束，不得编造不存在于短期记忆、长期记忆、近期对话中的事实。
+- 这是一个后台任务，更新完成后不要产生任何额外的回复和输出，也不要调用 ema_reply 或 keep_silence 工具，直接结束即可。
+`;
 
 /**
  * Background prompt used for calendar-triggered short-term-memory rollups.
  */
-export const EMA_CALENDAR_ROLLUP_PROMPT = [
-  "<task>",
-  "这是一个由时间触发的记忆压缩任务，用于在每天/每周/每月/每年结束时把短期记忆进行压缩整理。",
-  "本次允许更新的短期记忆类型：{ALLOWED_MEMORY_KINDS}",
-  "</task>",
-  "",
-  "<instructions>",
-  "1) 调用 get_skill 读取 update-short-term-memory-skill 技能说明，并严格按其要求执行。",
-  "2) 基于当前已有的角色、人格、短期记忆、长期记忆进行压缩整理，不要依赖对话历史。",
-  "3) 更新完后遵循 update-short-term-memory-skill 技能的工作流程，考虑长期记忆、角色书和人格记忆是否需要更新，并使用相应技能进行更新。",
-  "4) 这是一个后台任务。更新完成后不要产生任何额外的回复和输出。",
-  "</instructions>",
-  "",
-  "<constraints>",
-  "- 必须严格遵守 <task> 块中给定的允许更新类型；不得自行增删。",
-  "- 不得脱离角色和人格的约束，不得编造不存在于短期记忆、长期记忆、近期对话中的事实。",
-  "</constraints>",
-].join("\n");
+export const EMA_CALENDAR_ROLLUP_PROMPT = `
+# Task
+
+这是一个由时间触发的记忆压缩任务，用于在每天/每周/每月/每年结束时把短期记忆进行压缩整理。本次允许更新的短期记忆类型：{ALLOWED_MEMORY_KINDS}
+
+# Workflow
+
+1. 调用 get_skill 读取 update-short-term-memory-skill 技能说明。
+2. 基于当前已有的角色、人格、短期记忆、长期记忆，严格按照 update-short-term-memory-skill 技能的工作流程进行更新。
+3. 调用 get_skill 读取 update-long-term-memory-skill 技能说明，判断是否需要更新长期记忆，并使用相应技能进行更新。
+4. 调用 get_skill 读取 update-role-book-skill 技能说明，判断是否需要更新角色书，并使用相应技能进行更新。
+5. 调用 get_skill 读取 update-personality-skill 技能说明，判断是否需要更新人格记忆，并使用相应技能进行更新。
+
+# Constraints
+
+- 必须严格遵守 Task 中给定的允许更新类型，不得自行增删。
+- 不得脱离角色和人格的约束，不得编造不存在于短期记忆、长期记忆、近期对话中的事实。
+- 这是一个后台任务，更新完成后不要产生任何额外的回复和输出，也不要调用 ema_reply 或 keep_silence 工具，直接结束即可。
+`;
 
 /**
  * Foreground reminder prompt used by the periodic actor foreground job.

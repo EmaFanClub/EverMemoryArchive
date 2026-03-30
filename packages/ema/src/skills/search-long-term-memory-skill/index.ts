@@ -93,7 +93,7 @@ export default class SearchLongTermMemorySkill extends Skill {
         };
       }),
     );
-    this.logger.debug("Search-long-term-memory-skill results:", results);
+    this.logger.debug("Searched long-term memory:", results);
     return {
       success: true,
       content: JSON.stringify({ results }),
