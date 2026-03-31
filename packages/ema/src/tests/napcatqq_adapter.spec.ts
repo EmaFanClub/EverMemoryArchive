@@ -144,7 +144,7 @@ describe("NapCatQQAdapter", () => {
     });
   });
 
-  test("decodes market face image as qq emoji text", async () => {
+  test("decodes market face gif as qq emoji text when gif is unsupported", async () => {
     const adapter = new NapCatQQAdapter();
     const decoded = await adapter.decode({
       post_type: "message",
@@ -165,6 +165,17 @@ describe("NapCatQQAdapter", () => {
           },
         },
       ],
+      raw: {
+        elements: [
+          {
+            marketFaceElement: {
+              faceName: "[棒]",
+              emojiId: "emoji-test",
+              emojiPackageId: 234163,
+            },
+          },
+        ],
+      },
     });
 
     expect(decoded).toEqual({
@@ -246,6 +257,71 @@ describe("NapCatQQAdapter", () => {
               type: "inline_data",
               mimeType: "image/jpeg",
               data: Buffer.from("fake-image").toString("base64"),
+            },
+          ],
+        }),
+      ],
+    });
+  });
+
+  test("treats animated emoji jpg as a normal image instead of qq emoji text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        const body = Buffer.from("animated-emoji-jpg");
+        return new Response(body, {
+          status: 200,
+          headers: {
+            "content-type": "image/jpeg",
+            "content-length": String(body.byteLength),
+          },
+        });
+      }),
+    );
+
+    const adapter = new NapCatQQAdapter();
+    const decoded = await adapter.decode({
+      post_type: "message",
+      message_type: "private",
+      sub_type: "friend",
+      self_id: "10001",
+      message_id: "115-animation",
+      user_id: 12345,
+      message: [
+        {
+          type: "image",
+          data: {
+            summary: "[动画表情]",
+            file: "4BB917025DEDBDD6040477E3ADE659C5.jpg",
+            url: "https://example.com/animated-emoji.jpg",
+            sub_type: 1,
+          },
+        },
+      ],
+      raw: {
+        elements: [
+          {
+            picElement: {
+              summary: "[动画表情]",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(decoded).toEqual({
+      kind: "events",
+      events: [
+        expect.objectContaining({
+          inputs: [
+            {
+              type: "text",
+              text: "[图片：4BB917025DEDBDD6040477E3ADE659C5.jpg]",
+            },
+            {
+              type: "inline_data",
+              mimeType: "image/jpeg",
+              data: Buffer.from("animated-emoji-jpg").toString("base64"),
             },
           ],
         }),

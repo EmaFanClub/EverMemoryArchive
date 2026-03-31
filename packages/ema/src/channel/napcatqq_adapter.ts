@@ -41,7 +41,15 @@ interface NapCatQQMessageEvent {
   group_id?: number | string;
   raw_message?: string;
   message?: string | NapCatQQSegment[];
+  raw?: {
+    elements?: NapCatQQRawElement[];
+  };
   sender?: NapCatQQSender;
+}
+
+interface NapCatQQRawElement {
+  picElement?: Record<string, unknown> | null;
+  marketFaceElement?: Record<string, unknown> | null;
 }
 
 const MEDIA_FETCH_TIMEOUT_MS = 30_000;
@@ -285,11 +293,13 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
     const inputs: InputContent[] = [];
     let replyTo: MessageReplyRef | undefined;
     const selfId = this.readString(payload.self_id);
+    const rawElements = this.getRawElements(payload);
 
-    for (const segment of payload.message ?? []) {
+    for (const [index, segment] of (payload.message ?? []).entries()) {
       if (!segment.type) {
         continue;
       }
+      const rawElement = rawElements[index];
       if (segment.type === "text") {
         const text = this.readString(segment.data?.text);
         if (text) {
@@ -328,16 +338,8 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
         continue;
       }
       if (segment.type === "image") {
-        const marketFaceText = this.resolveMarketFaceText(segment.data);
-        if (marketFaceText) {
-          inputs.push({
-            type: "text",
-            text: `[QQ表情：${marketFaceText}]`,
-          });
-          continue;
-        }
         inputs.push(
-          ...(await this.resolveMediaInputs(payload, "image", segment.data)),
+          ...(await this.resolveImageInputs(payload, segment.data, rawElement)),
         );
         continue;
       }
@@ -388,15 +390,47 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
 
   private resolveMarketFaceText(
     data: Record<string, unknown> | undefined,
+    rawElement?: NapCatQQRawElement,
   ): string | null {
     const summary = this.readString(data?.summary)?.trim() ?? "";
     const emojiId = this.readString(data?.emoji_id) ?? "";
     const emojiPackageId = this.readString(data?.emoji_package_id) ?? "";
+    const rawFace = rawElement?.marketFaceElement;
+    const rawEmojiId = this.readString(rawFace?.emojiId) ?? "";
+    const rawEmojiPackageId = this.readString(rawFace?.emojiPackageId) ?? "";
+    const faceName = this.readString(rawFace?.faceName)?.trim() ?? "";
 
-    if (!summary && !emojiId && !emojiPackageId) {
+    if (
+      !emojiId &&
+      !emojiPackageId &&
+      !rawEmojiId &&
+      !rawEmojiPackageId &&
+      !faceName
+    ) {
       return null;
     }
-    return summary || "[表情]";
+    return summary || faceName || "[表情]";
+  }
+
+  private async resolveImageInputs(
+    payload: NapCatQQMessageEvent,
+    data: Record<string, unknown> | undefined,
+    rawElement?: NapCatQQRawElement,
+  ): Promise<InputContent[]> {
+    const mediaInputs = await this.resolveMediaInputs(payload, "image", data);
+    if (mediaInputs.some((input) => input.type === "inline_data")) {
+      return mediaInputs;
+    }
+    const marketFaceText = this.resolveMarketFaceText(data, rawElement);
+    if (!marketFaceText) {
+      return mediaInputs;
+    }
+    return [
+      {
+        type: "text",
+        text: `[QQ表情：${marketFaceText}]`,
+      },
+    ];
   }
 
   private async resolveMediaInputs(
@@ -429,6 +463,7 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
     if (directURL) {
       const inline = await this.fetchInlineDataFromURL(
         directURL,
+        kind,
         mimeType,
         hint,
       );
@@ -450,6 +485,7 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
 
     const inline = await this.fetchInlineDataFromURL(
       resolvedURL,
+      kind,
       mimeType,
       hint,
     );
@@ -467,6 +503,7 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
 
   private async fetchInlineDataFromURL(
     url: string,
+    kind: "image" | "file" | "video" | "audio",
     mimeType: MIME | null,
     hint: string | null,
   ): Promise<Extract<InputContent, { type: "inline_data" }> | null> {
@@ -485,6 +522,8 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
         return null;
       }
 
+      const buffer = Buffer.from(await response.arrayBuffer());
+
       const resolvedMimeType =
         mimeType ??
         resolveSupportedMediaMimeType(
@@ -502,8 +541,6 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
       ) {
         return null;
       }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
       if (!shouldAcceptMedia(resolvedMimeType, buffer.byteLength)) {
         return null;
       }
@@ -703,5 +740,9 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
     }
 
     return null;
+  }
+
+  private getRawElements(payload: NapCatQQMessageEvent): NapCatQQRawElement[] {
+    return Array.isArray(payload.raw?.elements) ? payload.raw.elements : [];
   }
 }
