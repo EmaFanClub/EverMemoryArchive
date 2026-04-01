@@ -72,6 +72,7 @@ describe("Server", () => {
       expect(qqConversation).toMatchObject({
         actorId: 1,
         session: "qq-chat-10726371",
+        allowProactive: true,
       });
       const qqGroupConversation =
         await server.conversationDB.getConversationByActorAndSession(
@@ -81,6 +82,7 @@ describe("Server", () => {
       expect(qqGroupConversation).toMatchObject({
         actorId: 1,
         session: "qq-group-114514",
+        allowProactive: false,
       });
     } finally {
       if (typeof previousQqUid === "undefined") {

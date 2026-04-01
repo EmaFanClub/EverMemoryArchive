@@ -31,6 +31,7 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
       description: "None.",
       actorId: 1,
       session: WEB_CHAT_1,
+      allowProactive: true,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };

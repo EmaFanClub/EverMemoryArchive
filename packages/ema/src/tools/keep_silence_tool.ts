@@ -40,11 +40,8 @@ export class KeepSilenceTool extends Tool {
       const payload = KeepSilenceSchema.parse(args);
       return {
         success: true,
-        content: JSON.stringify({
-          think: payload.think,
-          system:
-            "你选择沉默，请不要再调用任何工具了，包括这个工具本身，直接结束当前对话轮次即可。",
-        }),
+        content:
+          "你选择沉默，请不要再调用任何工具了，包括这个工具本身，直接结束当前对话轮次即可。",
       };
     } catch (err) {
       return {

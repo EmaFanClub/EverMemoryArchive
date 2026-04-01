@@ -349,6 +349,7 @@ export class Server {
       buildSession("web", "chat", String(user.id)),
       "Default",
       "这是你和你的拥有者之间在网页端进行的对话。",
+      false,
     );
     if (qqUid) {
       await this.createConversation(
@@ -356,6 +357,7 @@ export class Server {
         buildSession("qq", "chat", qqUid),
         "QQ Private Chat With Owner",
         "这是你和你的拥有者之间在 QQ 私聊中进行的对话。",
+        false,
       );
       console.log(`Created QQ private chat ${qqUid} for user ${user.id}`);
     }
@@ -365,6 +367,7 @@ export class Server {
         buildSession("qq", "group", qqGroupId),
         "QQ Group Chat",
         "这是你在 QQ 群聊中进行的对话。",
+        true,
       );
       console.log(`Created QQ group chat ${qqGroupId} for user ${user.id}`);
     }
@@ -388,16 +391,6 @@ export class Server {
           actorId: actor.id,
         },
       });
-      // await this.scheduler.scheduleEvery({
-      //   name: "actor_foreground",
-      //   runAt: Date.now(),
-      //   interval: 60_000,
-      //   data: {
-      //     actorId: actor.id,
-      //     conversationId: conversation.id,
-      //     prompt: EMA_FOREGROUND_REMINDER_PROMPT,
-      //   },
-      // });
     }
     await this.getActor(actor.id);
     return user;
@@ -474,16 +467,24 @@ export class Server {
     session: string,
     name: string = "default",
     description: string = "None.",
+    allowProactive: boolean = false,
   ) {
     const existing = await this.getConversationBySession(actorId, session);
-    if (existing) {
+    if (
+      existing &&
+      existing.name === name &&
+      existing.description === description &&
+      (existing.allowProactive ?? false) === allowProactive
+    ) {
       return existing;
     }
     const id = await this.conversationDB.upsertConversation({
+      ...(existing?.id ? { id: existing.id } : {}),
       actorId,
       session,
       name,
       description,
+      allowProactive,
     });
     const created = await this.conversationDB.getConversation(id);
     if (!created) {

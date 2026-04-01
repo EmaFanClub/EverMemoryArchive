@@ -398,6 +398,10 @@ export interface ConversationEntity extends Entity {
    */
   session: string;
   /**
+   * Whether this conversation allows heartbeat-triggered proactive messages.
+   */
+  allowProactive?: boolean;
+  /**
    * The date and time the conversation was last updated.
    */
   updatedAt?: DbDate;

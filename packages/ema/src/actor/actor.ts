@@ -1,5 +1,6 @@
 import type { Config } from "../config";
 import { Logger } from "../logger";
+import { EMA_FOREGROUND_HEARTBEAT_PROMPT } from "../memory/prompts";
 import type { Server } from "../server";
 import {
   WebsocketChannelClient,
@@ -11,6 +12,9 @@ import type { ActorChatInput, ActorInput, ActorSystemInput } from "./base";
 import { ActorWorker } from "./actor_worker";
 import { SessionManager } from "./session_manager";
 
+const DEFAULT_HEARTBEAT_CHECK_INTERVAL_MS = 60_000;
+const DEFAULT_HEARTBEAT_THRESHOLD_MS = 10 * 60_000;
+
 export class Actor {
   readonly sessionManager: SessionManager;
   private readonly channels = new Map<string, Channel>();
@@ -18,6 +22,9 @@ export class Actor {
   private currentConversationId: number | null = null;
   private currentWorker: ActorWorker | null = null;
   private acquiring = false;
+  private heartbeatEnabled = true;
+  private idleSince: number | null = null;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
   private readonly logger: Logger = Logger.create({
     name: "actor",
     level: "debug",
@@ -54,6 +61,7 @@ export class Actor {
       ),
     );
     actor.startChannels();
+    actor.startHeartbeat();
     return actor;
   }
 
@@ -112,6 +120,7 @@ export class Actor {
     conversationId: number,
     input: ActorInput,
   ): Promise<void> {
+    this.idleSince = null;
     if (input.kind === "chat") {
       await this.server.memoryManager.persistChatMessage(input);
     }
@@ -156,6 +165,7 @@ export class Actor {
     );
     this.currentConversationId = conversationId;
     this.currentWorker = worker;
+    this.idleSince = null;
     worker.events.on("actorResponsed", (event) => {
       const sessionInfo = resolveSession(event.response.session);
       if (!sessionInfo) {
@@ -225,6 +235,63 @@ export class Actor {
     }
     this.currentWorker = null;
     this.currentConversationId = null;
+  }
+
+  setHeartbeatEnabled(enabled: boolean): void {
+    this.heartbeatEnabled = enabled;
+    this.idleSince = null;
+  }
+
+  private startHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      return;
+    }
+    this.heartbeatTimer = setInterval(() => {
+      this.runDetached(this.tickHeartbeat(), "tick heartbeat");
+    }, DEFAULT_HEARTBEAT_CHECK_INTERVAL_MS);
+    this.heartbeatTimer.unref?.();
+  }
+
+  private async tickHeartbeat(): Promise<void> {
+    if (!this.heartbeatEnabled) {
+      return;
+    }
+    if (this.currentConversationId !== null) {
+      this.idleSince = null;
+      return;
+    }
+    const now = Date.now();
+    if (this.idleSince === null) {
+      this.idleSince = now;
+      return;
+    }
+    if (now - this.idleSince < DEFAULT_HEARTBEAT_THRESHOLD_MS) {
+      return;
+    }
+    this.idleSince = now;
+    const conversationId = await this.pickProactiveConversationId();
+    if (conversationId === null) {
+      return;
+    }
+    await this.enqueueActorInput(conversationId, {
+      kind: "system",
+      conversationId,
+      time: now,
+      inputs: [{ type: "text", text: EMA_FOREGROUND_HEARTBEAT_PROMPT }],
+    });
+  }
+
+  private async pickProactiveConversationId(): Promise<number | null> {
+    const conversations = await this.server.conversationDB.listConversations({
+      actorId: this.actorId,
+    });
+    const candidates = conversations.filter(
+      (conversation) => conversation.allowProactive === true,
+    );
+    if (candidates.length === 0) {
+      return null;
+    }
+    return candidates[Math.floor(Math.random() * candidates.length)].id ?? null;
   }
 
   private runDetached(task: Promise<void>, label: string): void {
