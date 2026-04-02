@@ -12,6 +12,7 @@ import {
 } from "../../memory/update_tasks";
 import type { ActorState } from "../../memory/base";
 import type { Server } from "../../server";
+import { formatTimestamp } from "../../utils";
 import type { JobHandler } from "../base";
 
 /**
@@ -223,13 +224,15 @@ function createBackgroundAgent(
   actorId: number,
   triggeredAt: number,
 ): Agent {
+  const fileName = `${formatTimestamp("YYYY-MM-DD-HH-mm-ss", triggeredAt)}.log`;
   return new Agent(
     server.config.agent,
     new LLMClient(server.config.llm),
     Logger.create({
       name,
       level: "debug",
-      transport: "console",
+      transport: ["console", "file"],
+      filePath: `${name}/actor_${actorId}/${fileName}`,
     }),
   );
 }

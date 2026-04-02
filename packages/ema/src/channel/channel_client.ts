@@ -15,7 +15,7 @@ import type {
 import { NapCatQQAdapter } from "./napcatqq_adapter";
 import { formatReplyRef, parseReplyRef } from "./utils";
 
-const DEFAULT_START_MAX_ATTEMPTS = 3;
+const DEFAULT_START_MAX_ATTEMPTS = 100_000_000;
 const DEFAULT_START_RETRY_DELAY_MS = 60_000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
 

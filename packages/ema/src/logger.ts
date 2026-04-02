@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import pino, { type Logger as PinoLogger, type LoggerOptions } from "pino";
 import pinoPretty from "pino-pretty";
@@ -154,10 +155,10 @@ function buildTransport(
       mkdir: true,
       ...prettyOptions,
     });
-    return pino.multistream([
-      { stream: consoleStream },
-      { stream: fileStream },
-    ]);
+    const tee = new PassThrough();
+    tee.pipe(consoleStream);
+    tee.pipe(fileStream);
+    return tee;
   }
   if (hasFile) {
     return pinoPretty({

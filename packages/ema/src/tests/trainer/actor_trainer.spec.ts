@@ -42,6 +42,9 @@ function createStubTrainingServer(events: string[]) {
         messageCount += 1;
       },
       addToBuffer: async () => {},
+      addShortTermMemory: async (actorId: number, item: { kind: string }) => {
+        events.push(`blank:${actorId}:${item.kind}`);
+      },
       upsertRolePrompt: async () => {},
     },
     createConversation: async () => ({ id: 1 }),
@@ -195,7 +198,7 @@ describe("ActorTrainer", () => {
     ]);
   });
 
-  test("does not flush leftover dialogue updates at the end of training", async () => {
+  test("flushes leftover dialogue updates and creates fresh buckets at the end of training", async () => {
     const events: string[] = [];
     const trainer = new ActorTrainer(
       createStubTrainingServer(events) as any,
@@ -233,7 +236,17 @@ describe("ActorTrainer", () => {
       checkpointDir: "/tmp/checkpoints",
     });
 
-    expect(events).toEqual(["add:1", "add:2"]);
+    expect(events).toEqual([
+      "add:1",
+      "add:2",
+      `update:dialogue_tick:${parseTimestamp(
+        "YYYY-MM-DD HH:mm:ss",
+        "2024-01-02 09:00:30",
+      )}`,
+      "blank:1:day",
+      "blank:1:week",
+      "blank:1:month",
+    ]);
   });
 
   test("rolls up before the next day and keeps pending dialogue count across days", async () => {
@@ -291,6 +304,9 @@ describe("ActorTrainer", () => {
         "YYYY-MM-DD HH:mm:ss",
         "2024-01-02 09:00:00",
       )}`,
+      "blank:1:day",
+      "blank:1:week",
+      "blank:1:month",
     ]);
   });
 
@@ -347,6 +363,13 @@ describe("ActorTrainer", () => {
         "2024-01-04 00:05:00",
       )}`,
       "add:2",
+      `update:dialogue_tick:${parseTimestamp(
+        "YYYY-MM-DD HH:mm:ss",
+        "2024-01-04 09:00:00",
+      )}`,
+      "blank:1:day",
+      "blank:1:week",
+      "blank:1:month",
     ]);
   });
 });

@@ -177,6 +177,30 @@ export class ActorTrainer {
           pendingDialogueCount = 0;
         }
       }
+      const finalTimestamp =
+        normalizedInputs[normalizedInputs.length - 1].timestamp;
+      if (pendingDialogueCount > 0) {
+        await this.runMemoryUpdate(
+          actorId,
+          conversationId,
+          req.bufferWindowSize,
+          finalTimestamp,
+          "dialogue_tick",
+        );
+        ({ checkpointId, stepCount } = await this.advanceStep(
+          "dialogue-tick",
+          checkpointId,
+          stepCount,
+          saveEverySteps,
+          messageCount,
+          actorId,
+          conversationId,
+          checkpointRoot,
+          finalTimestamp,
+          ["day"],
+        ));
+      }
+      await this.appendFreshShortTermBuckets(actorId, finalTimestamp);
       checkpointId += 1;
       await this.saveCheckpoint(
         "final",
@@ -397,6 +421,27 @@ export class ActorTrainer {
     await runActorCalendarRollupJob(this.server, {
       actorId,
       triggeredAt,
+    });
+  }
+
+  private async appendFreshShortTermBuckets(
+    actorId: number,
+    baseTimestamp: number,
+  ): Promise<void> {
+    await this.server.memoryManager.addShortTermMemory(actorId, {
+      kind: "day",
+      memory: "None.",
+      createdAt: Date.now(),
+    });
+    await this.server.memoryManager.addShortTermMemory(actorId, {
+      kind: "week",
+      memory: "None.",
+      createdAt: Date.now(),
+    });
+    await this.server.memoryManager.addShortTermMemory(actorId, {
+      kind: "month",
+      memory: "None.",
+      createdAt: Date.now(),
     });
   }
 
