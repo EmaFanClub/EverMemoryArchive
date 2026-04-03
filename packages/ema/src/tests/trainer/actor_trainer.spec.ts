@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import * as lancedb from "@lancedb/lancedb";
 
 import { ActorTrainer } from "../../trainer/actor_trainer";
@@ -29,27 +29,6 @@ const createTestConfig = () =>
     new MongoConfig(),
     new SystemConfig(),
   );
-
-function createStubTrainingServer(events: string[]) {
-  let messageCount = 0;
-  return {
-    actorDB: {
-      getActor: async () => ({ id: 1, roleId: null }),
-    },
-    memoryManager: {
-      persistChatMessage: async (message: { msgId: number }) => {
-        events.push(`add:${message.msgId}`);
-        messageCount += 1;
-      },
-      addToBuffer: async () => {},
-      addShortTermMemory: async (actorId: number, item: { kind: string }) => {
-        events.push(`blank:${actorId}:${item.kind}`);
-      },
-      upsertRolePrompt: async () => {},
-    },
-    createConversation: async () => ({ id: 1 }),
-  };
-}
 
 describe("ActorTrainer", () => {
   let mongo: Mongo;
@@ -183,193 +162,13 @@ describe("ActorTrainer", () => {
     });
   });
 
-  test("builds one daily rollup timestamp for each skipped calendar day", () => {
+  test("builds the end-of-day memory-update timestamp for a training day", () => {
     const trainer = new ActorTrainer(server, new MemFs());
 
-    const timestamps = (trainer as any).buildDailyRollupTimestamps(
-      "2024-01-02",
-      "2024-01-05",
+    const timestamp = (trainer as any).buildMemoryUpdateTimestamp("2024-01-02");
+
+    expect(timestamp).toBe(
+      parseTimestamp("YYYY-MM-DD HH:mm:ss", "2024-01-02 23:59:00"),
     );
-
-    expect(timestamps).toEqual([
-      parseTimestamp("YYYY-MM-DD HH:mm:ss", "2024-01-03 00:05:00"),
-      parseTimestamp("YYYY-MM-DD HH:mm:ss", "2024-01-04 00:05:00"),
-      parseTimestamp("YYYY-MM-DD HH:mm:ss", "2024-01-05 00:05:00"),
-    ]);
-  });
-
-  test("flushes leftover dialogue updates and creates fresh buckets at the end of training", async () => {
-    const events: string[] = [];
-    const trainer = new ActorTrainer(
-      createStubTrainingServer(events) as any,
-      new MemFs(),
-    );
-    vi.spyOn(trainer as any, "runMemoryUpdate").mockImplementation(
-      async (...args: unknown[]) => {
-        const triggeredAt = args[3] as number;
-        const task = args[4] as string;
-        events.push(`update:${task}:${triggeredAt}`);
-      },
-    );
-    vi.spyOn(trainer as any, "saveCheckpoint").mockResolvedValue(undefined);
-
-    await trainer.train({
-      actorId: 1,
-      characterName: "EMA",
-      dataset: {
-        description: "test",
-        inputs: [
-          {
-            name: "Alice",
-            time: "2024-01-02 09:00:00",
-            content: "Hello!",
-          },
-          {
-            name: "EMA",
-            time: "2024-01-02 09:00:30",
-            content: "Hi.",
-          },
-        ],
-      },
-      bufferWindowSize: 30,
-      diaryUpdateEvery: 3,
-      checkpointDir: "/tmp/checkpoints",
-    });
-
-    expect(events).toEqual([
-      "add:1",
-      "add:2",
-      `update:dialogue_tick:${parseTimestamp(
-        "YYYY-MM-DD HH:mm:ss",
-        "2024-01-02 09:00:30",
-      )}`,
-      "blank:1:day",
-      "blank:1:week",
-      "blank:1:month",
-    ]);
-  });
-
-  test("rolls up before the next day and keeps pending dialogue count across days", async () => {
-    const events: string[] = [];
-    const trainer = new ActorTrainer(
-      createStubTrainingServer(events) as any,
-      new MemFs(),
-    );
-    vi.spyOn(trainer as any, "runMemoryUpdate").mockImplementation(
-      async (...args: unknown[]) => {
-        const triggeredAt = args[3] as number;
-        const task = args[4] as string;
-        events.push(`update:${task}:${triggeredAt}`);
-      },
-    );
-    vi.spyOn(trainer as any, "saveCheckpoint").mockResolvedValue(undefined);
-
-    await trainer.train({
-      actorId: 1,
-      characterName: "EMA",
-      dataset: {
-        description: "test",
-        inputs: [
-          {
-            name: "Alice",
-            time: "2024-01-01 10:00:00",
-            content: "One",
-          },
-          {
-            name: "EMA",
-            time: "2024-01-01 10:00:30",
-            content: "Two",
-          },
-          {
-            name: "Alice",
-            time: "2024-01-02 09:00:00",
-            content: "Three",
-          },
-        ],
-      },
-      bufferWindowSize: 30,
-      diaryUpdateEvery: 3,
-      checkpointDir: "/tmp/checkpoints",
-    });
-
-    expect(events).toEqual([
-      "add:1",
-      "add:2",
-      `update:calendar_rollup:${parseTimestamp(
-        "YYYY-MM-DD HH:mm:ss",
-        "2024-01-02 00:05:00",
-      )}`,
-      "add:3",
-      `update:dialogue_tick:${parseTimestamp(
-        "YYYY-MM-DD HH:mm:ss",
-        "2024-01-02 09:00:00",
-      )}`,
-      "blank:1:day",
-      "blank:1:week",
-      "blank:1:month",
-    ]);
-  });
-
-  test("runs skipped-day calendar rollups without forcing a dialogue update", async () => {
-    const events: string[] = [];
-    const trainer = new ActorTrainer(
-      createStubTrainingServer(events) as any,
-      new MemFs(),
-    );
-    vi.spyOn(trainer as any, "runMemoryUpdate").mockImplementation(
-      async (...args: unknown[]) => {
-        const triggeredAt = args[3] as number;
-        const task = args[4] as string;
-        events.push(`update:${task}:${triggeredAt}`);
-      },
-    );
-    vi.spyOn(trainer as any, "saveCheckpoint").mockResolvedValue(undefined);
-
-    await trainer.train({
-      actorId: 1,
-      characterName: "EMA",
-      dataset: {
-        description: "test",
-        inputs: [
-          {
-            name: "Alice",
-            time: "2024-01-01 10:00:00",
-            content: "One",
-          },
-          {
-            name: "Alice",
-            time: "2024-01-04 09:00:00",
-            content: "Two",
-          },
-        ],
-      },
-      bufferWindowSize: 30,
-      diaryUpdateEvery: 3,
-      checkpointDir: "/tmp/checkpoints",
-    });
-
-    expect(events).toEqual([
-      "add:1",
-      `update:calendar_rollup:${parseTimestamp(
-        "YYYY-MM-DD HH:mm:ss",
-        "2024-01-02 00:05:00",
-      )}`,
-      `update:calendar_rollup:${parseTimestamp(
-        "YYYY-MM-DD HH:mm:ss",
-        "2024-01-03 00:05:00",
-      )}`,
-      `update:calendar_rollup:${parseTimestamp(
-        "YYYY-MM-DD HH:mm:ss",
-        "2024-01-04 00:05:00",
-      )}`,
-      "add:2",
-      `update:dialogue_tick:${parseTimestamp(
-        "YYYY-MM-DD HH:mm:ss",
-        "2024-01-04 09:00:00",
-      )}`,
-      "blank:1:day",
-      "blank:1:week",
-      "blank:1:month",
-    ]);
   });
 });

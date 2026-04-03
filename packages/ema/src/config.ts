@@ -17,7 +17,6 @@ import yaml from "js-yaml";
 
 import { RetryConfig } from "./llm/retry";
 import { type Tool, baseTools } from "./tools";
-import { skillsPrompt } from "./skills";
 export { RetryConfig } from "./llm/retry";
 
 /**
@@ -241,10 +240,6 @@ export class AgentConfig {
      */
     public readonly workspaceDir: string = "./workspace",
     /**
-     * The system prompt file for the agent.
-     */
-    public readonly systemPromptFile: string = "system_prompt.md",
-    /**
      * The token limit for the agent.
      */
     public readonly tokenLimit: number = 80000,
@@ -439,21 +434,6 @@ export class Config {
     }
   }
 
-  /**
-   * Gets the system prompt file path.
-   */
-  get systemPrompt(): string {
-    const path = Config.findConfigFile(this.agent.systemPromptFile);
-    if (!path) {
-      throw new Error(
-        `System prompt file not found: ${this.agent.systemPromptFile}`,
-      );
-    }
-    return fs
-      .readFileSync(path, "utf-8")
-      .replaceAll("{SKILLS_METADATA}", skillsPrompt);
-  }
-
   // TODO: populate with concrete tool instances when tool wiring is ready.
   get baseTools(): Tool[] {
     return baseTools;
@@ -483,7 +463,7 @@ export class Config {
    * | macOS   | `$HOME`/Library/Application Support      | /Users/Alice/Library/Application Support |
    * | Windows | `{FOLDERID_LocalAppData}`                | C:\Users\Alice\AppData\Local             |
    *
-   * @param filename Configuration file name (e.g., "config.yaml", "mcp.json", "system_prompt.md")
+   * @param filename Configuration file name (e.g., "config.yaml", "mcp.json")
    * @returns Path to found config file, or null if not found
    */
   static findConfigFile(filename: string): string | null {

@@ -33,7 +33,7 @@ describe("buildUserMessageFromActorInput", () => {
     expect(message.contents[0]).toEqual({
       type: "text",
       text: expect.stringContaining(
-        'weekday="Thursday" speaker="owner" session="qq-chat-1" uid="1" name="alice" msg_id="1"',
+        'speaker="owner" session="qq-chat-1" uid="1" name="alice" msg_id="1"',
       ),
     });
     expect(message.contents.slice(1)).toEqual([
@@ -80,7 +80,7 @@ describe("buildUserMessageFromActorInput", () => {
     expect(message.contents[0]).toEqual({
       type: "text",
       text: expect.stringContaining(
-        'weekday="Thursday" speaker="owner" session="qq-chat-1" uid="1" name="alice" msg_id="2"',
+        'speaker="owner" session="qq-chat-1" uid="1" name="alice" msg_id="2"',
       ),
     });
     expect(message.contents.slice(1)).toEqual([

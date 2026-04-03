@@ -2,7 +2,7 @@ import { z } from "zod";
 import { countApproxTextLength, Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
 import type { LongTermMemory } from "../../memory/base";
-import { getMemoryUpdateTaskData } from "../../memory/update_tasks";
+import { getShortTermMemoryTaskData } from "../../memory/update_tasks";
 import { Logger } from "../../logger";
 import { Index0Enum, Index1Enum } from "../../memory/utils";
 import { formatTimestamp } from "../../utils";
@@ -101,7 +101,7 @@ export default class UpdateLongTermMemorySkill extends Skill {
       };
     }
 
-    const createdAt = getMemoryUpdateTaskData(context?.data)?.triggeredAt;
+    const createdAt = getShortTermMemoryTaskData(context?.data)?.triggeredAt;
     const results: { id: number; createdAt: string }[] = [];
 
     for (let i = 0; i < payload.operations.length; i++) {

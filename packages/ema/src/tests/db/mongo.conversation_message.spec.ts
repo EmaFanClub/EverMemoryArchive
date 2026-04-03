@@ -58,7 +58,7 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     expect(retrievedMessage).toEqual(stored);
   });
 
-  test("should assign conversation-scoped msgIds sequentially", async () => {
+  test("should assign actor-scoped msgIds sequentially", async () => {
     const first = await db.addConversationMessage({
       conversationId: 1,
       actorId: 1,
@@ -93,8 +93,8 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     });
 
     expect(first.msgId).toBe(1);
-    expect(second.msgId).toBe(1);
-    expect(third.msgId).toBe(2);
+    expect(second.msgId).toBe(2);
+    expect(third.msgId).toBe(1);
   });
 
   test("should delete a conversation message", async () => {

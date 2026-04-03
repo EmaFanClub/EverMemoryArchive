@@ -7,8 +7,8 @@ export class Gateway {
 
   constructor(private readonly server: Server) {}
 
-  async reserveMessageId(conversationId: number): Promise<number> {
-    return this.server.conversationMessageDB.reserveMessageId(conversationId);
+  async reserveMessageId(actorId: number): Promise<number> {
+    return this.server.conversationMessageDB.reserveMessageId(actorId);
   }
 
   async dispatchChannel(
@@ -58,10 +58,7 @@ export class Gateway {
       };
     }
 
-    const msgId =
-      event.channel === "web"
-        ? Number(event.channelMessageId)
-        : await this.reserveMessageId(conversation.id);
+    const msgId = await this.reserveMessageId(actorId);
     const normalizedReplyTo = await this.normalizeReplyTo(
       conversation.id,
       event.replyTo,

@@ -49,18 +49,18 @@ export async function buildTrainingCheckpointSnapshot(
   if (!actor) {
     throw new Error(`Actor with ID ${actorId} not found.`);
   }
-  const [role, personality, day, week, month, year, longTerm] =
+  const [role, personality, activity, day, month, year, longTerm] =
     await Promise.all([
       server.roleDB.getRole(actor.roleId),
       server.personalityDB.getPersonality(actorId),
       server.shortTermMemoryDB.listShortTermMemories({
         actorId,
-        kind: "day",
+        kind: "activity",
         sort: "asc",
       }),
       server.shortTermMemoryDB.listShortTermMemories({
         actorId,
-        kind: "week",
+        kind: "day",
         sort: "asc",
       }),
       server.shortTermMemoryDB.listShortTermMemories({
@@ -80,8 +80,8 @@ export async function buildTrainingCheckpointSnapshot(
     roleBook: role?.prompt ?? "None.",
     personalityMemory: personality?.memory ?? "None.",
     shortTermMemory: {
+      activity,
       day,
-      week,
       month,
       year,
     },

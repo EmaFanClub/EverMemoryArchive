@@ -1,48 +1,45 @@
 /**
- * Background prompt used for dialogue-tick diary updates.
+ * Background prompt used for activity-tick updates.
  */
-export const EMA_DIALOGUE_TICK_PROMPT = `
+export const EMA_ACTIVITY_TICK_PROMPT = `
 # Task
 
-这是一个由对话数量触发的日记更新任务，用于把近期对话总结到日记中。本次允许更新的短期记忆类型：{ALLOWED_MEMORY_KINDS}
+这是一个由对话数量触发的 activity 更新任务，严格按照以下流程执行。
 
 # Workflow
 
-1. 调用 get_skill 读取 update-short-term-memory-skill 技能说明。
-2. 基于当前已有的角色、人格、短期记忆、长期记忆，严格按照 update-short-term-memory-skill 技能的工作流程进行更新。
-3. 第2步执行完后调用 get_skill 读取 update-long-term-memory-skill 技能说明，判断是否需要更新长期记忆，并使用相应技能进行更新。
-4. 第3步执行完后调用 get_skill 读取 update-role-book-skill 技能说明，判断是否需要更新角色书，并使用相应技能进行更新。
-5. 第4步执行完后调用 get_skill 读取 update-personality-skill 技能说明，判断是否需要更新人格记忆，并使用相应技能进行更新。
+1. 调用 get_skill 读取 update-short-term-memory-skill 技能说明，并严格按照该技能说明执行。
+2. 第1步执行完后调用 get_skill 读取 update-long-term-memory-skill 技能说明，判断是否需要更新长期记忆，并严格按照该技能说明执行。（更新前注意检索）
+3. 第2步执行完后调用 get_skill 读取 update-role-book-skill 技能说明，判断是否需要更新角色书，并严格按照该技能说明执行。
+4. 第3步执行完后调用 get_skill 读取 update-personality-skill 技能说明，判断是否需要更新人格记忆，并严格按照该技能说明执行。
 
 # Constraints
 
-- 必须更新 day 记忆。
-- 禁止修改 year / month / week 记忆。
-- 不得脱离角色和人格的约束，不得编造不存在于短期记忆、长期记忆、近期对话中的事实。
-- 这是一个后台任务，更新完成后不要产生任何额外的回复和输出，也不要调用 ema_reply 或 keep_silence 工具，直接结束即可。
+- update-short-term-memory-skill 只允许新增 activity 记录，不得修改 day、month、year。
+- 更新记忆时必须基于当前对话上下文与记忆，不得编造事实。
+- 这是后台任务，完成后直接结束，不要调用 ema_reply 或 keep_silence。
 `;
 
 /**
- * Background prompt used for calendar-triggered short-term-memory rollups.
+ * Background prompt used for daily memory-update rollups.
  */
-export const EMA_CALENDAR_ROLLUP_PROMPT = `
+export const EMA_MEMORY_UPDATE_PROMPT = `
 # Task
 
-这是一个由时间触发的记忆压缩任务，用于在每天/每周/每月/每年结束时把短期记忆进行压缩整理。本次允许更新的短期记忆类型：{ALLOWED_MEMORY_KINDS}
+这是一个由时间触发的记忆整理任务，严格按照以下流程执行。
 
 # Workflow
 
-1. 调用 get_skill 读取 update-short-term-memory-skill 技能说明。
-2. 基于当前已有的角色、人格、短期记忆、长期记忆，严格按照 update-short-term-memory-skill 技能的工作流程进行更新。
-3. 第2步执行完后调用 get_skill 读取 update-long-term-memory-skill 技能说明，判断是否需要更新长期记忆，并使用相应技能进行更新。
-4. 第3步执行完后调用 get_skill 读取 update-role-book-skill 技能说明，判断是否需要更新角色书，并使用相应技能进行更新。
-5. 第4步执行完后调用 get_skill 读取 update-personality-skill 技能说明，判断是否需要更新人格记忆，并使用相应技能进行更新。
+1. 调用 get_skill 读取 update-short-term-memory-skill 技能说明，并严格按照该技能说明执行。
+2. 第1步执行完后调用 get_skill 读取 update-long-term-memory-skill 技能说明，判断是否需要更新长期记忆，并严格按照该技能说明执行。（更新前注意检索）
+3. 第2步执行完后调用 get_skill 读取 update-role-book-skill 技能说明，判断是否需要更新角色书，并严格按照该技能说明执行。
+4. 第3步执行完后调用 get_skill 读取 update-personality-skill 技能说明，判断是否需要更新人格记忆，并严格按照该技能说明执行。
 
 # Constraints
 
-- 必须严格遵守 Task 中给定的允许更新类型，不得自行增删。
-- 不得脱离角色和人格的约束，不得编造不存在于短期记忆、长期记忆、近期对话中的事实。
-- 这是一个后台任务，更新完成后不要产生任何额外的回复和输出，也不要调用 ema_reply 或 keep_silence 工具，直接结束即可。
+- update-short-term-memory-skill 只能按技能返回的任务更新指定的目标记忆，不得修改其他 kind 或其他日期。
+- 更新记忆时必须基于当前对话上下文与记忆，不得编造事实。
+- 这是后台任务，完成后直接结束，不要调用 ema_reply 或 keep_silence。
 `;
 
 /**

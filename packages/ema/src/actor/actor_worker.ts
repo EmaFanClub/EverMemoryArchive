@@ -87,7 +87,7 @@ export class ActorWorker {
           }
           const msgId =
             await this.server.conversationMessageDB.reserveMessageId(
-              this.conversationId,
+              this.actorId,
             );
           const response: ActorChatResponse = {
             kind: "chat",
@@ -202,7 +202,6 @@ export class ActorWorker {
         } else {
           this.agentState = {
             systemPrompt: await this.server.memoryManager.buildSystemPrompt(
-              this.config.systemPrompt,
               this.actorId,
               this.conversationId,
             ),

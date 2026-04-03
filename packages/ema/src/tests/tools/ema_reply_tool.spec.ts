@@ -10,7 +10,7 @@ describe("EmaReplyTool", () => {
 
   it("should have correct name and description", () => {
     expect(tool.name).toBe("ema_reply");
-    expect(tool.description).toContain("唯一渠道");
+    expect(tool.description).toContain("唯一方式");
   });
 
   it("should expose required parameters schema", () => {

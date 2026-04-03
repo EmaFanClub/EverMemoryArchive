@@ -375,9 +375,9 @@ export class Server {
     }
     if (this.scheduler) {
       await this.scheduler.scheduleEvery({
-        name: "actor_calendar_rollup",
+        name: "actor_memory_update",
         runAt: Date.now(),
-        interval: "5 0 * * *",
+        interval: "59 23 * * *",
         data: {
           actorId: actor.id,
         },

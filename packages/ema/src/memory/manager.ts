@@ -1,7 +1,5 @@
 import type {
   ActorMemory,
-  ActorState,
-  ActorStateStorage,
   BufferMessage,
   BufferStorage,
   BufferWriteMessage,
@@ -12,6 +10,7 @@ import type {
 } from "./base";
 import type {
   ActorDB,
+  ConversationDB,
   ConversationMessageDB,
   ExternalIdentityBindingDB,
   LongTermMemoryDB,
@@ -21,29 +20,37 @@ import type {
   ShortTermMemoryDB,
   UserDB,
   UserOwnActorDB,
-  ConversationDB,
+  ListShortTermMemoriesRequest,
 } from "../db";
 import { Logger } from "../logger";
-import { runActorDialogueTickJob } from "../scheduler/jobs/actor.job";
+import { runActorActivityTickJob } from "../scheduler/jobs/actor.job";
+import { loadPromptTemplate } from "../prompt/loader";
 import { buildPromptFromBufferMessage, isActorChatInput } from "./utils";
 import { parseReplyRef, resolveSession } from "../channel";
 import type { Server } from "../server";
+import { formatTimestamp, parseTimestamp } from "../utils";
+import { skillsPrompt } from "../skills";
 
 /**
  * Memory manager implementation backed by database interfaces.
  */
-export class MemoryManager
-  implements BufferStorage, ActorStateStorage, ActorMemory
-{
-  /** Number of buffer additions required before triggering diary update. */
+export class MemoryManager implements BufferStorage, ActorMemory {
+  /** Number of buffer messages injected into chat prompts. */
   readonly bufferWindowSize = 30;
+  /** Number of resumed messages required before triggering an activity update. */
   readonly diaryUpdateEvery = 20;
-  private readonly shortTermUpdateLocks = new Map<number, Promise<void>>();
+  /** Number of unprocessed day entries injected into chat prompts. */
+  readonly dayWindowSize = 2;
+  /** Number of unprocessed month entries injected into chat prompts. */
+  readonly monthWindowSize = 2;
+  /** Number of unprocessed activity entries injected into chat prompts. */
+  readonly activityWindowSize = 100;
   private readonly logger: Logger = Logger.create({
     name: "MemoryManager",
     level: "debug",
     transport: "console",
   });
+
   /**
    * Creates a new MemoryManager instance.
    * @param roleDB - Role persistence interface.
@@ -57,7 +64,7 @@ export class MemoryManager
    * @param shortTermMemoryDB - Short-term memory persistence interface.
    * @param longTermMemoryDB - Long-term memory persistence interface.
    * @param longTermMemorySearcher - Long-term memory search interface.
-   * @param server - Optional server runtime used for direct dialogue-tick execution.
+   * @param server - Optional server runtime used for direct activity-tick execution.
    */
   constructor(
     private readonly roleDB: RoleDB,
@@ -86,61 +93,46 @@ export class MemoryManager
   }
 
   /**
-   * Gets the state of the actor.
+   * Builds the chat system prompt by injecting role/personality markdown,
+   * short-term memory, and recent conversation history.
    * @param actorId - The actor identifier to read.
-   * @param conversationId - Optional conversation identifier used for buffer history.
-   * @returns The state of the actor.
-   */
-  async getState(
-    actorId: number,
-    conversationId?: number,
-  ): Promise<ActorState> {
-    const [memoryDay, memoryWeek, memoryMonth, memoryYear, buffer] =
-      await Promise.all([
-        this.getShortTermMemory(actorId, "day", 1),
-        this.getShortTermMemory(actorId, "week", 1),
-        this.getShortTermMemory(actorId, "month", 1),
-        this.getShortTermMemory(actorId, "year", 1),
-        conversationId === undefined
-          ? Promise.resolve<BufferMessage[] | undefined>(undefined)
-          : this.getBuffer(conversationId, this.bufferWindowSize),
-      ]);
-    return {
-      memoryDay: memoryDay[0] ?? { kind: "day", memory: "None." },
-      memoryWeek: memoryWeek[0] ?? { kind: "week", memory: "None." },
-      memoryMonth: memoryMonth[0] ?? { kind: "month", memory: "None." },
-      memoryYear: memoryYear[0] ?? { kind: "year", memory: "None." },
-      ...(buffer ? { buffer } : {}),
-    };
-  }
-
-  /**
-   * Builds the system prompt by injecting role/personality markdown, short-term memory, and buffer history.
-   *
-   * The placeholders `{ROLE_PROMPT}`, `{PERSONALITY_MEMORY}`, `{MEMORY_YEAR}`,
-   * `{MEMORY_MONTH}`, `{MEMORY_WEEK}`, `{MEMORY_DAY}`, and `{MEMORY_BUFFER}`
-   * are replaced with the latest data. If a placeholder is missing, the
-   * original template is returned unchanged for that field.
-   *
-   * @param actorId - The actor identifier to read short-term memories.
-   * @param conversationId - The conversation identifier to read buffer messages.
-   * @param systemPrompt - The system prompt template containing memory placeholders.
-   * @param actorState - Optional preloaded actor state to avoid extra queries.
-   * @returns The system prompt with memory injected.
+   * @param conversationId - Optional conversation identifier used for recent history.
+   * @returns The fully injected system prompt.
    */
   async buildSystemPrompt(
-    systemPrompt: string,
     actorId: number,
     conversationId?: number,
-    actorState?: ActorState,
   ): Promise<string> {
-    const state = actorState ?? (await this.getState(actorId, conversationId));
-    const [actor, personality, conversation] = await Promise.all([
+    const template = await loadPromptTemplate(
+      "preamble.md",
+      "system.md",
+      "world.md",
+      "you.md",
+      "memory.md",
+      "interaction-guidelines.md",
+    );
+    const [
+      actor,
+      personality,
+      conversation,
+      yearMemory,
+      monthMemory,
+      dayMemory,
+      activityMemory,
+      buffer,
+    ] = await Promise.all([
       this.actorDB.getActor(actorId),
       this.personalityDB.getPersonality(actorId),
       conversationId === undefined
         ? Promise.resolve(null)
         : this.conversationDB.getConversation(conversationId),
+      this.buildYearMemoryPrompt(actorId),
+      this.buildMonthMemoryPrompt(actorId),
+      this.buildDayMemoryPrompt(actorId),
+      this.buildActivityMemoryPrompt(actorId),
+      conversationId === undefined
+        ? Promise.resolve<BufferMessage[]>([])
+        : this.getBuffer(conversationId, this.bufferWindowSize),
     ]);
     const role = actor?.roleId ? await this.roleDB.getRole(actor.roleId) : null;
     const rolePrompt = role?.prompt ?? "None.";
@@ -152,22 +144,136 @@ export class MemoryManager
     const ownerUid = sessionInfo
       ? await this.getOwnerUid(actorId, sessionInfo.channel)
       : null;
-    const buffer = state.buffer ?? [];
     const bufferText =
       buffer.length === 0
         ? "None."
         : buffer
             .map((item) => buildPromptFromBufferMessage(item, ownerUid))
             .join("\n");
-    return systemPrompt
+    return template
+      .replaceAll("{SKILLS_METADATA}", skillsPrompt)
       .replaceAll("{ROLE_PROMPT}", rolePrompt)
       .replaceAll("{PERSONALITY_MEMORY}", personalityMemory)
       .replaceAll("{CONVERSATION_DESCRIPTION}", conversationDescription)
-      .replaceAll("{MEMORY_YEAR}", state.memoryYear.memory)
-      .replaceAll("{MEMORY_MONTH}", state.memoryMonth.memory)
-      .replaceAll("{MEMORY_WEEK}", state.memoryWeek.memory)
-      .replaceAll("{MEMORY_DAY}", state.memoryDay.memory)
+      .replaceAll("{MEMORY_YEAR}", yearMemory)
+      .replaceAll("{MEMORY_MONTH}", monthMemory)
+      .replaceAll("{MEMORY_DAY}", dayMemory)
+      .replaceAll("{MEMORY_ACTIVITY}", activityMemory)
       .replaceAll("{MEMORY_BUFFER}", bufferText);
+  }
+
+  /**
+   * Builds the background prompt used for memory maintenance.
+   * @param actorId - The actor identifier to read.
+   * @returns The injected system prompt without memory or recent conversation.
+   */
+  async buildSystemPromptForMemoryUpdate(actorId: number): Promise<string> {
+    const template = await loadPromptTemplate(
+      "preamble.md",
+      "system.md",
+      "world.md",
+      "you.md",
+    );
+    const [actor, personality] = await Promise.all([
+      this.actorDB.getActor(actorId),
+      this.personalityDB.getPersonality(actorId),
+    ]);
+    const role = actor?.roleId ? await this.roleDB.getRole(actor.roleId) : null;
+    return template
+      .replaceAll("{SKILLS_METADATA}", skillsPrompt)
+      .replaceAll("{ROLE_PROMPT}", role?.prompt ?? "None.")
+      .replaceAll("{PERSONALITY_MEMORY}", personality?.memory ?? "None.");
+  }
+
+  private async buildYearMemoryPrompt(actorId: number): Promise<string> {
+    const records = await this.listShortTermMemories(actorId, {
+      kind: "year",
+      sort: "asc",
+    });
+    return this.formatFlatMemoryLines(records).join("\n");
+  }
+
+  private async buildMonthMemoryPrompt(actorId: number): Promise<string> {
+    const records = await this.listShortTermMemories(actorId, {
+      kind: "month",
+      processed: false,
+      sort: "desc",
+      limit: this.monthWindowSize,
+    });
+    return this.formatFlatMemoryLines([...records].reverse()).join("\n");
+  }
+
+  private async buildDayMemoryPrompt(actorId: number): Promise<string> {
+    const records = await this.listShortTermMemories(actorId, {
+      kind: "day",
+      processed: false,
+      sort: "desc",
+      limit: this.dayWindowSize,
+    });
+    return this.formatDayMemoryLines([...records].reverse()).join("\n");
+  }
+
+  private async buildActivityMemoryPrompt(actorId: number): Promise<string> {
+    const records = await this.listShortTermMemories(actorId, {
+      kind: "activity",
+      processed: false,
+      sort: "desc",
+      limit: this.activityWindowSize,
+    });
+    return this.formatActivityLines([...records].reverse()).join("\n");
+  }
+
+  private formatFlatMemoryLines(records: ShortTermMemoryRecord[]): string[] {
+    if (records.length === 0) {
+      return ["- None."];
+    }
+    return records.map(
+      (item) => `- ${item.date}：${this.toSingleLine(item.memory)}`,
+    );
+  }
+
+  private formatDayMemoryLines(records: ShortTermMemoryRecord[]): string[] {
+    if (records.length === 0) {
+      return ["- None."];
+    }
+    return records.map((item) => {
+      const weekday = this.formatChineseWeekday(item.date);
+      return `- ${item.date}（${weekday}）：${this.toSingleLine(item.memory)}`;
+    });
+  }
+
+  private formatActivityLines(records: ShortTermMemoryRecord[]): string[] {
+    if (records.length === 0) {
+      return ["- None."];
+    }
+    const grouped = new Map<string, string[]>();
+    for (const item of records) {
+      const bucket = grouped.get(item.date) ?? [];
+      bucket.push(this.toSingleLine(item.memory));
+      grouped.set(item.date, bucket);
+    }
+    const lines: string[] = [];
+    for (const [date, memories] of grouped) {
+      lines.push(`- ${date}`);
+      for (const memory of memories) {
+        lines.push(`  - ${memory}`);
+      }
+      lines.push("");
+    }
+    if (lines[lines.length - 1] === "") {
+      lines.pop();
+    }
+    return lines;
+  }
+
+  private toSingleLine(value: string): string {
+    return value.replaceAll(/\s+/g, " ").trim() || "None.";
+  }
+
+  private formatChineseWeekday(date: string): string {
+    return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
+      new Date(parseTimestamp("YYYY-MM-DD", date)).getDay()
+    ];
   }
 
   /**
@@ -273,16 +379,16 @@ export class MemoryManager
   }
 
   /**
-   * Adds a single persisted message into the resumed buffer and triggers day updates when needed.
+   * Adds a single persisted message into the resumed buffer and triggers activity updates when needed.
    * @param conversationId - The conversation identifier.
-   * @param msgId - Conversation-scoped message identifier.
-   * @param triggerDialogueTick - Whether this add should participate in online dialogue-tick triggering.
-   * @param triggeredAt - Optional timestamp used when triggering dialogue-tick jobs.
+   * @param msgId - Actor-scoped message identifier.
+   * @param triggerActivityTick - Whether this add should participate in online activity-tick triggering.
+   * @param triggeredAt - Optional timestamp used when triggering activity-tick jobs.
    */
   async addToBuffer(
     conversationId: number,
     msgId: number,
-    triggerDialogueTick: boolean,
+    triggerActivityTick: boolean,
     triggeredAt?: number,
   ): Promise<void> {
     const updated =
@@ -300,7 +406,7 @@ export class MemoryManager
         true,
       );
     if (
-      !triggerDialogueTick ||
+      !triggerActivityTick ||
       resumedCount % this.diaryUpdateEvery !== 0 ||
       !this.server
     ) {
@@ -308,14 +414,12 @@ export class MemoryManager
     }
 
     const actorId = await this.getActorIdByConversation(conversationId);
-    const actorState = await this.getState(actorId, conversationId);
-    void runActorDialogueTickJob(this.server, {
+    void runActorActivityTickJob(this.server, {
       actorId,
       conversationId,
-      actorState,
       triggeredAt: triggeredAt ?? Date.now(),
     }).catch((error) => {
-      this.logger.error("Failed to run actor dialogue tick job:", error);
+      this.logger.error("Failed to run actor activity tick job:", error);
     });
   }
 
@@ -358,22 +462,37 @@ export class MemoryManager
   }
 
   /**
-   * Lists short term memories for the actor.
+   * Lists short-term memories for the actor.
    * @param actorId - The actor identifier to query.
    * @param kind - Optional memory kind filter.
    * @param limit - Optional maximum number of memories to return.
-   * @returns The short term memories sorted by newest first.
+   * @returns The short-term memories sorted by newest first.
    */
   async getShortTermMemory(
     actorId: number,
     kind?: ShortTermMemory["kind"],
     limit?: number,
   ): Promise<ShortTermMemoryRecord[]> {
+    return this.listShortTermMemories(actorId, {
+      ...(kind ? { kind } : {}),
+      ...(limit !== undefined ? { limit } : {}),
+      sort: "desc",
+    });
+  }
+
+  /**
+   * Lists short-term memories with additional filters.
+   * @param actorId - The actor identifier to query.
+   * @param req - Additional list filters.
+   * @returns Matching short-term memory records.
+   */
+  async listShortTermMemories(
+    actorId: number,
+    req: Omit<ListShortTermMemoriesRequest, "actorId"> = {},
+  ): Promise<ShortTermMemoryRecord[]> {
     const items = await this.shortTermMemoryDB.listShortTermMemories({
       actorId,
-      kind,
-      sort: "desc",
-      limit,
+      ...req,
     });
     return items.map((item) => {
       if (typeof item.id !== "number") {
@@ -382,141 +501,125 @@ export class MemoryManager
       return {
         id: item.id,
         kind: item.kind,
+        date: item.date,
         memory: item.memory,
         createdAt: item.createdAt ?? Date.now(),
+        updatedAt: item.updatedAt,
+        processedAt: item.processedAt,
       };
     });
   }
 
   /**
-   * Adds a short-term memory item to the actor.
+   * Appends a new short-term memory item to the actor.
    * @param actorId - The actor identifier to update.
    * @param item - The short-term memory item to add.
    */
-  async addShortTermMemory(
+  async appendShortTermMemory(
     actorId: number,
     item: ShortTermMemory,
   ): Promise<void> {
+    const now = item.updatedAt ?? Date.now();
     await this.shortTermMemoryDB.appendShortTermMemory({
       actorId,
-      ...item,
+      kind: item.kind,
+      date: item.date,
+      memory: item.memory,
+      createdAt: item.createdAt,
+      updatedAt: now,
+      processedAt: item.processedAt,
     });
   }
 
   /**
-   * Upserts the latest short-term memory bucket of the same kind.
+   * Inserts or updates a short-term memory item identified by kind and date.
    * @param actorId - The actor identifier to update.
    * @param item - The short-term memory item to write.
    */
-  async upsertLatestShortTermMemory(
+  async upsertShortTermMemory(
     actorId: number,
     item: ShortTermMemory,
   ): Promise<void> {
-    await this.withShortTermUpdateLock(actorId, async () => {
-      const latest = await this.getShortTermMemory(actorId, item.kind, 1);
-      const now = Date.now();
-      if (latest.length === 0) {
-        await this.shortTermMemoryDB.appendShortTermMemory({
-          actorId,
-          kind: item.kind,
-          memory: item.memory,
-          messages: item.messages,
-          updatedAt: now,
-        });
-      } else {
-        await this.shortTermMemoryDB.upsertShortTermMemory({
-          id: latest[0].id,
-          actorId,
-          kind: item.kind,
-          memory: item.memory,
-          messages: item.messages,
-          createdAt: latest[0].createdAt,
-          updatedAt: now,
-        });
-      }
-
-      await this.rolloverAfterShortTermUpdate(actorId, item.kind);
+    const existing = await this.listShortTermMemories(actorId, {
+      kind: item.kind,
+      date: item.date,
+      limit: 1,
     });
-  }
-
-  /**
-   * Rolls over the lower-level short-term memory bucket after update.
-   * @param actorId - The actor identifier to update.
-   * @param kind - Updated short-term memory kind.
-   */
-  private async rolloverAfterShortTermUpdate(
-    actorId: number,
-    kind: ShortTermMemory["kind"],
-  ): Promise<void> {
-    let targetKind: ShortTermMemory["kind"] | null = null;
-    switch (kind) {
-      case "week":
-        targetKind = "day";
-        break;
-      case "month":
-        targetKind = "week";
-        break;
-      case "year":
-        targetKind = "month";
-        break;
-      default:
-        targetKind = null;
-    }
-    if (!targetKind) {
+    const now = item.updatedAt ?? Date.now();
+    if (existing.length === 0) {
+      await this.shortTermMemoryDB.appendShortTermMemory({
+        actorId,
+        kind: item.kind,
+        date: item.date,
+        memory: item.memory,
+        createdAt: item.createdAt,
+        updatedAt: now,
+        processedAt: item.processedAt,
+      });
       return;
     }
-    const latest = await this.getShortTermMemory(actorId, targetKind, 1);
-    if (
-      latest.length > 0 &&
-      this.isEmptyShortTermMemoryText(latest[0].memory)
-    ) {
-      return;
-    }
-    await this.shortTermMemoryDB.appendShortTermMemory({
+    await this.shortTermMemoryDB.upsertShortTermMemory({
+      id: existing[0].id,
       actorId,
-      kind: targetKind,
-      memory: "None.",
-      updatedAt: Date.now(),
+      kind: item.kind,
+      date: item.date,
+      memory: item.memory,
+      createdAt: existing[0].createdAt,
+      updatedAt: now,
+      processedAt: item.processedAt,
     });
   }
 
   /**
-   * Checks whether the memory text is considered empty.
-   * @param memory - Memory text to inspect.
-   * @returns True if empty.
+   * Marks the specified short-term memory records as processed.
+   * @param actorId - The actor identifier to update.
+   * @param ids - Memory record identifiers to mark.
+   * @param processedAt - Processing timestamp.
    */
-  private isEmptyShortTermMemoryText(memory: string): boolean {
-    const normalized = memory.trim();
-    return normalized.length === 0 || normalized === "None.";
-  }
-
-  /**
-   * Serializes short-term memory updates for the same actor.
-   * @param actorId - The actor identifier.
-   * @param fn - Update logic to execute under lock.
-   * @returns The callback result.
-   */
-  private async withShortTermUpdateLock<T>(
+  async markShortTermMemoryRecordsProcessed(
     actorId: number,
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    const previous =
-      this.shortTermUpdateLocks.get(actorId) ?? Promise.resolve();
-    let release: () => void = () => {};
-    const current = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const chain = previous.then(() => current);
-    this.shortTermUpdateLocks.set(actorId, chain);
-    await previous;
-    try {
-      return await fn();
-    } finally {
-      release();
-      if (this.shortTermUpdateLocks.get(actorId) === chain) {
-        this.shortTermUpdateLocks.delete(actorId);
-      }
+    ids: number[],
+    processedAt: number,
+  ): Promise<void> {
+    if (ids.length === 0) {
+      return;
     }
+    const records = await this.listShortTermMemories(actorId, {
+      ids,
+    });
+    await Promise.all(
+      records.map((record) =>
+        this.shortTermMemoryDB.upsertShortTermMemory({
+          id: record.id,
+          actorId,
+          kind: record.kind,
+          date: record.date,
+          memory: record.memory,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt ?? processedAt,
+          processedAt,
+        }),
+      ),
+    );
+  }
+
+  /**
+   * Gets the activity snapshot used by memory-update jobs.
+   * @param actorId - The actor identifier to read.
+   * @param triggeredAt - Trigger timestamp in milliseconds.
+   * @returns Unprocessed activities up to the trigger date.
+   */
+  async getActivitySnapshot(
+    actorId: number,
+    triggeredAt: number,
+  ): Promise<ShortTermMemoryRecord[]> {
+    const triggerDate = formatTimestamp("YYYY-MM-DD", triggeredAt);
+    const activities = await this.listShortTermMemories(actorId, {
+      kind: "activity",
+      processed: false,
+      sort: "asc",
+    });
+    return activities.filter((item) => item.date <= triggerDate);
   }
 
   /**
@@ -570,6 +673,12 @@ export class MemoryManager
     });
   }
 
+  /**
+   * Resolves the owner UID of the actor for a specific channel.
+   * @param actorId - The actor identifier.
+   * @param channel - External channel name.
+   * @returns Matching owner UID or null.
+   */
   async getOwnerUid(actorId: number, channel: string): Promise<string | null> {
     const userId = await this.userOwnActorDB.getActorOwner(actorId);
     if (userId === null) {

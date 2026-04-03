@@ -72,7 +72,7 @@ describe("Server", () => {
       expect(qqConversation).toMatchObject({
         actorId: 1,
         session: "qq-chat-10726371",
-        allowProactive: true,
+        allowProactive: false,
       });
       const qqGroupConversation =
         await server.conversationDB.getConversationByActorAndSession(
@@ -126,7 +126,7 @@ describe("Server", () => {
       });
 
       const backgroundJobs = await server.scheduler.listJobs({
-        name: "actor_calendar_rollup",
+        name: "actor_memory_update",
         "data.actorId": 1,
       });
       const foregroundJobs = await server.scheduler.listJobs({

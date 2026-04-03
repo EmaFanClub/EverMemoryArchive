@@ -1,85 +1,95 @@
-import type { ShortTermMemory } from "./base";
+import type { ShortTermMemoryRecord, ShortTermMemory } from "./base";
+import { formatTimestamp } from "../utils";
 
-export type MemoryUpdateTask = "dialogue_tick" | "calendar_rollup";
+export type ShortTermMemoryTask = "activity_tick" | "memory_update";
+
+export interface ActivityTickTaskData {
+  task: "activity_tick";
+  triggeredAt: number;
+  activityAdded?: boolean;
+}
 
 export interface MemoryUpdateTaskData {
-  task: MemoryUpdateTask;
+  task: "memory_update";
   triggeredAt: number;
+  activitySnapshot: ShortTermMemoryRecord[];
+  completedActivityIds?: number[];
 }
 
-/**
- * Resolves which short-term memory buckets may be updated for a task.
- * @param task - Memory update task kind.
- * @param triggeredAt - Trigger timestamp in milliseconds.
- * @returns Ordered allowed update kinds.
- */
-export function resolveAllowedMemoryKinds(
-  task: MemoryUpdateTask,
-  triggeredAt: number,
-): ShortTermMemory["kind"][] {
-  if (task === "dialogue_tick") {
-    return ["day"];
-  }
-  return computeDailyRollupKinds(triggeredAt);
-}
-
-/**
- * Computes update kinds for daily rollup tasks.
- * @param timestamp - Trigger timestamp in milliseconds.
- * @returns Ordered update kinds for the current rollup.
- */
-export function computeDailyRollupKinds(
-  timestamp: number,
-): ShortTermMemory["kind"][] {
-  const date = new Date(timestamp);
-  const kinds: ShortTermMemory["kind"][] = ["week"];
-  if (date.getDay() === 1) {
-    kinds.push("month");
-  }
-  if (date.getDate() === 1) {
-    kinds.push("year");
-  }
-  return kinds;
-}
+export type ShortTermMemoryTaskData =
+  | ActivityTickTaskData
+  | MemoryUpdateTaskData;
 
 /**
  * Resolves structured task metadata from tool context data.
  * @param data - Unstructured tool context payload.
  * @returns Parsed task data when available and valid.
  */
-export function getMemoryUpdateTaskData(
+export function getShortTermMemoryTaskData(
   data?: Record<string, unknown>,
-): MemoryUpdateTaskData | null {
-  if (!data) {
+): ShortTermMemoryTaskData | null {
+  if (!data || typeof data.triggeredAt !== "number") {
     return null;
   }
-  const task = data.task;
-  const triggeredAt = data.triggeredAt;
-  if (!isMemoryUpdateTask(task) || typeof triggeredAt !== "number") {
+  if (data.task === "activity_tick") {
+    return {
+      task: "activity_tick",
+      triggeredAt: data.triggeredAt,
+      ...(data.activityAdded === true ? { activityAdded: true } : {}),
+    };
+  }
+  if (data.task !== "memory_update" || !Array.isArray(data.activitySnapshot)) {
     return null;
   }
+  const activitySnapshot = data.activitySnapshot.filter(
+    isShortTermMemoryRecord,
+  );
   return {
-    task,
-    triggeredAt,
+    task: "memory_update",
+    triggeredAt: data.triggeredAt,
+    activitySnapshot,
+    ...(Array.isArray(data.completedActivityIds)
+      ? {
+          completedActivityIds: data.completedActivityIds.filter(
+            (item): item is number => typeof item === "number",
+          ),
+        }
+      : {}),
   };
 }
 
 /**
- * Replaces the allowed-memory-kinds placeholder in a prompt template.
- * @param prompt - Prompt template text.
- * @param task - Memory update task kind.
- * @param triggeredAt - Trigger timestamp in milliseconds.
- * @returns Prompt with resolved allowed-memory-kinds text.
+ * Formats the canonical date key for a short-term memory kind.
+ * @param kind - Target memory kind.
+ * @param timestamp - Source timestamp in milliseconds.
+ * @returns Canonical date key.
  */
-export function injectAllowedMemoryKinds(
-  prompt: string,
-  task: MemoryUpdateTask,
-  triggeredAt: number,
+export function formatShortTermMemoryDate(
+  kind: ShortTermMemory["kind"],
+  timestamp: number,
 ): string {
-  const kinds = resolveAllowedMemoryKinds(task, triggeredAt);
-  return prompt.replaceAll("{ALLOWED_MEMORY_KINDS}", kinds.join(", "));
+  switch (kind) {
+    case "activity":
+    case "day":
+      return formatTimestamp("YYYY-MM-DD", timestamp);
+    case "month":
+      return formatTimestamp("YYYY-MM", timestamp);
+    case "year":
+      return formatTimestamp("YYYY", timestamp);
+  }
 }
 
-function isMemoryUpdateTask(value: unknown): value is MemoryUpdateTask {
-  return value === "dialogue_tick" || value === "calendar_rollup";
+function isShortTermMemoryRecord(
+  value: unknown,
+): value is ShortTermMemoryRecord {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const item = value as Partial<ShortTermMemoryRecord>;
+  return (
+    typeof item.id === "number" &&
+    typeof item.kind === "string" &&
+    typeof item.date === "string" &&
+    typeof item.memory === "string"
+  );
 }

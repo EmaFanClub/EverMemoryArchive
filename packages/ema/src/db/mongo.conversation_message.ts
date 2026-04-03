@@ -134,11 +134,11 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     });
   }
 
-  async reserveMessageId(conversationId: number): Promise<number> {
-    if (typeof conversationId !== "number") {
-      throw new Error("conversationId must be a number");
+  async reserveMessageId(actorId: number): Promise<number> {
+    if (typeof actorId !== "number") {
+      throw new Error("actorId must be a number");
     }
-    return getNextId(this.mongo, `${this.$cn}:conversation:${conversationId}`);
+    return getNextId(this.mongo, `${this.$cn}:actor:${actorId}`);
   }
 
   /**
@@ -175,7 +175,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       throw new Error("id must not be provided");
     }
     const nextMsgId =
-      entity.msgId ?? (await this.reserveMessageId(entity.conversationId));
+      entity.msgId ?? (await this.reserveMessageId(entity.actorId));
     const storedEntity: ConversationMessageEntity = {
       ...entity,
       msgId: nextMsgId,
@@ -272,10 +272,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       resumed: 1,
       createdAt: -1,
     });
-    await collection.createIndex(
-      { conversationId: 1, msgId: 1 },
-      { unique: true },
-    );
+    await collection.createIndex({ actorId: 1, msgId: 1 }, { unique: true });
     await collection.createIndex({ conversationId: 1, channelMessageId: 1 });
   }
 }

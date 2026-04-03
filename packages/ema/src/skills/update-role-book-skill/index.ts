@@ -68,7 +68,7 @@ export default class UpdateRoleBookSkill extends Skill {
     );
     this.logger.debug("Updated role book:", {
       actorId,
-      roleId,
+      role: payload.prompt,
     });
     return {
       success: true,

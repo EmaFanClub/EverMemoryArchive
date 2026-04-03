@@ -560,11 +560,11 @@ export interface ConversationMessageDB {
   ): Promise<number>;
 
   /**
-   * Reserves the next message ID for a conversation.
-   * @param conversationId - The conversation ID to reserve a message ID for
-   * @returns Promise resolving to the reserved conversation-scoped msgId
+   * Reserves the next message ID for an actor.
+   * @param actorId - The actor ID to reserve a message ID for
+   * @returns Promise resolving to the reserved actor-scoped msgId
    */
-  reserveMessageId(conversationId: number): Promise<number>;
+  reserveMessageId(actorId: number): Promise<number>;
 
   /**
    * gets a conversation message by id
@@ -587,7 +587,7 @@ export interface ConversationMessageDB {
   /**
    * Updates the platform-scoped message identifier for a stored conversation message.
    * @param conversationId - The conversation ID of the target message
-   * @param msgId - The conversation-scoped msgId of the target message
+   * @param msgId - The actor-scoped msgId of the target message
    * @param channelMessageId - The platform message identifier to persist
    * @returns Promise resolving to true if the message exists and was updated
    */
@@ -598,10 +598,10 @@ export interface ConversationMessageDB {
   ): Promise<boolean>;
 
   /**
-   * Marks conversation-scoped messages as resumed so they can participate in
+   * Marks stored messages as resumed so they can participate in
    * rebuilt buffer prompts.
    * @param conversationId - The conversation ID of the target messages
-   * @param msgIds - Conversation-scoped msgIds to update
+   * @param msgIds - Actor-scoped msgIds to update
    * @returns Promise resolving to the number of updated rows
    */
   markConversationMessagesResumed(
@@ -655,87 +655,107 @@ export interface ListConversationMessagesRequest {
 }
 
 /**
- * Represents short term memory data structure
+ * Represents short-term memory data structure.
  */
 export interface ShortTermMemoryEntity extends Entity {
   /**
-   * The granularity of short term memory
+   * The granularity of short-term memory.
    */
-  kind: "year" | "month" | "week" | "day";
+  kind: "activity" | "day" | "month" | "year";
   /**
-   * The owner of the short term memory
+   * The owner of the short-term memory.
    */
   actorId: number;
   /**
-   * The memory text when the actor saw the messages.
+   * Canonical date key for the memory record.
+   */
+  date: string;
+  /**
+   * The memory text.
    */
   memory: string;
   /**
-   * The date and time the short term memory was last updated.
+   * The date and time the short-term memory was last updated.
    */
   updatedAt?: DbDate;
   /**
-   * The messages ids facilitating the short term memory, for debugging purpose.
+   * The date and time the short-term memory was consumed by a higher-level rollup.
    */
-  messages?: number[];
+  processedAt?: DbDate;
 }
 
 /**
- * Interface for short term memory database operations
+ * Interface for short-term memory database operations.
  */
 export interface ShortTermMemoryDB {
   /**
-   * lists short term memories in the database
-   * @returns Promise resolving to an array of short term memory data
+   * Lists short-term memories in the database.
+   * @returns Promise resolving to an array of short-term memory data.
    */
   listShortTermMemories(
     req: ListShortTermMemoriesRequest,
   ): Promise<ShortTermMemoryEntity[]>;
   /**
-   * appends a short term memory to the database
-   * @param entity - The short term memory to append
-   * @returns Promise resolving to the ID of the created memory
+   * Appends a short-term memory to the database.
+   * @param entity - The short-term memory to append.
+   * @returns Promise resolving to the ID of the created memory.
    */
   appendShortTermMemory(entity: ShortTermMemoryEntity): Promise<number>;
   /**
-   * upserts a short term memory in the database
-   * @param entity - The short term memory to upsert
-   * @returns Promise resolving to the ID of the created or updated memory
+   * Upserts a short-term memory in the database.
+   * @param entity - The short-term memory to upsert.
+   * @returns Promise resolving to the ID of the created or updated memory.
    */
   upsertShortTermMemory(entity: ShortTermMemoryEntity): Promise<number>;
   /**
-   * deletes a short term memory from the database
-   * @param id - The unique identifier for the short term memory to delete
-   * @returns Promise resolving to true if deleted, false if not found
+   * Deletes a short-term memory from the database.
+   * @param id - The unique identifier for the short-term memory to delete.
+   * @returns Promise resolving to true if deleted, false if not found.
    */
   deleteShortTermMemory(id: number): Promise<boolean>;
 }
 
 export interface ListShortTermMemoriesRequest {
   /**
-   * The actor ID to filter short term memories by
+   * The actor ID to filter short-term memories by.
    */
   actorId?: number;
   /**
-   * The kind of short term memory to filter by
+   * The kind of short-term memory to filter by.
    */
   kind?: ShortTermMemoryEntity["kind"];
   /**
-   * Sort order by createdAt
+   * Exact identifier filters.
+   */
+  ids?: number[];
+  /**
+   * Exact date filter.
+   */
+  date?: string;
+  /**
+   * Exact date filters.
+   */
+  dates?: string[];
+  /**
+   * Sort order by date.
    */
   sort?: "asc" | "desc";
   /**
-   * Max number of memories to return
+   * Max number of memories to return.
    */
   limit?: number;
   /**
-   * Filter short term memories created before the given date and time
+   * Filter short-term memories created before the given date and time.
    */
   createdBefore?: DbDate;
   /**
-   * Filter short term memories created after the given date and time
+   * Filter short-term memories created after the given date and time.
    */
   createdAfter?: DbDate;
+  /**
+   * Filter by processed state. `false` also includes legacy rows where the field is absent.
+   */
+  processed?: boolean;
 }
 
 /**

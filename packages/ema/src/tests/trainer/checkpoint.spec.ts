@@ -67,46 +67,53 @@ describe("buildTrainingCheckpointSnapshot", () => {
     });
     await server.actorDB.upsertActor({ id: 1, roleId });
 
-    const day1CreatedAt = 1_700_000_000_000;
-    const day2CreatedAt = 1_700_086_400_000;
-    const week1CreatedAt = 1_700_000_000_000;
-
-    await server.memoryManager.addShortTermMemory(1, {
+    await server.memoryManager.appendShortTermMemory(1, {
+      kind: "activity",
+      date: "2026-04-01",
+      memory: "activity-1",
+      createdAt: 1_700_000_000_000,
+    });
+    await server.memoryManager.appendShortTermMemory(1, {
       kind: "day",
+      date: "2026-04-01",
       memory: "day-1",
-      createdAt: day1CreatedAt,
+      createdAt: 1_700_000_000_000,
     });
-    await server.memoryManager.addShortTermMemory(1, {
+    await server.memoryManager.appendShortTermMemory(1, {
       kind: "day",
+      date: "2026-04-02",
       memory: "day-2",
-      createdAt: day2CreatedAt,
+      createdAt: 1_700_086_400_000,
     });
-    await server.memoryManager.addShortTermMemory(1, {
-      kind: "week",
-      memory: "week-1",
-      createdAt: week1CreatedAt,
+    await server.memoryManager.appendShortTermMemory(1, {
+      kind: "month",
+      date: "2026-04",
+      memory: "month-1",
+      createdAt: 1_700_000_000_000,
     });
 
     const snapshot = await buildTrainingCheckpointSnapshot(server, 1);
 
-    expect(snapshot.shortTermMemory.day).toHaveLength(2);
+    expect(snapshot.shortTermMemory.activity).toMatchObject([
+      {
+        actorId: 1,
+        kind: "activity",
+        date: "2026-04-01",
+        memory: "activity-1",
+      },
+    ]);
     expect(snapshot.shortTermMemory.day.map((item) => item.memory)).toEqual([
       "day-1",
       "day-2",
     ]);
-    expect(snapshot.shortTermMemory.day[0]?.createdAt).toBe(day1CreatedAt);
-    expect(snapshot.shortTermMemory.day[1]?.createdAt).toBe(day2CreatedAt);
-
-    expect(snapshot.shortTermMemory.week).toMatchObject([
+    expect(snapshot.shortTermMemory.month).toMatchObject([
       {
-        id: expect.any(Number),
         actorId: 1,
-        kind: "week",
-        createdAt: week1CreatedAt,
-        memory: "week-1",
+        kind: "month",
+        date: "2026-04",
+        memory: "month-1",
       },
     ]);
-    expect(snapshot.shortTermMemory.month).toEqual([]);
     expect(snapshot.shortTermMemory.year).toEqual([]);
   });
 });

@@ -6,32 +6,33 @@ import { formatTimestamp } from "../../utils";
 import { isAllowedIndex1 } from "../../memory/utils";
 
 describe("memory update skills", () => {
-  test("update-short-term-memory-skill enforces allowed kinds from tool context data", async () => {
+  test("update-short-term-memory-skill rejects add_activity outside activity_tick", async () => {
     const skill = new UpdateShortTermMemorySkill(
       ".",
       "update-short-term-memory-skill",
     );
     const res = await skill.execute(
       {
-        kind: "month",
+        action: "add_activity",
         memory: "test",
       },
       {
         actorId: 1,
         server: {
           memoryManager: {
-            upsertLatestShortTermMemory: vi.fn(),
+            appendShortTermMemory: vi.fn(),
           },
         } as any,
         data: {
-          task: "dialogue_tick",
+          task: "memory_update",
           triggeredAt: Date.now(),
+          activitySnapshot: [],
         },
       },
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("not allowed");
+    expect(res.error).toContain("activity_tick");
   });
 
   test("update-long-term-memory-skill uses triggeredAt from tool context data", async () => {
@@ -70,7 +71,7 @@ describe("memory update skills", () => {
           },
         } as any,
         data: {
-          task: "dialogue_tick",
+          task: "activity_tick",
           triggeredAt: 1234567890,
         },
       },

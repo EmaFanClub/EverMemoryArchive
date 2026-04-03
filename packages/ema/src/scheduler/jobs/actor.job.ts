@@ -3,14 +3,10 @@ import { Agent, type AgentState } from "../../agent";
 import { LLMClient } from "../../llm";
 import { Logger } from "../../logger";
 import {
-  EMA_CALENDAR_ROLLUP_PROMPT,
-  EMA_DIALOGUE_TICK_PROMPT,
+  EMA_ACTIVITY_TICK_PROMPT,
+  EMA_FOREGROUND_HEARTBEAT_PROMPT,
+  EMA_MEMORY_UPDATE_PROMPT,
 } from "../../memory/prompts";
-import {
-  computeDailyRollupKinds,
-  injectAllowedMemoryKinds,
-} from "../../memory/update_tasks";
-import type { ActorState } from "../../memory/base";
 import type { Server } from "../../server";
 import { formatTimestamp } from "../../utils";
 import type { JobHandler } from "../base";
@@ -25,22 +21,18 @@ export interface ActorForegroundJobData {
 }
 
 /**
- * Data for dialogue-tick memory update jobs.
+ * Data for activity-tick memory update jobs.
  */
-export interface ActorDialogueTickJobData {
+export interface ActorActivityTickJobData {
   actorId: number;
   conversationId: number;
-  triggeredAt: number;
-  /**
-   * Optional preloaded actor state used to freeze the triggering context.
-   */
-  actorState?: ActorState;
+  triggeredAt?: number;
 }
 
 /**
- * Data for calendar-triggered rollup jobs.
+ * Data for calendar-triggered memory update jobs.
  */
-export interface ActorCalendarRollupJobData {
+export interface ActorMemoryUpdateJobData {
   actorId: number;
   triggeredAt?: number;
 }
@@ -69,38 +61,32 @@ export async function runActorForegroundJob(
 }
 
 /**
- * Runs a dialogue-tick memory update job.
+ * Runs an activity-tick memory update job.
  * @param server - Server instance for shared resources.
- * @param job - Dialogue-tick job data.
+ * @param job - Activity-tick job data.
  */
-export async function runActorDialogueTickJob(
+export async function runActorActivityTickJob(
   server: Server,
-  job: ActorDialogueTickJobData,
+  job: ActorActivityTickJobData,
 ): Promise<void> {
-  const prompt = injectAllowedMemoryKinds(
-    EMA_DIALOGUE_TICK_PROMPT,
-    "dialogue_tick",
-    job.triggeredAt,
-  );
+  const triggeredAt = job.triggeredAt ?? Date.now();
   const agent = createBackgroundAgent(
     server,
-    "ActorDialogueTickJob",
+    "ActorActivityTickJob",
     job.actorId,
-    job.triggeredAt,
+    triggeredAt,
   );
   const agentState: AgentState = {
     systemPrompt: await server.memoryManager.buildSystemPrompt(
-      server.config.systemPrompt,
       job.actorId,
       job.conversationId,
-      job.actorState,
     ),
     messages: [
       buildUserMessageFromActorInput({
         kind: "system",
         conversationId: job.conversationId,
-        time: job.triggeredAt,
-        inputs: [{ type: "text", text: prompt }],
+        time: triggeredAt,
+        inputs: [{ type: "text", text: EMA_ACTIVITY_TICK_PROMPT }],
       }),
     ],
     tools: server.config.baseTools,
@@ -109,53 +95,7 @@ export async function runActorDialogueTickJob(
       conversationId: job.conversationId,
       server,
       data: {
-        task: "dialogue_tick",
-        triggeredAt: job.triggeredAt,
-      },
-    },
-  };
-  await agent.runWithState(agentState);
-}
-
-/**
- * Runs a calendar-triggered memory rollup job.
- * @param server - Server instance for shared resources.
- * @param job - Calendar rollup job data.
- */
-export async function runActorCalendarRollupJob(
-  server: Server,
-  job: ActorCalendarRollupJobData,
-): Promise<void> {
-  const triggeredAt = job.triggeredAt ?? Date.now();
-  const prompt = injectAllowedMemoryKinds(
-    EMA_CALENDAR_ROLLUP_PROMPT,
-    "calendar_rollup",
-    triggeredAt,
-  );
-  const agent = createBackgroundAgent(
-    server,
-    "ActorCalendarRollupJob",
-    job.actorId,
-    triggeredAt,
-  );
-  const agentState: AgentState = {
-    systemPrompt: await server.memoryManager.buildSystemPrompt(
-      server.config.systemPrompt,
-      job.actorId,
-    ),
-    messages: [
-      buildUserMessageFromActorInput({
-        kind: "system",
-        time: triggeredAt,
-        inputs: [{ type: "text", text: prompt }],
-      }),
-    ],
-    tools: server.config.baseTools,
-    toolContext: {
-      actorId: job.actorId,
-      server,
-      data: {
-        task: "calendar_rollup",
+        task: "activity_tick",
         triggeredAt,
       },
     },
@@ -164,14 +104,58 @@ export async function runActorCalendarRollupJob(
 }
 
 /**
- * ActorDialogueTick job handler implementation.
+ * Runs a calendar-triggered memory update job.
+ * @param server - Server instance for shared resources.
+ * @param job - Memory-update job data.
  */
-export function createActorDialogueTickJobHandler(
+export async function runActorMemoryUpdateJob(
   server: Server,
-): JobHandler<"actor_dialogue_tick"> {
+  job: ActorMemoryUpdateJobData,
+): Promise<void> {
+  const triggeredAt = job.triggeredAt ?? Date.now();
+  const agent = createBackgroundAgent(
+    server,
+    "ActorMemoryUpdateJob",
+    job.actorId,
+    triggeredAt,
+  );
+  const agentState: AgentState = {
+    systemPrompt: await server.memoryManager.buildSystemPromptForMemoryUpdate(
+      job.actorId,
+    ),
+    messages: [
+      buildUserMessageFromActorInput({
+        kind: "system",
+        time: triggeredAt,
+        inputs: [{ type: "text", text: EMA_MEMORY_UPDATE_PROMPT }],
+      }),
+    ],
+    tools: server.config.baseTools,
+    toolContext: {
+      actorId: job.actorId,
+      server,
+      data: {
+        task: "memory_update",
+        triggeredAt,
+        activitySnapshot: await server.memoryManager.getActivitySnapshot(
+          job.actorId,
+          triggeredAt,
+        ),
+      },
+    },
+  };
+  await agent.runWithState(agentState);
+}
+
+/**
+ * ActorActivityTick job handler implementation.
+ */
+export function createActorActivityTickJobHandler(
+  server: Server,
+): JobHandler<"actor_activity_tick"> {
   return async (job) => {
     try {
-      await runActorDialogueTickJob(server, job.attrs.data);
+      await runActorActivityTickJob(server, job.attrs.data);
     } catch (error) {
       throw error instanceof Error ? error : new Error(String(error));
     }
@@ -179,14 +163,14 @@ export function createActorDialogueTickJobHandler(
 }
 
 /**
- * ActorCalendarRollup job handler implementation.
+ * ActorMemoryUpdate job handler implementation.
  */
-export function createActorCalendarRollupJobHandler(
+export function createActorMemoryUpdateJobHandler(
   server: Server,
-): JobHandler<"actor_calendar_rollup"> {
+): JobHandler<"actor_memory_update"> {
   return async (job) => {
     try {
-      await runActorCalendarRollupJob(server, {
+      await runActorMemoryUpdateJob(server, {
         ...job.attrs.data,
         triggeredAt: job.attrs.data.triggeredAt ?? Date.now(),
       });
@@ -211,12 +195,7 @@ export function createActorForegroundJobHandler(
   };
 }
 
-/**
- * Computes update kinds for daily rollup jobs.
- * @param timestamp - Trigger timestamp in milliseconds.
- * @returns Ordered update kinds for the current rollup.
- */
-export { computeDailyRollupKinds };
+export { EMA_FOREGROUND_HEARTBEAT_PROMPT };
 
 function createBackgroundAgent(
   server: Server,

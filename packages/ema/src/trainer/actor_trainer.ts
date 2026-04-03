@@ -1,15 +1,10 @@
 import type { ActorChatInput } from "../actor";
 import type { Fs } from "../fs";
 import { RealFs } from "../fs";
-import type {
-  ActorState,
-  BufferWriteMessage,
-  ShortTermMemory,
-} from "../memory/base";
+import type { BufferWriteMessage, ShortTermMemory } from "../memory/base";
 import {
-  computeDailyRollupKinds,
-  runActorCalendarRollupJob,
-  runActorDialogueTickJob,
+  runActorActivityTickJob,
+  runActorMemoryUpdateJob,
 } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import { formatTimestamp, parseTimestamp } from "../utils";
@@ -97,34 +92,59 @@ export class ActorTrainer {
     const conversationId = conversation.id;
 
     console.log(
-      `>>> train start actor=${req.actorId} session=${trainingSession} inputs=${normalizedInputs.length} diaryEvery=${req.diaryUpdateEvery} bufferWindow=${req.bufferWindowSize}`,
+      `>>> train start actor=${req.actorId} session=${trainingSession} inputs=${normalizedInputs.length} activityEvery=${req.diaryUpdateEvery} bufferWindow=${req.bufferWindowSize}`,
     );
 
     let checkpointId = 0;
     let stepCount = 0;
     let messageCount = 0;
-    let pendingDialogueCount = 0;
-    let currentDayKey = normalizedInputs[0].dayKey;
-
     try {
-      for (const input of normalizedInputs) {
-        if (input.dayKey !== currentDayKey) {
-          console.log(
-            `>>> day rollover from=${currentDayKey} to=${input.dayKey} messages=${messageCount}`,
+      let nextInputIndex = 0;
+      while (nextInputIndex < normalizedInputs.length) {
+        const currentDayKey = normalizedInputs[nextInputIndex].dayKey;
+        let pendingActivityCount = 0;
+        let lastMessageTimestamp = normalizedInputs[nextInputIndex].timestamp;
+
+        console.log(
+          `>>> day start day=${currentDayKey} fromIndex=${nextInputIndex + 1}`,
+        );
+
+        while (
+          nextInputIndex < normalizedInputs.length &&
+          normalizedInputs[nextInputIndex].dayKey === currentDayKey
+        ) {
+          const input = normalizedInputs[nextInputIndex];
+          const message = this.toPersistedMessage(
+            {
+              ...input,
+              msgId:
+                await this.server.conversationMessageDB.reserveMessageId(
+                  actorId,
+                ),
+            },
+            characterUid,
+            req.actorId,
           );
-          for (const rollupTimestamp of this.buildDailyRollupTimestamps(
-            currentDayKey,
-            input.dayKey,
-          )) {
-            await this.runMemoryUpdate(
+          await this.server.memoryManager.persistChatMessage(message);
+          await this.server.memoryManager.addToBuffer(
+            conversationId,
+            message.msgId,
+            false,
+            input.timestamp,
+          );
+          messageCount = message.msgId;
+          pendingActivityCount += 1;
+          lastMessageTimestamp = input.timestamp;
+          nextInputIndex += 1;
+
+          if (pendingActivityCount >= req.diaryUpdateEvery) {
+            await runActorActivityTickJob(this.server, {
               actorId,
               conversationId,
-              req.bufferWindowSize,
-              rollupTimestamp,
-              "calendar_rollup",
-            );
+              triggeredAt: input.timestamp,
+            });
             ({ checkpointId, stepCount } = await this.advanceStep(
-              "calendar-rollup",
+              "activity-tick",
               checkpointId,
               stepCount,
               saveEverySteps,
@@ -132,38 +152,21 @@ export class ActorTrainer {
               actorId,
               conversationId,
               checkpointRoot,
-              rollupTimestamp,
-              computeDailyRollupKinds(rollupTimestamp),
+              input.timestamp,
+              ["activity"],
             ));
+            pendingActivityCount = 0;
           }
-          currentDayKey = input.dayKey;
         }
 
-        const message = this.toPersistedMessage(
-          input,
-          characterUid,
-          req.actorId,
-        );
-        await this.server.memoryManager.persistChatMessage(message);
-        await this.server.memoryManager.addToBuffer(
-          conversationId,
-          message.msgId,
-          false,
-          input.timestamp,
-        );
-        messageCount = message.msgId;
-        pendingDialogueCount += 1;
-
-        if (pendingDialogueCount >= req.diaryUpdateEvery) {
-          await this.runMemoryUpdate(
+        if (pendingActivityCount > 0) {
+          await runActorActivityTickJob(this.server, {
             actorId,
             conversationId,
-            req.bufferWindowSize,
-            input.timestamp,
-            "dialogue_tick",
-          );
+            triggeredAt: lastMessageTimestamp,
+          });
           ({ checkpointId, stepCount } = await this.advanceStep(
-            "dialogue-tick",
+            "activity-tick",
             checkpointId,
             stepCount,
             saveEverySteps,
@@ -171,24 +174,19 @@ export class ActorTrainer {
             actorId,
             conversationId,
             checkpointRoot,
-            input.timestamp,
-            ["day"],
+            lastMessageTimestamp,
+            ["activity"],
           ));
-          pendingDialogueCount = 0;
         }
-      }
-      const finalTimestamp =
-        normalizedInputs[normalizedInputs.length - 1].timestamp;
-      if (pendingDialogueCount > 0) {
-        await this.runMemoryUpdate(
+
+        const memoryUpdateTimestamp =
+          this.buildMemoryUpdateTimestamp(currentDayKey);
+        await runActorMemoryUpdateJob(this.server, {
           actorId,
-          conversationId,
-          req.bufferWindowSize,
-          finalTimestamp,
-          "dialogue_tick",
-        );
+          triggeredAt: memoryUpdateTimestamp,
+        });
         ({ checkpointId, stepCount } = await this.advanceStep(
-          "dialogue-tick",
+          "memory-update",
           checkpointId,
           stepCount,
           saveEverySteps,
@@ -196,11 +194,10 @@ export class ActorTrainer {
           actorId,
           conversationId,
           checkpointRoot,
-          finalTimestamp,
-          ["day"],
+          memoryUpdateTimestamp,
+          ["day", "month", "year"],
         ));
       }
-      await this.appendFreshShortTermBuckets(actorId, finalTimestamp);
       checkpointId += 1;
       await this.saveCheckpoint(
         "final",
@@ -354,95 +351,8 @@ export class ActorTrainer {
       .replaceAll("\n", " ");
   }
 
-  private buildNextDayRollupTimestamp(dayKey: string): number {
-    const nextDay = parseTimestamp(TRAINING_TIME_FORMAT, `${dayKey} 00:05:00`);
-    return nextDay + 24 * 60 * 60 * 1000;
-  }
-
-  private buildDailyRollupTimestamps(
-    fromDayKey: string,
-    toDayKey: string,
-  ): number[] {
-    const timestamps: number[] = [];
-    let nextRollupTimestamp = this.buildNextDayRollupTimestamp(fromDayKey);
-    const endTimestamp = parseTimestamp(
-      TRAINING_TIME_FORMAT,
-      `${toDayKey} 00:05:00`,
-    );
-    while (nextRollupTimestamp <= endTimestamp) {
-      timestamps.push(nextRollupTimestamp);
-      nextRollupTimestamp += 24 * 60 * 60 * 1000;
-    }
-    return timestamps;
-  }
-
-  private async buildTrainingActorState(
-    actorId: number,
-    conversationId: number,
-    bufferWindowSize: number,
-  ): Promise<ActorState> {
-    const [memoryDay, memoryWeek, memoryMonth, memoryYear, buffer] =
-      await Promise.all([
-        this.server.memoryManager.getShortTermMemory(actorId, "day", 1),
-        this.server.memoryManager.getShortTermMemory(actorId, "week", 1),
-        this.server.memoryManager.getShortTermMemory(actorId, "month", 1),
-        this.server.memoryManager.getShortTermMemory(actorId, "year", 1),
-        this.server.memoryManager.getBuffer(conversationId, bufferWindowSize),
-      ]);
-    return {
-      memoryDay: memoryDay[0] ?? { kind: "day", memory: "None." },
-      memoryWeek: memoryWeek[0] ?? { kind: "week", memory: "None." },
-      memoryMonth: memoryMonth[0] ?? { kind: "month", memory: "None." },
-      memoryYear: memoryYear[0] ?? { kind: "year", memory: "None." },
-      buffer,
-    };
-  }
-
-  private async runMemoryUpdate(
-    actorId: number,
-    conversationId: number,
-    bufferWindowSize: number,
-    triggeredAt: number,
-    task: "dialogue_tick" | "calendar_rollup",
-  ): Promise<void> {
-    if (task === "dialogue_tick") {
-      await runActorDialogueTickJob(this.server, {
-        actorId,
-        conversationId,
-        actorState: await this.buildTrainingActorState(
-          actorId,
-          conversationId,
-          bufferWindowSize,
-        ),
-        triggeredAt,
-      });
-      return;
-    }
-    await runActorCalendarRollupJob(this.server, {
-      actorId,
-      triggeredAt,
-    });
-  }
-
-  private async appendFreshShortTermBuckets(
-    actorId: number,
-    baseTimestamp: number,
-  ): Promise<void> {
-    await this.server.memoryManager.addShortTermMemory(actorId, {
-      kind: "day",
-      memory: "None.",
-      createdAt: Date.now(),
-    });
-    await this.server.memoryManager.addShortTermMemory(actorId, {
-      kind: "week",
-      memory: "None.",
-      createdAt: Date.now(),
-    });
-    await this.server.memoryManager.addShortTermMemory(actorId, {
-      kind: "month",
-      memory: "None.",
-      createdAt: Date.now(),
-    });
+  private buildMemoryUpdateTimestamp(dayKey: string): number {
+    return parseTimestamp(TRAINING_TIME_FORMAT, `${dayKey} 23:59:00`);
   }
 
   private async saveCheckpoint(

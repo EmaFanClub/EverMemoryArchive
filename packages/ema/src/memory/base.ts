@@ -62,46 +62,16 @@ export interface BufferStorage {
   /**
    * Adds a persisted chat message into the resumed buffer.
    * @param conversationId - The conversation identifier.
-   * @param msgId - Conversation-scoped message identifier.
-   * @param triggerDialogueTick - Whether this add should participate in online dialogue-tick triggering.
-   * @param triggeredAt - Optional timestamp used when triggering dialogue-tick jobs.
+   * @param msgId - Actor-scoped message identifier.
+   * @param triggerActivityTick - Whether this add should participate in activity-tick triggering.
+   * @param triggeredAt - Optional timestamp used when triggering activity-tick jobs.
    */
   addToBuffer(
     conversationId: number,
     msgId: number,
-    triggerDialogueTick: boolean,
+    triggerActivityTick: boolean,
     triggeredAt?: number,
   ): Promise<void>;
-}
-
-/**
- * Interface for persisting actor state.
- */
-export interface ActorStateStorage {
-  /**
-   * Gets the state of the actor
-   * @param actorId - The actor identifier to read.
-   * @param conversationId - Optional conversation identifier used to read buffer history.
-   * @returns Promise resolving to the state of the actor
-   */
-  getState(actorId: number, conversationId?: number): Promise<ActorState>;
-}
-
-/**
- * Runtime state for an actor.
- */
-export interface ActorState {
-  /**
-   * The lastest short-term memory for the actor.
-   */
-  memoryDay: ShortTermMemory;
-  memoryWeek: ShortTermMemory;
-  memoryMonth: ShortTermMemory;
-  memoryYear: ShortTermMemory;
-  /**
-   * The buffer messages for the actor when a conversation scope is available.
-   */
-  buffer?: BufferMessage[];
 }
 
 /**
@@ -109,13 +79,13 @@ export interface ActorState {
  */
 export interface ActorMemory {
   /**
-   * Searches actor memory
+   * Searches actor memory.
    * @param actorId - The actor identifier to search.
    * @param memory - The memory text to search against.
    * @param limit - Maximum number of memories to return.
    * @param index0 - Optional index0 filter.
    * @param index1 - Optional index1 filter.
-   * @returns Promise resolving to the search result
+   * @returns Promise resolving to the search result.
    */
   search(
     actorId: number,
@@ -125,11 +95,11 @@ export interface ActorMemory {
     index1?: string,
   ): Promise<LongTermMemoryRecord[]>;
   /**
-   * Lists short term memories for the actor
+   * Lists short-term memories for the actor.
    * @param actorId - The actor identifier to query.
    * @param kind - Optional memory kind filter.
    * @param limit - Optional maximum number of memories to return.
-   * @returns Promise resolving to short term memory records sorted by newest first.
+   * @returns Promise resolving to short-term memory records sorted by newest first.
    */
   getShortTermMemory(
     actorId: number,
@@ -137,35 +107,51 @@ export interface ActorMemory {
     limit?: number,
   ): Promise<ShortTermMemoryRecord[]>;
   /**
-   * Adds short term memory
+   * Appends a new short-term memory item to the actor.
    * @param actorId - The actor identifier to update.
-   * @param item - Short term memory item
-   * @returns Promise resolving when the memory is added
+   * @param item - Short-term memory item.
    */
-  addShortTermMemory(actorId: number, item: ShortTermMemory): Promise<void>;
+  appendShortTermMemory(actorId: number, item: ShortTermMemory): Promise<void>;
   /**
-   * Adds long term memory
+   * Inserts or updates a short-term memory item identified by kind and date.
    * @param actorId - The actor identifier to update.
-   * @param item - Long term memory item
-   * @returns Promise resolving to the created memory identifier
+   * @param item - Short-term memory item.
+   */
+  upsertShortTermMemory(actorId: number, item: ShortTermMemory): Promise<void>;
+  /**
+   * Marks the specified short-term memory records as processed.
+   * @param actorId - The actor identifier to update.
+   * @param ids - Memory record identifiers to mark.
+   * @param processedAt - Processing timestamp.
+   */
+  markShortTermMemoryRecordsProcessed(
+    actorId: number,
+    ids: number[],
+    processedAt: number,
+  ): Promise<void>;
+  /**
+   * Adds long-term memory.
+   * @param actorId - The actor identifier to update.
+   * @param item - Long-term memory item.
+   * @returns Promise resolving to the created memory identifier.
    */
   addLongTermMemory(actorId: number, item: LongTermMemory): Promise<number>;
 }
-
-/**
- * Result of searching actor memory.
- */
 
 /**
  * Short-term memory item captured at a specific granularity.
  */
 export interface ShortTermMemory {
   /**
-   * The granularity of short term memory.
+   * The granularity of short-term memory.
    */
-  kind: "year" | "month" | "week" | "day";
+  kind: "activity" | "day" | "month" | "year";
   /**
-   * The memory text when the actor saw the messages.
+   * Canonical date key for the memory record.
+   */
+  date: string;
+  /**
+   * The memory text.
    */
   memory: string;
   /**
@@ -173,9 +159,13 @@ export interface ShortTermMemory {
    */
   createdAt?: number;
   /**
-   * Related conversation message IDs for traceability.
+   * The date and time the memory was last updated.
    */
-  messages?: number[];
+  updatedAt?: number;
+  /**
+   * The date and time the memory was consumed by a higher-level rollup.
+   */
+  processedAt?: number;
 }
 
 /**
@@ -193,11 +183,11 @@ export type ShortTermMemoryRecord = ShortTermMemory & {
  */
 export interface LongTermMemory {
   /**
-   * The 0-index to search, a.k.a. 一级分类
+   * The 0-index to search, a.k.a. 一级分类.
    */
   index0: string;
   /**
-   * The 1-index to search, a.k.a. 二级分类
+   * The 1-index to search, a.k.a. 二级分类.
    */
   index1: string;
   /**
@@ -205,7 +195,7 @@ export interface LongTermMemory {
    */
   memory: string;
   /**
-   * The date and time the memory was created
+   * The date and time the memory was created.
    */
   createdAt?: number;
   /**
