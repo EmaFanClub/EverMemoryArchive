@@ -254,11 +254,24 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
         });
       }
     }
-    if (response.ema_reply.contents.length > 0) {
+    if (
+      response.ema_reply.kind === "text" &&
+      response.ema_reply.content.length > 0
+    ) {
       segments.push({
         type: "text",
         data: {
-          text: response.ema_reply.contents,
+          text: response.ema_reply.content,
+        },
+      });
+    } else if (
+      response.ema_reply.kind === "sticker" &&
+      response.ema_reply.content.length > 0
+    ) {
+      segments.push({
+        type: "image",
+        data: {
+          file: `base64://${response.ema_reply.content}`,
         },
       });
     }

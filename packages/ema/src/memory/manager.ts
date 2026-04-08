@@ -25,9 +25,12 @@ import type {
 import { Logger } from "../logger";
 import { runActorActivityTickJob } from "../scheduler/jobs/actor.job";
 import { loadPromptTemplate } from "../prompt/loader";
+import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
+import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
 import { buildPromptFromBufferMessage, isActorChatInput } from "./utils";
 import { parseReplyRef, resolveSession } from "../channel";
 import type { Server } from "../server";
+import type { InlineDataItem } from "../schema";
 import { formatTimestamp, parseTimestamp } from "../utils";
 import { skillsPrompt } from "../skills";
 
@@ -81,6 +84,72 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     private readonly server?: Server,
   ) {}
 
+  private async getBasePromptValues(actorId: number): Promise<{
+    rolePrompt: string;
+    personalityMemory: string;
+  }> {
+    const [actor, personality] = await Promise.all([
+      this.actorDB.getActor(actorId),
+      this.personalityDB.getPersonality(actorId),
+    ]);
+    const role = actor?.roleId ? await this.roleDB.getRole(actor.roleId) : null;
+    return {
+      rolePrompt: role?.prompt ?? "None.",
+      personalityMemory: personality?.memory ?? "None.",
+    };
+  }
+
+  private async getConversationMemoryPromptValues(
+    actorId: number,
+    conversationId: number,
+  ): Promise<{
+    conversationDescription: string;
+    bufferText: string;
+    yearMemory: string;
+    monthMemory: string;
+    dayMemory: string;
+    activityMemory: string;
+    sessionType: "chat" | "group";
+  }> {
+    const [
+      conversation,
+      yearMemory,
+      monthMemory,
+      dayMemory,
+      activityMemory,
+      buffer,
+    ] = await Promise.all([
+      this.conversationDB.getConversation(conversationId),
+      this.buildYearMemoryPrompt(actorId),
+      this.buildMonthMemoryPrompt(actorId),
+      this.buildDayMemoryPrompt(actorId),
+      this.buildActivityMemoryPrompt(actorId),
+      this.getBuffer(conversationId, this.bufferWindowSize),
+    ]);
+    if (!conversation) {
+      throw new Error(`Conversation with ID ${conversationId} not found.`);
+    }
+    const sessionInfo = resolveSession(conversation.session);
+    if (!sessionInfo) {
+      throw new Error(`Invalid session on conversation ${conversationId}.`);
+    }
+    const ownerUid = await this.getOwnerUid(actorId, sessionInfo.channel);
+    return {
+      conversationDescription: conversation.description ?? "None.",
+      bufferText:
+        buffer.length === 0
+          ? "None."
+          : buffer
+              .map((item) => buildPromptFromBufferMessage(item, ownerUid))
+              .join("\n"),
+      yearMemory,
+      monthMemory,
+      dayMemory,
+      activityMemory,
+      sessionType: sessionInfo.type,
+    };
+  }
+
   private async getActorIdByConversation(
     conversationId: number,
   ): Promise<number> {
@@ -93,15 +162,60 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   }
 
   /**
-   * Builds the chat system prompt by injecting role/personality markdown,
-   * short-term memory, and recent conversation history.
+   * Builds the chat system prompt for normal conversations.
    * @param actorId - The actor identifier to read.
-   * @param conversationId - Optional conversation identifier used for recent history.
+   * @param conversationId - Conversation identifier used for memory and recent history.
    * @returns The fully injected system prompt.
    */
-  async buildSystemPrompt(
+  async buildSystemPromptForChat(
     actorId: number,
-    conversationId?: number,
+    conversationId: number,
+  ): Promise<string> {
+    const template = await loadPromptTemplate(
+      "preamble.md",
+      "system.md",
+      "world.md",
+      "you.md",
+      "interaction-guidelines.md",
+      "memory.md",
+    );
+    const [{ rolePrompt, personalityMemory }, memoryValues] = await Promise.all(
+      [
+        this.getBasePromptValues(actorId),
+        this.getConversationMemoryPromptValues(actorId, conversationId),
+      ],
+    );
+    const chatWorkflow = await loadPromptTemplate(
+      memoryValues.sessionType === "group"
+        ? "chat-workflow-group.md"
+        : "chat-workflow-chat.md",
+    );
+    return template
+      .replaceAll("{SKILLS_METADATA}", skillsPrompt)
+      .replaceAll("{ROLE_PROMPT}", rolePrompt)
+      .replaceAll("{PERSONALITY_MEMORY}", personalityMemory)
+      .replaceAll("{CHAT_WORKFLOW}", chatWorkflow)
+      .replaceAll(
+        "{CONVERSATION_DESCRIPTION}",
+        memoryValues.conversationDescription,
+      )
+      .replaceAll("{MEMORY_YEAR}", memoryValues.yearMemory)
+      .replaceAll("{MEMORY_MONTH}", memoryValues.monthMemory)
+      .replaceAll("{MEMORY_DAY}", memoryValues.dayMemory)
+      .replaceAll("{MEMORY_ACTIVITY}", memoryValues.activityMemory)
+      .replaceAll("{MEMORY_BUFFER}", memoryValues.bufferText);
+  }
+
+  /**
+   * Builds the system prompt for activity updates. This includes memory and
+   * recent conversation, but excludes interaction guidelines.
+   * @param actorId - The actor identifier to read.
+   * @param conversationId - Conversation identifier used for memory and recent history.
+   * @returns The injected system prompt.
+   */
+  async buildSystemPromptForActivityUpdate(
+    actorId: number,
+    conversationId: number,
   ): Promise<string> {
     const template = await loadPromptTemplate(
       "preamble.md",
@@ -109,57 +223,26 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       "world.md",
       "you.md",
       "memory.md",
-      "interaction-guidelines.md",
     );
-    const [
-      actor,
-      personality,
-      conversation,
-      yearMemory,
-      monthMemory,
-      dayMemory,
-      activityMemory,
-      buffer,
-    ] = await Promise.all([
-      this.actorDB.getActor(actorId),
-      this.personalityDB.getPersonality(actorId),
-      conversationId === undefined
-        ? Promise.resolve(null)
-        : this.conversationDB.getConversation(conversationId),
-      this.buildYearMemoryPrompt(actorId),
-      this.buildMonthMemoryPrompt(actorId),
-      this.buildDayMemoryPrompt(actorId),
-      this.buildActivityMemoryPrompt(actorId),
-      conversationId === undefined
-        ? Promise.resolve<BufferMessage[]>([])
-        : this.getBuffer(conversationId, this.bufferWindowSize),
-    ]);
-    const role = actor?.roleId ? await this.roleDB.getRole(actor.roleId) : null;
-    const rolePrompt = role?.prompt ?? "None.";
-    const personalityMemory = personality?.memory ?? "None.";
-    const conversationDescription = conversation?.description ?? "None.";
-    const sessionInfo = conversation
-      ? resolveSession(conversation.session)
-      : null;
-    const ownerUid = sessionInfo
-      ? await this.getOwnerUid(actorId, sessionInfo.channel)
-      : null;
-    const bufferText =
-      buffer.length === 0
-        ? "None."
-        : buffer
-            .map((item) => buildPromptFromBufferMessage(item, ownerUid))
-            .join("\n");
+    const [{ rolePrompt, personalityMemory }, memoryValues] = await Promise.all(
+      [
+        this.getBasePromptValues(actorId),
+        this.getConversationMemoryPromptValues(actorId, conversationId),
+      ],
+    );
     return template
       .replaceAll("{SKILLS_METADATA}", skillsPrompt)
       .replaceAll("{ROLE_PROMPT}", rolePrompt)
       .replaceAll("{PERSONALITY_MEMORY}", personalityMemory)
-      .replaceAll("{CONVERSATION_DESCRIPTION}", conversationDescription)
-      .replaceAll("{MEMORY_YEAR}", yearMemory)
-      .replaceAll("{MEMORY_MONTH}", monthMemory)
-      .replaceAll("{MEMORY_DAY}", dayMemory)
-      .replaceAll("{MEMORY_ACTIVITY}", activityMemory)
-      .replaceAll("{MEMORY_BUFFER}", bufferText);
+      .replaceAll(
+        "{CONVERSATION_DESCRIPTION}",
+        memoryValues.conversationDescription,
+      )
+      .replaceAll("{MEMORY_YEAR}", memoryValues.yearMemory)
+      .replaceAll("{MEMORY_MONTH}", memoryValues.monthMemory)
+      .replaceAll("{MEMORY_DAY}", memoryValues.dayMemory)
+      .replaceAll("{MEMORY_ACTIVITY}", memoryValues.activityMemory)
+      .replaceAll("{MEMORY_BUFFER}", memoryValues.bufferText);
   }
 
   /**
@@ -174,15 +257,12 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       "world.md",
       "you.md",
     );
-    const [actor, personality] = await Promise.all([
-      this.actorDB.getActor(actorId),
-      this.personalityDB.getPersonality(actorId),
-    ]);
-    const role = actor?.roleId ? await this.roleDB.getRole(actor.roleId) : null;
+    const { rolePrompt, personalityMemory } =
+      await this.getBasePromptValues(actorId);
     return template
       .replaceAll("{SKILLS_METADATA}", skillsPrompt)
-      .replaceAll("{ROLE_PROMPT}", role?.prompt ?? "None.")
-      .replaceAll("{PERSONALITY_MEMORY}", personality?.memory ?? "None.");
+      .replaceAll("{ROLE_PROMPT}", rolePrompt)
+      .replaceAll("{PERSONALITY_MEMORY}", personalityMemory);
   }
 
   private async buildYearMemoryPrompt(actorId: number): Promise<string> {
@@ -353,16 +433,33 @@ export class MemoryManager implements BufferStorage, ActorMemory {
               : null;
             return replyTo ? { replyTo } : {};
           })(),
-          contents: [
-            ...(message.ema_reply.mention_uids ?? []).map((uid) => ({
-              type: "text" as const,
-              text: `@(${uid})`,
-            })),
-            {
-              type: "text" as const,
-              text: message.ema_reply.contents,
-            },
-          ],
+          contents:
+            message.ema_reply.kind === "sticker"
+              ? [
+                  ...(message.ema_reply.mention_uids ?? []).map((uid) => ({
+                    type: "text" as const,
+                    text: `@(${uid})`,
+                  })),
+                  {
+                    type: "text" as const,
+                    text: await formatStickerDisplayText(
+                      message.ema_reply.content,
+                    ),
+                  },
+                  ...(await this.buildStickerInlineContents(
+                    message.ema_reply.content,
+                  )),
+                ]
+              : [
+                  ...(message.ema_reply.mention_uids ?? []).map((uid) => ({
+                    type: "text" as const,
+                    text: `@(${uid})`,
+                  })),
+                  {
+                    type: "text" as const,
+                    text: message.ema_reply.content,
+                  },
+                ],
           think: message.ema_reply.think,
         };
     await this.conversationMessageDB.addConversationMessage({
@@ -376,6 +473,25 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       createdAt: message.time,
       msgId: message.msgId,
     });
+  }
+
+  /**
+   * Builds inline image contents for one sticker message stored in history.
+   * @param stickerId - Stable sticker identifier emitted by the model.
+   * @returns Inline image contents, or an empty list when the asset cannot be resolved.
+   */
+  private async buildStickerInlineContents(
+    stickerId: string,
+  ): Promise<InlineDataItem[]> {
+    try {
+      return [await stickerIdToInlineData(stickerId)];
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist sticker inline data for '${stickerId}', storing text proxy only.`,
+        error,
+      );
+      return [];
+    }
   }
 
   /**

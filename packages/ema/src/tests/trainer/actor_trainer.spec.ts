@@ -157,7 +157,8 @@ describe("ActorTrainer", () => {
       conversationId: 1,
       msgId: 2,
       ema_reply: {
-        contents: "I am here.",
+        kind: "text",
+        content: "I am here.",
       },
     });
   });

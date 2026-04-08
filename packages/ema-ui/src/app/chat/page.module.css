@@ -165,6 +165,14 @@
   line-height: 1.5;
 }
 
+.inlineImage {
+  display: block;
+  max-width: 220px;
+  max-height: 220px;
+  width: auto;
+  height: auto;
+}
+
 .userMessage .messageContent {
   background-color: #2d3748;
 }

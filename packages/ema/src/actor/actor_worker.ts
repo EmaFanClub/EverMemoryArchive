@@ -6,6 +6,8 @@ import type { Server } from "../server";
 import { Logger } from "../logger";
 import { LLMClient } from "../llm";
 import { resolveSession } from "../channel";
+import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
+import { stickerIdToBase64 } from "../skills/sticker-skill/utils";
 import { formatTimestamp } from "../utils";
 import { buildUserMessageFromActorInput } from "./utils";
 import type {
@@ -82,7 +84,7 @@ export class ActorWorker {
       if (eventName === "emaReplyReceived") {
         this.agent.events.on("emaReplyReceived", async (content) => {
           const reply = content.reply;
-          if (reply.contents.trim().length === 0) {
+          if (reply.kind === "text" && reply.content.trim().length === 0) {
             return;
           }
           const msgId =
@@ -105,11 +107,50 @@ export class ActorWorker {
             true,
             response.time,
           );
+          const outboundResponse = await this.buildOutboundResponse(response);
           this.emitEvent("actorResponsed", {
-            response,
+            response: outboundResponse,
           });
         });
       }
+    }
+  }
+
+  /**
+   * Builds the channel-facing actor response. Sticker replies are converted from
+   * stable sticker ids to base64 image payloads here so channel adapters can
+   * stay transport-focused.
+   * @param response - Persisted actor response.
+   * @returns Response payload ready for outbound channel delivery.
+   */
+  private async buildOutboundResponse(
+    response: ActorChatResponse,
+  ): Promise<ActorChatResponse> {
+    if (response.ema_reply.kind !== "sticker") {
+      return response;
+    }
+
+    try {
+      return {
+        ...response,
+        ema_reply: {
+          ...response.ema_reply,
+          content: await stickerIdToBase64(response.ema_reply.content),
+        },
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Failed to resolve sticker '${response.ema_reply.content}', falling back to text proxy.`,
+        error,
+      );
+      return {
+        ...response,
+        ema_reply: {
+          ...response.ema_reply,
+          kind: "text",
+          content: await formatStickerDisplayText(response.ema_reply.content),
+        },
+      };
     }
   }
 
@@ -201,10 +242,11 @@ export class ActorWorker {
           await this.markInputMessagesResumed(batches);
         } else {
           this.agentState = {
-            systemPrompt: await this.server.memoryManager.buildSystemPrompt(
-              this.actorId,
-              this.conversationId,
-            ),
+            systemPrompt:
+              await this.server.memoryManager.buildSystemPromptForChat(
+                this.actorId,
+                this.conversationId,
+              ),
             messages: batches.map((item) =>
               buildUserMessageFromActorInput(item, this.ownerUid ?? undefined),
             ),

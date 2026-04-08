@@ -35,8 +35,6 @@ export async function POST(
       },
     );
   }
-  const msgId = await server.gateway.reserveMessageId(conversation.id);
-
   const event: ChannelChatEvent = {
     kind: "chat",
     channel: "web",
@@ -46,7 +44,7 @@ export async function POST(
       uid: body.uid,
       name: body.name,
     },
-    channelMessageId: String(msgId),
+    channelMessageId: "web:pending",
     ...(typeof body.replyMsgId === "number"
       ? {
           replyTo: {

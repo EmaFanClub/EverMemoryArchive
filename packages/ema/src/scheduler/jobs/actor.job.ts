@@ -77,7 +77,7 @@ export async function runActorActivityTickJob(
     triggeredAt,
   );
   const agentState: AgentState = {
-    systemPrompt: await server.memoryManager.buildSystemPrompt(
+    systemPrompt: await server.memoryManager.buildSystemPromptForActivityUpdate(
       job.actorId,
       job.conversationId,
     ),

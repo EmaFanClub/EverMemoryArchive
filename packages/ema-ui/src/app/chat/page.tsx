@@ -3,12 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./page.module.css";
 import {
-  collapseContents,
   parseReplyRef,
   type ActorResponse,
   type ConversationMessage,
   type InputContent,
-  type TextItem,
 } from "ema/shared";
 
 const DEFAULT_USER_ID = 1;
@@ -35,10 +33,43 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-function renderContents(contents: InputContent[]): string {
-  return (collapseContents(contents, false) as TextItem[])
-    .map((content) => content.text)
-    .join("");
+function renderContents(contents: InputContent[]) {
+  return contents.map((content, index) => {
+    if (content.type === "text") {
+      return <span key={index}>{content.text}</span>;
+    }
+    if (content.mimeType.startsWith("image/")) {
+      return (
+        <img
+          key={index}
+          className={styles.inlineImage}
+          src={`data:${content.mimeType};base64,${content.data}`}
+          alt="sticker"
+        />
+      );
+    }
+    return <span key={index}>（{content.mimeType}）</span>;
+  });
+}
+
+function isStickerProxyText(text: string): boolean {
+  return /^\[表情：.+,id=[^\]]+\]$/.test(text);
+}
+
+function getRenderableContents(message: ConversationMessage): InputContent[] {
+  if (message.kind !== "actor") {
+    return message.contents;
+  }
+  const hasInlineImage = message.contents.some(
+    (content) =>
+      content.type === "inline_data" && content.mimeType.startsWith("image/"),
+  );
+  if (!hasInlineImage) {
+    return message.contents;
+  }
+  return message.contents.filter(
+    (content) => !(content.type === "text" && isStickerProxyText(content.text)),
+  );
 }
 
 export default function ChatPage() {
@@ -114,7 +145,16 @@ export default function ChatPage() {
                 kind: "actor",
                 msgId: payload.msgId,
                 name: DEFAULT_ACTOR_NAME,
-                contents: [{ type: "text", text: payload.ema_reply.contents }],
+                contents:
+                  payload.ema_reply.kind === "sticker"
+                    ? [
+                        {
+                          type: "inline_data",
+                          mimeType: "image/png",
+                          data: payload.ema_reply.content,
+                        },
+                      ]
+                    : [{ type: "text", text: payload.ema_reply.content }],
                 ...(payload.ema_reply.reply_to
                   ? (() => {
                       const replyTo = parseReplyRef(payload.ema_reply.reply_to);
@@ -311,7 +351,7 @@ export default function ChatPage() {
               >
                 <div className={styles.messageRole}>{message.name}</div>
                 <div className={styles.messageContent}>
-                  {renderContents(message.contents)}
+                  {renderContents(getRenderableContents(message))}
                 </div>
               </div>
             ))}

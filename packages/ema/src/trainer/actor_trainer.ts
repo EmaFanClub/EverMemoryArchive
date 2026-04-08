@@ -326,10 +326,11 @@ export class ActorTrainer {
       return input;
     }
     const reply: EmaReply = {
+      kind: "text",
       think: "",
       expression: "普通",
       action: "无",
-      contents: this.stringifyInputContents(input.inputs),
+      content: this.stringifyInputContents(input.inputs),
     };
     return {
       kind: "chat",

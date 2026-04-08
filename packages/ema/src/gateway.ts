@@ -59,14 +59,17 @@ export class Gateway {
     }
 
     const msgId = await this.reserveMessageId(actorId);
+    const channelMessageId =
+      event.channel === "web" ? String(msgId) : event.channelMessageId;
     const normalizedReplyTo = await this.normalizeReplyTo(
       conversation.id,
       event.replyTo,
     );
-    this.rememberMessageMapping(conversation.id, msgId, event.channelMessageId);
+    this.rememberMessageMapping(conversation.id, msgId, channelMessageId);
     await actor.enqueueChannelEvent(
       {
         ...event,
+        channelMessageId,
         ...(normalizedReplyTo ? { replyTo: normalizedReplyTo } : {}),
       },
       conversation.id,

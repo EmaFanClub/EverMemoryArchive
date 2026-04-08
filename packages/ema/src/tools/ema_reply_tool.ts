@@ -1,10 +1,14 @@
 import { z } from "zod";
 
+import { getStickerById } from "../skills/sticker-skill/pack";
 import { Tool } from "./base";
 import type { ToolResult, ToolContext } from "./base";
 
 const EmaReplySchema = z
   .object({
+    kind: z
+      .enum(["text", "sticker"])
+      .describe("消息类型。text 表示发送文本，sticker 表示发送表情包。"),
     think: z
       .string()
       .min(1)
@@ -17,9 +21,7 @@ const EmaReplySchema = z
       .string()
       .min(1)
       .describe("肢体动作，如：无、点头、摇头、挥手、跳跃、指点"),
-    contents: z
-      .string()
-      .describe("对方能看到的文本消息内容，如果不说话则为空字符串"),
+    content: z.string().describe("要发送的文本内容或表情包id"),
     mention_uids: z
       .array(z.string().min(1))
       .optional()
@@ -37,8 +39,10 @@ const EMA_REPLY_TOOL_DESCRIPTION = `
 2. 等待工具响应 \`success\` 后，再调用一次此工具发出第二条消息，以此类推。
 3. 直到最后一条消息发出后，停止调用此工具。
 注意事项：
+1. think 要结合人格填写最真实的内心活动和思考细节，不要写成对行为的简单描述。
 1. 尽量避免填写 \`reply_to\` 和 \`mention_uids\`，只有在对话复杂、对象不明确、必须精确指向某条消息或某个人时才使用。
 2. 如需要明确叫某个人，只填写 \`mention_uids\`，不要在正文里手写 \`@(XXX)\`、\`@某人\`。
+3. 当 \`kind\` 为 \`text\` 时，\`content\` 填文本；当 \`kind\` 为 \`sticker\` 时，\`content\` 必须填写合法的表情包 id。
 `;
 
 /** Tool that enforces JSON output matching the EmaReply shape. */
@@ -60,7 +64,14 @@ export class EmaReplyTool extends Tool {
   async execute(args: unknown, context?: ToolContext): Promise<ToolResult> {
     try {
       const payload = EmaReplySchema.parse(args);
-      payload.contents = payload.contents.replaceAll("\\n", "\n");
+      if (payload.kind === "text") {
+        payload.content = payload.content.replaceAll("\\n", "\n");
+      } else if (!(await getStickerById(payload.content))) {
+        return {
+          success: false,
+          error: `Unknown sticker id: ${payload.content}. Use get_skill to inspect sticker-skill first.`,
+        };
+      }
       return {
         success: true,
         content: JSON.stringify(payload),

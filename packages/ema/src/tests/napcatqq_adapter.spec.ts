@@ -492,10 +492,11 @@ describe("NapCatQQAdapter", () => {
         msgId: 1,
         session: "qq-chat-12345",
         ema_reply: {
+          kind: "text",
           think: "",
           expression: "普通",
           action: "无",
-          contents: "你好",
+          content: "你好",
         },
         time: 1,
       }),
@@ -515,10 +516,11 @@ describe("NapCatQQAdapter", () => {
         msgId: 1,
         session: "qq-group-54321",
         ema_reply: {
+          kind: "text",
           think: "",
           expression: "普通",
           action: "无",
-          contents: "大家好",
+          content: "大家好",
         },
         time: 1,
       }),
@@ -527,6 +529,41 @@ describe("NapCatQQAdapter", () => {
       params: {
         group_id: "54321",
         message: [{ type: "text", data: { text: "大家好" } }],
+      },
+    });
+  });
+
+  test("builds image segments for sticker replies", async () => {
+    const adapter = new NapCatQQAdapter();
+
+    expect(
+      await adapter.chatToAPICall({
+        kind: "chat",
+        actorId: 1,
+        conversationId: 1,
+        msgId: 1,
+        session: "qq-chat-12345",
+        ema_reply: {
+          kind: "sticker",
+          think: "",
+          expression: "开心",
+          action: "比心",
+          content: "ZmFrZS1zdGlja2Vy",
+        },
+        time: 1,
+      }),
+    ).toEqual({
+      method: "send_private_msg",
+      params: {
+        user_id: "12345",
+        message: [
+          {
+            type: "image",
+            data: {
+              file: "base64://ZmFrZS1zdGlja2Vy",
+            },
+          },
+        ],
       },
     });
   });
