@@ -150,6 +150,31 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     };
   }
 
+  private async getDetachedMemoryPromptValues(actorId: number): Promise<{
+    conversationDescription: string;
+    bufferText: string;
+    yearMemory: string;
+    monthMemory: string;
+    dayMemory: string;
+    activityMemory: string;
+  }> {
+    const [yearMemory, monthMemory, dayMemory, activityMemory] =
+      await Promise.all([
+        this.buildYearMemoryPrompt(actorId),
+        this.buildMonthMemoryPrompt(actorId),
+        this.buildDayMemoryPrompt(actorId),
+        this.buildActivityMemoryPrompt(actorId),
+      ]);
+    return {
+      conversationDescription: "None.",
+      bufferText: "None.",
+      yearMemory,
+      monthMemory,
+      dayMemory,
+      activityMemory,
+    };
+  }
+
   private async getActorIdByConversation(
     conversationId: number,
   ): Promise<number> {
@@ -228,6 +253,43 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       [
         this.getBasePromptValues(actorId),
         this.getConversationMemoryPromptValues(actorId, conversationId),
+      ],
+    );
+    return template
+      .replaceAll("{SKILLS_METADATA}", skillsPrompt)
+      .replaceAll("{ROLE_PROMPT}", rolePrompt)
+      .replaceAll("{PERSONALITY_MEMORY}", personalityMemory)
+      .replaceAll(
+        "{CONVERSATION_DESCRIPTION}",
+        memoryValues.conversationDescription,
+      )
+      .replaceAll("{MEMORY_YEAR}", memoryValues.yearMemory)
+      .replaceAll("{MEMORY_MONTH}", memoryValues.monthMemory)
+      .replaceAll("{MEMORY_DAY}", memoryValues.dayMemory)
+      .replaceAll("{MEMORY_ACTIVITY}", memoryValues.activityMemory)
+      .replaceAll("{MEMORY_BUFFER}", memoryValues.bufferText);
+  }
+
+  /**
+   * Builds the system prompt for heartbeat-triggered background activities.
+   * This includes memory, but excludes interaction guidelines.
+   * @param actorId - The actor identifier to read.
+   * @returns The injected system prompt.
+   */
+  async buildSystemPromptForHeartbeatActivity(
+    actorId: number,
+  ): Promise<string> {
+    const template = await loadPromptTemplate(
+      "preamble.md",
+      "system.md",
+      "world.md",
+      "you.md",
+      "memory.md",
+    );
+    const [{ rolePrompt, personalityMemory }, memoryValues] = await Promise.all(
+      [
+        this.getBasePromptValues(actorId),
+        this.getDetachedMemoryPromptValues(actorId),
       ],
     );
     return template
@@ -326,17 +388,24 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     if (records.length === 0) {
       return ["- None."];
     }
-    const grouped = new Map<string, string[]>();
+    const grouped = new Map<string, ShortTermMemoryRecord[]>();
     for (const item of records) {
       const bucket = grouped.get(item.date) ?? [];
-      bucket.push(this.toSingleLine(item.memory));
+      bucket.push(item);
       grouped.set(item.date, bucket);
     }
     const lines: string[] = [];
     for (const [date, memories] of grouped) {
       lines.push(`- ${date}`);
-      for (const memory of memories) {
-        lines.push(`  - ${memory}`);
+      for (const item of memories) {
+        const time =
+          typeof item.createdAt === "number"
+            ? formatTimestamp("HH:mm", item.createdAt)
+            : typeof item.updatedAt === "number"
+              ? formatTimestamp("HH:mm", item.updatedAt)
+              : null;
+        const memory = this.toSingleLine(item.memory);
+        lines.push(time ? `  - [${time}] ${memory}` : `  - ${memory}`);
       }
       lines.push("");
     }

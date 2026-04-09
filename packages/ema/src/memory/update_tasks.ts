@@ -1,10 +1,19 @@
 import type { ShortTermMemoryRecord, ShortTermMemory } from "./base";
 import { formatTimestamp } from "../utils";
 
-export type ShortTermMemoryTask = "activity_tick" | "memory_update";
+export type ShortTermMemoryTask =
+  | "activity_tick"
+  | "heartbeat_activity"
+  | "memory_update";
 
 export interface ActivityTickTaskData {
   task: "activity_tick";
+  triggeredAt: number;
+  activityAdded?: boolean;
+}
+
+export interface HeartbeatActivityTaskData {
+  task: "heartbeat_activity";
   triggeredAt: number;
   activityAdded?: boolean;
 }
@@ -18,6 +27,7 @@ export interface MemoryUpdateTaskData {
 
 export type ShortTermMemoryTaskData =
   | ActivityTickTaskData
+  | HeartbeatActivityTaskData
   | MemoryUpdateTaskData;
 
 /**
@@ -34,6 +44,13 @@ export function getShortTermMemoryTaskData(
   if (data.task === "activity_tick") {
     return {
       task: "activity_tick",
+      triggeredAt: data.triggeredAt,
+      ...(data.activityAdded === true ? { activityAdded: true } : {}),
+    };
+  }
+  if (data.task === "heartbeat_activity") {
+    return {
+      task: "heartbeat_activity",
       triggeredAt: data.triggeredAt,
       ...(data.activityAdded === true ? { activityAdded: true } : {}),
     };

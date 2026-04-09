@@ -1,6 +1,7 @@
 import type { Config } from "../config";
 import { Logger } from "../logger";
 import { EMA_FOREGROUND_HEARTBEAT_PROMPT } from "../memory/prompts";
+import { runActorHeartbeatActivityJob } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import {
   WebsocketChannelClient,
@@ -14,6 +15,8 @@ import { SessionManager } from "./session_manager";
 
 const DEFAULT_HEARTBEAT_CHECK_INTERVAL_MS = 60_000;
 const DEFAULT_HEARTBEAT_THRESHOLD_MS = 10 * 60_000;
+
+type HeartbeatBehavior = "foreground_chat" | "background_activity" | "noop";
 
 export class Actor {
   readonly sessionManager: SessionManager;
@@ -269,29 +272,70 @@ export class Actor {
       return;
     }
     this.idleSince = now;
-    const conversationId = await this.pickProactiveConversationId();
-    if (conversationId === null) {
-      return;
+    const proactiveConversationIds = await this.listProactiveConversationIds();
+    switch (this.pickHeartbeatBehavior(proactiveConversationIds.length > 0)) {
+      case "foreground_chat": {
+        const conversationId =
+          proactiveConversationIds[
+            Math.floor(Math.random() * proactiveConversationIds.length)
+          ];
+        if (typeof conversationId !== "number") {
+          return;
+        }
+        await this.enqueueActorInput(conversationId, {
+          kind: "system",
+          conversationId,
+          time: now,
+          inputs: [{ type: "text", text: EMA_FOREGROUND_HEARTBEAT_PROMPT }],
+        });
+        return;
+      }
+      case "background_activity":
+        await runActorHeartbeatActivityJob(this.server, {
+          actorId: this.actorId,
+          triggeredAt: now,
+        });
+        return;
+      case "noop":
+      default:
+        return;
     }
-    await this.enqueueActorInput(conversationId, {
-      kind: "system",
-      conversationId,
-      time: now,
-      inputs: [{ type: "text", text: EMA_FOREGROUND_HEARTBEAT_PROMPT }],
-    });
   }
 
-  private async pickProactiveConversationId(): Promise<number | null> {
+  private pickHeartbeatBehavior(
+    canStartForegroundChat: boolean,
+  ): HeartbeatBehavior {
+    const candidates: Array<{ kind: HeartbeatBehavior; weight: number }> = [
+      ...(canStartForegroundChat
+        ? [{ kind: "foreground_chat" as const, weight: 0.5 }]
+        : []),
+      { kind: "background_activity" as const, weight: 0.5 },
+      { kind: "noop" as const, weight: 0 },
+    ];
+    const totalWeight = candidates.reduce((sum, item) => sum + item.weight, 0);
+    if (totalWeight <= 0) {
+      return "noop";
+    }
+    let roll = Math.random() * totalWeight;
+    for (const candidate of candidates) {
+      if (roll < candidate.weight) {
+        return candidate.kind;
+      }
+      roll -= candidate.weight;
+    }
+    return candidates[candidates.length - 1]?.kind ?? "noop";
+  }
+
+  private async listProactiveConversationIds(): Promise<number[]> {
     const conversations = await this.server.conversationDB.listConversations({
       actorId: this.actorId,
     });
-    const candidates = conversations.filter(
-      (conversation) => conversation.allowProactive === true,
+    return conversations.flatMap((conversation) =>
+      conversation.allowProactive === true &&
+      typeof conversation.id === "number"
+        ? [conversation.id]
+        : [],
     );
-    if (candidates.length === 0) {
-      return null;
-    }
-    return candidates[Math.floor(Math.random() * candidates.length)].id ?? null;
   }
 
   private runDetached(task: Promise<void>, label: string): void {

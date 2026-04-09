@@ -360,7 +360,7 @@ export class Server {
         buildSession("qq", "group", qqGroupId),
         "QQ Group Chat",
         "这是你在 QQ 群聊中进行的对话。",
-        false,
+        true,
       );
       console.log(`Created QQ group chat ${qqGroupId} for user ${user.id}`);
     }

@@ -179,8 +179,10 @@ export default class UpdateShortTermMemorySkill extends Skill {
         error: "Missing short-term memory task metadata in tool context.",
       };
     }
-    if (taskData.task === "activity_tick") {
-      const date = formatShortTermMemoryDate("activity", taskData.triggeredAt);
+    if (
+      taskData.task === "activity_tick" ||
+      taskData.task === "heartbeat_activity"
+    ) {
       return {
         success: true,
         content: JSON.stringify({
@@ -188,7 +190,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
           prompt:
             taskData.activityAdded === true
               ? "本次活动记录已经提交完成，不需要再次新增。"
-              : `你现在要根据当前对话和上下文判断是否有新的活动需要记录，如果不需要可直接结束，否则按照要求增加一条活动记录。`,
+              : "按照要求增加一条活动记录，如果不需要增加可直接结束。",
           has_next_tasks: false,
         }),
       };
@@ -235,11 +237,15 @@ export default class UpdateShortTermMemorySkill extends Skill {
     context?: ToolContext,
   ): Promise<ToolResult> {
     const taskData = getShortTermMemoryTaskData(context?.data);
-    if (!taskData || taskData.task !== "activity_tick") {
+    if (
+      !taskData ||
+      (taskData.task !== "activity_tick" &&
+        taskData.task !== "heartbeat_activity")
+    ) {
       return {
         success: false,
         error:
-          "add_activity can only be used in the activity-record creation task.",
+          "add_activity can only be used in activity creation tasks (activity_tick or heartbeat_activity).",
       };
     }
     if (taskData.activityAdded === true) {

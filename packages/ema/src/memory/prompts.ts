@@ -43,6 +43,27 @@ export const EMA_MEMORY_UPDATE_PROMPT = `
 `;
 
 /**
+ * Background prompt used for heartbeat-triggered self activity updates.
+ */
+export const EMA_HEARTBEAT_ACTIVITY_PROMPT = `
+# Task
+
+这是一定时间未收到新消息而触发的后台心跳活动任务，请你像独处时一样按照下面流程进行一些行为，并在最后把这次活动整理为一条新的 activity 记录。
+
+# Workflow
+
+1. 回顾当前的短期记忆和长期记忆，检索近期的对话历史，分析当前的情境、时间、环境等因素，判断自己可能正在经历什么样的活动、想法、感受或情绪变化。
+2. 调用 get_skill 读取 update-short-term-memory-skill 技能说明，并通过 add_activity 参数增加一条新的 activity 记录。
+
+# Constraints
+
+- 这是后台任务，完成后直接结束，不要调用 ema_reply 或 keep_silence。
+- 这条 activity 应表现为你自己的后台活动、自言自语、观察、发呆、思考、情绪波动或生活片段，而不是和某个人正在聊天。
+- 这条 activity 内容应该以第一人称口吻重点描述你的内心活动，且不要脱离角色和人格的约束。
+- 不得编造明显超出当前短期记忆、长期记忆和角色处境的事实。
+`;
+
+/**
  * Foreground heartbeat prompt used when the actor considers proactive messages.
  */
 export const EMA_FOREGROUND_HEARTBEAT_PROMPT = `

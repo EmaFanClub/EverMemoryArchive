@@ -1,9 +1,10 @@
-import { buildUserMessageFromActorInput } from "../../actor";
+import { buildUserMessageFromActorInput } from "../../actor/utils";
 import { Agent, type AgentState } from "../../agent";
 import { LLMClient } from "../../llm";
 import { Logger } from "../../logger";
 import {
   EMA_ACTIVITY_TICK_PROMPT,
+  EMA_HEARTBEAT_ACTIVITY_PROMPT,
   EMA_FOREGROUND_HEARTBEAT_PROMPT,
   EMA_MEMORY_UPDATE_PROMPT,
 } from "../../memory/prompts";
@@ -33,6 +34,14 @@ export interface ActorActivityTickJobData {
  * Data for calendar-triggered memory update jobs.
  */
 export interface ActorMemoryUpdateJobData {
+  actorId: number;
+  triggeredAt?: number;
+}
+
+/**
+ * Data for heartbeat-triggered background activity jobs.
+ */
+export interface ActorHeartbeatActivityJobData {
   actorId: number;
   triggeredAt?: number;
 }
@@ -141,6 +150,47 @@ export async function runActorMemoryUpdateJob(
           job.actorId,
           triggeredAt,
         ),
+      },
+    },
+  };
+  await agent.runWithState(agentState);
+}
+
+/**
+ * Runs a heartbeat-triggered background activity job.
+ * @param server - Server instance for shared resources.
+ * @param job - Heartbeat activity job data.
+ */
+export async function runActorHeartbeatActivityJob(
+  server: Server,
+  job: ActorHeartbeatActivityJobData,
+): Promise<void> {
+  const triggeredAt = job.triggeredAt ?? Date.now();
+  const agent = createBackgroundAgent(
+    server,
+    "ActorHeartbeatActivityJob",
+    job.actorId,
+    triggeredAt,
+  );
+  const agentState: AgentState = {
+    systemPrompt:
+      await server.memoryManager.buildSystemPromptForHeartbeatActivity(
+        job.actorId,
+      ),
+    messages: [
+      buildUserMessageFromActorInput({
+        kind: "system",
+        time: triggeredAt,
+        inputs: [{ type: "text", text: EMA_HEARTBEAT_ACTIVITY_PROMPT }],
+      }),
+    ],
+    tools: server.config.baseTools,
+    toolContext: {
+      actorId: job.actorId,
+      server,
+      data: {
+        task: "heartbeat_activity",
+        triggeredAt,
       },
     },
   };

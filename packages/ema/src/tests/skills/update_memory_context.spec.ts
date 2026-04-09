@@ -35,6 +35,44 @@ describe("memory update skills", () => {
     expect(res.error).toContain("activity_tick");
   });
 
+  test("update-short-term-memory-skill allows add_activity in heartbeat_activity", async () => {
+    const appendShortTermMemory = vi.fn();
+    const skill = new UpdateShortTermMemorySkill(
+      ".",
+      "update-short-term-memory-skill",
+    );
+    const res = await skill.execute(
+      {
+        action: "add_activity",
+        memory: "一个人的午后，发了会儿呆。",
+      },
+      {
+        actorId: 1,
+        server: {
+          memoryManager: {
+            appendShortTermMemory,
+          },
+        } as any,
+        data: {
+          task: "heartbeat_activity",
+          triggeredAt: 1234567890,
+        },
+      },
+    );
+
+    expect(res.success).toBe(true);
+    expect(appendShortTermMemory).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        kind: "activity",
+        date: formatTimestamp("YYYY-MM-DD", 1234567890),
+        memory: "一个人的午后，发了会儿呆。",
+        createdAt: 1234567890,
+        updatedAt: 1234567890,
+      }),
+    );
+  });
+
   test("update-long-term-memory-skill uses triggeredAt from tool context data", async () => {
     const addLongTermMemory = vi
       .fn()
