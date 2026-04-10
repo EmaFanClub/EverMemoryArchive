@@ -283,6 +283,7 @@ export class Server {
     const existingUser = await this.userDB.getUser(DEFAULT_WEB_USER_ID);
     const qqUid = process.env.EMA_QQ_UID?.trim() || null;
     const qqGroupId = process.env.EMA_QQ_GROUP_ID?.trim() || null;
+    const tavilyApiKey = process.env.EMA_TAVILY_API_KEY?.trim() || undefined;
 
     const user = {
       id: DEFAULT_WEB_USER_ID,
@@ -293,14 +294,15 @@ export class Server {
       id: DEFAULT_WEB_ACTOR_ID,
       roleId: 1,
     };
+    await this.userDB.upsertUser({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      description: existingUser?.description ?? "",
+      avatar: existingUser?.avatar ?? "",
+      ...(tavilyApiKey ? { tavilyApiKey } : {}),
+    });
     if (!existingUser) {
-      await this.userDB.upsertUser({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        description: "",
-        avatar: "",
-      });
       await this.actorDB.upsertActor({
         id: actor.id,
         roleId: actor.roleId,
@@ -350,7 +352,7 @@ export class Server {
         buildSession("qq", "chat", qqUid),
         "QQ Private Chat With Owner",
         "这是你和你的拥有者之间在 QQ 私聊中进行的对话。",
-        false,
+        true,
       );
       console.log(`Created QQ private chat ${qqUid} for user ${user.id}`);
     }
@@ -360,7 +362,7 @@ export class Server {
         buildSession("qq", "group", qqGroupId),
         "QQ Group Chat",
         "这是你在 QQ 群聊中进行的对话。",
-        true,
+        false,
       );
       console.log(`Created QQ group chat ${qqGroupId} for user ${user.id}`);
     }

@@ -205,6 +205,10 @@ export interface UserEntity extends Entity {
    */
   email: string;
   /**
+   * Optional Tavily API key owned by the user.
+   */
+  tavilyApiKey?: string;
+  /**
    * The date and time the user was last updated
    */
   updatedAt?: DbDate;
