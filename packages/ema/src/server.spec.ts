@@ -122,11 +122,11 @@ describe("Server", () => {
       expect(conversation).toMatchObject({
         actorId: 1,
         session: "web-chat-1",
-        description: "这是你和你的拥有者之间在网页端进行的对话。",
+        description: "这是你和你的拥有者之间在网页端私聊的对话。",
       });
 
       const backgroundJobs = await server.scheduler.listJobs({
-        name: "actor_memory_update",
+        name: "actor_memory_rollup",
         "data.actorId": 1,
       });
       const foregroundJobs = await server.scheduler.listJobs({
@@ -286,7 +286,7 @@ describe("Server with MemFs and snapshot functions", () => {
         "web-chat-1",
       );
     expect(conversation?.description).toBe(
-      "这是你和你的拥有者之间在网页端进行的对话。",
+      "这是你和你的拥有者之间在网页端私聊的对话。",
     );
   });
 });

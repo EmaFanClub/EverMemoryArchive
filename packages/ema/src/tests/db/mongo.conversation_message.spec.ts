@@ -141,7 +141,7 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     expect(row?.channelMessageId).toBe("99887766");
   });
 
-  test("should filter messages by resumed state", async () => {
+  test("should filter messages by buffered state", async () => {
     const legacy = await db.addConversationMessage({
       conversationId: 1,
       actorId: 1,
@@ -156,7 +156,7 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     const pending = await db.addConversationMessage({
       conversationId: 1,
       actorId: 1,
-      resumed: false,
+      buffered: false,
       message: {
         kind: "user",
         uid: "user-1",
@@ -165,10 +165,10 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
       },
       createdAt: Date.now(),
     });
-    const resumed = await db.addConversationMessage({
+    const buffered = await db.addConversationMessage({
       conversationId: 1,
       actorId: 1,
-      resumed: true,
+      buffered: true,
       message: {
         kind: "actor",
         name: "EMA",
@@ -179,14 +179,14 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
 
     const visible = await db.listConversationMessages({
       conversationId: 1,
-      resumed: true,
+      buffered: true,
       sort: "asc",
     });
-    expect(visible).toEqual([legacy, resumed]);
+    expect(visible).toEqual([legacy, buffered]);
 
     const hidden = await db.listConversationMessages({
       conversationId: 1,
-      resumed: false,
+      buffered: false,
       sort: "asc",
     });
     expect(hidden).toEqual([pending]);
@@ -195,11 +195,11 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     expect(await db.countConversationMessages(1, false)).toBe(1);
   });
 
-  test("should mark selected messages as resumed", async () => {
+  test("should mark selected messages as buffered", async () => {
     const first = await db.addConversationMessage({
       conversationId: 1,
       actorId: 1,
-      resumed: false,
+      buffered: false,
       message: {
         kind: "user",
         uid: "user-1",
@@ -211,7 +211,7 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     const second = await db.addConversationMessage({
       conversationId: 1,
       actorId: 1,
-      resumed: false,
+      buffered: false,
       message: {
         kind: "user",
         uid: "user-1",
@@ -221,22 +221,63 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
       createdAt: Date.now(),
     });
 
-    const updated = await db.markConversationMessagesResumed(1, [second.msgId]);
+    const updated = await db.markConversationMessagesBuffered(1, [
+      second.msgId,
+    ]);
     expect(updated).toBe(1);
 
     const visible = await db.listConversationMessages({
       conversationId: 1,
-      resumed: true,
+      buffered: true,
       sort: "asc",
     });
-    expect(visible).toEqual([{ ...second, resumed: true }]);
+    expect(visible).toEqual([{ ...second, buffered: true }]);
 
     const pending = await db.listConversationMessages({
       conversationId: 1,
-      resumed: false,
+      buffered: false,
       sort: "asc",
     });
     expect(pending).toEqual([first]);
+  });
+
+  test("should mark selected messages as activity processed", async () => {
+    const first = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      buffered: true,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "first" }],
+      },
+      createdAt: Date.now(),
+    });
+    const second = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      buffered: true,
+      message: {
+        kind: "actor",
+        name: "EMA",
+        contents: [{ type: "text", text: "second" }],
+      },
+      createdAt: Date.now(),
+    });
+
+    const processedAt = Date.now();
+    const updated = await db.markConversationMessagesActivityProcessed(
+      1,
+      [first.msgId, second.msgId],
+      processedAt,
+    );
+    expect(updated).toBe(2);
+
+    const firstRow = await db.getConversationMessage(first.id);
+    const secondRow = await db.getConversationMessage(second.id);
+    expect(firstRow?.activityProcessedAt).toBe(processedAt);
+    expect(secondRow?.activityProcessedAt).toBe(processedAt);
   });
 
   test("should list messages filtered by conversationId", async () => {

@@ -239,7 +239,7 @@ export class ActorWorker {
               buildUserMessageFromActorInput(item, this.ownerUid ?? undefined),
             ),
           );
-          await this.markInputMessagesResumed(batches);
+          await this.markInputMessagesBuffered(batches);
         } else {
           this.agentState = {
             systemPrompt:
@@ -257,7 +257,7 @@ export class ActorWorker {
               server: this.server,
             },
           };
-          await this.markInputMessagesResumed(batches);
+          await this.markInputMessagesBuffered(batches);
         }
         this.setStatus("running");
         this.currentRunPromise = this.agent.runWithState(this.agentState);
@@ -303,7 +303,9 @@ export class ActorWorker {
     await this.currentRunPromise;
   }
 
-  private async markInputMessagesResumed(batches: ActorInput[]): Promise<void> {
+  private async markInputMessagesBuffered(
+    batches: ActorInput[],
+  ): Promise<void> {
     for (const item of batches) {
       if (item.kind !== "chat") {
         continue;

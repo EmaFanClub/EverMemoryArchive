@@ -70,6 +70,9 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
         ? { $exists: true, $ne: null }
         : { $in: [null, undefined] };
     }
+    if (req.visible !== undefined) {
+      filter.visible = req.visible ? { $ne: false } : false;
+    }
 
     let cursor = collection.find(filter);
     if (req.sort) {
@@ -132,11 +135,11 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
       },
     );
     await collection.createIndex(
-      { actorId: 1, kind: 1, date: -1, createdAt: 1 },
+      { actorId: 1, kind: 1, visible: 1, date: -1, createdAt: 1 },
       {},
     );
     await collection.createIndex(
-      { actorId: 1, kind: 1, processedAt: 1, date: -1 },
+      { actorId: 1, kind: 1, visible: 1, processedAt: 1, date: -1 },
       {},
     );
   }

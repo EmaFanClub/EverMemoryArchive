@@ -163,10 +163,10 @@ describe("ActorTrainer", () => {
     });
   });
 
-  test("builds the end-of-day memory-update timestamp for a training day", () => {
+  test("builds the end-of-day memory-rollup timestamp for a training day", () => {
     const trainer = new ActorTrainer(server, new MemFs());
 
-    const timestamp = (trainer as any).buildMemoryUpdateTimestamp("2024-01-02");
+    const timestamp = (trainer as any).buildMemoryRollupTimestamp("2024-01-02");
 
     expect(timestamp).toBe(
       parseTimestamp("YYYY-MM-DD HH:mm:ss", "2024-01-02 23:59:00"),

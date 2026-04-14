@@ -2,7 +2,7 @@ import { z } from "zod";
 import { countApproxTextLength, Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
 import type { LongTermMemory } from "../../memory/base";
-import { getShortTermMemoryTaskData } from "../../memory/update_tasks";
+import { getShortTermMemoryTaskData } from "../../memory/utils";
 import { Logger } from "../../logger";
 import { Index0Enum, Index1Enum } from "../../memory/utils";
 import { formatTimestamp } from "../../utils";

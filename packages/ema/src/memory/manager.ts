@@ -11,6 +11,7 @@ import type {
 import type {
   ActorDB,
   ConversationDB,
+  ConversationMessageEntity,
   ConversationMessageDB,
   ExternalIdentityBindingDB,
   LongTermMemoryDB,
@@ -23,7 +24,7 @@ import type {
   ListShortTermMemoriesRequest,
 } from "../db";
 import { Logger } from "../logger";
-import { runActorActivityTickJob } from "../scheduler/jobs/actor.job";
+import { runActorConversationActivityJob } from "../scheduler/jobs/actor.job";
 import { loadPromptTemplate } from "../prompt/loader";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
 import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
@@ -40,14 +41,20 @@ import { skillsPrompt } from "../skills";
 export class MemoryManager implements BufferStorage, ActorMemory {
   /** Number of buffer messages injected into chat prompts. */
   readonly bufferWindowSize = 30;
-  /** Number of resumed messages required before triggering an activity update. */
+  /** Number of pending buffered messages required before triggering a conversation activity update. */
   readonly diaryUpdateEvery = 20;
+  /** Number of pending activities required before triggering a memory rollup. */
+  readonly activityRollupEvery = 20;
   /** Number of unprocessed day entries injected into chat prompts. */
   readonly dayWindowSize = 2;
   /** Number of unprocessed month entries injected into chat prompts. */
   readonly monthWindowSize = 2;
-  /** Number of unprocessed activity entries injected into chat prompts. */
-  readonly activityWindowSize = 100;
+  /** Number of visible activity entries injected into chat prompts. */
+  readonly activityWindowSize = 30;
+  /** Conversation IDs currently running one conversation-to-activity update. */
+  private readonly runningConversationActivities = new Set<number>();
+  /** Actor IDs currently running one threshold-based activity-to-day rollup. */
+  private readonly runningActivityToDayRollups = new Set<number>();
   private readonly logger: Logger = Logger.create({
     name: "MemoryManager",
     level: "debug",
@@ -67,7 +74,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
    * @param shortTermMemoryDB - Short-term memory persistence interface.
    * @param longTermMemoryDB - Long-term memory persistence interface.
    * @param longTermMemorySearcher - Long-term memory search interface.
-   * @param server - Optional server runtime used for direct activity-tick execution.
+   * @param server - Optional server runtime used for direct conversation-activity execution.
    */
   constructor(
     private readonly roleDB: RoleDB,
@@ -102,6 +109,8 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   private async getConversationMemoryPromptValues(
     actorId: number,
     conversationId: number,
+    activityRecords?: ShortTermMemoryRecord[],
+    bufferMessages?: BufferMessage[],
   ): Promise<{
     conversationDescription: string;
     bufferText: string;
@@ -123,8 +132,10 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       this.buildYearMemoryPrompt(actorId),
       this.buildMonthMemoryPrompt(actorId),
       this.buildDayMemoryPrompt(actorId),
-      this.buildActivityMemoryPrompt(actorId),
-      this.getBuffer(conversationId, this.bufferWindowSize),
+      this.buildActivityMemoryPrompt(actorId, activityRecords),
+      bufferMessages
+        ? Promise.resolve(bufferMessages)
+        : this.getBuffer(conversationId, this.bufferWindowSize),
     ]);
     if (!conversation) {
       throw new Error(`Conversation with ID ${conversationId} not found.`);
@@ -150,7 +161,10 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     };
   }
 
-  private async getDetachedMemoryPromptValues(actorId: number): Promise<{
+  private async getDetachedMemoryPromptValues(
+    actorId: number,
+    activityRecords?: ShortTermMemoryRecord[],
+  ): Promise<{
     conversationDescription: string;
     bufferText: string;
     yearMemory: string;
@@ -163,7 +177,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         this.buildYearMemoryPrompt(actorId),
         this.buildMonthMemoryPrompt(actorId),
         this.buildDayMemoryPrompt(actorId),
-        this.buildActivityMemoryPrompt(actorId),
+        this.buildActivityMemoryPrompt(actorId, activityRecords),
       ]);
     return {
       conversationDescription: "None.",
@@ -173,6 +187,35 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       dayMemory,
       activityMemory,
     };
+  }
+
+  private async getBackgroundMemoryPromptValues(
+    actorId: number,
+    options?: {
+      conversationId?: number;
+      activityRecords?: ShortTermMemoryRecord[];
+      bufferMessages?: BufferMessage[];
+    },
+  ): Promise<{
+    conversationDescription: string;
+    bufferText: string;
+    yearMemory: string;
+    monthMemory: string;
+    dayMemory: string;
+    activityMemory: string;
+  }> {
+    if (typeof options?.conversationId === "number") {
+      return this.getConversationMemoryPromptValues(
+        actorId,
+        options.conversationId,
+        options.activityRecords,
+        options.bufferMessages,
+      );
+    }
+    return this.getDetachedMemoryPromptValues(
+      actorId,
+      options?.activityRecords,
+    );
   }
 
   private async getActorIdByConversation(
@@ -232,15 +275,19 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   }
 
   /**
-   * Builds the system prompt for activity updates. This includes memory and
-   * recent conversation, but excludes interaction guidelines.
+   * Builds the system prompt for background tasks. This includes memory, but
+   * excludes interaction guidelines.
    * @param actorId - The actor identifier to read.
-   * @param conversationId - Conversation identifier used for memory and recent history.
-   * @returns The injected system prompt.
+   * @param options - Optional background prompt inputs.
+   * @returns The injected system prompt for background execution.
    */
-  async buildSystemPromptForActivityUpdate(
+  async buildSystemPromptForBackground(
     actorId: number,
-    conversationId: number,
+    options?: {
+      conversationId?: number;
+      activityRecords?: ShortTermMemoryRecord[];
+      bufferMessages?: BufferMessage[];
+    },
   ): Promise<string> {
     const template = await loadPromptTemplate(
       "preamble.md",
@@ -252,7 +299,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     const [{ rolePrompt, personalityMemory }, memoryValues] = await Promise.all(
       [
         this.getBasePromptValues(actorId),
-        this.getConversationMemoryPromptValues(actorId, conversationId),
+        this.getBackgroundMemoryPromptValues(actorId, options),
       ],
     );
     return template
@@ -268,63 +315,6 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       .replaceAll("{MEMORY_DAY}", memoryValues.dayMemory)
       .replaceAll("{MEMORY_ACTIVITY}", memoryValues.activityMemory)
       .replaceAll("{MEMORY_BUFFER}", memoryValues.bufferText);
-  }
-
-  /**
-   * Builds the system prompt for heartbeat-triggered background activities.
-   * This includes memory, but excludes interaction guidelines.
-   * @param actorId - The actor identifier to read.
-   * @returns The injected system prompt.
-   */
-  async buildSystemPromptForHeartbeatActivity(
-    actorId: number,
-  ): Promise<string> {
-    const template = await loadPromptTemplate(
-      "preamble.md",
-      "system.md",
-      "world.md",
-      "you.md",
-      "memory.md",
-    );
-    const [{ rolePrompt, personalityMemory }, memoryValues] = await Promise.all(
-      [
-        this.getBasePromptValues(actorId),
-        this.getDetachedMemoryPromptValues(actorId),
-      ],
-    );
-    return template
-      .replaceAll("{SKILLS_METADATA}", skillsPrompt)
-      .replaceAll("{ROLE_PROMPT}", rolePrompt)
-      .replaceAll("{PERSONALITY_MEMORY}", personalityMemory)
-      .replaceAll(
-        "{CONVERSATION_DESCRIPTION}",
-        memoryValues.conversationDescription,
-      )
-      .replaceAll("{MEMORY_YEAR}", memoryValues.yearMemory)
-      .replaceAll("{MEMORY_MONTH}", memoryValues.monthMemory)
-      .replaceAll("{MEMORY_DAY}", memoryValues.dayMemory)
-      .replaceAll("{MEMORY_ACTIVITY}", memoryValues.activityMemory)
-      .replaceAll("{MEMORY_BUFFER}", memoryValues.bufferText);
-  }
-
-  /**
-   * Builds the background prompt used for memory maintenance.
-   * @param actorId - The actor identifier to read.
-   * @returns The injected system prompt without memory or recent conversation.
-   */
-  async buildSystemPromptForMemoryUpdate(actorId: number): Promise<string> {
-    const template = await loadPromptTemplate(
-      "preamble.md",
-      "system.md",
-      "world.md",
-      "you.md",
-    );
-    const { rolePrompt, personalityMemory } =
-      await this.getBasePromptValues(actorId);
-    return template
-      .replaceAll("{SKILLS_METADATA}", skillsPrompt)
-      .replaceAll("{ROLE_PROMPT}", rolePrompt)
-      .replaceAll("{PERSONALITY_MEMORY}", personalityMemory);
   }
 
   private async buildYearMemoryPrompt(actorId: number): Promise<string> {
@@ -355,14 +345,13 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     return this.formatDayMemoryLines([...records].reverse()).join("\n");
   }
 
-  private async buildActivityMemoryPrompt(actorId: number): Promise<string> {
-    const records = await this.listShortTermMemories(actorId, {
-      kind: "activity",
-      processed: false,
-      sort: "desc",
-      limit: this.activityWindowSize,
-    });
-    return this.formatActivityLines([...records].reverse()).join("\n");
+  private async buildActivityMemoryPrompt(
+    actorId: number,
+    records?: ShortTermMemoryRecord[],
+  ): Promise<string> {
+    const items =
+      records ?? (await this.getVisibleActivityWindow(actorId, Date.now()));
+    return this.formatActivityLines(items).join("\n");
   }
 
   private formatFlatMemoryLines(records: ShortTermMemoryRecord[]): string[] {
@@ -435,19 +424,111 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     conversationId: number,
     count: number,
   ): Promise<BufferMessage[]> {
-    const [conversation, messages] = await Promise.all([
-      this.conversationDB.getConversation(conversationId),
-      this.conversationMessageDB.listConversationMessages({
+    const messages = await this.getBufferedConversationWindowEntities(
+      conversationId,
+      Date.now(),
+      count,
+    );
+    return this.mapConversationEntitiesToBufferMessages(
+      conversationId,
+      messages,
+    );
+  }
+
+  /**
+   * Gets one frozen buffered-message window for a conversation.
+   * @param conversationId - The conversation identifier to read.
+   * @param triggeredAt - Trigger timestamp used as the upper bound.
+   * @param count - The number of buffered messages to return.
+   * @returns Buffered messages and their actor-scoped msgIds ordered from oldest to newest.
+   */
+  async getBufferedConversationWindowSnapshot(
+    conversationId: number,
+    triggeredAt: number,
+    count: number = this.bufferWindowSize,
+  ): Promise<{ messages: BufferMessage[]; msgIds: number[] }> {
+    const records = await this.getBufferedConversationWindowEntities(
+      conversationId,
+      triggeredAt,
+      count,
+    );
+    return {
+      messages: await this.mapConversationEntitiesToBufferMessages(
         conversationId,
-        limit: count,
-        resumed: true,
-        sort: "desc",
-      }),
-    ]);
+        records,
+      ),
+      msgIds: records.map((item) => item.msgId),
+    };
+  }
+
+  /**
+   * Gets the pending-state summary for the current buffered conversation window.
+   * @param conversationId - The conversation identifier to read.
+   * @param triggeredAt - Trigger timestamp used as the upper bound.
+   * @returns Pending count plus the newest pending actor-scoped msgId.
+   */
+  async getPendingConversationWindowState(
+    conversationId: number,
+    triggeredAt: number,
+  ): Promise<{ count: number; lastPendingId: number | null }> {
+    const records = await this.getBufferedConversationWindowEntities(
+      conversationId,
+      triggeredAt,
+      this.bufferWindowSize,
+    );
+    const pendingRecords = records.filter(
+      (item) => typeof item.activityProcessedAt !== "number",
+    );
+    return {
+      count: pendingRecords.length,
+      lastPendingId: pendingRecords[pendingRecords.length - 1]?.msgId ?? null,
+    };
+  }
+
+  /**
+   * Marks buffered conversation messages as consumed by one conversation-activity update.
+   * @param conversationId - The conversation identifier to update.
+   * @param msgIds - Actor-scoped msgIds inside the buffered snapshot.
+   * @param processedAt - Processing timestamp.
+   * @returns Number of messages successfully marked as processed.
+   */
+  async markConversationMessagesActivityProcessed(
+    conversationId: number,
+    msgIds: number[],
+    processedAt: number,
+  ): Promise<number> {
+    return await this.conversationMessageDB.markConversationMessagesActivityProcessed(
+      conversationId,
+      msgIds,
+      processedAt,
+    );
+  }
+
+  private async getBufferedConversationWindowEntities(
+    conversationId: number,
+    triggeredAt: number,
+    count: number,
+  ): Promise<ConversationMessageEntity[]> {
+    const messages = await this.conversationMessageDB.listConversationMessages({
+      conversationId,
+      limit: count,
+      buffered: true,
+      createdBefore: triggeredAt,
+      sort: "desc",
+    });
+    return [...messages].reverse();
+  }
+
+  private async mapConversationEntitiesToBufferMessages(
+    conversationId: number,
+    messages: ConversationMessageEntity[],
+  ): Promise<BufferMessage[]> {
+    const conversation =
+      await this.conversationDB.getConversation(conversationId);
     if (!conversation) {
       throw new Error(`Conversation with ID ${conversationId} not found.`);
     }
-    return [...messages].reverse().map((item) => {
+    return messages.map((item) => {
       const message = item.message;
       if (message.kind === "user") {
         return {
@@ -477,7 +558,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   }
 
   /**
-   * Persists a chat message before it is added to the resumed buffer.
+   * Persists a chat message before it is added to the buffered recent-history window.
    * @param message - The runtime chat message to persist.
    */
   async persistChatMessage(message: BufferWriteMessage): Promise<void> {
@@ -537,7 +618,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       channelMessageId: isActorChatInput(message)
         ? message.channelMessageId
         : `${message.conversationId}:${message.msgId}`,
-      resumed: false,
+      buffered: false,
       message: payload,
       createdAt: message.time,
       msgId: message.msgId,
@@ -564,11 +645,11 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   }
 
   /**
-   * Adds a single persisted message into the resumed buffer and triggers activity updates when needed.
+   * Adds a single persisted message into the buffered recent-history window and triggers activity updates when needed.
    * @param conversationId - The conversation identifier.
    * @param msgId - Actor-scoped message identifier.
-   * @param triggerActivityTick - Whether this add should participate in online activity-tick triggering.
-   * @param triggeredAt - Optional timestamp used when triggering activity-tick jobs.
+   * @param triggerActivityTick - Whether this add should participate in online conversation-activity triggering.
+   * @param triggeredAt - Optional timestamp used when triggering conversation-activity jobs.
    */
   async addToBuffer(
     conversationId: number,
@@ -577,7 +658,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     triggeredAt?: number,
   ): Promise<void> {
     const updated =
-      await this.conversationMessageDB.markConversationMessagesResumed(
+      await this.conversationMessageDB.markConversationMessagesBuffered(
         conversationId,
         [msgId],
       );
@@ -585,26 +666,31 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       return;
     }
 
-    const resumedCount =
-      await this.conversationMessageDB.countConversationMessages(
+    const effectiveTriggeredAt = triggeredAt ?? Date.now();
+    const pendingCount = (
+      await this.getPendingConversationWindowState(
         conversationId,
-        true,
-      );
+        effectiveTriggeredAt,
+      )
+    ).count;
     if (
       !triggerActivityTick ||
-      resumedCount % this.diaryUpdateEvery !== 0 ||
+      pendingCount < this.diaryUpdateEvery ||
       !this.server
     ) {
       return;
     }
 
     const actorId = await this.getActorIdByConversation(conversationId);
-    void runActorActivityTickJob(this.server, {
+    void runActorConversationActivityJob(this.server, {
       actorId,
       conversationId,
-      triggeredAt: triggeredAt ?? Date.now(),
+      triggeredAt: effectiveTriggeredAt,
     }).catch((error) => {
-      this.logger.error("Failed to run actor activity tick job:", error);
+      this.logger.error(
+        "Failed to run actor conversation activity job:",
+        error,
+      );
     });
   }
 
@@ -687,10 +773,12 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         id: item.id,
         kind: item.kind,
         date: item.date,
+        dayDate: item.dayDate,
         memory: item.memory,
-        createdAt: item.createdAt ?? Date.now(),
+        createdAt: item.createdAt ?? item.updatedAt ?? Date.now(),
         updatedAt: item.updatedAt,
         processedAt: item.processedAt,
+        visible: item.visible,
       };
     });
   }
@@ -709,10 +797,12 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       actorId,
       kind: item.kind,
       date: item.date,
+      dayDate: item.dayDate,
       memory: item.memory,
       createdAt: item.createdAt,
       updatedAt: now,
       processedAt: item.processedAt,
+      visible: item.visible,
     });
   }
 
@@ -736,10 +826,12 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         actorId,
         kind: item.kind,
         date: item.date,
+        dayDate: item.dayDate,
         memory: item.memory,
         createdAt: item.createdAt,
         updatedAt: now,
         processedAt: item.processedAt,
+        visible: item.visible,
       });
       return;
     }
@@ -748,10 +840,12 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       actorId,
       kind: item.kind,
       date: item.date,
+      dayDate: item.dayDate ?? existing[0].dayDate,
       memory: item.memory,
       createdAt: existing[0].createdAt,
       updatedAt: now,
       processedAt: item.processedAt,
+      visible: item.visible ?? existing[0].visible,
     });
   }
 
@@ -760,14 +854,15 @@ export class MemoryManager implements BufferStorage, ActorMemory {
    * @param actorId - The actor identifier to update.
    * @param ids - Memory record identifiers to mark.
    * @param processedAt - Processing timestamp.
+   * @returns Number of memory records successfully marked as processed.
    */
   async markShortTermMemoryRecordsProcessed(
     actorId: number,
     ids: number[],
     processedAt: number,
-  ): Promise<void> {
+  ): Promise<number> {
     if (ids.length === 0) {
-      return;
+      return 0;
     }
     const records = await this.listShortTermMemories(actorId, {
       ids,
@@ -779,32 +874,133 @@ export class MemoryManager implements BufferStorage, ActorMemory {
           actorId,
           kind: record.kind,
           date: record.date,
+          dayDate: record.dayDate,
           memory: record.memory,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt ?? processedAt,
           processedAt,
+          visible: record.visible,
         }),
       ),
     );
+    return records.length;
   }
 
   /**
-   * Gets the activity snapshot used by memory-update jobs.
+   * Tries to enter one running conversation-activity update for the conversation.
+   * @param conversationId - The conversation identifier to guard.
+   * @returns True when the caller acquired the running slot, false otherwise.
+   */
+  tryEnterConversationActivity(conversationId: number): boolean {
+    if (this.runningConversationActivities.has(conversationId)) {
+      return false;
+    }
+    this.runningConversationActivities.add(conversationId);
+    return true;
+  }
+
+  /**
+   * Leaves one running conversation-activity update for the conversation.
+   * @param conversationId - The conversation identifier to release.
+   */
+  leaveConversationActivity(conversationId: number): void {
+    this.runningConversationActivities.delete(conversationId);
+  }
+
+  /**
+   * Tries to enter one running threshold activity-to-day rollup for the actor.
+   * @param actorId - The actor identifier to guard.
+   * @returns True when the caller acquired the running slot, false otherwise.
+   */
+  tryEnterActivityToDayRollup(actorId: number): boolean {
+    if (this.runningActivityToDayRollups.has(actorId)) {
+      return false;
+    }
+    this.runningActivityToDayRollups.add(actorId);
+    return true;
+  }
+
+  /**
+   * Leaves one running threshold activity-to-day rollup for the actor.
+   * @param actorId - The actor identifier to release.
+   */
+  leaveActivityToDayRollup(actorId: number): void {
+    this.runningActivityToDayRollups.delete(actorId);
+  }
+
+  /**
+   * Gets the visible activity window used by prompts and rollups.
    * @param actorId - The actor identifier to read.
    * @param triggeredAt - Trigger timestamp in milliseconds.
-   * @returns Unprocessed activities up to the trigger date.
+   * @param limit - Maximum number of visible activity records to return.
+   * @returns Visible activity records ordered from oldest to newest.
    */
-  async getActivitySnapshot(
+  async getVisibleActivityWindow(
     actorId: number,
     triggeredAt: number,
+    limit: number = this.activityWindowSize,
   ): Promise<ShortTermMemoryRecord[]> {
-    const triggerDate = formatTimestamp("YYYY-MM-DD", triggeredAt);
     const activities = await this.listShortTermMemories(actorId, {
       kind: "activity",
-      processed: false,
-      sort: "asc",
+      visible: true,
+      createdBefore: triggeredAt,
+      sort: "desc",
+      limit,
     });
-    return activities.filter((item) => item.date <= triggerDate);
+    return [...activities].reverse();
+  }
+
+  /**
+   * Gets the pending-state summary for the current visible activity window.
+   * @param actorId - The actor identifier to read.
+   * @param triggeredAt - Trigger timestamp in milliseconds.
+   * @returns Pending count plus the newest pending activity record id.
+   */
+  async getPendingActivityWindowState(
+    actorId: number,
+    triggeredAt: number,
+  ): Promise<{ count: number; lastPendingId: number | null }> {
+    const records = await this.getVisibleActivityWindow(actorId, triggeredAt);
+    const pendingRecords = records.filter(
+      (item) => typeof item.processedAt !== "number",
+    );
+    return {
+      count: pendingRecords.length,
+      lastPendingId: pendingRecords[pendingRecords.length - 1]?.id ?? null,
+    };
+  }
+
+  /**
+   * Hides processed activity records up to the provided time boundary.
+   * @param actorId - The actor identifier to update.
+   * @param upperBoundAt - Inclusive upper bound of the affected activity window.
+   */
+  async hideRolledUpActivities(
+    actorId: number,
+    upperBoundAt: number,
+  ): Promise<void> {
+    const records = await this.listShortTermMemories(actorId, {
+      kind: "activity",
+      visible: true,
+      processed: true,
+      createdBefore: upperBoundAt,
+    });
+    await Promise.all(
+      records.map((record) =>
+        this.shortTermMemoryDB.upsertShortTermMemory({
+          id: record.id,
+          actorId,
+          kind: record.kind,
+          date: record.date,
+          dayDate: record.dayDate,
+          memory: record.memory,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt ?? upperBoundAt,
+          processedAt: record.processedAt,
+          visible: false,
+        }),
+      ),
+    );
   }
 
   /**

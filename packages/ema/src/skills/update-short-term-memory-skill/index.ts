@@ -5,8 +5,9 @@ import type { ShortTermMemory, ShortTermMemoryRecord } from "../../memory/base";
 import {
   formatShortTermMemoryDate,
   getShortTermMemoryTaskData,
-} from "../../memory/update_tasks";
+} from "../../memory/utils";
 import { Logger } from "../../logger";
+import { formatTimestamp } from "../../utils";
 
 const SHORT_TERM_MEMORY_MAX_LENGTH = {
   activity: 100,
@@ -180,7 +181,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
       };
     }
     if (
-      taskData.task === "activity_tick" ||
+      taskData.task === "conversation_activity" ||
       taskData.task === "heartbeat_activity"
     ) {
       return {
@@ -239,13 +240,13 @@ export default class UpdateShortTermMemorySkill extends Skill {
     const taskData = getShortTermMemoryTaskData(context?.data);
     if (
       !taskData ||
-      (taskData.task !== "activity_tick" &&
+      (taskData.task !== "conversation_activity" &&
         taskData.task !== "heartbeat_activity")
     ) {
       return {
         success: false,
         error:
-          "add_activity can only be used in activity creation tasks (activity_tick or heartbeat_activity).",
+          "add_activity can only be used in activity creation tasks (conversation_activity or heartbeat_activity).",
       };
     }
     if (taskData.activityAdded === true) {
@@ -265,9 +266,11 @@ export default class UpdateShortTermMemorySkill extends Skill {
     await context!.server!.memoryManager.appendShortTermMemory(actorId, {
       kind: "activity",
       date: formatShortTermMemoryDate("activity", taskData.triggeredAt),
+      dayDate: formatShortTermMemoryDate("day", taskData.triggeredAt),
       memory: payload.memory,
       createdAt: taskData.triggeredAt,
       updatedAt: taskData.triggeredAt,
+      visible: true,
     });
     if (context?.data) {
       context.data.activityAdded = true;
@@ -285,11 +288,11 @@ export default class UpdateShortTermMemorySkill extends Skill {
     context?: ToolContext,
   ): Promise<ToolResult> {
     const taskData = getShortTermMemoryTaskData(context?.data);
-    if (!taskData || taskData.task !== "memory_update") {
+    if (!taskData || taskData.task !== "memory_rollup") {
       return {
         success: false,
         error:
-          "update_memory can only be used in the short-term memory maintenance task.",
+          "update_memory can only be used in the short-term memory rollup task.",
       };
     }
     const currentTasks = await this.buildPendingMemoryTasks(actorId, context);
@@ -345,34 +348,33 @@ export default class UpdateShortTermMemorySkill extends Skill {
       };
     }
 
+    const memoryManager = context!.server!.memoryManager;
     for (const task of currentTasks) {
       const action = actionMap.get(task.taskId)!;
-      await context!.server!.memoryManager.upsertShortTermMemory(actorId, {
+      await memoryManager.upsertShortTermMemory(actorId, {
         kind: task.targetKind,
         date: task.targetDate,
         memory: action.memory,
         createdAt: taskData.triggeredAt,
         updatedAt: taskData.triggeredAt,
       });
-      await context!.server!.memoryManager.markShortTermMemoryRecordsProcessed(
-        actorId,
-        task.sourceIds,
-        taskData.triggeredAt,
-      );
-    }
-
-    if (context?.data && currentTasks[0]?.sourceKind === "activity") {
-      const completed = new Set<number>(
-        Array.isArray(context.data.completedActivityIds)
-          ? (context.data.completedActivityIds as number[])
-          : [],
-      );
-      for (const task of currentTasks) {
-        for (const id of task.sourceIds) {
-          completed.add(id);
+      const processedCount =
+        await memoryManager.markShortTermMemoryRecordsProcessed(
+          actorId,
+          task.sourceIds,
+          taskData.triggeredAt,
+        );
+      if (processedCount > 0 && task.sourceKind === "activity") {
+        const snapshot = Array.isArray(context?.data?.activitySnapshot)
+          ? context.data.activitySnapshot
+          : [];
+        const sourceIdSet = new Set(task.sourceIds);
+        for (const item of snapshot) {
+          if (sourceIdSet.has(item.id)) {
+            item.processedAt = taskData.triggeredAt;
+          }
         }
       }
-      context.data.completedActivityIds = Array.from(completed);
     }
 
     this.logger.debug("Updated short-term memory.", payload);
@@ -388,7 +390,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
   ): Promise<PendingMemoryTask[]> {
     const server = context?.server;
     const taskData = getShortTermMemoryTaskData(context?.data);
-    if (!server || !taskData || taskData.task !== "memory_update") {
+    if (!server || !taskData || taskData.task !== "memory_rollup") {
       return [];
     }
 
@@ -441,27 +443,27 @@ export default class UpdateShortTermMemorySkill extends Skill {
   ): Promise<PendingMemoryTask[]> {
     const server = context?.server;
     const taskData = getShortTermMemoryTaskData(context?.data);
-    if (!server || !taskData || taskData.task !== "memory_update") {
+    if (!server || !taskData || taskData.task !== "memory_rollup") {
       return [];
     }
-    const completedIds = new Set(taskData.completedActivityIds ?? []);
     const grouped = new Map<string, ShortTermMemoryRecord[]>();
     for (const item of taskData.activitySnapshot) {
-      if (completedIds.has(item.id)) {
+      if (typeof item.processedAt === "number") {
         continue;
       }
-      const bucket = grouped.get(item.date) ?? [];
+      const targetDate = item.dayDate ?? item.date;
+      const bucket = grouped.get(targetDate) ?? [];
       bucket.push(item);
-      grouped.set(item.date, bucket);
+      grouped.set(targetDate, bucket);
     }
     const tasks: PendingMemoryTask[] = [];
     let taskId = 1;
-    for (const [date, records] of grouped) {
+    for (const [targetDate, records] of grouped) {
       const existing = await server.memoryManager.listShortTermMemories(
         actorId,
         {
           kind: "day",
-          date,
+          date: targetDate,
           limit: 1,
         },
       );
@@ -469,9 +471,11 @@ export default class UpdateShortTermMemorySkill extends Skill {
         taskId: taskId++,
         sourceKind: "activity",
         sourceIds: records.map((item) => item.id),
-        sourceMemory: records.map((item) => `- ${item.memory}`).join("\n"),
+        sourceMemory: records
+          .map((item) => this.formatActivitySourceLine(item))
+          .join("\n"),
         targetKind: "day",
-        targetDate: date,
+        targetDate,
         targetMemory: existing[0]?.memory ?? "",
       });
     }
@@ -526,10 +530,21 @@ export default class UpdateShortTermMemorySkill extends Skill {
     return tasks;
   }
 
+  private formatActivitySourceLine(item: ShortTermMemoryRecord): string {
+    const time =
+      typeof item.createdAt === "number"
+        ? formatTimestamp("YYYY-MM-DD HH:mm", item.createdAt)
+        : typeof item.updatedAt === "number"
+          ? formatTimestamp("YYYY-MM-DD HH:mm", item.updatedAt)
+          : item.date;
+    const memory = item.memory.replaceAll(/\s+/g, " ").trim() || "None.";
+    return `- [${time}] ${memory}`;
+  }
+
   private getBatchPrompt(sourceKind: PendingMemoryTask["sourceKind"]): string {
     switch (sourceKind) {
       case "activity":
-        return "把 source 中同一天的 activity 记录整理到 target 对应日期的 day 记忆中，返回目标 day 的更新后完整版本。";
+        return "把 source 中的 activity 融合到 target 对应日期的 day 记忆中，返回目标 day 的更新后完整版本。";
       case "day":
         return "把 source 中的所有 day 记忆整理到 target 对应月份的 month 记忆中，返回目标 month 的更新后完整版本。";
       case "month":

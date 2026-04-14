@@ -94,11 +94,11 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       }
       filter.channelMessageId = req.channelMessageId;
     }
-    if (req.resumed !== undefined) {
-      if (typeof req.resumed !== "boolean") {
-        throw new Error("resumed must be a boolean");
+    if (req.buffered !== undefined) {
+      if (typeof req.buffered !== "boolean") {
+        throw new Error("buffered must be a boolean");
       }
-      filter.resumed = req.resumed ? { $ne: false } : false;
+      filter.buffered = req.buffered ? { $ne: false } : false;
     }
 
     let cursor = collection.find(filter);
@@ -114,12 +114,12 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
   /**
    * Counts conversation messages in the database
    * @param conversationId - The conversation ID to count messages for
-   * @param resumed - Optional resumed-state filter
+   * @param buffered - Optional buffered-state filter
    * @returns Promise resolving to the number of matching messages
    */
   async countConversationMessages(
     conversationId: number,
-    resumed?: boolean,
+    buffered?: boolean,
   ): Promise<number> {
     if (typeof conversationId !== "number") {
       throw new Error("conversationId must be a number");
@@ -128,9 +128,9 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     const collection = db.collection<ConversationMessageEntity>(this.$cn);
     return collection.countDocuments({
       conversationId,
-      ...(resumed === undefined
+      ...(buffered === undefined
         ? {}
-        : { resumed: resumed ? { $ne: false } : false }),
+        : { buffered: buffered ? { $ne: false } : false }),
     });
   }
 
@@ -216,7 +216,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     return result.matchedCount > 0;
   }
 
-  async markConversationMessagesResumed(
+  async markConversationMessagesBuffered(
     conversationId: number,
     msgIds: number[],
   ): Promise<number> {
@@ -242,7 +242,44 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       },
       {
         $set: {
-          resumed: true,
+          buffered: true,
+        },
+      },
+    );
+    return result.modifiedCount;
+  }
+
+  async markConversationMessagesActivityProcessed(
+    conversationId: number,
+    msgIds: number[],
+    processedAt: number,
+  ): Promise<number> {
+    if (typeof conversationId !== "number") {
+      throw new Error("conversationId must be a number");
+    }
+    if (!Array.isArray(msgIds)) {
+      throw new Error("msgIds must be an array");
+    }
+    if (msgIds.some((id) => typeof id !== "number")) {
+      throw new Error("msgIds must contain only numbers");
+    }
+    if (typeof processedAt !== "number") {
+      throw new Error("processedAt must be a number");
+    }
+    if (msgIds.length === 0) {
+      return 0;
+    }
+
+    const db = this.mongo.getDb();
+    const collection = db.collection<ConversationMessageEntity>(this.$cn);
+    const result = await collection.updateMany(
+      {
+        conversationId,
+        msgId: { $in: msgIds },
+      },
+      {
+        $set: {
+          activityProcessedAt: processedAt,
         },
       },
     );
@@ -269,7 +306,13 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     await collection.createIndex({ conversationId: 1, createdAt: -1 });
     await collection.createIndex({
       conversationId: 1,
-      resumed: 1,
+      buffered: 1,
+      createdAt: -1,
+    });
+    await collection.createIndex({
+      conversationId: 1,
+      buffered: 1,
+      activityProcessedAt: 1,
       createdAt: -1,
     });
     await collection.createIndex({ actorId: 1, msgId: 1 }, { unique: true });

@@ -352,7 +352,7 @@ export class Server {
         buildSession("qq", "chat", qqUid),
         "QQ Private Chat With Owner",
         "这是你和你的拥有者之间在 QQ 私聊中进行的对话。",
-        true,
+        false,
       );
       console.log(`Created QQ private chat ${qqUid} for user ${user.id}`);
     }
@@ -379,11 +379,12 @@ export class Server {
     }
     if (this.scheduler) {
       await this.scheduler.scheduleEvery({
-        name: "actor_memory_update",
+        name: "actor_memory_rollup",
         runAt: Date.now(),
         interval: "59 23 * * *",
         data: {
           actorId: actor.id,
+          reason: "dayend",
         },
       });
     }

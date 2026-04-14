@@ -53,7 +53,7 @@ export interface ActorTrainingRequest {
    */
   dataset: TrainDataset;
   /**
-   * Buffer size used when constructing memory-update prompts during training.
+   * Buffer size used when constructing memory prompts during training.
    */
   bufferWindowSize: number;
   /**
@@ -65,7 +65,7 @@ export interface ActorTrainingRequest {
    */
   checkpointDir: string;
   /**
-   * Save one numbered checkpoint for every N completed memory-update steps.
+   * Save one numbered checkpoint for every N completed training steps.
    * Defaults to 1.
    */
   saveEverySteps?: number;

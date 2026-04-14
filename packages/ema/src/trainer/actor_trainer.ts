@@ -3,8 +3,8 @@ import type { Fs } from "../fs";
 import { RealFs } from "../fs";
 import type { BufferWriteMessage, ShortTermMemory } from "../memory/base";
 import {
-  runActorActivityTickJob,
-  runActorMemoryUpdateJob,
+  runActorConversationActivityJob,
+  runActorMemoryRollupJob,
 } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import { formatTimestamp, parseTimestamp } from "../utils";
@@ -102,7 +102,6 @@ export class ActorTrainer {
       let nextInputIndex = 0;
       while (nextInputIndex < normalizedInputs.length) {
         const currentDayKey = normalizedInputs[nextInputIndex].dayKey;
-        let pendingActivityCount = 0;
         let lastMessageTimestamp = normalizedInputs[nextInputIndex].timestamp;
 
         console.log(
@@ -133,18 +132,23 @@ export class ActorTrainer {
             input.timestamp,
           );
           messageCount = message.msgId;
-          pendingActivityCount += 1;
           lastMessageTimestamp = input.timestamp;
           nextInputIndex += 1;
 
-          if (pendingActivityCount >= req.diaryUpdateEvery) {
-            await runActorActivityTickJob(this.server, {
+          const pendingConversationCount = (
+            await this.server.memoryManager.getPendingConversationWindowState(
+              conversationId,
+              input.timestamp,
+            )
+          ).count;
+          if (pendingConversationCount >= req.diaryUpdateEvery) {
+            await runActorConversationActivityJob(this.server, {
               actorId,
               conversationId,
               triggeredAt: input.timestamp,
             });
             ({ checkpointId, stepCount } = await this.advanceStep(
-              "activity-tick",
+              "conversation-activity",
               checkpointId,
               stepCount,
               saveEverySteps,
@@ -153,20 +157,25 @@ export class ActorTrainer {
               conversationId,
               checkpointRoot,
               input.timestamp,
-              ["activity"],
+              ["activity", "day", "month", "year"],
             ));
-            pendingActivityCount = 0;
           }
         }
 
-        if (pendingActivityCount > 0) {
-          await runActorActivityTickJob(this.server, {
+        const pendingConversationCount = (
+          await this.server.memoryManager.getPendingConversationWindowState(
+            conversationId,
+            lastMessageTimestamp,
+          )
+        ).count;
+        if (pendingConversationCount > 0) {
+          await runActorConversationActivityJob(this.server, {
             actorId,
             conversationId,
             triggeredAt: lastMessageTimestamp,
           });
           ({ checkpointId, stepCount } = await this.advanceStep(
-            "activity-tick",
+            "conversation-activity",
             checkpointId,
             stepCount,
             saveEverySteps,
@@ -175,18 +184,19 @@ export class ActorTrainer {
             conversationId,
             checkpointRoot,
             lastMessageTimestamp,
-            ["activity"],
+            ["activity", "day", "month", "year"],
           ));
         }
 
-        const memoryUpdateTimestamp =
-          this.buildMemoryUpdateTimestamp(currentDayKey);
-        await runActorMemoryUpdateJob(this.server, {
+        const memoryRollupTimestamp =
+          this.buildMemoryRollupTimestamp(currentDayKey);
+        await runActorMemoryRollupJob(this.server, {
           actorId,
-          triggeredAt: memoryUpdateTimestamp,
+          triggeredAt: memoryRollupTimestamp,
+          reason: "dayend",
         });
         ({ checkpointId, stepCount } = await this.advanceStep(
-          "memory-update",
+          "memory-rollup",
           checkpointId,
           stepCount,
           saveEverySteps,
@@ -194,8 +204,8 @@ export class ActorTrainer {
           actorId,
           conversationId,
           checkpointRoot,
-          memoryUpdateTimestamp,
-          ["day", "month", "year"],
+          memoryRollupTimestamp,
+          ["activity", "day", "month", "year"],
         ));
       }
       checkpointId += 1;
@@ -352,7 +362,7 @@ export class ActorTrainer {
       .replaceAll("\n", " ");
   }
 
-  private buildMemoryUpdateTimestamp(dayKey: string): number {
+  private buildMemoryRollupTimestamp(dayKey: string): number {
     return parseTimestamp(TRAINING_TIME_FORMAT, `${dayKey} 23:59:00`);
   }
 

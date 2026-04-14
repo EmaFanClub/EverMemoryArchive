@@ -6,7 +6,7 @@ import { formatTimestamp } from "../../utils";
 import { isAllowedIndex1 } from "../../memory/utils";
 
 describe("memory update skills", () => {
-  test("update-short-term-memory-skill rejects add_activity outside activity_tick", async () => {
+  test("update-short-term-memory-skill rejects add_activity outside conversation activity", async () => {
     const skill = new UpdateShortTermMemorySkill(
       ".",
       "update-short-term-memory-skill",
@@ -24,7 +24,8 @@ describe("memory update skills", () => {
           },
         } as any,
         data: {
-          task: "memory_update",
+          task: "memory_rollup",
+          reason: "threshold",
           triggeredAt: Date.now(),
           activitySnapshot: [],
         },
@@ -32,7 +33,7 @@ describe("memory update skills", () => {
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("activity_tick");
+    expect(res.error).toContain("conversation_activity");
   });
 
   test("update-short-term-memory-skill allows add_activity in heartbeat_activity", async () => {
@@ -66,9 +67,11 @@ describe("memory update skills", () => {
       expect.objectContaining({
         kind: "activity",
         date: formatTimestamp("YYYY-MM-DD", 1234567890),
+        dayDate: formatTimestamp("YYYY-MM-DD", 1234567890),
         memory: "一个人的午后，发了会儿呆。",
         createdAt: 1234567890,
         updatedAt: 1234567890,
+        visible: true,
       }),
     );
   });
@@ -109,7 +112,7 @@ describe("memory update skills", () => {
           },
         } as any,
         data: {
-          task: "activity_tick",
+          task: "conversation_activity",
           triggeredAt: 1234567890,
         },
       },

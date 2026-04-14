@@ -1,10 +1,10 @@
 /**
- * Background prompt used for activity-tick updates.
+ * Background prompt used for conversation-triggered activity updates.
  */
-export const EMA_ACTIVITY_TICK_PROMPT = `
+export const EMA_CONVERSATION_ACTIVITY_PROMPT = `
 # Task
 
-这是一个由对话数量触发的 activity 更新任务，严格按照以下流程执行。
+这是一个 activity 更新任务，严格按照以下流程执行。
 
 # Workflow
 
@@ -21,12 +21,12 @@ export const EMA_ACTIVITY_TICK_PROMPT = `
 `;
 
 /**
- * Background prompt used for daily memory-update rollups.
+ * Background prompt used for memory rollups.
  */
-export const EMA_MEMORY_UPDATE_PROMPT = `
+export const EMA_MEMORY_ROLLUP_PROMPT = `
 # Task
 
-这是一个由时间触发的记忆整理任务，严格按照以下流程执行。
+这是一个后台记忆整理任务，严格按照以下流程执行。
 
 # Workflow
 

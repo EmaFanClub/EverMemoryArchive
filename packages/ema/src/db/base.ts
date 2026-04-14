@@ -488,10 +488,13 @@ export interface ConversationMessageEntity extends Entity {
    */
   channelMessageId?: string;
   /**
-   * Whether the message has already been merged into actor runtime state and
-   * is therefore eligible to appear in rebuilt buffer prompts.
+   * Whether the message has already entered the buffered recent-history window.
    */
-  resumed?: boolean;
+  buffered?: boolean;
+  /**
+   * The date and time this message was consumed by a conversation-activity update.
+   */
+  activityProcessedAt?: DbDate;
   /**
    * The conversation message
    */
@@ -555,12 +558,12 @@ export interface ConversationMessageDB {
   /**
    * counts conversation messages in the database
    * @param conversationId - The conversation ID to count messages for
-   * @param resumed - Optional resumed-state filter
+   * @param buffered - Optional buffered-state filter
    * @returns Promise resolving to the number of matching messages
    */
   countConversationMessages(
     conversationId: number,
-    resumed?: boolean,
+    buffered?: boolean,
   ): Promise<number>;
 
   /**
@@ -602,15 +605,28 @@ export interface ConversationMessageDB {
   ): Promise<boolean>;
 
   /**
-   * Marks stored messages as resumed so they can participate in
-   * rebuilt buffer prompts.
+   * Marks stored messages as buffered so they can participate in
+   * rebuilt recent-history prompts.
    * @param conversationId - The conversation ID of the target messages
    * @param msgIds - Actor-scoped msgIds to update
    * @returns Promise resolving to the number of updated rows
    */
-  markConversationMessagesResumed(
+  markConversationMessagesBuffered(
     conversationId: number,
     msgIds: number[],
+  ): Promise<number>;
+
+  /**
+   * Marks buffered messages as consumed by a conversation-activity update.
+   * @param conversationId - The conversation ID of the target messages
+   * @param msgIds - Actor-scoped msgIds to update
+   * @param processedAt - Processing timestamp
+   * @returns Promise resolving to the number of updated rows
+   */
+  markConversationMessagesActivityProcessed(
+    conversationId: number,
+    msgIds: number[],
+    processedAt: DbDate,
   ): Promise<number>;
 
   /**
@@ -652,10 +668,10 @@ export interface ListConversationMessagesRequest {
   msgIds?: number[];
   channelMessageId?: string;
   /**
-   * Filter messages by resumed state. `true` should also include legacy rows
+   * Filter messages by buffered state. `true` should also include legacy rows
    * where the field is absent.
    */
-  resumed?: boolean;
+  buffered?: boolean;
 }
 
 /**
@@ -675,6 +691,10 @@ export interface ShortTermMemoryEntity extends Entity {
    */
   date: string;
   /**
+   * Logical day bucket used when rolling activity into day memory.
+   */
+  dayDate?: string;
+  /**
    * The memory text.
    */
   memory: string;
@@ -686,6 +706,10 @@ export interface ShortTermMemoryEntity extends Entity {
    * The date and time the short-term memory was consumed by a higher-level rollup.
    */
   processedAt?: DbDate;
+  /**
+   * Whether this record should still appear in the current activity window.
+   */
+  visible?: boolean;
 }
 
 /**
@@ -760,6 +784,10 @@ export interface ListShortTermMemoriesRequest {
    * Filter by processed state. `false` also includes legacy rows where the field is absent.
    */
   processed?: boolean;
+  /**
+   * Filter by visible state. `true` also includes legacy rows where the field is absent.
+   */
+  visible?: boolean;
 }
 
 /**

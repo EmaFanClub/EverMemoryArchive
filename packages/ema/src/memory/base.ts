@@ -4,6 +4,11 @@ import type { InputContent } from "../schema";
 
 export type BufferWriteMessage = ActorChatInput | ActorChatResponse;
 
+export type ShortTermMemoryTask =
+  | "conversation_activity"
+  | "heartbeat_activity"
+  | "memory_rollup";
+
 /**
  * Shared fields for persisted buffer messages.
  */
@@ -50,21 +55,21 @@ export interface BufferStorage {
    * Gets buffer messages.
    * @param conversationId - The conversation identifier to read.
    * @param count - The number of messages to return.
-   * @returns Promise resolving to the buffer messages.
+   * @returns Promise resolving to the buffered recent-history messages.
    */
   getBuffer(conversationId: number, count: number): Promise<BufferMessage[]>;
   /**
-   * Saves a chat message before it is added to the resumed buffer.
+   * Saves a chat message before it is added to the buffered recent-history window.
    * @param message - The runtime message to persist.
    * @returns Promise resolving when the message is stored.
    */
   persistChatMessage(message: BufferWriteMessage): Promise<void>;
   /**
-   * Adds a persisted chat message into the resumed buffer.
+   * Adds a persisted chat message into the buffered recent-history window.
    * @param conversationId - The conversation identifier.
    * @param msgId - Actor-scoped message identifier.
-   * @param triggerActivityTick - Whether this add should participate in activity-tick triggering.
-   * @param triggeredAt - Optional timestamp used when triggering activity-tick jobs.
+   * @param triggerActivityTick - Whether this add should participate in conversation-activity triggering.
+   * @param triggeredAt - Optional timestamp used when triggering conversation-activity jobs.
    */
   addToBuffer(
     conversationId: number,
@@ -123,12 +128,13 @@ export interface ActorMemory {
    * @param actorId - The actor identifier to update.
    * @param ids - Memory record identifiers to mark.
    * @param processedAt - Processing timestamp.
+   * @returns Promise resolving to the number of records marked.
    */
   markShortTermMemoryRecordsProcessed(
     actorId: number,
     ids: number[],
     processedAt: number,
-  ): Promise<void>;
+  ): Promise<number>;
   /**
    * Adds long-term memory.
    * @param actorId - The actor identifier to update.
@@ -151,6 +157,10 @@ export interface ShortTermMemory {
    */
   date: string;
   /**
+   * Logical day bucket used when rolling activity into day memory.
+   */
+  dayDate?: string;
+  /**
    * The memory text.
    */
   memory: string;
@@ -166,6 +176,10 @@ export interface ShortTermMemory {
    * The date and time the memory was consumed by a higher-level rollup.
    */
   processedAt?: number;
+  /**
+   * Whether this record should still appear in the current activity window.
+   */
+  visible?: boolean;
 }
 
 /**
@@ -177,6 +191,30 @@ export type ShortTermMemoryRecord = ShortTermMemory & {
    */
   id: number;
 };
+
+export interface ConversationActivityTaskData {
+  task: "conversation_activity";
+  triggeredAt: number;
+  activityAdded?: boolean;
+}
+
+export interface HeartbeatActivityTaskData {
+  task: "heartbeat_activity";
+  triggeredAt: number;
+  activityAdded?: boolean;
+}
+
+export interface MemoryRollupTaskData {
+  task: "memory_rollup";
+  triggeredAt: number;
+  reason: "threshold" | "dayend";
+  activitySnapshot: ShortTermMemoryRecord[];
+}
+
+export type ShortTermMemoryTaskData =
+  | ConversationActivityTaskData
+  | HeartbeatActivityTaskData
+  | MemoryRollupTaskData;
 
 /**
  * Long-term memory item used for retrieval.
