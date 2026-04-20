@@ -352,4 +352,64 @@ describe("AgendaScheduler", () => {
 
     expect(count).toBe(4);
   }, 5000);
+
+  test("marks overdue one-time jobs instead of replaying them on start", async () => {
+    const foregroundHandler = vi.fn(async () => {});
+    const handlers: JobHandlerMap = {
+      test: async () => {},
+      actor_foreground: foregroundHandler as any,
+      actor_background: async () => {},
+    };
+
+    const jobId = await scheduler.schedule({
+      name: "actor_foreground",
+      runAt: Date.now() - 5_000,
+      data: {
+        actorId: 1,
+        conversationId: 12,
+        task: "chat",
+        prompt: "过时的一次性任务",
+      },
+    });
+
+    await scheduler.start(handlers);
+    await sleep(100);
+
+    const job = await scheduler.getJob(jobId);
+    expect(job?.attrs.disabled).toBe(true);
+    expect(
+      (job?.attrs.data as { addition?: { overdue?: boolean } }).addition
+        ?.overdue,
+    ).toBe(true);
+    expect(foregroundHandler).not.toHaveBeenCalled();
+  });
+
+  test("advances overdue recurring jobs to the next future run on start", async () => {
+    const handlers: JobHandlerMap = {
+      test: async () => {},
+      actor_foreground: async () => {},
+      actor_background: async () => {},
+    };
+    const startedAt = Date.now();
+    const jobId = await scheduler.scheduleEvery({
+      name: "actor_background",
+      runAt: startedAt - 5_000,
+      interval: "1 hour",
+      data: {
+        actorId: 1,
+        task: "activity",
+        prompt: "过时的周期任务",
+      },
+    });
+
+    await scheduler.start(handlers);
+
+    const job = await scheduler.getJob(jobId);
+    expect(job?.attrs.disabled).not.toBe(true);
+    expect(job?.attrs.nextRunAt?.getTime()).toBeGreaterThan(startedAt);
+    expect(
+      (job?.attrs.data as { addition?: { overdue?: boolean } }).addition
+        ?.overdue,
+    ).toBeUndefined();
+  });
 });

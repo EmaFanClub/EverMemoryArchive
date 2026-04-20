@@ -37,7 +37,7 @@ import type { Fs } from "./fs";
 import { RealFs } from "./fs";
 import * as path from "node:path";
 import { Actor } from "./actor";
-import { AgendaScheduler } from "./scheduler";
+import { ActorScheduler, AgendaScheduler } from "./scheduler";
 import { createJobHandlers } from "./scheduler/jobs";
 import { EMA_MEMORY_ROLLUP_PROMPT } from "./memory/prompts";
 import { MemoryManager } from "./memory/manager";
@@ -207,6 +207,15 @@ export class Server {
     ]);
     server.gateway = new Gateway(server);
     return server;
+  }
+
+  /**
+   * Creates an actor-scoped scheduler view.
+   * @param actorId - Actor identifier.
+   * @returns Actor scheduler wrapper.
+   */
+  getActorScheduler(actorId: number): ActorScheduler {
+    return new ActorScheduler(this.scheduler, actorId);
   }
 
   private snapshotPath(name: string): string {

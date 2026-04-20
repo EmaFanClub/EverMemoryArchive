@@ -61,7 +61,7 @@ export interface ActorForegroundJobData {
 export interface ActorBackgroundJobData {
   actorId: number;
   conversationId?: number;
-  task: "activity" | "conversation_rollup" | "memory_rollup";
+  task: "activity" | "conversation_rollup" | "memory_rollup" | "wake" | "sleep";
   prompt: string;
   addition?: Record<string, unknown>;
 }
@@ -133,6 +133,11 @@ export async function runActorBackgroundJob(
         reason: getMemoryRollupReason(job.addition),
       });
       return;
+    case "wake":
+    case "sleep":
+      throw new Error(
+        `Actor background task '${job.task}' is not implemented yet.`,
+      );
     default: {
       const unreachable: never = job.task;
       throw new Error(`Unsupported actor background task: ${unreachable}`);

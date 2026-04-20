@@ -62,6 +62,7 @@ export class AgendaScheduler implements Scheduler {
     this.status = "running";
 
     try {
+      await this.normalizeOverdueJobsBeforeStart();
       await this.agenda.start();
     } catch (error) {
       this.status = "idle";
@@ -218,6 +219,56 @@ export class AgendaScheduler implements Scheduler {
   private async initialize(): Promise<void> {
     await this.agenda.database(this.mongo.getUri(), this.collectionName);
     await this.agenda.ready;
+  }
+
+  /**
+   * Normalizes overdue jobs before the scheduler loop starts.
+   */
+  private async normalizeOverdueJobsBeforeStart(): Promise<void> {
+    const jobs = (await this.agenda.jobs({})) as Job[];
+    const now = Date.now();
+
+    for (const job of jobs) {
+      const nextRunAt = job.attrs.nextRunAt;
+      if (!(nextRunAt instanceof Date) || Number.isNaN(nextRunAt.getTime())) {
+        continue;
+      }
+      if (nextRunAt.getTime() >= now) {
+        continue;
+      }
+
+      job.attrs.lockedAt = undefined;
+      const isRecurring = Boolean(
+        job.attrs.repeatInterval || job.attrs.repeatAt,
+      );
+      if (!isRecurring) {
+        job.disable();
+        const data = job.attrs.data;
+        if (data && typeof data === "object" && !Array.isArray(data)) {
+          const nextData = data as unknown as Record<string, unknown>;
+          const addition = nextData.addition;
+          nextData.addition =
+            addition && typeof addition === "object" && !Array.isArray(addition)
+              ? { ...(addition as Record<string, unknown>), overdue: true }
+              : { overdue: true };
+        }
+        await job.save();
+        continue;
+      }
+
+      job.enable();
+      while (
+        job.attrs.nextRunAt instanceof Date &&
+        job.attrs.nextRunAt.getTime() <= now
+      ) {
+        job.attrs.lastRunAt = new Date(job.attrs.nextRunAt);
+        (job as any).computeNextRunAt();
+        if (!(job.attrs.nextRunAt instanceof Date)) {
+          break;
+        }
+      }
+      await job.save();
+    }
   }
 
   private registerHandlers(handlers: JobHandlerMap): void {
