@@ -2,12 +2,7 @@ import { buildUserMessageFromActorInput } from "../../actor/utils";
 import { Agent, type AgentState } from "../../agent";
 import { LLMClient } from "../../llm";
 import { Logger } from "../../logger";
-import {
-  EMA_CONVERSATION_ACTIVITY_PROMPT,
-  EMA_HEARTBEAT_ACTIVITY_PROMPT,
-  EMA_FOREGROUND_HEARTBEAT_PROMPT,
-  EMA_MEMORY_ROLLUP_PROMPT,
-} from "../../memory/prompts";
+import { EMA_MEMORY_ROLLUP_PROMPT } from "../../memory/prompts";
 import type { ShortTermMemoryRecord } from "../../memory/base";
 import type { Server } from "../../server";
 import { formatTimestamp } from "../../utils";
@@ -15,9 +10,38 @@ import type { JobHandler } from "../base";
 
 const actorMemoryRollupQueue = new Map<number, Promise<unknown>>();
 
+type MemoryRollupReason = "threshold" | "dayend";
+
 interface PendingWindowState {
   count: number;
   lastPendingId: number | null;
+}
+
+interface ChatTaskData {
+  actorId: number;
+  prompt: string;
+  conversationId: number;
+  triggeredAt: number;
+}
+
+interface ConversationRollupTaskData {
+  actorId: number;
+  conversationId: number;
+  prompt: string;
+  triggeredAt: number;
+}
+
+interface MemoryRollupTaskData {
+  actorId: number;
+  prompt: string;
+  triggeredAt: number;
+  reason: MemoryRollupReason;
+}
+
+interface ActivityTaskData {
+  actorId: number;
+  prompt: string;
+  triggeredAt: number;
 }
 
 /**
@@ -27,66 +51,123 @@ export interface ActorForegroundJobData {
   actorId: number;
   prompt: string;
   conversationId: number;
+  task: "chat";
+  addition?: Record<string, unknown>;
 }
 
 /**
- * Data for conversation-triggered activity jobs.
+ * Data for actor background jobs.
  */
-export interface ActorConversationActivityJobData {
+export interface ActorBackgroundJobData {
   actorId: number;
-  conversationId: number;
-  triggeredAt?: number;
+  conversationId?: number;
+  task: "activity" | "conversation_rollup" | "memory_rollup";
+  prompt: string;
+  addition?: Record<string, unknown>;
 }
 
 /**
- * Data for memory-rollup jobs.
- */
-export interface ActorMemoryRollupJobData {
-  actorId: number;
-  triggeredAt?: number;
-  reason: "threshold" | "dayend";
-}
-
-/**
- * Data for heartbeat-triggered background activity jobs.
- */
-export interface ActorHeartbeatActivityJobData {
-  actorId: number;
-  triggeredAt?: number;
-}
-
-/**
- * Runs the foreground actor execution directly without scheduler glue.
+ * Runs the unified foreground actor job entry.
  * @param server - Server instance for shared resources.
  * @param job - Foreground job data.
+ * @param triggeredAt - Optional logical trigger timestamp.
  */
 export async function runActorForegroundJob(
   server: Server,
   job: ActorForegroundJobData,
+  triggeredAt: number = Date.now(),
 ): Promise<void> {
+  switch (job.task) {
+    case "chat":
+      await runChatTask(server, {
+        actorId: job.actorId,
+        conversationId: job.conversationId,
+        prompt: job.prompt,
+        triggeredAt,
+      });
+      return;
+    default: {
+      const unreachable: never = job.task;
+      throw new Error(`Unsupported actor foreground task: ${unreachable}`);
+    }
+  }
+}
+
+/**
+ * Runs the unified background actor job entry.
+ * @param server - Server instance for shared resources.
+ * @param job - Background job data.
+ * @param triggeredAt - Optional logical trigger timestamp.
+ */
+export async function runActorBackgroundJob(
+  server: Server,
+  job: ActorBackgroundJobData,
+  triggeredAt: number = Date.now(),
+): Promise<void> {
+  switch (job.task) {
+    case "activity":
+      await runActivityTask(server, {
+        actorId: job.actorId,
+        prompt: job.prompt,
+        triggeredAt,
+      });
+      return;
+    case "conversation_rollup":
+      if (typeof job.conversationId !== "number") {
+        throw new Error(
+          "conversationId is required for actor background task 'conversation_rollup'.",
+        );
+      }
+      await runConversationRollupTask(server, {
+        actorId: job.actorId,
+        conversationId: job.conversationId,
+        prompt: job.prompt,
+        triggeredAt,
+      });
+      return;
+    case "memory_rollup":
+      await runMemoryRollupTask(server, {
+        actorId: job.actorId,
+        prompt: job.prompt,
+        triggeredAt,
+        reason: getMemoryRollupReason(job.addition),
+      });
+      return;
+    default: {
+      const unreachable: never = job.task;
+      throw new Error(`Unsupported actor background task: ${unreachable}`);
+    }
+  }
+}
+
+/**
+ * Dispatches one foreground chat task to the target actor.
+ * @param server - Server instance for shared resources.
+ * @param job - Normalized chat task data.
+ */
+async function runChatTask(server: Server, job: ChatTaskData): Promise<void> {
   const actor = await server.getActor(job.actorId);
   await actor.enqueueActorInput(job.conversationId, {
     kind: "system",
     conversationId: job.conversationId,
-    time: Date.now(),
+    time: job.triggeredAt,
     inputs: [{ type: "text", text: job.prompt }],
   });
 }
 
 /**
- * Runs a conversation-triggered activity job.
+ * Runs one conversation-triggered activity task.
  * @param server - Server instance for shared resources.
- * @param job - Conversation activity job data.
+ * @param job - Conversation rollup task data.
  */
-export async function runActorConversationActivityJob(
+async function runConversationRollupTask(
   server: Server,
-  job: ActorConversationActivityJobData,
+  job: ConversationRollupTaskData,
 ): Promise<void> {
   if (!server.memoryManager.tryEnterConversationActivity(job.conversationId)) {
     return;
   }
   const threshold = server.memoryManager.diaryUpdateEvery;
-  const startedAt = job.triggeredAt ?? Date.now();
   let pendingBefore: PendingWindowState = {
     count: 0,
     lastPendingId: null,
@@ -97,14 +178,11 @@ export async function runActorConversationActivityJob(
     pendingBefore =
       await server.memoryManager.getPendingConversationWindowState(
         job.conversationId,
-        startedAt,
+        job.triggeredAt,
       );
     if (pendingBefore.count >= threshold) {
       ranOnce = true;
-      didConsumePending = await runActorConversationActivityJobOnce(server, {
-        ...job,
-        triggeredAt: startedAt,
-      });
+      didConsumePending = await runConversationRollupTaskOnce(server, job);
     }
   } finally {
     server.memoryManager.leaveConversationActivity(job.conversationId);
@@ -124,7 +202,7 @@ export async function runActorConversationActivityJob(
       didConsumePending,
     )
   ) {
-    await runActorConversationActivityJob(server, {
+    await runConversationRollupTask(server, {
       ...job,
       triggeredAt: latestAt,
     });
@@ -134,12 +212,12 @@ export async function runActorConversationActivityJob(
 /**
  * Executes one conversation-to-activity update attempt.
  * @param server - Server instance for shared resources.
- * @param job - Normalized conversation activity job data.
+ * @param job - Normalized conversation rollup task data.
  * @returns True when buffered source messages were marked as processed.
  */
-async function runActorConversationActivityJobOnce(
+async function runConversationRollupTaskOnce(
   server: Server,
-  job: Required<ActorConversationActivityJobData>,
+  job: ConversationRollupTaskData,
 ): Promise<boolean> {
   const bufferSnapshot =
     await server.memoryManager.getBufferedConversationWindowSnapshot(
@@ -170,7 +248,7 @@ async function runActorConversationActivityJobOnce(
         kind: "system",
         conversationId: job.conversationId,
         time: job.triggeredAt,
-        inputs: [{ type: "text", text: EMA_CONVERSATION_ACTIVITY_PROMPT }],
+        inputs: [{ type: "text", text: job.prompt }],
       }),
     ],
     tools: server.config.baseTools,
@@ -205,20 +283,17 @@ async function runActorConversationActivityJobOnce(
 }
 
 /**
- * Runs a memory-rollup job. Rollups for the same actor are serialized.
+ * Runs one memory-rollup task. Rollups for the same actor are serialized.
  * @param server - Server instance for shared resources.
- * @param job - Memory-rollup job data.
+ * @param job - Memory rollup task data.
  */
-export async function runActorMemoryRollupJob(
+async function runMemoryRollupTask(
   server: Server,
-  job: ActorMemoryRollupJobData,
+  job: MemoryRollupTaskData,
 ): Promise<void> {
   if (job.reason === "dayend") {
     await enqueueActorMemoryRollup(job.actorId, () =>
-      runActorMemoryRollupJobOnce(server, {
-        ...job,
-        triggeredAt: job.triggeredAt ?? Date.now(),
-      }),
+      runMemoryRollupTaskOnce(server, job),
     );
     return;
   }
@@ -251,7 +326,7 @@ export async function runActorMemoryRollupJob(
         return {
           pendingBefore: before,
           ranOnce: true,
-          didConsumePending: await runActorMemoryRollupJobOnce(server, {
+          didConsumePending: await runMemoryRollupTaskOnce(server, {
             ...job,
             triggeredAt: startedAt,
             reason: "threshold",
@@ -275,7 +350,7 @@ export async function runActorMemoryRollupJob(
       didConsumePending,
     )
   ) {
-    await runActorMemoryRollupJob(server, {
+    await runMemoryRollupTask(server, {
       ...job,
       triggeredAt: latestAt,
       reason: "threshold",
@@ -284,24 +359,23 @@ export async function runActorMemoryRollupJob(
 }
 
 /**
- * Runs a heartbeat-triggered background activity job.
+ * Runs one heartbeat-triggered background activity task.
  * @param server - Server instance for shared resources.
- * @param job - Heartbeat activity job data.
+ * @param job - Background activity task data.
  */
-export async function runActorHeartbeatActivityJob(
+async function runActivityTask(
   server: Server,
-  job: ActorHeartbeatActivityJobData,
+  job: ActivityTaskData,
 ): Promise<void> {
-  const triggeredAt = job.triggeredAt ?? Date.now();
   const activitySnapshot = await server.memoryManager.getVisibleActivityWindow(
     job.actorId,
-    triggeredAt,
+    job.triggeredAt,
   );
   const agent = createBackgroundAgent(
     server,
     "ActorHeartbeatActivityJob",
     job.actorId,
-    triggeredAt,
+    job.triggeredAt,
   );
   const agentState: AgentState = {
     systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
@@ -313,8 +387,8 @@ export async function runActorHeartbeatActivityJob(
     messages: [
       buildUserMessageFromActorInput({
         kind: "system",
-        time: triggeredAt,
-        inputs: [{ type: "text", text: EMA_HEARTBEAT_ACTIVITY_PROMPT }],
+        time: job.triggeredAt,
+        inputs: [{ type: "text", text: job.prompt }],
       }),
     ],
     tools: server.config.baseTools,
@@ -323,7 +397,7 @@ export async function runActorHeartbeatActivityJob(
       server,
       data: {
         task: "heartbeat_activity",
-        triggeredAt,
+        triggeredAt: job.triggeredAt,
       },
     },
   };
@@ -331,20 +405,20 @@ export async function runActorHeartbeatActivityJob(
   await runThresholdMemoryRollupWhenNeeded(
     server,
     job.actorId,
-    triggeredAt,
+    job.triggeredAt,
     agentState,
   );
 }
 
 /**
- * ActorMemoryRollup job handler implementation.
+ * Actor background job handler implementation.
  */
-export function createActorMemoryRollupJobHandler(
+export function createActorBackgroundJobHandler(
   server: Server,
-): JobHandler<"actor_memory_rollup"> {
+): JobHandler<"actor_background"> {
   return async (job) => {
     try {
-      await runActorMemoryRollupJob(server, job.attrs.data);
+      await runActorBackgroundJob(server, job.attrs.data);
     } catch (error) {
       throw error instanceof Error ? error : new Error(String(error));
     }
@@ -352,22 +426,7 @@ export function createActorMemoryRollupJobHandler(
 }
 
 /**
- * HeartbeatActivity job handler implementation.
- */
-export function createActorHeartbeatActivityJobHandler(
-  server: Server,
-): JobHandler<"heartbeat_activity"> {
-  return async (job) => {
-    try {
-      await runActorHeartbeatActivityJob(server, job.attrs.data);
-    } catch (error) {
-      throw error instanceof Error ? error : new Error(String(error));
-    }
-  };
-}
-
-/**
- * ActorForeground job handler implementation.
+ * Actor foreground job handler implementation.
  */
 export function createActorForegroundJobHandler(
   server: Server,
@@ -380,8 +439,6 @@ export function createActorForegroundJobHandler(
     }
   };
 }
-
-export { EMA_FOREGROUND_HEARTBEAT_PROMPT };
 
 async function runThresholdMemoryRollupWhenNeeded(
   server: Server,
@@ -401,8 +458,9 @@ async function runThresholdMemoryRollupWhenNeeded(
   if (pendingCount < server.memoryManager.activityRollupEvery) {
     return;
   }
-  await runActorMemoryRollupJob(server, {
+  await runMemoryRollupTask(server, {
     actorId,
+    prompt: EMA_MEMORY_ROLLUP_PROMPT,
     triggeredAt,
     reason: "threshold",
   });
@@ -411,12 +469,12 @@ async function runThresholdMemoryRollupWhenNeeded(
 /**
  * Executes one rollup attempt for the provided actor and reason.
  * @param server - Server instance for shared resources.
- * @param job - Normalized memory-rollup job data.
+ * @param job - Normalized memory-rollup task data.
  * @returns True when pending activity source records were marked as processed.
  */
-async function runActorMemoryRollupJobOnce(
+async function runMemoryRollupTaskOnce(
   server: Server,
-  job: Required<ActorMemoryRollupJobData>,
+  job: MemoryRollupTaskData,
 ): Promise<boolean> {
   const activitySnapshot = await server.memoryManager.getVisibleActivityWindow(
     job.actorId,
@@ -442,7 +500,7 @@ async function runActorMemoryRollupJobOnce(
       buildUserMessageFromActorInput({
         kind: "system",
         time: job.triggeredAt,
-        inputs: [{ type: "text", text: EMA_MEMORY_ROLLUP_PROMPT }],
+        inputs: [{ type: "text", text: job.prompt }],
       }),
     ],
     tools: server.config.baseTools,
@@ -516,7 +574,7 @@ function shouldScheduleFollowUp(
 
 async function finalizeDayEndVisibility(
   server: Server,
-  job: Required<ActorMemoryRollupJobData>,
+  job: MemoryRollupTaskData,
   activitySnapshot: ShortTermMemoryRecord[],
 ): Promise<void> {
   if (job.reason !== "dayend" || activitySnapshot.length === 0) {
@@ -531,6 +589,12 @@ async function finalizeDayEndVisibility(
     job.actorId,
     newestCreatedAtInSnapshot,
   );
+}
+
+function getMemoryRollupReason(
+  addition?: Record<string, unknown>,
+): MemoryRollupReason {
+  return addition?.reason === "dayend" ? "dayend" : "threshold";
 }
 
 function createBackgroundAgent(

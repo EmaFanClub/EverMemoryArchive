@@ -19,8 +19,8 @@ vi.mock("../logger", () => ({
 
 import { Agent } from "../agent";
 import {
-  runActorConversationActivityJob,
-  runActorMemoryRollupJob,
+  runActorBackgroundJob,
+  type ActorBackgroundJobData,
 } from "../scheduler/jobs/actor.job";
 import type { ShortTermMemoryRecord } from "../memory/base";
 
@@ -237,6 +237,24 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const conversationRollupJob = (): ActorBackgroundJobData & {
+  conversationId: number;
+} => ({
+  actorId: 1,
+  conversationId: 1,
+  task: "conversation_rollup",
+  prompt: "conversation-rollup",
+});
+
+const memoryRollupJob = (
+  reason: "threshold" | "dayend" = "threshold",
+): ActorBackgroundJobData => ({
+  actorId: 1,
+  task: "memory_rollup",
+  prompt: "memory-rollup",
+  addition: { reason },
+});
+
 describe("actor background job follow-up", () => {
   test("conversation activity schedules a follow-up when threshold is reached after final recheck without running Once", async () => {
     const bufferedMessages = createBufferedMessages(1, 19, 1000);
@@ -270,11 +288,7 @@ describe("actor background job follow-up", () => {
 
     mockNowSequence([4000, 5000]);
 
-    await runActorConversationActivityJob(server as any, {
-      actorId: 1,
-      conversationId: 1,
-      triggeredAt: 2000,
-    });
+    await runActorBackgroundJob(server as any, conversationRollupJob(), 2000);
 
     expect(runWithStateSpy).toHaveBeenCalledTimes(1);
     expect(
@@ -304,11 +318,7 @@ describe("actor background job follow-up", () => {
 
     mockNowSequence([4000, 5000]);
 
-    await runActorConversationActivityJob(server as any, {
-      actorId: 1,
-      conversationId: 1,
-      triggeredAt: 2000,
-    });
+    await runActorBackgroundJob(server as any, conversationRollupJob(), 2000);
 
     expect(callCount).toBe(2);
     const newBatch = bufferedMessages.filter((item) => item.msgId >= 31);
@@ -355,10 +365,7 @@ describe("actor background job follow-up", () => {
 
     mockNowSequence([2000, 4000, 5000, 6000]);
 
-    await runActorMemoryRollupJob(server as any, {
-      actorId: 1,
-      reason: "threshold",
-    });
+    await runActorBackgroundJob(server as any, memoryRollupJob("threshold"));
 
     expect(callCount).toBe(2);
     expect(

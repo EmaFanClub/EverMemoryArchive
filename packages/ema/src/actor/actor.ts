@@ -1,7 +1,10 @@
 import type { Config } from "../config";
 import { Logger } from "../logger";
-import { EMA_FOREGROUND_HEARTBEAT_PROMPT } from "../memory/prompts";
-import { runActorHeartbeatActivityJob } from "../scheduler/jobs/actor.job";
+import {
+  EMA_FOREGROUND_HEARTBEAT_PROMPT,
+  EMA_HEARTBEAT_ACTIVITY_PROMPT,
+} from "../memory/prompts";
+import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import {
   WebsocketChannelClient,
@@ -291,10 +294,15 @@ export class Actor {
         return;
       }
       case "background_activity":
-        await runActorHeartbeatActivityJob(this.server, {
-          actorId: this.actorId,
-          triggeredAt: now,
-        });
+        await runActorBackgroundJob(
+          this.server,
+          {
+            actorId: this.actorId,
+            task: "activity",
+            prompt: EMA_HEARTBEAT_ACTIVITY_PROMPT,
+          },
+          now,
+        );
         return;
       case "noop":
       default:

@@ -51,6 +51,7 @@ export async function executeCreateReminder(
   const baseData = {
     actorId,
     conversationId,
+    task: "chat" as const,
     prompt: payload.prompt,
   };
   let runAt: number;

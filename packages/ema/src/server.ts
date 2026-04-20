@@ -39,6 +39,7 @@ import * as path from "node:path";
 import { Actor } from "./actor";
 import { AgendaScheduler } from "./scheduler";
 import { createJobHandlers } from "./scheduler/jobs";
+import { EMA_MEMORY_ROLLUP_PROMPT } from "./memory/prompts";
 import { MemoryManager } from "./memory/manager";
 import { Gateway } from "./gateway";
 import { WebChannel, buildSession } from "./channel";
@@ -379,12 +380,16 @@ export class Server {
     }
     if (this.scheduler) {
       await this.scheduler.scheduleEvery({
-        name: "actor_memory_rollup",
+        name: "actor_background",
         runAt: Date.now(),
         interval: "59 23 * * *",
         data: {
           actorId: actor.id,
-          reason: "dayend",
+          task: "memory_rollup",
+          prompt: EMA_MEMORY_ROLLUP_PROMPT,
+          addition: {
+            reason: "dayend",
+          },
         },
       });
     }

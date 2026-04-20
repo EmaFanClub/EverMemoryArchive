@@ -3,9 +3,10 @@ import type { Fs } from "../fs";
 import { RealFs } from "../fs";
 import type { BufferWriteMessage, ShortTermMemory } from "../memory/base";
 import {
-  runActorConversationActivityJob,
-  runActorMemoryRollupJob,
-} from "../scheduler/jobs/actor.job";
+  EMA_CONVERSATION_ACTIVITY_PROMPT,
+  EMA_MEMORY_ROLLUP_PROMPT,
+} from "../memory/prompts";
+import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import { formatTimestamp, parseTimestamp } from "../utils";
 import type {
@@ -142,11 +143,16 @@ export class ActorTrainer {
             )
           ).count;
           if (pendingConversationCount >= req.diaryUpdateEvery) {
-            await runActorConversationActivityJob(this.server, {
-              actorId,
-              conversationId,
-              triggeredAt: input.timestamp,
-            });
+            await runActorBackgroundJob(
+              this.server,
+              {
+                actorId,
+                conversationId,
+                task: "conversation_rollup",
+                prompt: EMA_CONVERSATION_ACTIVITY_PROMPT,
+              },
+              input.timestamp,
+            );
             ({ checkpointId, stepCount } = await this.advanceStep(
               "conversation-activity",
               checkpointId,
@@ -169,11 +175,16 @@ export class ActorTrainer {
           )
         ).count;
         if (pendingConversationCount > 0) {
-          await runActorConversationActivityJob(this.server, {
-            actorId,
-            conversationId,
-            triggeredAt: lastMessageTimestamp,
-          });
+          await runActorBackgroundJob(
+            this.server,
+            {
+              actorId,
+              conversationId,
+              task: "conversation_rollup",
+              prompt: EMA_CONVERSATION_ACTIVITY_PROMPT,
+            },
+            lastMessageTimestamp,
+          );
           ({ checkpointId, stepCount } = await this.advanceStep(
             "conversation-activity",
             checkpointId,
@@ -190,11 +201,18 @@ export class ActorTrainer {
 
         const memoryRollupTimestamp =
           this.buildMemoryRollupTimestamp(currentDayKey);
-        await runActorMemoryRollupJob(this.server, {
-          actorId,
-          triggeredAt: memoryRollupTimestamp,
-          reason: "dayend",
-        });
+        await runActorBackgroundJob(
+          this.server,
+          {
+            actorId,
+            task: "memory_rollup",
+            prompt: EMA_MEMORY_ROLLUP_PROMPT,
+            addition: {
+              reason: "dayend",
+            },
+          },
+          memoryRollupTimestamp,
+        );
         ({ checkpointId, stepCount } = await this.advanceStep(
           "memory-rollup",
           checkpointId,

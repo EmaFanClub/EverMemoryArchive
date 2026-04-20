@@ -126,8 +126,9 @@ describe("Server", () => {
       });
 
       const backgroundJobs = await server.scheduler.listJobs({
-        name: "actor_memory_rollup",
+        name: "actor_background",
         "data.actorId": 1,
+        "data.task": "memory_rollup",
       });
       const foregroundJobs = await server.scheduler.listJobs({
         name: "actor_foreground",

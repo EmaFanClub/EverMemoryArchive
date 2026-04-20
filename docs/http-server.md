@@ -12,5 +12,6 @@ Frontend endpoints:
 
 Backend endpoints:
 
-- [Send](./http/actor/input/route/variables/POST) inputs to actors.
-- [Subscribe](./http/actor/sse/route/variables/GET) to outputs from actors.
+- Send inputs to actors via `POST /api/v1/chat/:session/send`.
+- Subscribe to actor outputs via `GET /api/v1/chat/:session/sse`.
+- Query conversation history via `GET /api/v1/chat/:session/history`.

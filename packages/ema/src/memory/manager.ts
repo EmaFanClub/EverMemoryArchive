@@ -24,7 +24,8 @@ import type {
   ListShortTermMemoriesRequest,
 } from "../db";
 import { Logger } from "../logger";
-import { runActorConversationActivityJob } from "../scheduler/jobs/actor.job";
+import { EMA_CONVERSATION_ACTIVITY_PROMPT } from "./prompts";
+import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import { loadPromptTemplate } from "../prompt/loader";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
 import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
@@ -682,11 +683,16 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     }
 
     const actorId = await this.getActorIdByConversation(conversationId);
-    void runActorConversationActivityJob(this.server, {
-      actorId,
-      conversationId,
-      triggeredAt: effectiveTriggeredAt,
-    }).catch((error) => {
+    void runActorBackgroundJob(
+      this.server,
+      {
+        actorId,
+        conversationId,
+        task: "conversation_rollup",
+        prompt: EMA_CONVERSATION_ACTIVITY_PROMPT,
+      },
+      effectiveTriggeredAt,
+    ).catch((error) => {
       this.logger.error(
         "Failed to run actor conversation activity job:",
         error,

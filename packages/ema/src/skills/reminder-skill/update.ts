@@ -107,6 +107,7 @@ export async function executeUpdateReminder(
   const nextData = {
     actorId,
     conversationId,
+    task: "chat" as const,
     prompt,
   };
 

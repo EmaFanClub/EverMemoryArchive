@@ -6,12 +6,10 @@ import type { JobHandlerMap } from "../base";
 import type { Server } from "../../server";
 import { TestJobHandler, type TestJobData } from "./test.job";
 import {
+  createActorBackgroundJobHandler,
   createActorForegroundJobHandler,
-  createActorHeartbeatActivityJobHandler,
-  createActorMemoryRollupJobHandler,
+  type ActorBackgroundJobData,
   type ActorForegroundJobData,
-  type ActorHeartbeatActivityJobData,
-  type ActorMemoryRollupJobData,
 } from "./actor.job";
 
 /**
@@ -23,15 +21,11 @@ export interface JobDataMap {
    */
   test: TestJobData;
   /**
-   * ActorMemoryRollup job data mapping.
+   * Actor background job data mapping.
    */
-  actor_memory_rollup: ActorMemoryRollupJobData;
+  actor_background: ActorBackgroundJobData;
   /**
-   * HeartbeatActivity job data mapping.
-   */
-  heartbeat_activity: ActorHeartbeatActivityJobData;
-  /**
-   * ActorForeground job data mapping.
+   * Actor foreground job data mapping.
    */
   actor_foreground: ActorForegroundJobData;
 }
@@ -44,8 +38,7 @@ export interface JobDataMap {
 export function createJobHandlers(server: Server): JobHandlerMap {
   return {
     test: TestJobHandler,
-    actor_memory_rollup: createActorMemoryRollupJobHandler(server),
-    heartbeat_activity: createActorHeartbeatActivityJobHandler(server),
+    actor_background: createActorBackgroundJobHandler(server),
     actor_foreground: createActorForegroundJobHandler(server),
   };
 }
