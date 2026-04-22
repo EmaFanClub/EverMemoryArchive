@@ -36,7 +36,7 @@ const createServerForTest = async (
   lance: lancedb.Connection,
 ) => {
   const config = createTestConfig();
-  const server = new (Server as any)(fs, config) as Server;
+  const server = new (Server as any)(config) as Server;
   server.dbService = DBService.createSync(fs, config, mongo, lance);
   server.actorRegistry = new ActorRegistry(server);
   server.gateway = new Gateway(server);

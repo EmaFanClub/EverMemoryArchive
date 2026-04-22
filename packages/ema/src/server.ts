@@ -1,6 +1,3 @@
-import { fileURLToPath } from "node:url";
-import * as path from "node:path";
-
 import { Config } from "./config";
 import { DBService } from "./db";
 import type { Fs } from "./fs";
@@ -11,58 +8,74 @@ import { createJobHandlers } from "./scheduler/jobs";
 import { MemoryManager } from "./memory/manager";
 import { Gateway } from "./gateway";
 import { buildSession } from "./channel";
-import {
-  ActorTrainer,
-  type ActorTrainingResult,
-  type TrainDataset,
-} from "./trainer";
 
 const DEFAULT_WEB_USER_ID = 1;
 const DEFAULT_WEB_ACTOR_ID = 1;
-const DEFAULT_TRAIN_CHARACTER_NAME = "亚托莉";
-const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_TRAIN_DATASET_PATH = path.resolve(
-  SERVER_DIR,
-  "..",
-  ".data",
-  ".train",
-  "data",
-  "ATRI.json",
-);
-const DEFAULT_TRAIN_CHECKPOINT_DIR = path.resolve(
-  SERVER_DIR,
-  "..",
-  ".data",
-  ".train",
-  "checkpoints",
-);
 
 /**
- * The server class for the EverMemoryArchive.
+ * Top-level server container that wires and starts the core runtime services.
  */
 export class Server {
-  private trainInFlight: Promise<ActorTrainingResult> | null = null;
-
+  /**
+   * Immutable process-level configuration shared by runtime components.
+   */
   config: Config;
+
+  /**
+   * Registry that owns all loaded actor runtime instances.
+   */
   actorRegistry!: ActorRegistry;
+
+  /**
+   * Message routing entrypoint for inbound channel events and outbound actor
+   * responses.
+   */
   gateway!: Gateway;
+
+  /**
+   * Aggregated database service exposing all persistence drivers.
+   */
   dbService!: DBService;
+
+  /**
+   * Process-wide scheduler used for foreground and background jobs.
+   */
   scheduler!: AgendaScheduler;
+
+  /**
+   * Memory coordinator that persists chat/activity data and builds prompts.
+   */
   memoryManager!: MemoryManager;
 
-  private constructor(
-    private readonly fs: Fs,
-    config: Config,
-  ) {
+  /**
+   * Creates an uninitialized server container.
+   *
+   * Use {@link Server.create} for normal startup so all dependencies are wired
+   * and started in the expected order.
+   *
+   * @param config - Process-level runtime configuration.
+   */
+  private constructor(config: Config) {
     this.config = config;
   }
 
+  /**
+   * Creates and starts a fully initialized server instance.
+   *
+   * This method restores optional development snapshots, creates indices,
+   * constructs runtime services, restores actor runtimes, starts the scheduler,
+   * and finally triggers actor boot initialization.
+   *
+   * @param fs - Filesystem abstraction used for snapshot loading.
+   * @param config - Process-level runtime configuration.
+   * @returns Fully initialized server instance ready to serve requests.
+   */
   static async create(
     fs: Fs = new RealFs(),
     config: Config = Config.load(),
   ): Promise<Server> {
     const isDev = ["development", "test"].includes(process.env.NODE_ENV || "");
-    const server = new Server(fs, config);
+    const server = new Server(config);
     server.dbService = await DBService.create(fs, config);
 
     if (isDev) {
@@ -91,16 +104,32 @@ export class Server {
   }
 
   /**
-   * Creates an actor-scoped scheduler view.
+   * Creates an actor-scoped scheduler facade bound to the shared scheduler.
+   *
+   * The returned wrapper automatically scopes schedule operations to the
+   * specified actor id while still using the single process-wide scheduler
+   * instance.
+   *
    * @param actorId - Actor identifier.
-   * @returns Actor scheduler wrapper.
+   * @returns Actor-scoped scheduler wrapper.
    */
   getActorScheduler(actorId: number): ActorScheduler {
     return new ActorScheduler(this.scheduler, actorId);
   }
 
   /**
-   * Initializes the default character and related resources when missing.
+   * Ensures the current debug bootstrap dataset exists.
+   *
+   * This method is intentionally idempotent. It creates or updates the default
+   * web user, default actor, ownership relation, role book, external identity
+   * bindings, and default conversations that the current development workflow
+   * depends on.
+   *
+   * The method only touches persistent data. Runtime actor restoration,
+   * channel startup, scheduler startup, and boot initialization are handled by
+   * the caller after bootstrap data has been ensured.
+   *
+   * @returns Promise that resolves after the default bootstrap data is ready.
    */
   private async createInitialCharacters(): Promise<void> {
     const existingUser =
@@ -198,34 +227,6 @@ export class Server {
       throw new Error(
         "Default conversation ID is missing after initial character setup.",
       );
-    }
-  }
-
-  async train(): Promise<ActorTrainingResult> {
-    if (this.trainInFlight) {
-      return await this.trainInFlight;
-    }
-    const task = (async () => {
-      const dataset = JSON.parse(
-        await this.fs.read(DEFAULT_TRAIN_DATASET_PATH),
-      ) as TrainDataset;
-      const trainer = new ActorTrainer(this, this.fs);
-      return await trainer.train({
-        actorId: DEFAULT_WEB_ACTOR_ID,
-        characterName: DEFAULT_TRAIN_CHARACTER_NAME,
-        dataset,
-        bufferWindowSize: this.memoryManager.bufferWindowSize,
-        diaryUpdateEvery: this.memoryManager.diaryUpdateEvery,
-        checkpointDir: DEFAULT_TRAIN_CHECKPOINT_DIR,
-      });
-    })();
-    this.trainInFlight = task;
-    try {
-      return await task;
-    } finally {
-      if (this.trainInFlight === task) {
-        this.trainInFlight = null;
-      }
     }
   }
 }
