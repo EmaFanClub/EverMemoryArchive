@@ -1,18 +1,50 @@
-import type { Server } from "./server";
-import type { ChannelEvent, GatewayResult, MessageReplyRef } from "./channel";
+import type { ActorChatResponse } from "../actor";
+import {
+  ChannelRegistry,
+  type ChannelEvent,
+  type GatewayResult,
+  type MessageReplyRef,
+  resolveSession,
+} from "../channel";
+import { Logger } from "../logger";
+import type { Server } from "../server";
+import type { DispatchActorResponseResult } from "./base";
 
+/**
+ * Routes inbound channel events and outbound actor responses.
+ */
 export class Gateway {
+  readonly channelRegistry: ChannelRegistry;
+
   private readonly channelMessageToMsg = new Map<string, number>();
   private readonly msgToChannelMessage = new Map<string, string>();
+  private readonly logger: Logger = Logger.create({
+    name: "gateway",
+    level: "debug",
+    transport: "console",
+  });
 
-  constructor(private readonly server: Server) {}
+  constructor(private readonly server: Server) {
+    this.channelRegistry = new ChannelRegistry(server);
+  }
 
+  /**
+   * Reserves one actor-scoped message id.
+   * @param actorId - Actor identifier.
+   * @returns Reserved message id.
+   */
   async reserveMessageId(actorId: number): Promise<number> {
     return this.server.dbService.conversationMessageDB.reserveMessageId(
       actorId,
     );
   }
 
+  /**
+   * Dispatches one inbound channel event into the actor runtime.
+   * @param actorId - Actor identifier.
+   * @param event - Normalized channel event.
+   * @returns Dispatch result.
+   */
   async dispatchChannel(
     actorId: number,
     event: ChannelEvent,
@@ -24,7 +56,7 @@ export class Gateway {
       };
     }
 
-    const channel = await this.resolveChannel(actorId, event.channel);
+    const channel = this.channelRegistry.getChannel(actorId, event.channel);
     if (!channel) {
       return {
         ok: false,
@@ -86,6 +118,52 @@ export class Gateway {
     };
   }
 
+  /**
+   * Dispatches one outbound actor response to its target channel.
+   * @param response - Actor response payload.
+   * @returns Dispatch result.
+   */
+  async dispatchActorResponse(
+    response: ActorChatResponse,
+  ): Promise<DispatchActorResponseResult> {
+    const sessionInfo = resolveSession(response.session);
+    if (!sessionInfo) {
+      this.logger.warn(
+        `Invalid session for conversation ${response.conversationId}, reply dropped.`,
+      );
+      return {
+        ok: false,
+        msg: "Invalid session.",
+      };
+    }
+
+    const channel = this.channelRegistry.getChannel(
+      response.actorId,
+      sessionInfo.channel,
+    );
+    if (!channel) {
+      this.logger.warn(
+        `Missing channel for conversation ${response.conversationId}, reply dropped.`,
+      );
+      return {
+        ok: false,
+        msg: `Channel '${sessionInfo.channel}' is not registered.`,
+      };
+    }
+
+    await channel.send(response);
+    return {
+      ok: true,
+      msg: "accepted",
+    };
+  }
+
+  /**
+   * Stores one conversation message to channel message mapping.
+   * @param conversationId - Conversation identifier.
+   * @param msgId - Internal actor-scoped message id.
+   * @param channelMessageId - External channel message id.
+   */
   rememberMessageMapping(
     conversationId: number,
     msgId: number,
@@ -101,6 +179,12 @@ export class Gateway {
     );
   }
 
+  /**
+   * Resolves one internal message id by channel message id.
+   * @param conversationId - Conversation identifier.
+   * @param channelMessageId - External channel message id.
+   * @returns Internal message id, or null when missing.
+   */
   async resolveMsgIdByChannelMessageId(
     conversationId: number,
     channelMessageId: string,
@@ -126,6 +210,12 @@ export class Gateway {
     return row.msgId;
   }
 
+  /**
+   * Resolves one channel message id by internal message id.
+   * @param conversationId - Conversation identifier.
+   * @param msgId - Internal actor-scoped message id.
+   * @returns Channel message id, or null when missing.
+   */
   async resolveChannelMessageIdByMsgId(
     conversationId: number,
     msgId: number,
@@ -149,11 +239,6 @@ export class Gateway {
     }
     this.rememberMessageMapping(conversationId, msgId, row.channelMessageId);
     return row.channelMessageId;
-  }
-
-  private async resolveChannel(actorId: number, channelName: string) {
-    const actor = await this.server.actorRegistry.ensure(actorId);
-    return actor.getChannel(channelName);
   }
 
   private async normalizeReplyTo(

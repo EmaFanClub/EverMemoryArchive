@@ -6,13 +6,13 @@ import type { Server } from "../server";
 import type {
   Channel,
   ChannelAdapter,
+  ChannelAdapterFactory,
   ChannelAPICall,
   ChannelClient,
   ChannelClientStatus,
   ChannelResponse,
   ChannelStartOptions,
 } from "./base";
-import { NapCatQQAdapter } from "./napcatqq_adapter";
 import { formatReplyRef, parseReplyRef } from "./utils";
 
 const DEFAULT_START_MAX_ATTEMPTS = 100_000_000;
@@ -49,6 +49,7 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
     actorId: number,
     url: string,
     server: Server,
+    adapterFactory: ChannelAdapterFactory,
     enabled: boolean,
     accessToken: string | null,
   ) {
@@ -63,7 +64,7 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
       transport: "console",
     });
     this.enabled = enabled;
-    this.adapter = this.createAdapter(channel);
+    this.adapter = adapterFactory(this.call.bind(this));
   }
 
   static async create(
@@ -71,6 +72,7 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
     actorId: number,
     url: string,
     server: Server,
+    adapterFactory: ChannelAdapterFactory,
     accessToken: string | null = null,
   ): Promise<WebsocketChannelClient> {
     const enabled = true;
@@ -79,6 +81,7 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
       actorId,
       url,
       server,
+      adapterFactory,
       enabled,
       accessToken?.trim() || null,
     );
@@ -231,13 +234,6 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
         reject(error);
       }
     });
-  }
-
-  private createAdapter(channel: string): ChannelAdapter {
-    if (channel === "qq") {
-      return new NapCatQQAdapter(this.call.bind(this));
-    }
-    throw new Error(`Unsupported channel adapter: ${channel}`);
   }
 
   private async runLoop(

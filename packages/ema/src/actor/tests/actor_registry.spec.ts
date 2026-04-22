@@ -21,14 +21,8 @@ import { Server } from "../../server";
 const createTestConfig = () =>
   new Config(
     new LLMConfig(
-      new OpenAIApiConfig(
-        "test-openai-key",
-        "https://example.com/openai/v1/",
-      ),
-      new GoogleApiConfig(
-        "test-google-key",
-        "https://example.com/google/v1/",
-      ),
+      new OpenAIApiConfig("test-openai-key", "https://example.com/openai/v1/"),
+      new GoogleApiConfig("test-google-key", "https://example.com/google/v1/"),
     ),
     new AgentConfig(),
     new ToolsConfig(),

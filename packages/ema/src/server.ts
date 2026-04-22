@@ -10,7 +10,7 @@ import { ActorScheduler, AgendaScheduler } from "./scheduler";
 import { createJobHandlers } from "./scheduler/jobs";
 import { MemoryManager } from "./memory/manager";
 import { Gateway } from "./gateway";
-import { WebChannel, buildSession } from "./channel";
+import { buildSession } from "./channel";
 import {
   ActorTrainer,
   type ActorTrainingResult,
@@ -42,7 +42,6 @@ const DEFAULT_TRAIN_CHECKPOINT_DIR = path.resolve(
  */
 export class Server {
   private trainInFlight: Promise<ActorTrainingResult> | null = null;
-  readonly webChannel: WebChannel;
 
   config: Config;
   actorRegistry!: ActorRegistry;
@@ -56,7 +55,6 @@ export class Server {
     config: Config,
   ) {
     this.config = config;
-    this.webChannel = new WebChannel();
   }
 
   static async create(
@@ -66,11 +64,6 @@ export class Server {
     const isDev = ["development", "test"].includes(process.env.NODE_ENV || "");
     const server = new Server(fs, config);
     server.dbService = await DBService.create(fs, config);
-    server.actorRegistry = new ActorRegistry(server);
-    server.gateway = new Gateway(server);
-    server.memoryManager = new MemoryManager(server);
-
-    server.scheduler = await AgendaScheduler.create(server.dbService.mongo);
 
     if (isDev) {
       const restored = await server.dbService.restoreFromSnapshot("default");
@@ -82,6 +75,11 @@ export class Server {
     }
 
     await server.dbService.createIndices();
+
+    server.gateway = new Gateway(server);
+    server.actorRegistry = new ActorRegistry(server);
+    server.memoryManager = new MemoryManager(server);
+    server.scheduler = await AgendaScheduler.create(server.dbService.mongo);
 
     await server.createInitialCharacters();
     await server.actorRegistry.restoreAll();

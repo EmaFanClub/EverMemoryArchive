@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { NapCatQQAdapter } from "../channel";
+import { NapCatQQAdapter } from "../index";
 
 afterEach(() => {
   vi.restoreAllMocks();

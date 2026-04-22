@@ -8,12 +8,7 @@ import {
 import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import { formatTimestamp } from "../utils";
-import {
-  WebsocketChannelClient,
-  resolveSession,
-  type Channel,
-  type ChannelEvent,
-} from "../channel";
+import type { ChannelEvent } from "../channel";
 import type {
   ActorChatInput,
   ActorInput,
@@ -28,7 +23,6 @@ const DEFAULT_SLEEP_QUIET_PERIOD_MS = 5 * 60_000;
 
 export class Actor {
   readonly sessionManager: SessionManager;
-  private readonly channels = new Map<string, Channel>();
   private readonly sleepTimer = new HeartbeatTimer(
     DEFAULT_SLEEP_QUIET_PERIOD_MS,
   );
@@ -63,30 +57,7 @@ export class Actor {
     actorId: number,
     server: Server,
   ): Promise<Actor> {
-    const actor = new Actor(config, actorId, server);
-    const napcatAccessToken = process.env.EMA_QQ_TOKEN?.trim() || null;
-    const qqWsUrl = process.env.EMA_QQ_WS_URL?.trim() || "ws://127.0.0.1:3001";
-
-    actor.registerChannel(server.webChannel);
-    actor.registerChannel(
-      await WebsocketChannelClient.create(
-        "qq",
-        actorId,
-        qqWsUrl,
-        server,
-        napcatAccessToken,
-      ),
-    );
-    actor.startChannels();
-    return actor;
-  }
-
-  registerChannel(channel: Channel): void {
-    this.channels.set(channel.name, channel);
-  }
-
-  getChannel(name: string): Channel | undefined {
-    return this.channels.get(name);
+    return new Actor(config, actorId, server);
   }
 
   getStatus(): ActorStatus {
@@ -224,18 +195,6 @@ export class Actor {
     }
   }
 
-  private startChannels(): void {
-    for (const channel of this.channels.values()) {
-      if (
-        channel instanceof WebsocketChannelClient &&
-        channel.isEnabled() &&
-        channel.getStatus() === "exhausted"
-      ) {
-        channel.start();
-      }
-    }
-  }
-
   private async runBootInit(): Promise<void> {
     try {
       await runActorBackgroundJob(
@@ -342,22 +301,8 @@ export class Actor {
     this.currentConversationId = conversationId;
     this.currentWorker = worker;
     worker.events.on("actorResponsed", (event) => {
-      const sessionInfo = resolveSession(event.response.session);
-      if (!sessionInfo) {
-        this.logger.warn(
-          `Invalid session for conversation ${conversationId}, reply dropped.`,
-        );
-        return;
-      }
-      const channel = this.getChannel(sessionInfo.channel);
-      if (!channel) {
-        this.logger.warn(
-          `Missing channel for conversation ${conversationId}, reply dropped.`,
-        );
-        return;
-      }
       this.runDetached(
-        channel.send(event.response),
+        this.server.gateway.dispatchActorResponse(event.response),
         `send reply for conversation ${conversationId}`,
       );
     });
@@ -419,7 +364,7 @@ export class Actor {
     this.currentConversationId = null;
   }
 
-  private runDetached(task: Promise<void>, label: string): void {
+  private runDetached(task: Promise<unknown>, label: string): void {
     task.catch((error) => {
       this.logger.error(`Failed to ${label}:`, error);
     });

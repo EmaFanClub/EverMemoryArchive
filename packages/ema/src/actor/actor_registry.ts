@@ -30,9 +30,8 @@ export class ActorRegistry {
       let inFlight = this.actorInFlight.get(actorId);
       if (!inFlight) {
         inFlight = (async () => {
-          const actorEntity = await this.server.dbService.actorDB.getActor(
-            actorId,
-          );
+          const actorEntity =
+            await this.server.dbService.actorDB.getActor(actorId);
           if (!actorEntity) {
             throw new Error(`Actor ${actorId} not found.`);
           }
@@ -42,6 +41,14 @@ export class ActorRegistry {
             this.server,
           );
           this.actors.set(actorId, created);
+          try {
+            await this.server.gateway.channelRegistry.ensureStarted(actorId);
+          } catch (error) {
+            if (this.actors.get(actorId) === created) {
+              this.actors.delete(actorId);
+            }
+            throw error;
+          }
           return created;
         })();
         this.actorInFlight.set(actorId, inFlight);

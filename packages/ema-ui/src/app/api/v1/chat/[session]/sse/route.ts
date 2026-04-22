@@ -27,7 +27,7 @@ export async function GET(
   }
 
   const conversationId = conversation.id!;
-  const channel = server.webChannel;
+  const channel = server.gateway.channelRegistry.webChannel;
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
 

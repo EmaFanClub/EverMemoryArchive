@@ -71,6 +71,8 @@ export type ChannelAPICaller = (
   options?: { timeoutMs?: number },
 ) => Promise<ChannelResponse | null>;
 
+export type ChannelAdapterFactory = (call: ChannelAPICaller) => ChannelAdapter;
+
 export type ChannelDecodeResult =
   | {
       kind: "events";

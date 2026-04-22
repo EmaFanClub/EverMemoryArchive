@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { WebsocketChannelClient } from "../channel";
+import { NapCatQQAdapter, WebsocketChannelClient } from "../index";
 
 describe("WebsocketChannelClient", () => {
   test("builds authorization header when access token is provided", async () => {
@@ -9,6 +9,7 @@ describe("WebsocketChannelClient", () => {
       1,
       "ws://127.0.0.1:8082",
       {} as never,
+      (call) => new NapCatQQAdapter(call),
       "token-123",
     );
 
@@ -25,6 +26,7 @@ describe("WebsocketChannelClient", () => {
       1,
       "ws://127.0.0.1:8082",
       {} as never,
+      (call) => new NapCatQQAdapter(call),
       null,
     );
 
