@@ -49,9 +49,11 @@ describe("memory update skills", () => {
       {
         actorId: 1,
         server: {
-          getActorRuntime: vi.fn().mockReturnValue({
-            getDayDate: vi.fn().mockReturnValue("2026-04-20"),
-          }),
+          actorRegistry: {
+            get: vi.fn().mockReturnValue({
+              getDayDate: vi.fn().mockReturnValue("2026-04-20"),
+            }),
+          },
           memoryManager: {
             appendShortTermMemory,
           },

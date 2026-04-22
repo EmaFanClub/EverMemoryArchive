@@ -1,11 +1,11 @@
 import { fileURLToPath } from "node:url";
+import * as path from "node:path";
 
 import { Config } from "./config";
 import { DBService } from "./db";
 import type { Fs } from "./fs";
 import { RealFs } from "./fs";
-import * as path from "node:path";
-import { Actor } from "./actor";
+import { ActorRegistry } from "./actor";
 import { ActorScheduler, AgendaScheduler } from "./scheduler";
 import { createJobHandlers } from "./scheduler/jobs";
 import { MemoryManager } from "./memory/manager";
@@ -41,12 +41,11 @@ const DEFAULT_TRAIN_CHECKPOINT_DIR = path.resolve(
  * The server class for the EverMemoryArchive.
  */
 export class Server {
-  actors: Map<number, Actor> = new Map();
-  private actorInFlight: Map<number, Promise<Actor>> = new Map();
   private trainInFlight: Promise<ActorTrainingResult> | null = null;
   readonly webChannel: WebChannel;
 
   config: Config;
+  actorRegistry!: ActorRegistry;
   gateway!: Gateway;
   dbService!: DBService;
   scheduler!: AgendaScheduler;
@@ -67,6 +66,7 @@ export class Server {
     const isDev = ["development", "test"].includes(process.env.NODE_ENV || "");
     const server = new Server(fs, config);
     server.dbService = await DBService.create(fs, config);
+    server.actorRegistry = new ActorRegistry(server);
     server.gateway = new Gateway(server);
     server.memoryManager = new MemoryManager(server);
 
@@ -84,19 +84,10 @@ export class Server {
     await server.dbService.createIndices();
 
     await server.createInitialCharacters();
-
-    const actors = await server.dbService.actorDB.listActors();
-    await Promise.all(
-      actors
-        .map((actor) => actor.id)
-        .filter((id): id is number => typeof id === "number")
-        .map((actorId) => server.createActorRuntime(actorId)),
-    );
+    await server.actorRegistry.restoreAll();
 
     await server.scheduler.start(createJobHandlers(server));
-    for (const actor of server.actors.values()) {
-      actor.startBootInit();
-    }
+    server.actorRegistry.startBootInitAll();
 
     return server;
   }
@@ -238,44 +229,5 @@ export class Server {
         this.trainInFlight = null;
       }
     }
-  }
-
-  /**
-   * Gets one loaded actor runtime instance from the in-memory cache.
-   * @param actorId - The actor identifier.
-   * @returns Loaded runtime actor, or null when not loaded yet.
-   */
-  getActorRuntime(actorId: number): Actor | null {
-    return this.actors.get(actorId) ?? null;
-  }
-
-  /**
-   * Creates one actor runtime instance when needed and returns it.
-   * @param actorId - The actor identifier.
-   * @returns Loaded runtime actor instance.
-   */
-  async createActorRuntime(actorId: number): Promise<Actor> {
-    let actor = this.actors.get(actorId);
-    if (!actor) {
-      let inFlight = this.actorInFlight.get(actorId);
-      if (!inFlight) {
-        inFlight = (async () => {
-          const actorEntity = await this.dbService.actorDB.getActor(actorId);
-          if (!actorEntity) {
-            throw new Error(`Actor ${actorId} not found.`);
-          }
-          const created = await Actor.create(this.config, actorId, this);
-          this.actors.set(actorId, created);
-          return created;
-        })();
-        this.actorInFlight.set(actorId, inFlight);
-      }
-      try {
-        actor = await inFlight;
-      } finally {
-        this.actorInFlight.delete(actorId);
-      }
-    }
-    return actor;
   }
 }

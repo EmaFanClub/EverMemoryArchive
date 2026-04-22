@@ -5,6 +5,7 @@ import { createMongo, DBService, type Mongo } from "./db";
 import { AgendaScheduler } from "./scheduler";
 import { MemoryManager } from "./memory/manager";
 import { Gateway } from "./gateway";
+import { ActorRegistry } from "./actor";
 import {
   Config,
   LLMConfig,
@@ -37,6 +38,7 @@ const createServerForTest = async (
   const config = createTestConfig();
   const server = new (Server as any)(fs, config) as Server;
   server.dbService = DBService.createSync(fs, config, mongo, lance);
+  server.actorRegistry = new ActorRegistry(server);
   server.gateway = new Gateway(server);
   server.memoryManager = new MemoryManager(server);
   return server;
@@ -202,41 +204,4 @@ describe("Server", () => {
       await lance.close();
     }
   });
-});
-
-test("getActorRuntime only reads loaded runtimes and createActorRuntime loads existing actors", async () => {
-  const fs = new MemFs();
-  const mongo = await createMongo("", "test_actor_runtime", "memory");
-  await mongo.connect();
-  const lance = await lancedb.connect("memory://ema-actor-runtime");
-  const server = await createServerForTest(fs, mongo, lance);
-
-  try {
-    expect(server.getActorRuntime(1)).toBeNull();
-    await expect(server.createActorRuntime(1)).rejects.toThrow(
-      "Actor 1 not found.",
-    );
-
-    await (server as any).createInitialCharacters();
-
-    const loaded = server.getActorRuntime(1);
-    expect(loaded).toBeNull();
-
-    const actor = await server.createActorRuntime(1);
-    const actorAgain = await server.createActorRuntime(1);
-    expect(actor).toBe(actorAgain);
-    expect(server.getActorRuntime(1)).toBe(actor);
-
-    const conversation =
-      await server.dbService.conversationDB.getConversationByActorAndSession(
-        1,
-        "web-chat-1",
-      );
-    expect(conversation?.description).toBe(
-      "这是你和你的拥有者之间在网页端私聊的对话。",
-    );
-  } finally {
-    await mongo.close();
-    await lance.close();
-  }
 });

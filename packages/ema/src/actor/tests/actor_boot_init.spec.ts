@@ -4,11 +4,11 @@ const { runActorBackgroundJob } = vi.hoisted(() => ({
   runActorBackgroundJob: vi.fn(async () => {}),
 }));
 
-vi.mock("../scheduler/jobs/actor.job", () => ({
+vi.mock("../../scheduler/jobs/actor.job", () => ({
   runActorBackgroundJob,
 }));
 
-vi.mock("../logger", () => ({
+vi.mock("../../logger", () => ({
   Logger: class Logger {
     static create() {
       return {
@@ -21,7 +21,7 @@ vi.mock("../logger", () => ({
   },
 }));
 
-import { Actor } from "../actor/actor";
+import { Actor } from "../actor";
 
 function createActor(
   recurring: Array<{

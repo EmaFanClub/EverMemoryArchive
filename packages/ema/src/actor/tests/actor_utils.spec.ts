@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { buildUserMessageFromActorInput } from "../actor";
+import { buildUserMessageFromActorInput } from "../index";
 
 describe("buildUserMessageFromActorInput", () => {
   test("preserves inline image data in user messages", () => {

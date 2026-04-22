@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { SessionManager, SessionQueue } from "../actor";
-import type { ActorSystemInput } from "../actor";
+import { SessionManager, SessionQueue } from "../index";
+import type { ActorSystemInput } from "../index";
 
 function createSystemInput(text: string): ActorSystemInput {
   return {

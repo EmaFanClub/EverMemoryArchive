@@ -263,7 +263,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
     }
 
     const actorDayDate = context!
-      .server!.getActorRuntime(actorId)
+      .server!.actorRegistry.get(actorId)
       ?.getDayDate();
     await context!.server!.memoryManager.appendShortTermMemory(actorId, {
       kind: "activity",

@@ -182,7 +182,7 @@ export async function runActorBackgroundJob(
  * @param job - Normalized chat task data.
  */
 async function runChatTask(server: Server, job: ChatTaskData): Promise<void> {
-  const actor = await server.createActorRuntime(job.actorId);
+  const actor = await server.actorRegistry.ensure(job.actorId);
   if (!actor.canRunActiveTasks()) {
     return;
   }
@@ -411,7 +411,7 @@ async function runActivityTask(
   server: Server,
   job: ActivityTaskData,
 ): Promise<void> {
-  const actor = await server.createActorRuntime(job.actorId);
+  const actor = await server.actorRegistry.ensure(job.actorId);
   if (!actor.canRunActiveTasks()) {
     return;
   }
@@ -472,7 +472,7 @@ async function runActivityTask(
  * @param job - Wake task data.
  */
 async function runWakeTask(server: Server, job: WakeTaskData): Promise<void> {
-  const actor = await server.createActorRuntime(job.actorId);
+  const actor = await server.actorRegistry.ensure(job.actorId);
   if (!actor.beginWake()) {
     return;
   }
@@ -525,7 +525,7 @@ async function runWakeTask(server: Server, job: WakeTaskData): Promise<void> {
  * @param job - Sleep task data.
  */
 async function runSleepTask(server: Server, job: SleepTaskData): Promise<void> {
-  const actor = await server.createActorRuntime(job.actorId);
+  const actor = await server.actorRegistry.ensure(job.actorId);
   if (job.source === "schedule") {
     actor.startSleepTimer();
     return;
