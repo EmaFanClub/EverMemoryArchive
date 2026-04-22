@@ -25,7 +25,6 @@ describe("memory update skills", () => {
         } as any,
         data: {
           task: "memory_rollup",
-          reason: "threshold",
           triggeredAt: Date.now(),
           activitySnapshot: [],
         },
@@ -33,10 +32,10 @@ describe("memory update skills", () => {
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("conversation_activity");
+    expect(res.error).toContain("conversation_rollup");
   });
 
-  test("update-short-term-memory-skill allows add_activity in heartbeat_activity", async () => {
+  test("update-short-term-memory-skill allows add_activity in activity", async () => {
     const appendShortTermMemory = vi.fn();
     const skill = new UpdateShortTermMemorySkill(
       ".",
@@ -50,12 +49,15 @@ describe("memory update skills", () => {
       {
         actorId: 1,
         server: {
+          getActorRuntime: vi.fn().mockReturnValue({
+            getDayDate: vi.fn().mockReturnValue("2026-04-20"),
+          }),
           memoryManager: {
             appendShortTermMemory,
           },
         } as any,
         data: {
-          task: "heartbeat_activity",
+          task: "activity",
           triggeredAt: 1234567890,
         },
       },
@@ -67,11 +69,10 @@ describe("memory update skills", () => {
       expect.objectContaining({
         kind: "activity",
         date: formatTimestamp("YYYY-MM-DD", 1234567890),
-        dayDate: formatTimestamp("YYYY-MM-DD", 1234567890),
+        dayDate: "2026-04-20",
         memory: "一个人的午后，发了会儿呆。",
         createdAt: 1234567890,
         updatedAt: 1234567890,
-        visible: true,
       }),
     );
   });
@@ -112,7 +113,7 @@ describe("memory update skills", () => {
           },
         } as any,
         data: {
-          task: "conversation_activity",
+          task: "conversation_rollup",
           triggeredAt: 1234567890,
         },
       },

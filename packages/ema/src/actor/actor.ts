@@ -1,36 +1,44 @@
 import type { Config } from "../config";
 import { Logger } from "../logger";
 import {
-  EMA_FOREGROUND_HEARTBEAT_PROMPT,
-  EMA_HEARTBEAT_ACTIVITY_PROMPT,
+  EMA_MEMORY_ROLLUP_PROMPT,
+  EMA_SLEEP_PROMPT,
+  EMA_WAKE_PROMPT,
 } from "../memory/prompts";
 import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
+import { formatTimestamp } from "../utils";
 import {
   WebsocketChannelClient,
   resolveSession,
   type Channel,
   type ChannelEvent,
 } from "../channel";
-import type { ActorChatInput, ActorInput, ActorSystemInput } from "./base";
+import type {
+  ActorChatInput,
+  ActorInput,
+  ActorStatus,
+  ActorSystemInput,
+} from "./base";
 import { ActorWorker } from "./actor_worker";
 import { SessionManager } from "./session_manager";
+import { HeartbeatTimer } from "./timer";
 
-const DEFAULT_HEARTBEAT_CHECK_INTERVAL_MS = 60_000;
-const DEFAULT_HEARTBEAT_THRESHOLD_MS = 10 * 60_000;
-
-type HeartbeatBehavior = "foreground_chat" | "background_activity" | "noop";
+const DEFAULT_SLEEP_QUIET_PERIOD_MS = 5 * 60_000;
 
 export class Actor {
   readonly sessionManager: SessionManager;
   private readonly channels = new Map<string, Channel>();
+  private readonly sleepTimer = new HeartbeatTimer(
+    DEFAULT_SLEEP_QUIET_PERIOD_MS,
+  );
 
   private currentConversationId: number | null = null;
   private currentWorker: ActorWorker | null = null;
   private acquiring = false;
-  private heartbeatEnabled = true;
-  private idleSince: number | null = null;
-  private heartbeatTimer: NodeJS.Timeout | null = null;
+  private bootInitPromise: Promise<void> | null = null;
+  private status: ActorStatus = "sleep";
+  private dayDate: string | null = null;
   private readonly logger: Logger = Logger.create({
     name: "actor",
     level: "debug",
@@ -45,6 +53,9 @@ export class Actor {
     this.sessionManager = new SessionManager(
       this.handleQueueUnlocked.bind(this),
     );
+    this.sleepTimer.on(() => {
+      this.runDetached(this.handleSleepTimerFired(), "handle sleep timer");
+    });
   }
 
   static async create(
@@ -67,7 +78,6 @@ export class Actor {
       ),
     );
     actor.startChannels();
-    actor.startHeartbeat();
     return actor;
   }
 
@@ -79,16 +89,87 @@ export class Actor {
     return this.channels.get(name);
   }
 
-  private startChannels(): void {
-    for (const channel of this.channels.values()) {
-      if (
-        channel instanceof WebsocketChannelClient &&
-        channel.isEnabled() &&
-        channel.getStatus() === "exhausted"
-      ) {
-        channel.start();
-      }
+  getStatus(): ActorStatus {
+    return this.status;
+  }
+
+  getDayDate(): string | null {
+    return this.dayDate;
+  }
+
+  canRunActiveTasks(): boolean {
+    return this.status === "awake";
+  }
+
+  startBootInit(): void {
+    if (this.bootInitPromise) {
+      return;
     }
+    const task = this.runBootInit().finally(() => {
+      if (this.bootInitPromise === task) {
+        this.bootInitPromise = null;
+      }
+    });
+    this.bootInitPromise = task;
+    this.runDetached(task, "run boot init");
+  }
+
+  beginWake(): boolean {
+    if (this.status !== "sleep") {
+      return false;
+    }
+    this.stopSleepTimer();
+    this.status = "switching";
+    return true;
+  }
+
+  completeWake(): void {
+    this.dayDate = formatTimestamp("YYYY-MM-DD", Date.now());
+    this.status = "awake";
+    this.tryAcquireConversation();
+  }
+
+  failWake(): void {
+    this.status = "sleep";
+  }
+
+  startSleepTimer(): boolean {
+    if (this.status !== "awake") {
+      return false;
+    }
+    this.sleepTimer.start();
+    return true;
+  }
+
+  resetSleepTimer(): boolean {
+    if (this.status !== "awake" || !this.sleepTimer.isRunning()) {
+      return false;
+    }
+    this.sleepTimer.reset();
+    return true;
+  }
+
+  stopSleepTimer(): void {
+    this.sleepTimer.stop();
+  }
+
+  beginSleep(): boolean {
+    if (this.status !== "awake") {
+      return false;
+    }
+    this.status = "switching";
+    return true;
+  }
+
+  completeSleep(): void {
+    this.stopSleepTimer();
+    this.dayDate = null;
+    this.status = "sleep";
+  }
+
+  failSleep(): void {
+    this.status = "awake";
+    this.tryAcquireConversation();
   }
 
   enqueueChannelEvent(
@@ -126,11 +207,14 @@ export class Actor {
     conversationId: number,
     input: ActorInput,
   ): Promise<void> {
-    this.idleSince = null;
     if (input.kind === "chat") {
       await this.server.memoryManager.persistChatMessage(input);
     }
     this.sessionManager.enqueue(conversationId, input);
+    this.resetSleepTimer();
+    if (this.status !== "awake") {
+      return;
+    }
     if (this.currentConversationId === null) {
       this.tryAcquireConversation();
       return;
@@ -140,8 +224,94 @@ export class Actor {
     }
   }
 
+  private startChannels(): void {
+    for (const channel of this.channels.values()) {
+      if (
+        channel instanceof WebsocketChannelClient &&
+        channel.isEnabled() &&
+        channel.getStatus() === "exhausted"
+      ) {
+        channel.start();
+      }
+    }
+  }
+
+  private async runBootInit(): Promise<void> {
+    try {
+      await runActorBackgroundJob(
+        this.server,
+        {
+          actorId: this.actorId,
+          task: "memory_rollup",
+          prompt: EMA_MEMORY_ROLLUP_PROMPT,
+          addition: { reason: "flush" },
+        },
+        Date.now(),
+      );
+    } catch (error) {
+      this.logger.error("Failed to run boot-init memory rollup:", error);
+    }
+
+    const listed = await this.server.getActorScheduler(this.actorId).list();
+    const wakeSchedule = listed.recurring.find((item) => item.task === "wake");
+    const sleepSchedule = listed.recurring.find(
+      (item) => item.task === "sleep",
+    );
+    const shouldWake =
+      !wakeSchedule ||
+      !sleepSchedule ||
+      (typeof wakeSchedule.lastRunAt === "string" &&
+      typeof sleepSchedule.lastRunAt === "string"
+        ? wakeSchedule.lastRunAt > sleepSchedule.lastRunAt
+        : typeof wakeSchedule.lastRunAt === "string"
+          ? true
+          : typeof sleepSchedule.lastRunAt === "string"
+            ? false
+            : typeof wakeSchedule.nextRunAt === "string" &&
+                typeof sleepSchedule.nextRunAt === "string"
+              ? wakeSchedule.nextRunAt >= sleepSchedule.nextRunAt
+              : true);
+    if (!shouldWake) {
+      return;
+    }
+
+    try {
+      await runActorBackgroundJob(
+        this.server,
+        {
+          actorId: this.actorId,
+          task: "wake",
+          prompt: EMA_WAKE_PROMPT,
+        },
+        Date.now(),
+      );
+    } catch (error) {
+      this.logger.error("Failed to run boot-init wake task:", error);
+    }
+  }
+
+  private async handleSleepTimerFired(): Promise<void> {
+    if (this.status !== "awake") {
+      return;
+    }
+    await runActorBackgroundJob(
+      this.server,
+      {
+        actorId: this.actorId,
+        task: "sleep",
+        prompt: EMA_SLEEP_PROMPT,
+        addition: { source: "timer" },
+      },
+      Date.now(),
+    );
+  }
+
   private tryAcquireConversation(): void {
-    if (this.currentConversationId !== null || this.acquiring) {
+    if (
+      this.status !== "awake" ||
+      this.currentConversationId !== null ||
+      this.acquiring
+    ) {
       return;
     }
     const conversationId = this.sessionManager.pickNextConversationId();
@@ -152,7 +322,7 @@ export class Actor {
     this.runDetached(
       this.holdConversation(conversationId).finally(() => {
         this.acquiring = false;
-        if (this.currentConversationId === null) {
+        if (this.currentConversationId === null && this.status === "awake") {
           setTimeout(() => {
             this.tryAcquireConversation();
           }, 0);
@@ -171,7 +341,6 @@ export class Actor {
     );
     this.currentConversationId = conversationId;
     this.currentWorker = worker;
-    this.idleSince = null;
     worker.events.on("actorResponsed", (event) => {
       const sessionInfo = resolveSession(event.response.session);
       if (!sessionInfo) {
@@ -208,7 +377,11 @@ export class Actor {
   }
 
   private pumpHeldQueue(): void {
-    if (this.currentConversationId === null || !this.currentWorker) {
+    if (
+      this.status !== "awake" ||
+      this.currentConversationId === null ||
+      !this.currentWorker
+    ) {
       return;
     }
     const conversationId = this.currentConversationId;
@@ -225,6 +398,9 @@ export class Actor {
   }
 
   private handleQueueUnlocked(conversationId: number): void {
+    if (this.status !== "awake") {
+      return;
+    }
     if (this.currentConversationId === null) {
       this.tryAcquireConversation();
       return;
@@ -241,109 +417,6 @@ export class Actor {
     }
     this.currentWorker = null;
     this.currentConversationId = null;
-  }
-
-  setHeartbeatEnabled(enabled: boolean): void {
-    this.heartbeatEnabled = enabled;
-    this.idleSince = null;
-  }
-
-  private startHeartbeat(): void {
-    if (this.heartbeatTimer) {
-      return;
-    }
-    this.heartbeatTimer = setInterval(() => {
-      this.runDetached(this.tickHeartbeat(), "tick heartbeat");
-    }, DEFAULT_HEARTBEAT_CHECK_INTERVAL_MS);
-    this.heartbeatTimer.unref?.();
-  }
-
-  private async tickHeartbeat(): Promise<void> {
-    if (!this.heartbeatEnabled) {
-      return;
-    }
-    if (this.currentConversationId !== null) {
-      this.idleSince = null;
-      return;
-    }
-    const now = Date.now();
-    if (this.idleSince === null) {
-      this.idleSince = now;
-      return;
-    }
-    if (now - this.idleSince < DEFAULT_HEARTBEAT_THRESHOLD_MS) {
-      return;
-    }
-    this.idleSince = now;
-    const proactiveConversationIds = await this.listProactiveConversationIds();
-    switch (this.pickHeartbeatBehavior(proactiveConversationIds.length > 0)) {
-      case "foreground_chat": {
-        const conversationId =
-          proactiveConversationIds[
-            Math.floor(Math.random() * proactiveConversationIds.length)
-          ];
-        if (typeof conversationId !== "number") {
-          return;
-        }
-        await this.enqueueActorInput(conversationId, {
-          kind: "system",
-          conversationId,
-          time: now,
-          inputs: [{ type: "text", text: EMA_FOREGROUND_HEARTBEAT_PROMPT }],
-        });
-        return;
-      }
-      case "background_activity":
-        await runActorBackgroundJob(
-          this.server,
-          {
-            actorId: this.actorId,
-            task: "activity",
-            prompt: EMA_HEARTBEAT_ACTIVITY_PROMPT,
-          },
-          now,
-        );
-        return;
-      case "noop":
-      default:
-        return;
-    }
-  }
-
-  private pickHeartbeatBehavior(
-    canStartForegroundChat: boolean,
-  ): HeartbeatBehavior {
-    const candidates: Array<{ kind: HeartbeatBehavior; weight: number }> = [
-      ...(canStartForegroundChat
-        ? [{ kind: "foreground_chat" as const, weight: 0.5 }]
-        : []),
-      { kind: "background_activity" as const, weight: 0.5 },
-      { kind: "noop" as const, weight: 0 },
-    ];
-    const totalWeight = candidates.reduce((sum, item) => sum + item.weight, 0);
-    if (totalWeight <= 0) {
-      return "noop";
-    }
-    let roll = Math.random() * totalWeight;
-    for (const candidate of candidates) {
-      if (roll < candidate.weight) {
-        return candidate.kind;
-      }
-      roll -= candidate.weight;
-    }
-    return candidates[candidates.length - 1]?.kind ?? "noop";
-  }
-
-  private async listProactiveConversationIds(): Promise<number[]> {
-    const conversations = await this.server.conversationDB.listConversations({
-      actorId: this.actorId,
-    });
-    return conversations.flatMap((conversation) =>
-      conversation.allowProactive === true &&
-      typeof conversation.id === "number"
-        ? [conversation.id]
-        : [],
-    );
   }
 
   private runDetached(task: Promise<void>, label: string): void {

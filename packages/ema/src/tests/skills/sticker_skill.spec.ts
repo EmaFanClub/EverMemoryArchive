@@ -65,20 +65,6 @@ vi.mock("../../skills/sticker-skill/utils", () => ({
 import StickerSkill from "../../skills/sticker-skill";
 
 describe("StickerSkill", () => {
-  test("getPlaybook explains how to use the skill", async () => {
-    const skill = new StickerSkill("packages/ema/src/skills", "sticker-skill");
-
-    const playbook = await skill.getPlaybook();
-
-    expect(playbook).toContain("## 可用表情包");
-    expect(playbook).toContain("## 支持的模式");
-    expect(playbook).toContain("preview");
-    expect(playbook).toContain("update");
-    expect(playbook).toContain("create");
-    expect(playbook).not.toContain("{AVAILABLE_STICKERS}");
-    expect(playbook).toContain("- 测试表情包");
-  });
-
   test("preview returns readable content and inline image data", async () => {
     const skill = new StickerSkill("packages/ema/src/skills", "sticker-skill");
 

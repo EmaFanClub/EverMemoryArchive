@@ -50,7 +50,7 @@ type FakeMemoryManager = {
     msgIds: number[],
     processedAt: number,
   ) => Promise<number>;
-  getVisibleActivityWindow: (
+  getActivityWindow: (
     actorId: number,
     triggeredAt: number,
   ) => Promise<ShortTermMemoryRecord[]>;
@@ -59,10 +59,6 @@ type FakeMemoryManager = {
     triggeredAt: number,
   ) => Promise<{ count: number; lastPendingId: number | null }>;
   buildSystemPromptForBackground: () => Promise<string>;
-  hideRolledUpActivities: (
-    actorId: number,
-    upperBoundAt: number,
-  ) => Promise<void>;
 };
 
 type FakeServer = {
@@ -89,10 +85,7 @@ function createFakeServer(
 
   const getActivityWindow = (triggeredAt: number) =>
     activities
-      .filter(
-        (item) =>
-          item.visible !== false && (item.createdAt ?? 0) <= triggeredAt,
-      )
+      .filter((item) => (item.createdAt ?? 0) <= triggeredAt)
       .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
       .slice(-30);
 
@@ -164,7 +157,7 @@ function createFakeServer(
         }
         return updated;
       },
-      async getVisibleActivityWindow(_actorId: number, triggeredAt: number) {
+      async getActivityWindow(_actorId: number, triggeredAt: number) {
         return getActivityWindow(triggeredAt).map((item) => ({ ...item }));
       },
       async getPendingActivityWindowState(
@@ -181,17 +174,6 @@ function createFakeServer(
       },
       async buildSystemPromptForBackground() {
         return "";
-      },
-      async hideRolledUpActivities(_actorId: number, upperBoundAt: number) {
-        for (const item of activities) {
-          if (
-            item.visible !== false &&
-            typeof item.processedAt === "number" &&
-            (item.createdAt ?? 0) <= upperBoundAt
-          ) {
-            item.visible = false;
-          }
-        }
       },
     },
   };
@@ -220,7 +202,6 @@ function createActivities(
     dayDate: "2026-04-13",
     memory: `activity-${startId + index}`,
     createdAt: startAt + index,
-    visible: true,
   }));
 }
 
@@ -371,5 +352,42 @@ describe("actor background job follow-up", () => {
     expect(
       activities.every((item) => typeof item.processedAt === "number"),
     ).toBe(true);
+  });
+
+  test("non-threshold memory rollup relies on the agent run to finish internal get_tasks loops", async () => {
+    const activities = createActivities(1, 20, 1000);
+    const server = createFakeServer([], activities);
+
+    let callCount = 0;
+    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
+      async (state) => {
+        callCount += 1;
+        if (callCount !== 1) {
+          return;
+        }
+        const snapshot = Array.isArray(
+          state.toolContext?.data?.activitySnapshot,
+        )
+          ? (state.toolContext.data.activitySnapshot as ShortTermMemoryRecord[])
+          : [];
+        const processedAt = state.toolContext?.data?.triggeredAt;
+        if (typeof processedAt !== "number") {
+          return;
+        }
+        for (const item of snapshot) {
+          item.processedAt = processedAt;
+        }
+        for (const item of activities) {
+          item.processedAt = processedAt;
+        }
+        if (state.toolContext?.data) {
+          state.toolContext.data.memoryUpdated = true;
+        }
+      },
+    );
+
+    await runActorBackgroundJob(server as any, memoryRollupJob("dayend"));
+
+    expect(callCount).toBe(1);
   });
 });

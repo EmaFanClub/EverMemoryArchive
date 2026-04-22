@@ -39,7 +39,7 @@ describe("ActorScheduler", () => {
         type: "every",
         task: "activity",
         runAt: now + 120_000,
-        interval: "1 hour",
+        interval: 3_600_000,
         prompt: "记录一条轻量后台活动。",
       },
     ]);
@@ -78,7 +78,7 @@ describe("ActorScheduler", () => {
       task: "activity",
       conversationId: null,
       prompt: "记录一条轻量后台活动。",
-      interval: "1 hour",
+      interval: 3_600_000,
     });
 
     const updated = await actorScheduler.update([
@@ -207,5 +207,152 @@ describe("ActorScheduler", () => {
         overdue: true,
       },
     });
+  });
+
+  test("reuses existing recurring wake schedules instead of creating duplicates", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+    const now = Date.now();
+
+    const first = await actorScheduler.add([
+      {
+        task: "wake",
+        interval: "0 8 * * *",
+      },
+    ]);
+    const second = await actorScheduler.add([
+      {
+        task: "wake",
+        interval: "0 9 * * *",
+      },
+    ]);
+
+    expect(second.added[0].id).toBe(first.added[0].id);
+    const listed = await actorScheduler.list(now);
+    const wakeSchedules = listed.recurring.filter(
+      (item) => item.task === "wake",
+    );
+    expect(wakeSchedules).toHaveLength(1);
+    expect(wakeSchedules[0]).toMatchObject({
+      id: first.added[0].id,
+      interval: "0 9 * * *",
+    });
+  });
+
+  test("rejects invalid recurring wake interval before writing job", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+
+    await expect(
+      actorScheduler.add([
+        {
+          task: "wake",
+          interval: "07:30",
+        },
+      ]),
+    ).rejects.toThrow("cron");
+
+    const listed = await actorScheduler.list();
+    expect(listed.recurring).toHaveLength(0);
+  });
+
+  test("rejects cron expressions that Agenda cannot compute", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+
+    await expect(
+      actorScheduler.add([
+        {
+          task: "wake",
+          interval: "0 0 31 2 *",
+        },
+      ]),
+    ).rejects.toThrow("cron");
+
+    const listed = await actorScheduler.list();
+    expect(listed.recurring).toHaveLength(0);
+  });
+
+  test("allows recurring chat cron schedules without runAt", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+
+    const created = await actorScheduler.add([
+      {
+        type: "every",
+        task: "chat",
+        interval: "0 9 * * *",
+        conversationId: 12,
+        prompt: "每天上午问候。",
+      },
+    ]);
+
+    const listed = await actorScheduler.list();
+    expect(listed.recurring).toHaveLength(1);
+    expect(listed.recurring[0]).toMatchObject({
+      id: created.added[0].id,
+      task: "chat",
+      interval: "0 9 * * *",
+      conversationId: 12,
+      prompt: "每天上午问候。",
+    });
+    expect(listed.recurring[0].nextRunAt).not.toBeNull();
+  });
+
+  test("rejects recurring chat cron schedules with runAt", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+
+    await expect(
+      actorScheduler.add([
+        {
+          type: "every",
+          task: "chat",
+          runAt: Date.now() + 60_000,
+          interval: "0 9 * * *",
+          conversationId: 12,
+          prompt: "每天上午问候。",
+        } as any,
+      ]),
+    ).rejects.toThrow("runAt");
+  });
+
+  test("rejects numeric recurring chat interval updates without runAt", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+    const created = await actorScheduler.add([
+      {
+        type: "every",
+        task: "chat",
+        runAt: Date.now() + 60_000,
+        interval: 60_000,
+        conversationId: 12,
+        prompt: "按固定间隔提醒。",
+      },
+    ]);
+
+    await expect(
+      actorScheduler.update([
+        {
+          id: created.added[0].id,
+          interval: 120_000,
+        },
+      ]),
+    ).rejects.toThrow("runAt");
+  });
+
+  test("rejects interval updates for one-time schedules", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+    const created = await actorScheduler.add([
+      {
+        type: "once",
+        task: "activity",
+        runAt: Date.now() + 60_000,
+        prompt: "记录一次状态。",
+      },
+    ]);
+
+    await expect(
+      actorScheduler.update([
+        {
+          id: created.added[0].id,
+          interval: 60_000,
+        },
+      ]),
+    ).rejects.toThrow("once schedules do not support interval updates");
   });
 });

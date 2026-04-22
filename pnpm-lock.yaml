@@ -75,6 +75,9 @@ importers:
       apache-arrow:
         specifier: ^18.1.0
         version: 18.1.0
+      cron-parser:
+        specifier: ^4.9.0
+        version: 4.9.0
       dayjs:
         specifier: ^1.11.19
         version: 1.11.19

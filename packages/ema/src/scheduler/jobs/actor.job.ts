@@ -2,7 +2,13 @@ import { buildUserMessageFromActorInput } from "../../actor/utils";
 import { Agent, type AgentState } from "../../agent";
 import { LLMClient } from "../../llm";
 import { Logger } from "../../logger";
-import { EMA_MEMORY_ROLLUP_PROMPT } from "../../memory/prompts";
+import {
+  EMA_MEMORY_ROLLUP_PROMPT,
+  EMA_SCHEDULED_ACTIVITY_PROMPT,
+  EMA_SCHEDULED_CHAT_PROMPT,
+  EMA_SLEEP_PROMPT,
+  EMA_WAKE_PROMPT,
+} from "../../memory/prompts";
 import type { ShortTermMemoryRecord } from "../../memory/base";
 import type { Server } from "../../server";
 import { formatTimestamp } from "../../utils";
@@ -10,7 +16,7 @@ import type { JobHandler } from "../base";
 
 const actorMemoryRollupQueue = new Map<number, Promise<unknown>>();
 
-type MemoryRollupReason = "threshold" | "dayend";
+type SleepTaskSource = "schedule" | "timer";
 
 interface PendingWindowState {
   count: number;
@@ -35,13 +41,27 @@ interface MemoryRollupTaskData {
   actorId: number;
   prompt: string;
   triggeredAt: number;
-  reason: MemoryRollupReason;
+  thresholdTriggered: boolean;
 }
 
 interface ActivityTaskData {
   actorId: number;
   prompt: string;
   triggeredAt: number;
+}
+
+interface WakeTaskData {
+  actorId: number;
+  prompt: string;
+  triggeredAt: number;
+}
+
+interface SleepTaskData {
+  actorId: number;
+  prompt: string;
+  triggeredAt: number;
+  source: SleepTaskSource;
+  addition?: Record<string, unknown>;
 }
 
 /**
@@ -130,14 +150,25 @@ export async function runActorBackgroundJob(
         actorId: job.actorId,
         prompt: job.prompt,
         triggeredAt,
-        reason: getMemoryRollupReason(job.addition),
+        thresholdTriggered: isThresholdTriggered(job.addition),
       });
       return;
     case "wake":
+      await runWakeTask(server, {
+        actorId: job.actorId,
+        prompt: job.prompt,
+        triggeredAt,
+      });
+      return;
     case "sleep":
-      throw new Error(
-        `Actor background task '${job.task}' is not implemented yet.`,
-      );
+      await runSleepTask(server, {
+        actorId: job.actorId,
+        prompt: job.prompt,
+        triggeredAt,
+        source: job.addition?.source === "timer" ? "timer" : "schedule",
+        addition: stripInternalSleepSource(job.addition),
+      });
+      return;
     default: {
       const unreachable: never = job.task;
       throw new Error(`Unsupported actor background task: ${unreachable}`);
@@ -151,12 +182,20 @@ export async function runActorBackgroundJob(
  * @param job - Normalized chat task data.
  */
 async function runChatTask(server: Server, job: ChatTaskData): Promise<void> {
-  const actor = await server.getActor(job.actorId);
+  const actor = await server.createActorRuntime(job.actorId);
+  if (!actor.canRunActiveTasks()) {
+    return;
+  }
   await actor.enqueueActorInput(job.conversationId, {
     kind: "system",
     conversationId: job.conversationId,
     time: job.triggeredAt,
-    inputs: [{ type: "text", text: job.prompt }],
+    inputs: [
+      {
+        type: "text",
+        text: EMA_SCHEDULED_CHAT_PROMPT.replaceAll("{prompt}", job.prompt),
+      },
+    ],
   });
 }
 
@@ -229,13 +268,13 @@ async function runConversationRollupTaskOnce(
       job.conversationId,
       job.triggeredAt,
     );
-  const activitySnapshot = await server.memoryManager.getVisibleActivityWindow(
+  const activitySnapshot = await server.memoryManager.getActivityWindow(
     job.actorId,
     job.triggeredAt,
   );
   const agent = createBackgroundAgent(
     server,
-    "ActorConversationActivityJob",
+    "ActorConversationRollupTask",
     job.actorId,
     job.triggeredAt,
   );
@@ -262,7 +301,7 @@ async function runConversationRollupTaskOnce(
       conversationId: job.conversationId,
       server,
       data: {
-        task: "conversation_activity",
+        task: "conversation_rollup",
         triggeredAt: job.triggeredAt,
       },
     },
@@ -296,7 +335,7 @@ async function runMemoryRollupTask(
   server: Server,
   job: MemoryRollupTaskData,
 ): Promise<void> {
-  if (job.reason === "dayend") {
+  if (!job.thresholdTriggered) {
     await enqueueActorMemoryRollup(job.actorId, () =>
       runMemoryRollupTaskOnce(server, job),
     );
@@ -334,7 +373,7 @@ async function runMemoryRollupTask(
           didConsumePending: await runMemoryRollupTaskOnce(server, {
             ...job,
             triggeredAt: startedAt,
-            reason: "threshold",
+            thresholdTriggered: true,
           }),
         };
       }));
@@ -358,13 +397,13 @@ async function runMemoryRollupTask(
     await runMemoryRollupTask(server, {
       ...job,
       triggeredAt: latestAt,
-      reason: "threshold",
+      thresholdTriggered: true,
     });
   }
 }
 
 /**
- * Runs one heartbeat-triggered background activity task.
+ * Runs one scheduled background activity task.
  * @param server - Server instance for shared resources.
  * @param job - Background activity task data.
  */
@@ -372,13 +411,17 @@ async function runActivityTask(
   server: Server,
   job: ActivityTaskData,
 ): Promise<void> {
-  const activitySnapshot = await server.memoryManager.getVisibleActivityWindow(
+  const actor = await server.createActorRuntime(job.actorId);
+  if (!actor.canRunActiveTasks()) {
+    return;
+  }
+  const activitySnapshot = await server.memoryManager.getActivityWindow(
     job.actorId,
     job.triggeredAt,
   );
   const agent = createBackgroundAgent(
     server,
-    "ActorHeartbeatActivityJob",
+    "ActorActivityTask",
     job.actorId,
     job.triggeredAt,
   );
@@ -393,7 +436,15 @@ async function runActivityTask(
       buildUserMessageFromActorInput({
         kind: "system",
         time: job.triggeredAt,
-        inputs: [{ type: "text", text: job.prompt }],
+        inputs: [
+          {
+            type: "text",
+            text: EMA_SCHEDULED_ACTIVITY_PROMPT.replaceAll(
+              "{prompt}",
+              job.prompt,
+            ),
+          },
+        ],
       }),
     ],
     tools: server.config.baseTools,
@@ -401,7 +452,7 @@ async function runActivityTask(
       actorId: job.actorId,
       server,
       data: {
-        task: "heartbeat_activity",
+        task: "activity",
         triggeredAt: job.triggeredAt,
       },
     },
@@ -413,6 +464,122 @@ async function runActivityTask(
     job.triggeredAt,
     agentState,
   );
+}
+
+/**
+ * Runs one wake task and transitions the actor to the awake state on success.
+ * @param server - Server instance for shared resources.
+ * @param job - Wake task data.
+ */
+async function runWakeTask(server: Server, job: WakeTaskData): Promise<void> {
+  const actor = await server.createActorRuntime(job.actorId);
+  if (!actor.beginWake()) {
+    return;
+  }
+  try {
+    const activitySnapshot = await server.memoryManager.getActivityWindow(
+      job.actorId,
+      job.triggeredAt,
+    );
+    const agent = createBackgroundAgent(
+      server,
+      "ActorWakeTask",
+      job.actorId,
+      job.triggeredAt,
+    );
+    const agentState: AgentState = {
+      systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
+        job.actorId,
+        {
+          activityRecords: activitySnapshot,
+        },
+      ),
+      messages: [
+        buildUserMessageFromActorInput({
+          kind: "system",
+          time: job.triggeredAt,
+          inputs: [{ type: "text", text: EMA_WAKE_PROMPT }],
+        }),
+      ],
+      tools: server.config.baseTools,
+      toolContext: {
+        actorId: job.actorId,
+        server,
+        data: {
+          task: "wake",
+          triggeredAt: job.triggeredAt,
+        },
+      },
+    };
+    await agent.runWithState(agentState);
+    actor.completeWake();
+  } catch (error) {
+    actor.failWake();
+    throw error;
+  }
+}
+
+/**
+ * Runs one sleep task. Scheduled sleep starts the timer, timer sleep performs the real transition.
+ * @param server - Server instance for shared resources.
+ * @param job - Sleep task data.
+ */
+async function runSleepTask(server: Server, job: SleepTaskData): Promise<void> {
+  const actor = await server.createActorRuntime(job.actorId);
+  if (job.source === "schedule") {
+    actor.startSleepTimer();
+    return;
+  }
+  if (!actor.beginSleep()) {
+    return;
+  }
+  try {
+    await runMemoryRollupTask(server, {
+      actorId: job.actorId,
+      prompt: EMA_MEMORY_ROLLUP_PROMPT,
+      triggeredAt: job.triggeredAt,
+      thresholdTriggered: false,
+    });
+    const activitySnapshot = await server.memoryManager.getActivityWindow(
+      job.actorId,
+      job.triggeredAt,
+    );
+    const agent = createBackgroundAgent(
+      server,
+      "ActorSleepTask",
+      job.actorId,
+      job.triggeredAt,
+    );
+    const agentState: AgentState = {
+      systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
+        job.actorId,
+        {
+          activityRecords: activitySnapshot,
+        },
+      ),
+      messages: [
+        buildUserMessageFromActorInput({
+          kind: "system",
+          time: job.triggeredAt,
+          inputs: [{ type: "text", text: EMA_SLEEP_PROMPT }],
+        }),
+      ],
+      tools: server.config.baseTools,
+      toolContext: {
+        actorId: job.actorId,
+        server,
+        data: {
+          task: "sleep",
+          triggeredAt: job.triggeredAt,
+        },
+      },
+    };
+    await agent.runWithState(agentState);
+    actor.completeSleep();
+  } catch (error) {
+    actor.failSleep();
+    throw error;
+  }
 }
 
 /**
@@ -467,30 +634,27 @@ async function runThresholdMemoryRollupWhenNeeded(
     actorId,
     prompt: EMA_MEMORY_ROLLUP_PROMPT,
     triggeredAt,
-    reason: "threshold",
+    thresholdTriggered: true,
   });
 }
 
 /**
- * Executes one rollup attempt for the provided actor and reason.
+ * Executes one memory-rollup agent run.
  * @param server - Server instance for shared resources.
  * @param job - Normalized memory-rollup task data.
- * @returns True when pending activity source records were marked as processed.
+ * @returns True when this run consumed at least one batch of source records.
  */
 async function runMemoryRollupTaskOnce(
   server: Server,
   job: MemoryRollupTaskData,
 ): Promise<boolean> {
-  const activitySnapshot = await server.memoryManager.getVisibleActivityWindow(
+  const activitySnapshot = await server.memoryManager.getActivityWindow(
     job.actorId,
     job.triggeredAt,
   );
-  const processedBefore = activitySnapshot.filter(
-    (item) => typeof item.processedAt === "number",
-  ).length;
   const agent = createBackgroundAgent(
     server,
-    "ActorMemoryRollupJob",
+    "ActorMemoryRollupTask",
     job.actorId,
     job.triggeredAt,
   );
@@ -514,18 +678,13 @@ async function runMemoryRollupTaskOnce(
       server,
       data: {
         task: "memory_rollup",
-        reason: job.reason,
         triggeredAt: job.triggeredAt,
         activitySnapshot,
       },
     },
   };
   await agent.runWithState(agentState);
-  await finalizeDayEndVisibility(server, job, activitySnapshot);
-  const processedAfter = activitySnapshot.filter(
-    (item) => typeof item.processedAt === "number",
-  ).length;
-  return processedAfter > processedBefore;
+  return agentState.toolContext?.data?.memoryUpdated === true;
 }
 
 /**
@@ -577,29 +736,19 @@ function shouldScheduleFollowUp(
   return pendingAfter.lastPendingId !== pendingBefore.lastPendingId;
 }
 
-async function finalizeDayEndVisibility(
-  server: Server,
-  job: MemoryRollupTaskData,
-  activitySnapshot: ShortTermMemoryRecord[],
-): Promise<void> {
-  if (job.reason !== "dayend" || activitySnapshot.length === 0) {
-    return;
-  }
-  const newestCreatedAtInSnapshot =
-    activitySnapshot[activitySnapshot.length - 1]?.createdAt;
-  if (typeof newestCreatedAtInSnapshot !== "number") {
-    return;
-  }
-  await server.memoryManager.hideRolledUpActivities(
-    job.actorId,
-    newestCreatedAtInSnapshot,
-  );
+function isThresholdTriggered(addition?: Record<string, unknown>): boolean {
+  return addition?.source === "threshold" || addition?.reason === "threshold";
 }
 
-function getMemoryRollupReason(
+function stripInternalSleepSource(
   addition?: Record<string, unknown>,
-): MemoryRollupReason {
-  return addition?.reason === "dayend" ? "dayend" : "threshold";
+): Record<string, unknown> | undefined {
+  if (!addition || typeof addition !== "object" || Array.isArray(addition)) {
+    return undefined;
+  }
+  const next = { ...addition };
+  delete next.source;
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 function createBackgroundAgent(

@@ -48,7 +48,7 @@ export class Gateway {
       };
     }
 
-    const actor = await this.server.getActor(actorId);
+    const actor = await this.server.createActorRuntime(actorId);
     if (event.kind === "system") {
       await actor.enqueueChannelEvent(event, conversation.id);
       return {
@@ -146,7 +146,7 @@ export class Gateway {
   }
 
   private async resolveChannel(actorId: number, channelName: string) {
-    const actor = await this.server.getActor(actorId);
+    const actor = await this.server.createActorRuntime(actorId);
     return actor.getChannel(channelName);
   }
 

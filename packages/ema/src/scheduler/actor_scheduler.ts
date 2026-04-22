@@ -3,6 +3,7 @@ import type {
   ActorForegroundJobData,
 } from "./jobs/actor.job";
 import type { Job, JobEverySpec, JobId, JobSpec, Scheduler } from "./base";
+import cronParser from "cron-parser";
 import { formatTimestamp, parseTimestamp } from "../utils";
 
 const RUN_AT_FORMAT = "YYYY-MM-DD HH:mm:ss";
@@ -63,27 +64,139 @@ export interface ActorScheduleListResult {
 }
 
 /**
- * Input for creating a one-time schedule.
+ * Converts one actor-visible schedule item into the compact model-facing shape.
+ * @param item - Actor-visible schedule item.
+ * @returns Schedule payload safe to expose to the model layer.
  */
-export interface CreateOnceScheduleInput {
+export function toModelScheduleItem(
+  item: ActorScheduleItem,
+): Record<string, unknown> {
+  const base = {
+    id: item.id,
+    type: item.type,
+    task: item.task,
+  } satisfies Record<string, unknown>;
+
+  if (item.type === "once") {
+    if (item.task === "chat") {
+      return {
+        ...base,
+        runAt: item.runAt,
+        conversationId: item.conversationId,
+        prompt: item.prompt,
+      };
+    }
+    if (item.task === "activity") {
+      return {
+        ...base,
+        runAt: item.runAt,
+        prompt: item.prompt,
+      };
+    }
+    return {
+      ...base,
+      runAt: item.runAt,
+    };
+  }
+
+  if (item.task === "chat") {
+    return {
+      ...base,
+      nextRunAt: item.nextRunAt,
+      lastRunAt: item.lastRunAt,
+      interval: item.interval,
+      conversationId: item.conversationId,
+      prompt: item.prompt,
+    };
+  }
+  if (item.task === "activity") {
+    return {
+      ...base,
+      nextRunAt: item.nextRunAt,
+      lastRunAt: item.lastRunAt,
+      interval: item.interval,
+      prompt: item.prompt,
+    };
+  }
+  return {
+    ...base,
+    nextRunAt: item.nextRunAt,
+    lastRunAt: item.lastRunAt,
+    interval: item.interval,
+  };
+}
+
+/**
+ * Serializes one actor-visible schedule list into the model-facing JSON string.
+ * @param listed - Categorized schedule items.
+ * @returns JSON string aligned with schedule-skill output.
+ */
+export function stringifyModelScheduleList(
+  listed: ActorScheduleListResult,
+): string {
+  return JSON.stringify({
+    overdue: listed.overdue.map(toModelScheduleItem),
+    upcoming: listed.upcoming.map(toModelScheduleItem),
+    recurring: listed.recurring.map(toModelScheduleItem),
+  });
+}
+
+interface CreateChatOnceScheduleInput {
   type: "once";
-  task: ActorScheduleTask;
+  task: "chat";
   runAt: number;
-  conversationId?: number | null;
+  conversationId: number;
   prompt: string;
   addition?: Record<string, unknown>;
 }
 
-/**
- * Input for creating a recurring schedule.
- */
-export interface CreateRecurringScheduleInput {
+interface CreateChatRecurringScheduleInput {
   type: "every";
-  task: ActorScheduleTask;
-  runAt: number;
-  interval: string | number;
-  conversationId?: number | null;
+  task: "chat";
+  interval: string;
+  conversationId: number;
   prompt: string;
+  addition?: Record<string, unknown>;
+}
+
+interface CreateChatRecurringNumericScheduleInput {
+  type: "every";
+  task: "chat";
+  runAt: number;
+  interval: number;
+  conversationId: number;
+  prompt: string;
+  addition?: Record<string, unknown>;
+}
+
+interface CreateActivityOnceScheduleInput {
+  type: "once";
+  task: "activity";
+  runAt: number;
+  prompt: string;
+  addition?: Record<string, unknown>;
+}
+
+interface CreateActivityRecurringScheduleInput {
+  type: "every";
+  task: "activity";
+  interval: string;
+  prompt: string;
+  addition?: Record<string, unknown>;
+}
+
+interface CreateActivityRecurringNumericScheduleInput {
+  type: "every";
+  task: "activity";
+  runAt: number;
+  interval: number;
+  prompt: string;
+  addition?: Record<string, unknown>;
+}
+
+interface CreateRoutineScheduleInput {
+  task: "wake" | "sleep";
+  interval: string | number;
   addition?: Record<string, unknown>;
 }
 
@@ -91,8 +204,13 @@ export interface CreateRecurringScheduleInput {
  * Input for creating schedule items.
  */
 export type CreateScheduleInput =
-  | CreateOnceScheduleInput
-  | CreateRecurringScheduleInput;
+  | CreateChatOnceScheduleInput
+  | CreateChatRecurringScheduleInput
+  | CreateChatRecurringNumericScheduleInput
+  | CreateActivityOnceScheduleInput
+  | CreateActivityRecurringScheduleInput
+  | CreateActivityRecurringNumericScheduleInput
+  | CreateRoutineScheduleInput;
 
 /**
  * Input for updating an existing schedule.
@@ -171,9 +289,14 @@ export class ActorScheduler {
   ): Promise<{ added: ActorScheduleItem[] }> {
     const added: ActorScheduleItem[] = [];
     for (const item of items) {
+      validateCreateScheduleInput(item);
       const spec = this.buildScheduleSpec(item);
-      const id =
-        item.type === "every"
+      const id = isRoutineCreateInput(item)
+        ? await this.upsertRecurringRoutineSchedule(
+            item.task,
+            spec as JobEverySpec,
+          )
+        : item.type === "every"
           ? await this.scheduler.scheduleEvery(spec as JobEverySpec)
           : await this.scheduler.schedule(spec as JobSpec);
       added.push(await this.getOwnedScheduleItem(id));
@@ -192,6 +315,55 @@ export class ActorScheduler {
     const updated: ActorScheduleItem[] = [];
     for (const item of items) {
       const current = await this.getOwnedScheduleItem(item.id);
+      validateUpdateScheduleInput(current, item);
+
+      if (isRoutineTask(current.task)) {
+        if (current.type !== "every") {
+          throw new Error(`${current.task} schedules must be recurring.`);
+        }
+        if (
+          item.runAt !== undefined ||
+          item.prompt !== undefined ||
+          item.conversationId !== undefined
+        ) {
+          throw new Error(
+            `${current.task} schedules only support interval updates.`,
+          );
+        }
+        if (item.interval === undefined) {
+          throw new Error(
+            `${current.task} schedules require a new interval when updating.`,
+          );
+        }
+        const nextRunAt =
+          current.nextRunAt !== null
+            ? parseScheduleTime(current.nextRunAt)
+            : Date.now();
+        const updatedOk = await this.scheduler.rescheduleEvery(item.id, {
+          name: getJobName(current.task),
+          runAt: nextRunAt,
+          interval: item.interval,
+          data: buildJobData(
+            this.actorId,
+            current.task,
+            "",
+            null,
+            sanitizeAddition(item.addition ?? current.addition),
+          ),
+        });
+        if (!updatedOk) {
+          throw new Error(`Failed to update schedule ${item.id}.`);
+        }
+        const job = await this.scheduler.getJob(item.id);
+        if (!job) {
+          throw new Error(`Schedule ${item.id} not found after update.`);
+        }
+        job.enable();
+        await job.save();
+        updated.push(await this.getOwnedScheduleItem(item.id));
+        continue;
+      }
+
       const prompt = item.prompt ?? current.prompt;
       const conversationId = resolveConversationId(
         current.task,
@@ -307,10 +479,55 @@ export class ActorScheduler {
     return item;
   }
 
+  private async upsertRecurringRoutineSchedule(
+    task: Extract<ActorScheduleTask, "wake" | "sleep">,
+    spec: JobEverySpec,
+  ): Promise<JobId> {
+    const jobs = await this.scheduler.listJobs({
+      "data.actorId": this.actorId,
+      "data.task": task,
+    });
+    const existing = jobs.find((job) =>
+      Boolean(job.attrs.repeatInterval || job.attrs.repeatAt),
+    );
+    if (!existing) {
+      return this.scheduler.scheduleEvery(spec);
+    }
+    const id = existing.attrs._id?.toString();
+    if (!id) {
+      throw new Error(`Recurring ${task} schedule is missing id.`);
+    }
+    const updated = await this.scheduler.rescheduleEvery(id, spec);
+    if (!updated) {
+      throw new Error(`Failed to update recurring ${task} schedule ${id}.`);
+    }
+    const job = await this.scheduler.getJob(id);
+    if (job) {
+      job.enable();
+      await job.save();
+    }
+    return id;
+  }
+
   private buildScheduleSpec(item: CreateScheduleInput): JobSpec | JobEverySpec {
+    if (isRoutineCreateInput(item)) {
+      return {
+        name: getJobName(item.task),
+        runAt: Date.now(),
+        interval: item.interval,
+        data: buildJobData(
+          this.actorId,
+          item.task,
+          "",
+          null,
+          sanitizeAddition(item.addition),
+        ),
+      };
+    }
+
     const conversationId = resolveConversationId(
       item.task,
-      item.conversationId,
+      "conversationId" in item ? item.conversationId : null,
     );
     const data = buildJobData(
       this.actorId,
@@ -322,7 +539,7 @@ export class ActorScheduler {
     if (item.type === "every") {
       return {
         name: getJobName(item.task),
-        runAt: item.runAt,
+        runAt: "runAt" in item ? item.runAt : Date.now(),
         interval: item.interval,
         data,
       };
@@ -421,6 +638,18 @@ function buildJobData(
   };
 }
 
+function isRoutineCreateInput(
+  item: CreateScheduleInput,
+): item is CreateRoutineScheduleInput {
+  return item.task === "wake" || item.task === "sleep";
+}
+
+function isRoutineTask(
+  task: ActorScheduleTask,
+): task is Extract<ActorScheduleTask, "wake" | "sleep"> {
+  return task === "wake" || task === "sleep";
+}
+
 function getJobName(
   task: ActorScheduleTask,
 ): "actor_foreground" | "actor_background" {
@@ -484,6 +713,100 @@ function cloneAddition(
   return addition && typeof addition === "object" && !Array.isArray(addition)
     ? { ...addition }
     : {};
+}
+
+function validateCreateScheduleInput(item: CreateScheduleInput): void {
+  if (isRoutineCreateInput(item)) {
+    assertCronInterval(item.interval, `${item.task} schedules`);
+    return;
+  }
+  if (item.type !== "every") {
+    return;
+  }
+  assertRecurringIntervalConfig(
+    item.task,
+    item.interval,
+    "runAt" in item ? item.runAt : undefined,
+  );
+}
+
+function validateUpdateScheduleInput(
+  current: ActorScheduleItem,
+  item: UpdateScheduleInput,
+): void {
+  if (current.type !== "every") {
+    if (item.interval !== undefined) {
+      throw new Error("once schedules do not support interval updates.");
+    }
+    return;
+  }
+  if (isRoutineTask(current.task)) {
+    if (item.interval !== undefined) {
+      assertCronInterval(item.interval, `${current.task} schedules`);
+    }
+    return;
+  }
+  const nextInterval = item.interval ?? current.interval;
+  assertRecurringIntervalConfig(
+    current.task,
+    nextInterval,
+    item.runAt,
+    item.interval !== undefined,
+  );
+}
+
+function assertRecurringIntervalConfig(
+  task: "chat" | "activity",
+  interval: string | number,
+  runAt?: number,
+  intervalWasUpdated: boolean = true,
+): void {
+  if (typeof interval === "string") {
+    assertCronInterval(interval, `${task} recurring schedules`);
+    if (runAt !== undefined) {
+      throw new Error(
+        `${task} recurring schedules using cron interval must not provide runAt.`,
+      );
+    }
+    return;
+  }
+  if (!Number.isInteger(interval) || interval <= 0) {
+    throw new Error(
+      `${task} recurring schedules with numeric interval require a positive interval in milliseconds.`,
+    );
+  }
+  if (intervalWasUpdated && runAt === undefined) {
+    throw new Error(
+      `${task} recurring schedules with numeric interval require runAt.`,
+    );
+  }
+}
+
+function assertCronInterval(
+  interval: string | number,
+  label: string,
+): asserts interval is string {
+  if (typeof interval !== "string" || !isValidCronExpression(interval)) {
+    throw new Error(
+      `${label} require a valid 5-field cron expression for interval.`,
+    );
+  }
+}
+
+export function isValidCronExpression(value: string): boolean {
+  const fields = value.trim().split(/\s+/);
+  if (fields.length !== 5) {
+    return false;
+  }
+  try {
+    cronParser
+      .parseExpression(value, { currentDate: new Date() })
+      .next()
+      .toDate();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function formatScheduleTime(value: Date | null | undefined): string | null {

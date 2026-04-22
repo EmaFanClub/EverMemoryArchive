@@ -114,29 +114,6 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     expect(memories.map((item) => item.memory)).toEqual(["a", "b"]);
   });
 
-  test("should filter activity memories by visible state", async () => {
-    await db.appendShortTermMemory({
-      kind: "activity",
-      actorId: 1,
-      date: "2026-04-01",
-      memory: "visible",
-      visible: true,
-    });
-    await db.appendShortTermMemory({
-      kind: "activity",
-      actorId: 1,
-      date: "2026-04-02",
-      memory: "hidden",
-      visible: false,
-    });
-
-    const visible = await db.listShortTermMemories({ visible: true });
-    const hidden = await db.listShortTermMemories({ visible: false });
-
-    expect(visible.map((item) => item.memory)).toEqual(["visible"]);
-    expect(hidden.map((item) => item.memory)).toEqual(["hidden"]);
-  });
-
   test("should sort and limit by date", async () => {
     await db.appendShortTermMemory({
       kind: "day",

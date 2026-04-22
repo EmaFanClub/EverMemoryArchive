@@ -13,7 +13,7 @@ import { buildUserMessageFromActorInput } from "./utils";
 import type {
   ActorInput,
   ActorChatResponse,
-  ActorStatus,
+  ActorWorkerStatus,
   ActorWorkerEvent,
   ActorWorkerEventMap,
   ActorWorkerEventName,
@@ -24,7 +24,7 @@ export class ActorWorker {
   readonly events: ActorWorkerEventsEmitter =
     new EventEmitter<ActorWorkerEventMap>() as ActorWorkerEventsEmitter;
   private readonly agent: Agent;
-  private currentStatus: ActorStatus = "idle";
+  private currentStatus: ActorWorkerStatus = "idle";
   private readonly logger: Logger = Logger.create({
     name: "actor",
     level: "debug",
@@ -184,7 +184,7 @@ export class ActorWorker {
     this.events.emit(event, content);
   }
 
-  private setStatus(status: ActorStatus): void {
+  private setStatus(status: ActorWorkerStatus): void {
     this.currentStatus = status;
   }
 

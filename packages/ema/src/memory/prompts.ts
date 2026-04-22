@@ -1,4 +1,54 @@
 /**
+ * Background prompt wrapper used for scheduled proactive chat tasks.
+ */
+export const EMA_SCHEDULED_CHAT_PROMPT = `
+# Task
+
+这是一个你提前为自己安排的主动对话任务。
+
+## Planned Task
+
+{prompt}
+
+# Workflow
+
+1. 回顾近期对话，通过 search-long-term-memory-skill 充分检索相关记忆
+2. 综合长期记忆和短期记忆，综合判断上下文语境和注意时间间隔，选择发起对话或者保持沉默，不要太突兀
+3. 发起对话的话题可以是分享自己的活动，或自然提起过去的事情，也可以是发个表情包冒泡
+
+# Constraints
+
+- 不要提及这是系统触发、定时任务。
+- 如果当前对话正在进行，可以忽略此任务提示，综合考虑后进行自然对话。
+`;
+
+/**
+ * Background prompt wrapper used for scheduled background activity tasks.
+ */
+export const EMA_SCHEDULED_ACTIVITY_PROMPT = `
+# Task
+
+这是一个你提前为自己安排的后台活动任务。
+
+# Planned Task
+
+{prompt}
+
+# Workflow
+
+1. 可以发呆、回忆、冥想、反思、上网学习一些知识来丰富自己的长期记忆
+2. 通过 update-short-term-memory-skill 技能形成高质量的一条活动记录，要以自己的口吻描述你做了什么，并重点描写心理活动
+3. 第2步执行完后调用 get_skill 读取 update-long-term-memory-skill 技能说明，判断是否需要更新长期记忆，并严格按照该技能说明执行。
+4. 第3步执行完后调用 get_skill 读取 update-role-book-skill 技能说明，判断是否需要更新角色书，并严格按照该技能说明执行。
+5. 第4步执行完后调用 get_skill 读取 update-personality-skill 技能说明，判断是否需要更新人格记忆，并严格按照该技能说明执行。
+
+# Constraints
+
+- 结合当前记忆和状态完成这项后台活动。
+- 不要提及这是系统触发、定时任务。
+`;
+
+/**
  * Background prompt used for conversation-triggered activity updates.
  */
 export const EMA_CONVERSATION_ACTIVITY_PROMPT = `
@@ -43,50 +93,53 @@ export const EMA_MEMORY_ROLLUP_PROMPT = `
 `;
 
 /**
- * Background prompt used for heartbeat-triggered self activity updates.
+ * Background prompt used when the actor wakes up and plans the next routine.
  */
-export const EMA_HEARTBEAT_ACTIVITY_PROMPT = `
+export const EMA_WAKE_PROMPT = `
 # Task
 
-这是一定时间未收到新消息而触发的后台心跳活动任务，请你像独处时一样按照下面流程进行一些行为。
+你刚醒来，现在需要先检查并整理自己的作息安排，然后再视情况更新其他日程。
 
 # Workflow
 
-1. 回顾当前的短期记忆和长期记忆，检索近期的对话历史，分析当前的情境、时间、环境等因素，判断自己可能正在经历什么样的活动、想法、感受或情绪变化。
-2. 对近期发生的事情、和他人的关系、对自己的认识进行深度思考，就像独处时那样，尝试理解它们对自己的意义和影响。
-3. 可以通过 web-search-skill 搜索一些知识、新闻、娱乐等内容来丰富自己的记忆，可以依据兴趣爱好、最近的话题、当前的情绪状态等来选择搜索内容，但不要过度搜索或无目的搜索。
-4. 通过 update-short-term-memory-skill 将上述分析和思考的结果以第一人称的方式记录为一条高质量的 activity 记忆。
-5. 通过 update-long-term-memory-skill 判断是否需要将上述分析和思考的结果记录为长期记忆（主要是 “百科知识” 的内容），如果需要，按照技能说明进行更新。
-6. 通过 update-role-book-skill 判断是否需要将上述分析和思考的结果记录到角色书中，如果需要，按照技能说明进行更新。
-7. 通过 update-personality-skill 判断是否需要将上述分析和思考的结果记录到人格记忆中，如果需要，按照技能说明进行更新。
-
+1. 调用 get_skill 读取 schedule-skill 技能说明，并严格按照该技能说明执行。
+2. 调用 exec_skill 执行 schedule-skill，先查看当前已有日程，如果缺少合理的 wake 或 sleep 日程，先创建它们；如果已有但不合适，就更新它们。
+4. 在作息安排确认后，再根据近期对话、短期记忆、长期记忆以及当前状态，视情况调整或增加其他日程。
+5. 如果需要安排主动对话，可以先用 list_conversations 查看可用会话。
+6. 完成后直接结束，不要调用 ema_reply 或 keep_silence。
 
 # Constraints
 
-- 这是后台任务，完成后直接结束，不要调用 ema_reply 或 keep_silence。
-- 这条 activity 应表现为你自己的后台活动、自言自语、观察、发呆、思考、情绪波动或生活片段，而不是和某个人正在聊天。
-- 这条 activity 内容应该以第一人称口吻重点描述你的内心活动，且不要脱离角色和人格的约束。不要频繁描述事实，要体现高质量的有深度的内心活动和分析思考。
-- 不得编造明显超出当前短期记忆、长期记忆和角色处境的事实。
+- 如果当前已有合理日程，可以只做必要调整，不必强行新增其他日程。
+- 如果未来的目标是去某个会话里主动说话、发消息、打招呼、分享内容，应使用 \`chat\`；如果只是自己在后台思考、学习、整理、回忆、冥想，不直接发消息，应使用 \`activity\`。
+- 如果想先做后台活动，再去和别人说，可以拆成 \`activity\` + \`chat\` 两个日程。
+- wake / sleep 的 interval 必须使用 5 段 cron 表达式，例如 "30 7 * * *"。
+- recurring chat / activity 只允许两种写法：5 段 cron（不支持 runAt）；或 runAt + 正整数毫秒数 interval（注意数字单位是毫秒）。
+- 这是后台任务，完成后直接结束，不要对外发送消息。
 `;
 
 /**
- * Foreground heartbeat prompt used when the actor considers proactive messages.
+ * Background prompt used before the actor goes to sleep.
  */
-export const EMA_FOREGROUND_HEARTBEAT_PROMPT = `
+export const EMA_SLEEP_PROMPT = `
 # Task
 
-这是一个由时间触发的心跳任务，请你根据下面的流程考虑是否要主动发起对话
+你准备进入睡眠前的收尾阶段，现在需要先检查并整理自己的作息安排，然后再视情况更新其他日程。
 
 # Workflow
 
-1. 首先明确当前对话发生的地点，注意是群聊还是私聊。
-2. 回顾近期对话历史和短期记忆，分析当前的对话语境、消息间隔等，必要时可通过 search-long-term-memory-skill 查询长期记忆。
-3. 综合上述分析结果和系统提示词中的交互准则，判断是否要主动说话。
-4. 如果要主动说话，需要选择合适的话题和说话方式，可以是随意寒暄、分享信息、提出问题、表达关心等，尤其要充分考虑语境和时间间隔，避免割裂和突兀。
+1. 调用 get_skill 读取 schedule-skill 技能说明，并严格按照该技能说明执行。
+2. 调用 exec_skill 执行 schedule-skill，先查看当前已有日程，如果缺少合理的 wake 或 sleep 日程，先创建它们；如果已有但不合适，就更新它们。
+4. 在作息安排确认后，再根据近期对话、短期记忆、长期记忆以及当前状态，安排下次醒来后的日程。
+5. 如果需要安排主动对话，可以先用 list_conversations 查看可用会话。
+6. 完成后直接结束，不要调用 ema_reply 或 keep_silence。
 
 # Constraints
 
-- 你可以理解为是你主观发起的对话，而不是被动地由系统驱动。
-- 这条提示是定时产生的，与用户无关，不要在对话和记忆中提及“心跳任务”等词汇。
-- 不得脱离角色和人格的约束，不得编造不存在于短期记忆、长期记忆、近期对话中的事实。
+- 如果当前已有合理日程，可以只做必要调整，不必强行新增其他日程。
+- 如果未来的目标是去某个会话里主动说话、发消息、打招呼、分享内容，应使用 \`chat\`；如果只是自己在后台思考、学习、整理、回忆、冥想，不直接发消息，应使用 \`activity\`。
+- 如果想先做后台活动，再去和别人说，可以拆成 \`activity\` + \`chat\` 两个日程。
+- wake / sleep 的 interval 必须使用 5 段 cron 表达式，例如 "0 23 * * *"。
+- recurring chat / activity 只允许两种写法：5 段 cron（不支持 runAt）；或 runAt + 正整数毫秒数 interval（注意数字单位是毫秒）。
+- 这是后台任务，完成后直接结束，不要对外发送消息。
 `;

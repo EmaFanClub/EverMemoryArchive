@@ -1,5 +1,6 @@
 import * as lancedb from "@lancedb/lancedb";
 import { fileURLToPath } from "node:url";
+import { BSON } from "mongodb";
 
 import { Config } from "./config";
 import {
@@ -39,7 +40,6 @@ import * as path from "node:path";
 import { Actor } from "./actor";
 import { ActorScheduler, AgendaScheduler } from "./scheduler";
 import { createJobHandlers } from "./scheduler/jobs";
-import { EMA_MEMORY_ROLLUP_PROMPT } from "./memory/prompts";
 import { MemoryManager } from "./memory/manager";
 import { Gateway } from "./gateway";
 import { WebChannel, buildSession } from "./channel";
@@ -167,7 +167,20 @@ export class Server {
       server.longTermMemoryVectorSearcher.createIndices(),
     ]);
 
+    await server.createInitialCharacters();
+
+    const actors = await server.actorDB.listActors();
+    await Promise.all(
+      actors
+        .map((actor) => actor.id)
+        .filter((id): id is number => typeof id === "number")
+        .map((actorId) => server.createActorRuntime(actorId)),
+    );
+
     await server.scheduler.start(createJobHandlers(server));
+    for (const actor of server.actors.values()) {
+      actor.startBootInit();
+    }
 
     return server;
   }
@@ -256,7 +269,10 @@ export class Server {
       collections.add(this.scheduler.collectionName);
     }
     const snapshot = await this.mongo.snapshot(Array.from(collections));
-    await this.fs.write(fileName, JSON.stringify(snapshot, null, 1));
+    await this.fs.write(
+      fileName,
+      BSON.EJSON.stringify(snapshot, { relaxed: false }, 1),
+    );
     return {
       fileName,
     };
@@ -273,23 +289,14 @@ export class Server {
       return false;
     }
     const snapshot = await this.fs.read(fileName);
-    await this.mongo.restoreFromSnapshot(JSON.parse(snapshot));
+    await this.mongo.restoreFromSnapshot(BSON.EJSON.parse(snapshot));
     return true;
   }
 
   /**
-   * Handles user login and returns a user object.
-   *
-   * Exposed as `GET /api/users/login`.
-   *
-   * @returns The logged-in user object.
-   *
-   * @example
-   * // Example usage:
-   * const user = await server.login();
-   * console.log(user.id); // 1
+   * Initializes the default character and related resources when missing.
    */
-  async login(): Promise<{ id: number; name: string; email: string }> {
+  private async createInitialCharacters(): Promise<void> {
     const existingUser = await this.userDB.getUser(DEFAULT_WEB_USER_ID);
     const qqUid = process.env.EMA_QQ_UID?.trim() || null;
     const qqGroupId = process.env.EMA_QQ_GROUP_ID?.trim() || null;
@@ -312,15 +319,15 @@ export class Server {
       avatar: existingUser?.avatar ?? "",
       ...(tavilyApiKey ? { tavilyApiKey } : {}),
     });
-    if (!existingUser) {
-      await this.actorDB.upsertActor({
-        id: actor.id,
-        roleId: actor.roleId,
-      });
-      await this.userOwnActorDB.addActorToUser({
-        userId: user.id,
-        actorId: actor.id,
-      });
+    await this.actorDB.upsertActor({
+      id: actor.id,
+      roleId: actor.roleId,
+    });
+    await this.userOwnActorDB.addActorToUser({
+      userId: user.id,
+      actorId: actor.id,
+    });
+    if (!existingUser || !(await this.roleDB.getRole(actor.roleId))) {
       await this.roleDB.upsertRole({
         id: actor.roleId,
         name: "苍星怜",
@@ -377,33 +384,30 @@ export class Server {
       console.log(`Created QQ group chat ${qqGroupId} for user ${user.id}`);
     }
     if (typeof conversation.id !== "number") {
-      throw new Error("Default conversation ID is missing after login.");
+      throw new Error(
+        "Default conversation ID is missing after initial character setup.",
+      );
     }
-    if (existingUser) {
-      await this.getActor(actor.id);
-      return {
-        id: existingUser.id!,
-        name: existingUser.name,
-        email: existingUser.email,
-      };
+  }
+
+  /**
+   * Gets the default user profile used by the temporary web login route.
+   * @returns Default user info, or null when missing.
+   */
+  async getDefaultUser(): Promise<{
+    id: number;
+    name: string;
+    email: string;
+  } | null> {
+    const user = await this.userDB.getUser(DEFAULT_WEB_USER_ID);
+    if (!user || typeof user.id !== "number") {
+      return null;
     }
-    if (this.scheduler) {
-      await this.scheduler.scheduleEvery({
-        name: "actor_background",
-        runAt: Date.now(),
-        interval: "59 23 * * *",
-        data: {
-          actorId: actor.id,
-          task: "memory_rollup",
-          prompt: EMA_MEMORY_ROLLUP_PROMPT,
-          addition: {
-            reason: "dayend",
-          },
-        },
-      });
-    }
-    await this.getActor(actor.id);
-    return user;
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+    };
   }
 
   async train(): Promise<ActorTrainingResult> {
@@ -411,7 +415,6 @@ export class Server {
       return await this.trainInFlight;
     }
     const task = (async () => {
-      await this.login();
       const dataset = JSON.parse(
         await this.fs.read(DEFAULT_TRAIN_DATASET_PATH),
       ) as TrainDataset;
@@ -436,11 +439,20 @@ export class Server {
   }
 
   /**
-   * Gets the active actor instance for the given actor ID.
-   * @param actorId - The actor ID.
-   * @returns The actor instance.
+   * Gets one loaded actor runtime instance from the in-memory cache.
+   * @param actorId - The actor identifier.
+   * @returns Loaded runtime actor, or null when not loaded yet.
    */
-  async getActor(actorId: number): Promise<Actor> {
+  getActorRuntime(actorId: number): Actor | null {
+    return this.actors.get(actorId) ?? null;
+  }
+
+  /**
+   * Creates one actor runtime instance when needed and returns it.
+   * @param actorId - The actor identifier.
+   * @returns Loaded runtime actor instance.
+   */
+  async createActorRuntime(actorId: number): Promise<Actor> {
     let actor = this.actors.get(actorId);
     if (!actor) {
       let inFlight = this.actorInFlight.get(actorId);

@@ -114,25 +114,21 @@ export function getShortTermMemoryTaskData(
   if (!data || typeof data.triggeredAt !== "number") {
     return null;
   }
-  if (data.task === "conversation_activity") {
+  if (data.task === "conversation_rollup") {
     return {
-      task: "conversation_activity",
+      task: "conversation_rollup",
       triggeredAt: data.triggeredAt,
       ...(data.activityAdded === true ? { activityAdded: true } : {}),
     };
   }
-  if (data.task === "heartbeat_activity") {
+  if (data.task === "activity") {
     return {
-      task: "heartbeat_activity",
+      task: "activity",
       triggeredAt: data.triggeredAt,
       ...(data.activityAdded === true ? { activityAdded: true } : {}),
     };
   }
-  if (
-    data.task !== "memory_rollup" ||
-    !Array.isArray(data.activitySnapshot) ||
-    (data.reason !== "threshold" && data.reason !== "dayend")
-  ) {
+  if (data.task !== "memory_rollup" || !Array.isArray(data.activitySnapshot)) {
     return null;
   }
   const activitySnapshot = data.activitySnapshot.filter(
@@ -141,7 +137,7 @@ export function getShortTermMemoryTaskData(
   return {
     task: "memory_rollup",
     triggeredAt: data.triggeredAt,
-    reason: data.reason,
+    ...(data.memoryUpdated === true ? { memoryUpdated: true } : {}),
     activitySnapshot,
   };
 }

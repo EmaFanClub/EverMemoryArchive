@@ -181,8 +181,8 @@ export default class UpdateShortTermMemorySkill extends Skill {
       };
     }
     if (
-      taskData.task === "conversation_activity" ||
-      taskData.task === "heartbeat_activity"
+      taskData.task === "conversation_rollup" ||
+      taskData.task === "activity"
     ) {
       return {
         success: true,
@@ -240,13 +240,12 @@ export default class UpdateShortTermMemorySkill extends Skill {
     const taskData = getShortTermMemoryTaskData(context?.data);
     if (
       !taskData ||
-      (taskData.task !== "conversation_activity" &&
-        taskData.task !== "heartbeat_activity")
+      (taskData.task !== "conversation_rollup" && taskData.task !== "activity")
     ) {
       return {
         success: false,
         error:
-          "add_activity can only be used in activity creation tasks (conversation_activity or heartbeat_activity).",
+          "add_activity can only be used in activity creation tasks (conversation_rollup or activity).",
       };
     }
     if (taskData.activityAdded === true) {
@@ -263,14 +262,17 @@ export default class UpdateShortTermMemorySkill extends Skill {
       };
     }
 
+    const actorDayDate = context!
+      .server!.getActorRuntime(actorId)
+      ?.getDayDate();
     await context!.server!.memoryManager.appendShortTermMemory(actorId, {
       kind: "activity",
       date: formatShortTermMemoryDate("activity", taskData.triggeredAt),
-      dayDate: formatShortTermMemoryDate("day", taskData.triggeredAt),
+      dayDate:
+        actorDayDate ?? formatShortTermMemoryDate("day", taskData.triggeredAt),
       memory: payload.memory,
       createdAt: taskData.triggeredAt,
       updatedAt: taskData.triggeredAt,
-      visible: true,
     });
     if (context?.data) {
       context.data.activityAdded = true;
@@ -349,6 +351,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
     }
 
     const memoryManager = context!.server!.memoryManager;
+    let memoryUpdated = false;
     for (const task of currentTasks) {
       const action = actionMap.get(task.taskId)!;
       await memoryManager.upsertShortTermMemory(actorId, {
@@ -364,6 +367,9 @@ export default class UpdateShortTermMemorySkill extends Skill {
           task.sourceIds,
           taskData.triggeredAt,
         );
+      if (processedCount > 0) {
+        memoryUpdated = true;
+      }
       if (processedCount > 0 && task.sourceKind === "activity") {
         const snapshot = Array.isArray(context?.data?.activitySnapshot)
           ? context.data.activitySnapshot
@@ -375,6 +381,10 @@ export default class UpdateShortTermMemorySkill extends Skill {
           }
         }
       }
+    }
+
+    if (context?.data && memoryUpdated) {
+      context.data.memoryUpdated = true;
     }
 
     this.logger.debug("Updated short-term memory.", payload);

@@ -5,8 +5,8 @@ import type { InputContent } from "../schema";
 export type BufferWriteMessage = ActorChatInput | ActorChatResponse;
 
 export type ShortTermMemoryTask =
-  | "conversation_activity"
-  | "heartbeat_activity"
+  | "conversation_rollup"
+  | "activity"
   | "memory_rollup";
 
 /**
@@ -176,10 +176,6 @@ export interface ShortTermMemory {
    * The date and time the memory was consumed by a higher-level rollup.
    */
   processedAt?: number;
-  /**
-   * Whether this record should still appear in the current activity window.
-   */
-  visible?: boolean;
 }
 
 /**
@@ -192,14 +188,14 @@ export type ShortTermMemoryRecord = ShortTermMemory & {
   id: number;
 };
 
-export interface ConversationActivityTaskData {
-  task: "conversation_activity";
+export interface ConversationRollupTaskData {
+  task: "conversation_rollup";
   triggeredAt: number;
   activityAdded?: boolean;
 }
 
-export interface HeartbeatActivityTaskData {
-  task: "heartbeat_activity";
+export interface ActivityTaskData {
+  task: "activity";
   triggeredAt: number;
   activityAdded?: boolean;
 }
@@ -207,13 +203,13 @@ export interface HeartbeatActivityTaskData {
 export interface MemoryRollupTaskData {
   task: "memory_rollup";
   triggeredAt: number;
-  reason: "threshold" | "dayend";
   activitySnapshot: ShortTermMemoryRecord[];
+  memoryUpdated?: boolean;
 }
 
 export type ShortTermMemoryTaskData =
-  | ConversationActivityTaskData
-  | HeartbeatActivityTaskData
+  | ConversationRollupTaskData
+  | ActivityTaskData
   | MemoryRollupTaskData;
 
 /**

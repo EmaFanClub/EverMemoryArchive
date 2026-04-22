@@ -1,9 +1,11 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
+import { BSON, ObjectId } from "mongodb";
 import { Server } from "./server";
 import { MemFs } from "./fs";
 import type { RoleEntity } from "./db";
 import { createMongo, type Mongo } from "./db";
 import { AgendaScheduler } from "./scheduler";
+import { MemoryManager } from "./memory/manager";
 import {
   Config,
   LLMConfig,
@@ -29,7 +31,7 @@ const createTestConfig = () =>
   );
 
 describe("Server", () => {
-  test("should return user on login", async () => {
+  test("should initialize default user, bindings, and conversations", async () => {
     const previousQqUid = process.env.EMA_QQ_UID;
     const previousQqGroupId = process.env.EMA_QQ_GROUP_ID;
     process.env.EMA_QQ_UID = "10726371";
@@ -41,11 +43,12 @@ describe("Server", () => {
     const server = Server.createSync(fs, mongo, lance, createTestConfig());
 
     try {
-      const user = await server.login();
-      expect(user).toBeDefined();
-      expect(user.id).toBe(1);
-      expect(user.name).toBe("alice");
-      expect(user.email).toBe("alice@example.com");
+      await (server as any).createInitialCharacters();
+      const user = await server.getDefaultUser();
+      expect(user).not.toBeNull();
+      expect(user!.id).toBe(1);
+      expect(user!.name).toBe("alice");
+      expect(user!.email).toBe("alice@example.com");
       const userBinding =
         await server.externalIdentityBindingDB.getExternalIdentityBindingByUid(
           "1",
@@ -100,7 +103,7 @@ describe("Server", () => {
     }
   });
 
-  test("login should schedule default recurring jobs only once", async () => {
+  test("initial character setup should not create default scheduler jobs", async () => {
     const fs = new MemFs();
     const mongo = await createMongo("", "test_login_jobs", "memory");
     await mongo.connect();
@@ -111,8 +114,8 @@ describe("Server", () => {
     });
 
     try {
-      await server.login();
-      await server.login();
+      await (server as any).createInitialCharacters();
+      await (server as any).createInitialCharacters();
 
       const conversation =
         await server.conversationDB.getConversationByActorAndSession(
@@ -128,14 +131,74 @@ describe("Server", () => {
       const backgroundJobs = await server.scheduler.listJobs({
         name: "actor_background",
         "data.actorId": 1,
-        "data.task": "memory_rollup",
       });
       const foregroundJobs = await server.scheduler.listJobs({
         name: "actor_foreground",
         "data.actorId": 1,
       });
-      expect(backgroundJobs).toHaveLength(1);
+      expect(backgroundJobs).toHaveLength(0);
       expect(foregroundJobs).toHaveLength(0);
+    } finally {
+      await server.scheduler.stop();
+      await mongo.close();
+      await lance.close();
+    }
+  });
+
+  test("system prompt should include actor schedules", async () => {
+    const fs = new MemFs();
+    const mongo = await createMongo("", "test_prompt_schedule", "memory");
+    await mongo.connect();
+    const lance = await lancedb.connect("memory://ema-prompt-schedule");
+    const server = Server.createSync(fs, mongo, lance, createTestConfig());
+    server.scheduler = await AgendaScheduler.create(mongo, {
+      processEvery: 20,
+    });
+    server.memoryManager = new MemoryManager(
+      server.roleDB,
+      server.personalityDB,
+      server.actorDB,
+      server.userDB,
+      server.userOwnActorDB,
+      server.externalIdentityBindingDB,
+      server.conversationDB,
+      server.conversationMessageDB,
+      server.shortTermMemoryDB,
+      server.longTermMemoryDB,
+      server.longTermMemoryVectorSearcher,
+      server,
+    );
+
+    try {
+      await (server as any).createInitialCharacters();
+      const conversation =
+        await server.conversationDB.getConversationByActorAndSession(
+          1,
+          "web-chat-1",
+        );
+      expect(conversation?.id).toBeTypeOf("number");
+
+      await server.getActorScheduler(1).add([
+        {
+          task: "wake",
+          interval: "0 8 * * *",
+        },
+        {
+          type: "once",
+          task: "chat",
+          runAt: Date.now() + 60_000,
+          prompt: "问问最近过得怎么样",
+          conversationId: conversation!.id!,
+        },
+      ]);
+
+      const prompt = await server.memoryManager.buildSystemPromptForChat(
+        1,
+        conversation!.id!,
+      );
+      expect(prompt).toContain("# 日程（Schedule）");
+      expect(prompt).toContain('"task":"wake"');
+      expect(prompt).toContain('"task":"chat"');
     } finally {
       await server.scheduler.stop();
       await mongo.close();
@@ -162,6 +225,9 @@ describe("Server with MemFs and snapshot functions", () => {
   });
 
   afterEach(async () => {
+    if (server.scheduler) {
+      await server.scheduler.stop();
+    }
     await mongo.close();
     await lance.close();
   });
@@ -204,7 +270,10 @@ describe("Server with MemFs and snapshot functions", () => {
 
     // Verify snapshot content
     const snapshotContent = await fs.read(result.fileName);
-    const snapshot = JSON.parse(snapshotContent);
+    const snapshot = BSON.EJSON.parse(snapshotContent) as Record<
+      string,
+      unknown[]
+    >;
     expect(snapshot).toHaveProperty("roles");
     expect(snapshot.roles).toHaveLength(1);
     expect(snapshot.roles[0]).toMatchObject(role1);
@@ -235,11 +304,78 @@ describe("Server with MemFs and snapshot functions", () => {
 
     // Verify snapshot content
     const snapshotContent = await fs.read(result.fileName);
-    const snapshot = JSON.parse(snapshotContent);
+    const snapshot = BSON.EJSON.parse(snapshotContent) as Record<
+      string,
+      unknown[]
+    >;
     expect(snapshot).toHaveProperty("roles");
     expect(snapshot.roles).toHaveLength(2);
     expect(snapshot.roles[0]).toMatchObject(role2);
     expect(snapshot.roles[1]).toMatchObject(role3);
+  });
+
+  test("should preserve agenda ObjectId and Date fields in snapshot and restore", async () => {
+    server.scheduler = await AgendaScheduler.create(mongo, {
+      processEvery: 20,
+    });
+    await (server as any).createInitialCharacters();
+
+    const actorScheduler = server.getActorScheduler(1);
+    const runAt = Date.now() + 60_000;
+    await actorScheduler.add([
+      {
+        type: "once",
+        task: "chat",
+        runAt,
+        conversationId: 1,
+        prompt: "稍后主动打招呼。",
+      },
+      {
+        task: "wake",
+        interval: "30 7 * * *",
+      },
+    ]);
+
+    const result = await server.snapshot("test-snapshot-agenda-ejson");
+    const snapshotContent = await fs.read(result.fileName);
+    const snapshot = BSON.EJSON.parse(snapshotContent) as Record<
+      string,
+      Array<Record<string, unknown>>
+    >;
+    const agenda = snapshot.agenda;
+    expect(Array.isArray(agenda)).toBe(true);
+    expect(agenda).toHaveLength(2);
+    for (const job of agenda) {
+      expect(job._id).toBeInstanceOf(ObjectId);
+      if (job.nextRunAt != null) {
+        expect(job.nextRunAt).toBeInstanceOf(Date);
+      }
+      if (job.lastRunAt != null) {
+        expect(job.lastRunAt).toBeInstanceOf(Date);
+      }
+    }
+
+    await mongo.restoreFromSnapshot({ agenda: [] });
+    expect((await server.scheduler.listJobs({})).length).toBe(0);
+
+    const restored = await server.restoreFromSnapshot(
+      "test-snapshot-agenda-ejson",
+    );
+    expect(restored).toBe(true);
+
+    const listed = await actorScheduler.list();
+    expect(listed.upcoming).toHaveLength(1);
+    expect(listed.upcoming[0]).toMatchObject({
+      task: "chat",
+      prompt: "稍后主动打招呼。",
+      conversationId: 1,
+    });
+    expect(listed.recurring).toHaveLength(1);
+    expect(listed.recurring[0]).toMatchObject({
+      task: "wake",
+      interval: "30 7 * * *",
+    });
+    expect(listed.recurring[0].nextRunAt).not.toBeNull();
   });
 
   test("should restore from snapshot containing roles [r1]", async () => {
@@ -272,14 +408,21 @@ describe("Server with MemFs and snapshot functions", () => {
     expect(restored).toBe(false);
   });
 
-  test("getActor should only load actors that already exist in database", async () => {
-    await expect(server.getActor(1)).rejects.toThrow("Actor 1 not found.");
+  test("getActorRuntime only reads loaded runtimes and createActorRuntime loads existing actors", async () => {
+    expect(server.getActorRuntime(1)).toBeNull();
+    await expect(server.createActorRuntime(1)).rejects.toThrow(
+      "Actor 1 not found.",
+    );
 
-    await server.login();
+    await (server as any).createInitialCharacters();
 
-    const actor = await server.getActor(1);
-    const actorAgain = await server.getActor(1);
+    const loaded = server.getActorRuntime(1);
+    expect(loaded).toBeNull();
+
+    const actor = await server.createActorRuntime(1);
+    const actorAgain = await server.createActorRuntime(1);
     expect(actor).toBe(actorAgain);
+    expect(server.getActorRuntime(1)).toBe(actor);
 
     const conversation =
       await server.conversationDB.getConversationByActorAndSession(

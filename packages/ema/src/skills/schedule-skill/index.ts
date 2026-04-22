@@ -1,50 +1,181 @@
 import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
-import type {
-  CreateScheduleInput,
-  UpdateScheduleInput,
+import {
+  isValidCronExpression,
+  toModelScheduleItem,
+  type CreateScheduleInput,
+  type UpdateScheduleInput,
 } from "../../scheduler/actor_scheduler";
 import { parseTimestamp } from "../../utils";
 
 const RUN_AT_FORMAT = "YYYY-MM-DD HH:mm:ss";
-const ScheduleTaskSchema = z.enum(["chat", "activity"]);
-const ScheduleAdditionSchema = z.record(z.string(), z.unknown());
+const CronIntervalSchema = z
+  .string()
+  .min(1)
+  .refine((value) => isValidCronExpression(value), {
+    message: "interval must be a valid 5-field cron expression.",
+  });
 
-const ScheduleCreateBaseSchema = z.object({
-  task: ScheduleTaskSchema.describe("日程任务类型，仅支持 chat 或 activity"),
-  runAt: z.string().min(1).describe(`执行时间，格式为 "${RUN_AT_FORMAT}"`),
-  prompt: z.string().min(1).describe("触发该日程时要给模型的提示词"),
-  conversationId: z
-    .number()
-    .int()
-    .positive()
-    .nullable()
-    .optional()
-    .describe("chat 任务必填；activity 任务可省略或填 null"),
-  addition: ScheduleAdditionSchema.optional().describe("附加信息对象，可选"),
-});
+const MillisecondsIntervalSchema = z
+  .number()
+  .int()
+  .positive()
+  .describe("循环间隔毫秒数，必须为正整数毫秒。");
 
-const AddOnceScheduleSchema = ScheduleCreateBaseSchema.extend({
-  type: z.literal("once").describe("一次性日程"),
-})
-  .strict()
-  .superRefine(validateConversationConstraint);
+const AddChatOnceScheduleSchema = z
+  .object({
+    type: z.literal("once").describe("一次性日程"),
+    task: z
+      .literal("chat")
+      .describe(
+        "主动对话任务：未来会去某个 conversation 主动说话、发消息、打招呼、分享内容时使用。",
+      ),
+    runAt: z.string().min(1).describe(`执行时间，格式为 "${RUN_AT_FORMAT}"`),
+    prompt: z
+      .string()
+      .min(1)
+      .describe("要执行的任务内容；应描述未来要在该会话里主动做什么。"),
+    conversationId: z
+      .number()
+      .int()
+      .positive()
+      .describe("要在哪个会话中执行该任务"),
+  })
+  .strict();
 
-const AddRecurringScheduleSchema = ScheduleCreateBaseSchema.extend({
-  type: z.literal("every").describe("周期日程"),
-  interval: z
-    .union([z.number().int().positive(), z.string().min(1)])
-    .describe("周期表达式，可为毫秒数或 Agenda 支持的字符串表达式"),
-})
-  .strict()
-  .superRefine(validateConversationConstraint);
+const AddChatRecurringScheduleSchema = z.union([
+  z
+    .object({
+      type: z.literal("every").describe("周期日程"),
+      task: z
+        .literal("chat")
+        .describe(
+          "主动对话任务：未来会去某个 conversation 主动说话、发消息、打招呼、分享内容时使用。",
+        ),
+      interval: CronIntervalSchema.describe(
+        '5 段 cron 表达式，例如 "30 7 * * *"。',
+      ),
+      prompt: z
+        .string()
+        .min(1)
+        .describe("要执行的任务内容；应描述未来要在该会话里主动做什么。"),
+      conversationId: z
+        .number()
+        .int()
+        .positive()
+        .describe("要在哪个会话中执行该任务"),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("every").describe("周期日程"),
+      task: z
+        .literal("chat")
+        .describe(
+          "主动对话任务：未来会去某个 conversation 主动说话、发消息、打招呼、分享内容时使用。",
+        ),
+      runAt: z
+        .string()
+        .min(1)
+        .describe(`首次执行时间，格式为 "${RUN_AT_FORMAT}"`),
+      interval: MillisecondsIntervalSchema,
+      prompt: z
+        .string()
+        .min(1)
+        .describe("要执行的任务内容；应描述未来要在该会话里主动做什么。"),
+      conversationId: z
+        .number()
+        .int()
+        .positive()
+        .describe("要在哪个会话中执行该任务"),
+    })
+    .strict(),
+]);
+
+const AddActivityOnceScheduleSchema = z
+  .object({
+    type: z.literal("once").describe("一次性日程"),
+    task: z
+      .literal("activity")
+      .describe(
+        "后台活动任务：只在后台自己进行思考、学习、整理、回忆、冥想等，不直接去某个 conversation 发消息时使用。",
+      ),
+    runAt: z.string().min(1).describe(`执行时间，格式为 "${RUN_AT_FORMAT}"`),
+    prompt: z
+      .string()
+      .min(1)
+      .describe(
+        "要执行的任务内容；应描述后台活动本身，而不是去某个会话发消息。",
+      ),
+  })
+  .strict();
+
+const AddActivityRecurringScheduleSchema = z.union([
+  z
+    .object({
+      type: z.literal("every").describe("周期日程"),
+      task: z
+        .literal("activity")
+        .describe(
+          "后台活动任务：只在后台自己进行思考、学习、整理、回忆、冥想等，不直接去某个 conversation 发消息时使用。",
+        ),
+      interval: CronIntervalSchema.describe(
+        '5 段 cron 表达式，例如 "0 9 * * *"。',
+      ),
+      prompt: z
+        .string()
+        .min(1)
+        .describe(
+          "要执行的任务内容；应描述后台活动本身，而不是去某个会话发消息。",
+        ),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("every").describe("周期日程"),
+      task: z
+        .literal("activity")
+        .describe(
+          "后台活动任务：只在后台自己进行思考、学习、整理、回忆、冥想等，不直接去某个 conversation 发消息时使用。",
+        ),
+      runAt: z
+        .string()
+        .min(1)
+        .describe(`首次执行时间，格式为 "${RUN_AT_FORMAT}"`),
+      interval: MillisecondsIntervalSchema,
+      prompt: z
+        .string()
+        .min(1)
+        .describe(
+          "要执行的任务内容；应描述后台活动本身，而不是去某个会话发消息。",
+        ),
+    })
+    .strict(),
+]);
+
+const AddRoutineScheduleSchema = z
+  .object({
+    task: z.enum(["wake", "sleep"]).describe("作息任务类型"),
+    interval: CronIntervalSchema.describe(
+      '作息周期必须为 5 段 cron 表达式，例如 "30 7 * * *"。',
+    ),
+  })
+  .strict();
 
 const AddSchedulesSchema = z
   .object({
     action: z.literal("add_schedules"),
     items: z
-      .array(z.union([AddOnceScheduleSchema, AddRecurringScheduleSchema]))
+      .array(
+        z.union([
+          AddChatOnceScheduleSchema,
+          AddChatRecurringScheduleSchema,
+          AddActivityOnceScheduleSchema,
+          AddActivityRecurringScheduleSchema,
+          AddRoutineScheduleSchema,
+        ]),
+      )
       .min(1),
   })
   .strict();
@@ -58,18 +189,18 @@ const UpdateScheduleItemSchema = z
       .optional()
       .describe(`新的执行时间，格式为 "${RUN_AT_FORMAT}"`),
     interval: z
-      .union([z.number().int().positive(), z.string().min(1)])
+      .union([MillisecondsIntervalSchema, CronIntervalSchema])
       .optional()
-      .describe("新的周期，仅对周期任务生效"),
-    prompt: z.string().min(1).optional().describe("新的提示词"),
+      .describe(
+        "新的周期：wake/sleep 必须是 5 段 cron；chat/activity 可为 5 段 cron，或配合 runAt 一起填写的正整数毫秒数。",
+      ),
+    prompt: z.string().min(1).optional().describe("新的任务内容"),
     conversationId: z
       .number()
       .int()
       .positive()
-      .nullable()
       .optional()
-      .describe("新的 conversationId；若传 null 表示清空"),
-    addition: ScheduleAdditionSchema.optional().describe("新的附加信息对象"),
+      .describe("新的 conversationId，仅 chat 任务可用"),
   })
   .strict()
   .refine(
@@ -77,11 +208,10 @@ const UpdateScheduleItemSchema = z
       value.runAt !== undefined ||
       value.interval !== undefined ||
       value.prompt !== undefined ||
-      value.conversationId !== undefined ||
-      value.addition !== undefined,
+      value.conversationId !== undefined,
     {
       message:
-        "At least one of runAt, interval, prompt, conversationId, or addition must be provided.",
+        "At least one of runAt, interval, prompt, or conversationId must be provided.",
     },
   );
 
@@ -114,20 +244,7 @@ const ScheduleSkillSchema = z.discriminatedUnion("action", [
 
 type ScheduleSkillInput = z.infer<typeof ScheduleSkillSchema>;
 
-function validateConversationConstraint(
-  value:
-    | z.infer<typeof AddOnceScheduleSchema>
-    | z.infer<typeof AddRecurringScheduleSchema>,
-  ctx: z.RefinementCtx,
-): void {
-  if (value.task === "chat" && typeof value.conversationId !== "number") {
-    ctx.addIssue({
-      code: "custom",
-      path: ["conversationId"],
-      message: "conversationId is required when task is 'chat'.",
-    });
-  }
-}
+type AddScheduleItem = z.infer<typeof AddSchedulesSchema>["items"][number];
 
 function parseRunAt(value: string): number {
   try {
@@ -137,30 +254,68 @@ function parseRunAt(value: string): number {
   }
 }
 
-function toCreateScheduleInput(
-  item:
-    | z.infer<typeof AddOnceScheduleSchema>
-    | z.infer<typeof AddRecurringScheduleSchema>,
-): CreateScheduleInput {
-  const base = {
-    type: item.type,
-    task: item.task,
-    runAt: parseRunAt(item.runAt),
-    prompt: item.prompt,
-    conversationId: item.conversationId ?? null,
-    addition: item.addition,
-  };
-  if (item.type === "every") {
-    return {
-      ...base,
-      type: "every",
-      interval: item.interval,
-    };
+function toCreateScheduleInput(item: AddScheduleItem): CreateScheduleInput {
+  switch (item.task) {
+    case "chat":
+      if (item.type === "every") {
+        if ("runAt" in item && typeof item.runAt === "string") {
+          return {
+            type: "every",
+            task: "chat",
+            runAt: parseRunAt(item.runAt),
+            interval: item.interval,
+            prompt: item.prompt,
+            conversationId: item.conversationId,
+          };
+        }
+        const interval = item.interval as string;
+        return {
+          type: "every",
+          task: "chat",
+          interval,
+          prompt: item.prompt,
+          conversationId: item.conversationId,
+        };
+      }
+      return {
+        type: "once",
+        task: "chat",
+        runAt: parseRunAt(item.runAt),
+        prompt: item.prompt,
+        conversationId: item.conversationId,
+      };
+    case "activity":
+      if (item.type === "every") {
+        if ("runAt" in item && typeof item.runAt === "string") {
+          return {
+            type: "every",
+            task: "activity",
+            runAt: parseRunAt(item.runAt),
+            interval: item.interval,
+            prompt: item.prompt,
+          };
+        }
+        const interval = item.interval as string;
+        return {
+          type: "every",
+          task: "activity",
+          interval,
+          prompt: item.prompt,
+        };
+      }
+      return {
+        type: "once",
+        task: "activity",
+        runAt: parseRunAt(item.runAt),
+        prompt: item.prompt,
+      };
+    case "wake":
+    case "sleep":
+      return {
+        task: item.task,
+        interval: item.interval,
+      };
   }
-  return {
-    ...base,
-    type: "once",
-  };
 }
 
 function toUpdateScheduleInput(
@@ -174,7 +329,6 @@ function toUpdateScheduleInput(
     ...(item.conversationId !== undefined
       ? { conversationId: item.conversationId }
       : {}),
-    ...(item.addition !== undefined ? { addition: item.addition } : {}),
   };
 }
 
@@ -182,7 +336,8 @@ function toUpdateScheduleInput(
  * Skill for managing actor schedules.
  */
 export default class ScheduleSkill extends Skill {
-  description = "该技能用于查询、创建、修改和删除当前的日程安排。";
+  description =
+    "该技能用于查询、创建、修改和删除当前的日程安排，可以调整作息、安排未来的主动对话和自主活动、调整计划等。";
 
   parameters = ScheduleSkillSchema.toJSONSchema();
 
@@ -221,29 +376,39 @@ export default class ScheduleSkill extends Skill {
 
     try {
       switch (payload.action) {
-        case "list_schedules":
+        case "list_schedules": {
+          const listed = await actorScheduler.list();
           return {
             success: true,
-            content: JSON.stringify(await actorScheduler.list()),
+            content: JSON.stringify({
+              overdue: listed.overdue.map(toModelScheduleItem),
+              upcoming: listed.upcoming.map(toModelScheduleItem),
+              recurring: listed.recurring.map(toModelScheduleItem),
+            }),
           };
-        case "add_schedules":
+        }
+        case "add_schedules": {
+          const result = await actorScheduler.add(
+            payload.items.map(toCreateScheduleInput),
+          );
           return {
             success: true,
-            content: JSON.stringify(
-              await actorScheduler.add(
-                payload.items.map(toCreateScheduleInput),
-              ),
-            ),
+            content: JSON.stringify({
+              added: result.added.map(toModelScheduleItem),
+            }),
           };
-        case "update_schedules":
+        }
+        case "update_schedules": {
+          const result = await actorScheduler.update(
+            payload.items.map(toUpdateScheduleInput),
+          );
           return {
             success: true,
-            content: JSON.stringify(
-              await actorScheduler.update(
-                payload.items.map(toUpdateScheduleInput),
-              ),
-            ),
+            content: JSON.stringify({
+              updated: result.updated.map(toModelScheduleItem),
+            }),
           };
+        }
         case "delete_schedules":
           return {
             success: true,

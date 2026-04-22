@@ -26,6 +26,7 @@ import type {
 import { Logger } from "../logger";
 import { EMA_CONVERSATION_ACTIVITY_PROMPT } from "./prompts";
 import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
+import { stringifyModelScheduleList } from "../scheduler/actor_scheduler";
 import { loadPromptTemplate } from "../prompt/loader";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
 import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
@@ -50,7 +51,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   readonly dayWindowSize = 2;
   /** Number of unprocessed month entries injected into chat prompts. */
   readonly monthWindowSize = 2;
-  /** Number of visible activity entries injected into chat prompts. */
+  /** Number of activity entries injected into chat prompts. */
   readonly activityWindowSize = 30;
   /** Conversation IDs currently running one conversation-to-activity update. */
   private readonly runningConversationActivities = new Set<number>();
@@ -219,6 +220,18 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     );
   }
 
+  private async buildSchedulePrompt(actorId: number): Promise<string> {
+    if (!this.server || !this.server.scheduler) {
+      return stringifyModelScheduleList({
+        overdue: [],
+        upcoming: [],
+        recurring: [],
+      });
+    }
+    const listed = await this.server.getActorScheduler(actorId).list();
+    return stringifyModelScheduleList(listed);
+  }
+
   private async getActorIdByConversation(
     conversationId: number,
   ): Promise<number> {
@@ -247,13 +260,14 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       "you.md",
       "interaction-guidelines.md",
       "memory.md",
+      "schedule.md",
     );
-    const [{ rolePrompt, personalityMemory }, memoryValues] = await Promise.all(
-      [
+    const [{ rolePrompt, personalityMemory }, memoryValues, scheduleText] =
+      await Promise.all([
         this.getBasePromptValues(actorId),
         this.getConversationMemoryPromptValues(actorId, conversationId),
-      ],
-    );
+        this.buildSchedulePrompt(actorId),
+      ]);
     const chatWorkflow = await loadPromptTemplate(
       memoryValues.sessionType === "group"
         ? "chat-workflow-group.md"
@@ -272,6 +286,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       .replaceAll("{MEMORY_MONTH}", memoryValues.monthMemory)
       .replaceAll("{MEMORY_DAY}", memoryValues.dayMemory)
       .replaceAll("{MEMORY_ACTIVITY}", memoryValues.activityMemory)
+      .replaceAll("{SCHEDULES}", scheduleText)
       .replaceAll("{MEMORY_BUFFER}", memoryValues.bufferText);
   }
 
@@ -296,13 +311,14 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       "world.md",
       "you.md",
       "memory.md",
+      "schedule.md",
     );
-    const [{ rolePrompt, personalityMemory }, memoryValues] = await Promise.all(
-      [
+    const [{ rolePrompt, personalityMemory }, memoryValues, scheduleText] =
+      await Promise.all([
         this.getBasePromptValues(actorId),
         this.getBackgroundMemoryPromptValues(actorId, options),
-      ],
-    );
+        this.buildSchedulePrompt(actorId),
+      ]);
     return template
       .replaceAll("{SKILLS_METADATA}", skillsPrompt)
       .replaceAll("{ROLE_PROMPT}", rolePrompt)
@@ -315,6 +331,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       .replaceAll("{MEMORY_MONTH}", memoryValues.monthMemory)
       .replaceAll("{MEMORY_DAY}", memoryValues.dayMemory)
       .replaceAll("{MEMORY_ACTIVITY}", memoryValues.activityMemory)
+      .replaceAll("{SCHEDULES}", scheduleText)
       .replaceAll("{MEMORY_BUFFER}", memoryValues.bufferText);
   }
 
@@ -351,7 +368,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     records?: ShortTermMemoryRecord[],
   ): Promise<string> {
     const items =
-      records ?? (await this.getVisibleActivityWindow(actorId, Date.now()));
+      records ?? (await this.getActivityWindow(actorId, Date.now()));
     return this.formatActivityLines(items).join("\n");
   }
 
@@ -784,7 +801,6 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         createdAt: item.createdAt ?? item.updatedAt ?? Date.now(),
         updatedAt: item.updatedAt,
         processedAt: item.processedAt,
-        visible: item.visible,
       };
     });
   }
@@ -808,7 +824,6 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       createdAt: item.createdAt,
       updatedAt: now,
       processedAt: item.processedAt,
-      visible: item.visible,
     });
   }
 
@@ -837,7 +852,6 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         createdAt: item.createdAt,
         updatedAt: now,
         processedAt: item.processedAt,
-        visible: item.visible,
       });
       return;
     }
@@ -851,7 +865,6 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       createdAt: existing[0].createdAt,
       updatedAt: now,
       processedAt: item.processedAt,
-      visible: item.visible ?? existing[0].visible,
     });
   }
 
@@ -885,7 +898,6 @@ export class MemoryManager implements BufferStorage, ActorMemory {
           createdAt: record.createdAt,
           updatedAt: record.updatedAt ?? processedAt,
           processedAt,
-          visible: record.visible,
         }),
       ),
     );
@@ -935,20 +947,19 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   }
 
   /**
-   * Gets the visible activity window used by prompts and rollups.
+   * Gets the activity window used by prompts and rollups.
    * @param actorId - The actor identifier to read.
    * @param triggeredAt - Trigger timestamp in milliseconds.
-   * @param limit - Maximum number of visible activity records to return.
-   * @returns Visible activity records ordered from oldest to newest.
+   * @param limit - Maximum number of activity records to return.
+   * @returns Activity records ordered from oldest to newest.
    */
-  async getVisibleActivityWindow(
+  async getActivityWindow(
     actorId: number,
     triggeredAt: number,
     limit: number = this.activityWindowSize,
   ): Promise<ShortTermMemoryRecord[]> {
     const activities = await this.listShortTermMemories(actorId, {
       kind: "activity",
-      visible: true,
       createdBefore: triggeredAt,
       sort: "desc",
       limit,
@@ -957,7 +968,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   }
 
   /**
-   * Gets the pending-state summary for the current visible activity window.
+   * Gets the pending-state summary for the current activity window.
    * @param actorId - The actor identifier to read.
    * @param triggeredAt - Trigger timestamp in milliseconds.
    * @returns Pending count plus the newest pending activity record id.
@@ -966,7 +977,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     actorId: number,
     triggeredAt: number,
   ): Promise<{ count: number; lastPendingId: number | null }> {
-    const records = await this.getVisibleActivityWindow(actorId, triggeredAt);
+    const records = await this.getActivityWindow(actorId, triggeredAt);
     const pendingRecords = records.filter(
       (item) => typeof item.processedAt !== "number",
     );
@@ -974,39 +985,6 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       count: pendingRecords.length,
       lastPendingId: pendingRecords[pendingRecords.length - 1]?.id ?? null,
     };
-  }
-
-  /**
-   * Hides processed activity records up to the provided time boundary.
-   * @param actorId - The actor identifier to update.
-   * @param upperBoundAt - Inclusive upper bound of the affected activity window.
-   */
-  async hideRolledUpActivities(
-    actorId: number,
-    upperBoundAt: number,
-  ): Promise<void> {
-    const records = await this.listShortTermMemories(actorId, {
-      kind: "activity",
-      visible: true,
-      processed: true,
-      createdBefore: upperBoundAt,
-    });
-    await Promise.all(
-      records.map((record) =>
-        this.shortTermMemoryDB.upsertShortTermMemory({
-          id: record.id,
-          actorId,
-          kind: record.kind,
-          date: record.date,
-          dayDate: record.dayDate,
-          memory: record.memory,
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt ?? upperBoundAt,
-          processedAt: record.processedAt,
-          visible: false,
-        }),
-      ),
-    );
   }
 
   /**

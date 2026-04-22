@@ -402,7 +402,7 @@ export interface ConversationEntity extends Entity {
    */
   session: string;
   /**
-   * Whether this conversation allows heartbeat-triggered proactive messages.
+   * Whether this conversation allows proactive messages.
    */
   allowProactive?: boolean;
   /**
@@ -706,10 +706,6 @@ export interface ShortTermMemoryEntity extends Entity {
    * The date and time the short-term memory was consumed by a higher-level rollup.
    */
   processedAt?: DbDate;
-  /**
-   * Whether this record should still appear in the current activity window.
-   */
-  visible?: boolean;
 }
 
 /**
@@ -784,10 +780,6 @@ export interface ListShortTermMemoriesRequest {
    * Filter by processed state. `false` also includes legacy rows where the field is absent.
    */
   processed?: boolean;
-  /**
-   * Filter by visible state. `true` also includes legacy rows where the field is absent.
-   */
-  visible?: boolean;
 }
 
 /**

@@ -88,4 +88,6 @@ export interface ActorWorkerEventSource {
 export type ActorWorkerEventsEmitter = EventEmitter<ActorWorkerEventMap> &
   ActorWorkerEventSource;
 
-export type ActorStatus = "preparing" | "running" | "idle";
+export type ActorWorkerStatus = "preparing" | "running" | "idle";
+
+export type ActorStatus = "sleep" | "switching" | "awake";
