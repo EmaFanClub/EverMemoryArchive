@@ -2,9 +2,9 @@ import type {
   ExternalIdentityBindingDB,
   ExternalIdentityBindingEntity,
   ListExternalIdentityBindingsRequest,
-} from "./base";
-import type { Mongo } from "./mongo";
-import { deleteEntity, omitMongoId, upsertEntity } from "./mongo.util";
+} from "../base";
+import type { Mongo } from "../mongo";
+import { deleteEntity, omitMongoId, upsertEntity } from "../mongo/utils";
 
 /**
  * MongoDB-based implementation of ExternalIdentityBindingDB.

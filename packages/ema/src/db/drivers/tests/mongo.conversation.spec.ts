@@ -1,6 +1,6 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
-import { createMongo, MongoConversationDB } from "../../db";
-import type { Mongo, ConversationEntity } from "../../db";
+import { createMongo, MongoConversationDB } from "../..";
+import type { Mongo, ConversationEntity } from "../..";
 
 const WEB_CHAT_1 = "web-chat-1";
 const WEB_CHAT_2 = "web-chat-2";

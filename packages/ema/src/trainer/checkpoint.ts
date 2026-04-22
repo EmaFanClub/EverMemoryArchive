@@ -45,35 +45,35 @@ export async function buildTrainingCheckpointSnapshot(
   server: Server,
   actorId: number,
 ): Promise<ActorTrainingCheckpointSnapshot> {
-  const actor = await server.actorDB.getActor(actorId);
+  const actor = await server.dbService.actorDB.getActor(actorId);
   if (!actor) {
     throw new Error(`Actor with ID ${actorId} not found.`);
   }
   const [role, personality, activity, day, month, year, longTerm] =
     await Promise.all([
-      server.roleDB.getRole(actor.roleId),
-      server.personalityDB.getPersonality(actorId),
-      server.shortTermMemoryDB.listShortTermMemories({
+      server.dbService.roleDB.getRole(actor.roleId),
+      server.dbService.personalityDB.getPersonality(actorId),
+      server.dbService.shortTermMemoryDB.listShortTermMemories({
         actorId,
         kind: "activity",
         sort: "asc",
       }),
-      server.shortTermMemoryDB.listShortTermMemories({
+      server.dbService.shortTermMemoryDB.listShortTermMemories({
         actorId,
         kind: "day",
         sort: "asc",
       }),
-      server.shortTermMemoryDB.listShortTermMemories({
+      server.dbService.shortTermMemoryDB.listShortTermMemories({
         actorId,
         kind: "month",
         sort: "asc",
       }),
-      server.shortTermMemoryDB.listShortTermMemories({
+      server.dbService.shortTermMemoryDB.listShortTermMemories({
         actorId,
         kind: "year",
         sort: "asc",
       }),
-      server.longTermMemoryDB.listLongTermMemories({ actorId }),
+      server.dbService.longTermMemoryDB.listLongTermMemories({ actorId }),
     ]);
 
   return {

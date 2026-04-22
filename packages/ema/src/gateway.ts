@@ -8,7 +8,9 @@ export class Gateway {
   constructor(private readonly server: Server) {}
 
   async reserveMessageId(actorId: number): Promise<number> {
-    return this.server.conversationMessageDB.reserveMessageId(actorId);
+    return this.server.dbService.conversationMessageDB.reserveMessageId(
+      actorId,
+    );
   }
 
   async dispatchChannel(
@@ -37,7 +39,7 @@ export class Gateway {
       };
     }
 
-    const conversation = await this.server.getConversationBySession(
+    const conversation = await this.server.dbService.getConversationBySession(
       actorId,
       event.session,
     );
@@ -109,11 +111,13 @@ export class Gateway {
       return cached;
     }
     const rows =
-      await this.server.conversationMessageDB.listConversationMessages({
-        conversationId,
-        channelMessageId,
-        limit: 1,
-      });
+      await this.server.dbService.conversationMessageDB.listConversationMessages(
+        {
+          conversationId,
+          channelMessageId,
+          limit: 1,
+        },
+      );
     const row = rows[0];
     if (!row) {
       return null;
@@ -132,11 +136,13 @@ export class Gateway {
       return cached;
     }
     const rows =
-      await this.server.conversationMessageDB.listConversationMessages({
-        conversationId,
-        msgIds: [msgId],
-        limit: 1,
-      });
+      await this.server.dbService.conversationMessageDB.listConversationMessages(
+        {
+          conversationId,
+          msgIds: [msgId],
+          limit: 1,
+        },
+      );
     const row = rows[0];
     if (!row || !row.channelMessageId) {
       return null;

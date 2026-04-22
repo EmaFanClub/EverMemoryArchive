@@ -175,7 +175,7 @@ export default class QueryChatHistorySkill extends Skill {
 
     try {
       const conversation =
-        await server.conversationDB.getConversation(conversationId);
+        await server.dbService.conversationDB.getConversation(conversationId);
       if (!conversation) {
         return {
           success: false,
@@ -196,12 +196,14 @@ export default class QueryChatHistorySkill extends Skill {
 
       if (payload.mode === "expand_one") {
         const rows =
-          await server.conversationMessageDB.listConversationMessages({
-            conversationId,
-            actorId,
-            msgIds: [payload.msg_id],
-            limit: 1,
-          });
+          await server.dbService.conversationMessageDB.listConversationMessages(
+            {
+              conversationId,
+              actorId,
+              msgIds: [payload.msg_id],
+              limit: 1,
+            },
+          );
         const row = rows[0];
         if (!row) {
           return {
@@ -224,11 +226,13 @@ export default class QueryChatHistorySkill extends Skill {
 
       if (payload.mode === "by_ids") {
         const rows =
-          await server.conversationMessageDB.listConversationMessages({
-            conversationId,
-            actorId,
-            msgIds: payload.msg_ids,
-          });
+          await server.dbService.conversationMessageDB.listConversationMessages(
+            {
+              conversationId,
+              actorId,
+              msgIds: payload.msg_ids,
+            },
+          );
         const byId = new Map(
           rows
             .filter(
@@ -262,13 +266,14 @@ export default class QueryChatHistorySkill extends Skill {
         };
       }
 
-      const rows = await server.conversationMessageDB.listConversationMessages({
-        conversationId,
-        createdAfter: startTime,
-        createdBefore: endTime,
-        sort: "asc",
-        limit: payload.limit + 1,
-      });
+      const rows =
+        await server.dbService.conversationMessageDB.listConversationMessages({
+          conversationId,
+          createdAfter: startTime,
+          createdBefore: endTime,
+          sort: "asc",
+          limit: payload.limit + 1,
+        });
       const hasMore = rows.length > payload.limit;
       const page = hasMore ? rows.slice(0, payload.limit) : rows;
       const messages = page.map((item) =>

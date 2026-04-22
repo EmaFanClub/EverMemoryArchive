@@ -5,8 +5,8 @@
 
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
-import type { CreateMongoArgs } from "../mongo";
-import { Mongo } from "../mongo";
+import type { CreateMongoArgs } from "./base";
+import { Mongo } from "./base";
 
 /**
  * In-memory MongoDB implementation

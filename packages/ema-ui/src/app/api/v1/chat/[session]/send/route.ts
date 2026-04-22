@@ -22,7 +22,7 @@ export async function POST(
     : buildSession("web", "chat", rawSession);
 
   const server = await getServer();
-  const conversation = await server.getConversationBySession(
+  const conversation = await server.dbService.getConversationBySession(
     body.actorId,
     session,
   );

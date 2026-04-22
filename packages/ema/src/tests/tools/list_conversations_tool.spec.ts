@@ -11,23 +11,25 @@ describe("ListConversationsTool", () => {
       {
         actorId: 1,
         server: {
-          conversationDB: {
-            listConversations: vi.fn().mockResolvedValue([
-              {
-                id: 18,
-                name: "项目群",
-                session: "qq-group-123456",
-                description: "项目讨论群",
-                allowProactive: false,
-              },
-              {
-                id: 12,
-                name: "Alice",
-                session: "web-chat-1",
-                description: "和 Alice 的私聊",
-                allowProactive: true,
-              },
-            ]),
+          dbService: {
+            conversationDB: {
+              listConversations: vi.fn().mockResolvedValue([
+                {
+                  id: 18,
+                  name: "项目群",
+                  session: "qq-group-123456",
+                  description: "项目讨论群",
+                  allowProactive: false,
+                },
+                {
+                  id: 12,
+                  name: "Alice",
+                  session: "web-chat-1",
+                  description: "和 Alice 的私聊",
+                  allowProactive: true,
+                },
+              ]),
+            },
           },
         } as any,
       },

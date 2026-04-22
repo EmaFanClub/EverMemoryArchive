@@ -2,9 +2,9 @@ import type {
   ShortTermMemoryDB,
   ShortTermMemoryEntity,
   ListShortTermMemoriesRequest,
-} from "./base";
-import type { Mongo } from "./mongo";
-import { upsertEntity, deleteEntity, omitMongoId } from "./mongo.util";
+} from "../base";
+import type { Mongo } from "../mongo";
+import { upsertEntity, deleteEntity, omitMongoId } from "../mongo/utils";
 
 /**
  * MongoDB-based implementation of ShortTermMemoryDB.

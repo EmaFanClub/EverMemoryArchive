@@ -16,11 +16,13 @@ describe("web-search-skill", () => {
       {
         actorId: 1,
         server: {
-          userOwnActorDB: {
-            getActorOwner: vi.fn().mockResolvedValue(null),
-          },
-          userDB: {
-            getUser: vi.fn(),
+          dbService: {
+            userOwnActorDB: {
+              getActorOwner: vi.fn().mockResolvedValue(null),
+            },
+            userDB: {
+              getUser: vi.fn(),
+            },
           },
         } as any,
       },
@@ -38,15 +40,17 @@ describe("web-search-skill", () => {
       {
         actorId: 1,
         server: {
-          userOwnActorDB: {
-            getActorOwner: vi.fn().mockResolvedValue(7),
-          },
-          userDB: {
-            getUser: vi.fn().mockResolvedValue({
-              id: 7,
-              name: "alice",
-              email: "alice@example.com",
-            }),
+          dbService: {
+            userOwnActorDB: {
+              getActorOwner: vi.fn().mockResolvedValue(7),
+            },
+            userDB: {
+              getUser: vi.fn().mockResolvedValue({
+                id: 7,
+                name: "alice",
+                email: "alice@example.com",
+              }),
+            },
           },
         } as any,
       },
@@ -71,16 +75,18 @@ describe("web-search-skill", () => {
       {
         actorId: 1,
         server: {
-          userOwnActorDB: {
-            getActorOwner: vi.fn().mockResolvedValue(7),
-          },
-          userDB: {
-            getUser: vi.fn().mockResolvedValue({
-              id: 7,
-              name: "alice",
-              email: "alice@example.com",
-              tavilyApiKey: "bad-key",
-            }),
+          dbService: {
+            userOwnActorDB: {
+              getActorOwner: vi.fn().mockResolvedValue(7),
+            },
+            userDB: {
+              getUser: vi.fn().mockResolvedValue({
+                id: 7,
+                name: "alice",
+                email: "alice@example.com",
+                tavilyApiKey: "bad-key",
+              }),
+            },
           },
         } as any,
       },
@@ -125,16 +131,18 @@ describe("web-search-skill", () => {
       {
         actorId: 1,
         server: {
-          userOwnActorDB: {
-            getActorOwner: vi.fn().mockResolvedValue(7),
-          },
-          userDB: {
-            getUser: vi.fn().mockResolvedValue({
-              id: 7,
-              name: "alice",
-              email: "alice@example.com",
-              tavilyApiKey: "good-key",
-            }),
+          dbService: {
+            userOwnActorDB: {
+              getActorOwner: vi.fn().mockResolvedValue(7),
+            },
+            userDB: {
+              getUser: vi.fn().mockResolvedValue({
+                id: 7,
+                name: "alice",
+                email: "alice@example.com",
+                tavilyApiKey: "good-key",
+              }),
+            },
           },
         } as any,
       },
@@ -209,16 +217,18 @@ describe("web-search-skill", () => {
       {
         actorId: 1,
         server: {
-          userOwnActorDB: {
-            getActorOwner: vi.fn().mockResolvedValue(7),
-          },
-          userDB: {
-            getUser: vi.fn().mockResolvedValue({
-              id: 7,
-              name: "alice",
-              email: "alice@example.com",
-              tavilyApiKey: "good-key",
-            }),
+          dbService: {
+            userOwnActorDB: {
+              getActorOwner: vi.fn().mockResolvedValue(7),
+            },
+            userDB: {
+              getUser: vi.fn().mockResolvedValue({
+                id: 7,
+                name: "alice",
+                email: "alice@example.com",
+                tavilyApiKey: "good-key",
+              }),
+            },
           },
         } as any,
       },

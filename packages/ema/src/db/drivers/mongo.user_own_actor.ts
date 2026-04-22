@@ -2,9 +2,9 @@ import type {
   UserOwnActorDB,
   UserOwnActorRelation,
   ListUserOwnActorRelationsRequest,
-} from "./base";
-import type { Mongo } from "./mongo";
-import { omitMongoId } from "./mongo.util";
+} from "../base";
+import type { Mongo } from "../mongo";
+import { omitMongoId } from "../mongo/utils";
 
 /**
  * MongoDB-based implementation of UserOwnActorDB

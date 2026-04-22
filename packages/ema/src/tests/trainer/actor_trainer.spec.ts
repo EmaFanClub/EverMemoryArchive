@@ -2,10 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import * as lancedb from "@lancedb/lancedb";
 
 import { ActorTrainer } from "../../trainer/actor_trainer";
-import { Server } from "../../server";
+import type { Server } from "../../server";
 import { MemFs } from "../../fs";
 import { createMongo, type Mongo } from "../../db";
-import { MemoryManager } from "../../memory/manager";
 import { parseTimestamp } from "../../utils";
 import {
   Config,
@@ -39,21 +38,7 @@ describe("ActorTrainer", () => {
     mongo = await createMongo("", "test", "memory");
     await mongo.connect();
     lance = await lancedb.connect("memory://ema-trainer");
-    server = Server.createSync(new MemFs(), mongo, lance, createTestConfig());
-    server.memoryManager = new MemoryManager(
-      server.roleDB,
-      server.personalityDB,
-      server.actorDB,
-      server.userDB,
-      server.userOwnActorDB,
-      server.externalIdentityBindingDB,
-      server.conversationDB,
-      server.conversationMessageDB,
-      server.shortTermMemoryDB,
-      server.longTermMemoryDB,
-      server.longTermMemoryVectorSearcher,
-      server,
-    );
+    server = {} as Server;
   });
 
   afterEach(async () => {

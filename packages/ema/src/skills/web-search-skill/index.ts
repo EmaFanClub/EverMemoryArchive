@@ -133,14 +133,14 @@ export default class WebSearchSkill extends Skill {
       };
     }
 
-    const userId = await server.userOwnActorDB.getActorOwner(actorId);
+    const userId = await server.dbService.userOwnActorDB.getActorOwner(actorId);
     if (typeof userId !== "number") {
       return {
         success: false,
         error: "No owner user found for current actor.",
       };
     }
-    const user = await server.userDB.getUser(userId);
+    const user = await server.dbService.userDB.getUser(userId);
     const apiKey = user?.tavilyApiKey?.trim();
     if (!apiKey) {
       return {

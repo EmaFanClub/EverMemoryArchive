@@ -1,5 +1,5 @@
-import type { Entity } from "./base";
-import type { Mongo, MongoCollectionGetter } from "./mongo";
+import type { Entity } from "../base";
+import type { Mongo, MongoCollectionGetter } from "./base";
 
 const counterCollectionName = "counters";
 export const utilCollections: MongoCollectionGetter = {

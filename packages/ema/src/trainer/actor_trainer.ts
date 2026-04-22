@@ -52,7 +52,7 @@ export class ActorTrainer {
    */
   async train(req: ActorTrainingRequest): Promise<ActorTrainingResult> {
     this.validateRequest(req);
-    const actor = await this.server.actorDB.getActor(req.actorId);
+    const actor = await this.server.dbService.actorDB.getActor(req.actorId);
     if (!actor) {
       throw new Error(`Actor with ID ${req.actorId} not found.`);
     }
@@ -64,7 +64,7 @@ export class ActorTrainer {
       req.checkpointDir,
       trainingSession,
     );
-    const conversation = await this.server.createConversation(
+    const conversation = await this.server.dbService.createConversation(
       req.actorId,
       trainingSession,
       trainingSession,
@@ -118,7 +118,7 @@ export class ActorTrainer {
             {
               ...input,
               msgId:
-                await this.server.conversationMessageDB.reserveMessageId(
+                await this.server.dbService.conversationMessageDB.reserveMessageId(
                   actorId,
                 ),
             },

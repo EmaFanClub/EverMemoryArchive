@@ -5,29 +5,31 @@ import type { ConversationMessageEntity } from "../../db/base";
 
 function createServer(rows: ConversationMessageEntity[]) {
   return {
-    conversationDB: {
-      async getConversation(conversationId: number) {
-        if (conversationId !== 1) {
-          return null;
-        }
-        return {
-          id: 1,
-          actorId: 1,
-          session: "qq-chat-10726371",
-          name: "Default",
-          description: "test",
-        };
+    dbService: {
+      conversationDB: {
+        async getConversation(conversationId: number) {
+          if (conversationId !== 1) {
+            return null;
+          }
+          return {
+            id: 1,
+            actorId: 1,
+            session: "qq-chat-10726371",
+            name: "Default",
+            description: "test",
+          };
+        },
       },
-    },
-    conversationMessageDB: {
-      async listConversationMessages(req: {
-        msgIds?: number[];
-        limit?: number;
-      }) {
-        if (req.msgIds) {
-          return rows.filter((row) => req.msgIds?.includes(row.msgId));
-        }
-        return rows.slice(0, req.limit);
+      conversationMessageDB: {
+        async listConversationMessages(req: {
+          msgIds?: number[];
+          limit?: number;
+        }) {
+          if (req.msgIds) {
+            return rows.filter((row) => req.msgIds?.includes(row.msgId));
+          }
+          return rows.slice(0, req.limit);
+        },
       },
     },
   };

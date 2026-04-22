@@ -2,8 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import type {
   SearchLongTermMemoriesRequest,
   LongTermMemoryEntity,
-} from "./base";
-import type { Mongo } from "./mongo";
+} from "../base";
+import type { Mongo } from "../mongo";
 import { MongoMemorySearchAdaptor } from "./mongo.long_term_memory";
 import * as lancedb from "@lancedb/lancedb";
 import {
@@ -15,8 +15,8 @@ import {
   Utf8,
 } from "apache-arrow";
 
-import { FetchWithProxy } from "../llm/proxy";
-import { GenAI } from "../llm/google_client";
+import { FetchWithProxy } from "../../llm/proxy";
+import { GenAI } from "../../llm/google_client";
 import { type GoogleGenAIOptions } from "@google/genai";
 
 /**

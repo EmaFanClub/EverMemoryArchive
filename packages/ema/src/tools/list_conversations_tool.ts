@@ -45,9 +45,10 @@ export class ListConversationsTool extends Tool {
       };
     }
 
-    const conversations = await server.conversationDB.listConversations({
-      actorId,
-    });
+    const conversations =
+      await server.dbService.conversationDB.listConversations({
+        actorId,
+      });
     conversations.sort((left, right) => (left.id ?? 0) - (right.id ?? 0));
 
     return {

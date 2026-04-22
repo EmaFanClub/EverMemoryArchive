@@ -1,6 +1,6 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
-import { createMongo, MongoUserDB } from "../../db";
-import type { Mongo, UserEntity } from "../../db";
+import { createMongo, MongoUserDB } from "../..";
+import type { Mongo, UserEntity } from "../..";
 
 describe("MongoUserDB with in-memory MongoDB", () => {
   let mongo: Mongo;

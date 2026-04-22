@@ -1,6 +1,6 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
-import { createMongo, MongoExternalIdentityBindingDB } from "../../db";
-import type { Mongo, ExternalIdentityBindingEntity } from "../../db";
+import { createMongo, MongoExternalIdentityBindingDB } from "../..";
+import type { Mongo, ExternalIdentityBindingEntity } from "../..";
 
 describe("MongoExternalIdentityBindingDB with in-memory MongoDB", () => {
   let mongo: Mongo;

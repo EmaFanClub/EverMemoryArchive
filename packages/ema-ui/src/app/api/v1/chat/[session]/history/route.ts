@@ -17,7 +17,7 @@ export async function GET(
   const limit = limitText ? Number.parseInt(limitText, 10) : undefined;
 
   const server = await getServer();
-  const conversation = await server.getConversationBySession(
+  const conversation = await server.dbService.getConversationBySession(
     DEFAULT_ACTOR_ID,
     session,
   );
@@ -28,11 +28,12 @@ export async function GET(
     });
   }
 
-  const rows = await server.conversationMessageDB.listConversationMessages({
-    conversationId: conversation.id!,
-    limit,
-    sort: "desc",
-  });
+  const rows =
+    await server.dbService.conversationMessageDB.listConversationMessages({
+      conversationId: conversation.id!,
+      limit,
+      sort: "desc",
+    });
 
   const messages: ConversationMessage[] = rows.reverse().map((row) => ({
     ...row.message,

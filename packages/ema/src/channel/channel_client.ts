@@ -550,7 +550,7 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
     const maxAttempts = 5;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const updated =
-        await this.server.conversationMessageDB.updateConversationMessageChannelMessageId(
+        await this.server.dbService.conversationMessageDB.updateConversationMessageChannelMessageId(
           conversationId,
           msgId,
           channelMessageId,

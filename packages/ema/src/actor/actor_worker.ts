@@ -55,7 +55,7 @@ export class ActorWorker {
     server: Server,
   ): Promise<ActorWorker> {
     const conversation =
-      await server.conversationDB.getConversation(conversationId);
+      await server.dbService.conversationDB.getConversation(conversationId);
     if (!conversation) {
       throw new Error(`Conversation ${conversationId} not found.`);
     }
@@ -88,7 +88,7 @@ export class ActorWorker {
             return;
           }
           const msgId =
-            await this.server.conversationMessageDB.reserveMessageId(
+            await this.server.dbService.conversationMessageDB.reserveMessageId(
               this.actorId,
             );
           const response: ActorChatResponse = {

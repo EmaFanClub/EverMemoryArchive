@@ -1,6 +1,6 @@
-import type { PersonalityDB, PersonalityEntity } from "./base";
-import type { Mongo } from "./mongo";
-import { deleteEntity, omitMongoId, upsertEntity } from "./mongo.util";
+import type { PersonalityDB, PersonalityEntity } from "../base";
+import type { Mongo } from "../mongo";
+import { deleteEntity, omitMongoId, upsertEntity } from "../mongo/utils";
 
 /**
  * MongoDB-based implementation of PersonalityDB

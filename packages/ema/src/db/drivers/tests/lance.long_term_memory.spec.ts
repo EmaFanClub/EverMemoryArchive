@@ -3,14 +3,14 @@ import {
   createMongo,
   LanceMemoryVectorSearcher,
   MongoLongTermMemoryDB,
-} from "../../db";
+} from "../..";
 
 import type {
   LongTermMemoryEmbeddingEngine,
   LongTermMemoryEmbeddingInput,
   LongTermMemoryEntity,
   Mongo,
-} from "../../db";
+} from "../..";
 import * as lancedb from "@lancedb/lancedb";
 
 class SimpleEmbeddingEngine implements LongTermMemoryEmbeddingEngine {

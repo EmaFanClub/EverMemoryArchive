@@ -171,11 +171,12 @@ export default class StickerSkill extends Skill {
       };
     }
 
-    const rows = await server.conversationMessageDB.listConversationMessages({
-      conversationId,
-      msgIds: [payload.msg_id],
-      limit: 1,
-    });
+    const rows =
+      await server.dbService.conversationMessageDB.listConversationMessages({
+        conversationId,
+        msgIds: [payload.msg_id],
+        limit: 1,
+      });
     const row = rows[0];
     if (!row) {
       return {

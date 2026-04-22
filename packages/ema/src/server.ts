@@ -1,39 +1,7 @@
-import * as lancedb from "@lancedb/lancedb";
 import { fileURLToPath } from "node:url";
-import { BSON } from "mongodb";
 
 import { Config } from "./config";
-import {
-  createMongo,
-  Mongo,
-  MongoRoleDB,
-  MongoPersonalityDB,
-  MongoActorDB,
-  MongoUserDB,
-  MongoUserOwnActorDB,
-  MongoExternalIdentityBindingDB,
-  MongoConversationDB,
-  MongoConversationMessageDB,
-  MongoShortTermMemoryDB,
-  MongoLongTermMemoryDB,
-  type MongoCollectionGetter,
-  MongoMemorySearchAdaptor,
-  LanceMemoryVectorSearcher,
-} from "./db";
-import { utilCollections } from "./db/mongo.util";
-import type {
-  RoleDB,
-  PersonalityDB,
-  ActorDB,
-  UserDB,
-  UserOwnActorDB,
-  ExternalIdentityBindingDB,
-  ConversationDB,
-  ConversationMessageDB,
-  ShortTermMemoryDB,
-  LongTermMemoryDB,
-  IndexableDB,
-} from "./db/base";
+import { DBService } from "./db";
 import type { Fs } from "./fs";
 import { RealFs } from "./fs";
 import * as path from "node:path";
@@ -80,26 +48,7 @@ export class Server {
 
   config: Config;
   gateway!: Gateway;
-
-  mongo!: Mongo;
-  lancedb!: lancedb.Connection;
-
-  roleDB!: RoleDB & MongoCollectionGetter;
-  personalityDB!: PersonalityDB & MongoCollectionGetter & IndexableDB;
-  actorDB!: ActorDB & MongoCollectionGetter & IndexableDB;
-  userDB!: UserDB & MongoCollectionGetter & IndexableDB;
-  userOwnActorDB!: UserOwnActorDB & MongoCollectionGetter & IndexableDB;
-  externalIdentityBindingDB!: ExternalIdentityBindingDB &
-    MongoCollectionGetter &
-    IndexableDB;
-  conversationDB!: ConversationDB & MongoCollectionGetter & IndexableDB;
-  conversationMessageDB!: ConversationMessageDB &
-    MongoCollectionGetter &
-    IndexableDB;
-  shortTermMemoryDB!: ShortTermMemoryDB & MongoCollectionGetter & IndexableDB;
-  longTermMemoryDB!: LongTermMemoryDB & MongoCollectionGetter & IndexableDB;
-  longTermMemoryVectorSearcher!: MongoMemorySearchAdaptor &
-    MongoCollectionGetter;
+  dbService!: DBService;
   scheduler!: AgendaScheduler;
   memoryManager!: MemoryManager;
 
@@ -116,37 +65,15 @@ export class Server {
     config: Config = Config.load(),
   ): Promise<Server> {
     const isDev = ["development", "test"].includes(process.env.NODE_ENV || "");
+    const server = new Server(fs, config);
+    server.dbService = await DBService.create(fs, config);
+    server.gateway = new Gateway(server);
+    server.memoryManager = new MemoryManager(server);
 
-    // Initialize MongoDB asynchronously
-    const mongo = await createMongo(
-      config.mongo.uri,
-      config.mongo.db_name,
-      config.mongo.kind,
-    );
-    await mongo.connect();
-
-    const databaseDir = path.join(process.env.DATA_ROOT || ".data", "lancedb");
-    const lance = await lancedb.connect(databaseDir);
-
-    const server = Server.createSync(fs, mongo, lance, config);
-    server.scheduler = await AgendaScheduler.create(mongo);
-    server.memoryManager = new MemoryManager(
-      server.roleDB,
-      server.personalityDB,
-      server.actorDB,
-      server.userDB,
-      server.userOwnActorDB,
-      server.externalIdentityBindingDB,
-      server.conversationDB,
-      server.conversationMessageDB,
-      server.shortTermMemoryDB,
-      server.longTermMemoryDB,
-      server.longTermMemoryVectorSearcher,
-      server,
-    );
+    server.scheduler = await AgendaScheduler.create(server.dbService.mongo);
 
     if (isDev) {
-      const restored = await server.restoreFromSnapshot("default");
+      const restored = await server.dbService.restoreFromSnapshot("default");
       if (!restored) {
         console.error("Failed to restore snapshot 'default'");
       } else {
@@ -154,22 +81,11 @@ export class Server {
       }
     }
 
-    await Promise.all([
-      server.personalityDB.createIndices(),
-      server.actorDB.createIndices(),
-      server.userDB.createIndices(),
-      server.userOwnActorDB.createIndices(),
-      server.externalIdentityBindingDB.createIndices(),
-      server.conversationDB.createIndices(),
-      server.conversationMessageDB.createIndices(),
-      server.shortTermMemoryDB.createIndices(),
-      server.longTermMemoryDB.createIndices(),
-      server.longTermMemoryVectorSearcher.createIndices(),
-    ]);
+    await server.dbService.createIndices();
 
     await server.createInitialCharacters();
 
-    const actors = await server.actorDB.listActors();
+    const actors = await server.dbService.actorDB.listActors();
     await Promise.all(
       actors
         .map((actor) => actor.id)
@@ -186,43 +102,6 @@ export class Server {
   }
 
   /**
-   * Creates a Server instance with a pre-configured MongoDB instance for testing.
-   * @param fs - File system implementation
-   * @param mongo - MongoDB instance
-   * @param lance - LanceDB instance
-   * @returns The Server instance
-   */
-  static createSync(
-    fs: Fs,
-    mongo: Mongo,
-    lance: lancedb.Connection,
-    config: Config = Config.load(),
-  ): Server {
-    const server = new Server(fs, config);
-    server.mongo = mongo;
-    server.roleDB = new MongoRoleDB(mongo);
-    server.personalityDB = new MongoPersonalityDB(mongo);
-    server.actorDB = new MongoActorDB(mongo);
-    server.userDB = new MongoUserDB(mongo);
-    server.userOwnActorDB = new MongoUserOwnActorDB(mongo);
-    server.externalIdentityBindingDB = new MongoExternalIdentityBindingDB(
-      mongo,
-    );
-    server.conversationDB = new MongoConversationDB(mongo);
-    server.conversationMessageDB = new MongoConversationMessageDB(mongo);
-    server.shortTermMemoryDB = new MongoShortTermMemoryDB(mongo);
-    server.longTermMemoryVectorSearcher = new LanceMemoryVectorSearcher(
-      mongo,
-      lance,
-    );
-    server.longTermMemoryDB = new MongoLongTermMemoryDB(mongo, [
-      server.longTermMemoryVectorSearcher,
-    ]);
-    server.gateway = new Gateway(server);
-    return server;
-  }
-
-  /**
    * Creates an actor-scoped scheduler view.
    * @param actorId - Actor identifier.
    * @returns Actor scheduler wrapper.
@@ -231,73 +110,12 @@ export class Server {
     return new ActorScheduler(this.scheduler, actorId);
   }
 
-  private snapshotPath(name: string): string {
-    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-      throw new Error(
-        `Invalid snapshot name: ${name}. Only letters, numbers, underscores, and hyphens are allowed.`,
-      );
-    }
-
-    const dataRoot = this.config.system.data_root;
-    return `${dataRoot}/mongo-snapshots/${name}.json`;
-  }
-
-  /**
-   * Takes a snapshot of the MongoDB database and writes it to a file.
-   * @param name - The name of the snapshot
-   * @returns The file name of the snapshot
-   */
-  async snapshot(name: string): Promise<{ fileName: string }> {
-    const fileName = this.snapshotPath(name);
-
-    const dbs = [
-      utilCollections,
-      this.roleDB,
-      this.personalityDB,
-      this.actorDB,
-      this.userDB,
-      this.userOwnActorDB,
-      this.externalIdentityBindingDB,
-      this.conversationDB,
-      this.conversationMessageDB,
-      this.shortTermMemoryDB,
-      this.longTermMemoryDB,
-      this.longTermMemoryVectorSearcher,
-    ];
-    const collections = new Set<string>(dbs.flatMap((db) => db.collections));
-    if (this.scheduler) {
-      collections.add(this.scheduler.collectionName);
-    }
-    const snapshot = await this.mongo.snapshot(Array.from(collections));
-    await this.fs.write(
-      fileName,
-      BSON.EJSON.stringify(snapshot, { relaxed: false }, 1),
-    );
-    return {
-      fileName,
-    };
-  }
-
-  /**
-   * Restores the MongoDB database from the snapshot file.
-   * @param name - The name of the snapshot
-   * @returns True if the snapshot was restored, false if not found
-   */
-  async restoreFromSnapshot(name: string): Promise<boolean> {
-    const fileName = this.snapshotPath(name);
-    if (!(await this.fs.exists(fileName))) {
-      return false;
-    }
-    const snapshot = await this.fs.read(fileName);
-    await this.mongo.restoreFromSnapshot(BSON.EJSON.parse(snapshot));
-    return true;
-  }
-
   /**
    * Initializes the default character and related resources when missing.
    */
   private async createInitialCharacters(): Promise<void> {
-    const existingUser = await this.userDB.getUser(DEFAULT_WEB_USER_ID);
+    const existingUser =
+      await this.dbService.userDB.getUser(DEFAULT_WEB_USER_ID);
     const qqUid = process.env.EMA_QQ_UID?.trim() || null;
     const qqGroupId = process.env.EMA_QQ_GROUP_ID?.trim() || null;
     const tavilyApiKey = process.env.EMA_TAVILY_API_KEY?.trim() || undefined;
@@ -311,7 +129,7 @@ export class Server {
       id: DEFAULT_WEB_ACTOR_ID,
       roleId: 1,
     };
-    await this.userDB.upsertUser({
+    await this.dbService.userDB.upsertUser({
       id: user.id,
       name: user.name,
       email: user.email,
@@ -319,16 +137,16 @@ export class Server {
       avatar: existingUser?.avatar ?? "",
       ...(tavilyApiKey ? { tavilyApiKey } : {}),
     });
-    await this.actorDB.upsertActor({
+    await this.dbService.actorDB.upsertActor({
       id: actor.id,
       roleId: actor.roleId,
     });
-    await this.userOwnActorDB.addActorToUser({
+    await this.dbService.userOwnActorDB.addActorToUser({
       userId: user.id,
       actorId: actor.id,
     });
-    if (!existingUser || !(await this.roleDB.getRole(actor.roleId))) {
-      await this.roleDB.upsertRole({
+    if (!existingUser || !(await this.dbService.roleDB.getRole(actor.roleId))) {
+      await this.dbService.roleDB.upsertRole({
         id: actor.roleId,
         name: "苍星怜",
         prompt: [
@@ -344,19 +162,23 @@ export class Server {
         ].join("\n"),
       });
     }
-    await this.externalIdentityBindingDB.upsertExternalIdentityBinding({
-      userId: user.id,
-      channel: "web",
-      uid: String(user.id),
-    });
-    if (qqUid) {
-      await this.externalIdentityBindingDB.upsertExternalIdentityBinding({
+    await this.dbService.externalIdentityBindingDB.upsertExternalIdentityBinding(
+      {
         userId: user.id,
-        channel: "qq",
-        uid: qqUid,
-      });
+        channel: "web",
+        uid: String(user.id),
+      },
+    );
+    if (qqUid) {
+      await this.dbService.externalIdentityBindingDB.upsertExternalIdentityBinding(
+        {
+          userId: user.id,
+          channel: "qq",
+          uid: qqUid,
+        },
+      );
     }
-    const conversation = await this.createConversation(
+    const conversation = await this.dbService.createConversation(
       actor.id,
       buildSession("web", "chat", String(user.id)),
       "Default",
@@ -364,7 +186,7 @@ export class Server {
       false,
     );
     if (qqUid) {
-      await this.createConversation(
+      await this.dbService.createConversation(
         actor.id,
         buildSession("qq", "chat", qqUid),
         "QQ Private Chat With Owner",
@@ -374,7 +196,7 @@ export class Server {
       console.log(`Created QQ private chat ${qqUid} for user ${user.id}`);
     }
     if (qqGroupId) {
-      await this.createConversation(
+      await this.dbService.createConversation(
         actor.id,
         buildSession("qq", "group", qqGroupId),
         "QQ Group Chat",
@@ -388,26 +210,6 @@ export class Server {
         "Default conversation ID is missing after initial character setup.",
       );
     }
-  }
-
-  /**
-   * Gets the default user profile used by the temporary web login route.
-   * @returns Default user info, or null when missing.
-   */
-  async getDefaultUser(): Promise<{
-    id: number;
-    name: string;
-    email: string;
-  } | null> {
-    const user = await this.userDB.getUser(DEFAULT_WEB_USER_ID);
-    if (!user || typeof user.id !== "number") {
-      return null;
-    }
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-    };
   }
 
   async train(): Promise<ActorTrainingResult> {
@@ -458,7 +260,7 @@ export class Server {
       let inFlight = this.actorInFlight.get(actorId);
       if (!inFlight) {
         inFlight = (async () => {
-          const actorEntity = await this.actorDB.getActor(actorId);
+          const actorEntity = await this.dbService.actorDB.getActor(actorId);
           if (!actorEntity) {
             throw new Error(`Actor ${actorId} not found.`);
           }
@@ -475,67 +277,5 @@ export class Server {
       }
     }
     return actor;
-  }
-
-  async getConversationBySession(actorId: number, session: string) {
-    return await this.conversationDB.getConversationByActorAndSession(
-      actorId,
-      session,
-    );
-  }
-
-  async createConversation(
-    actorId: number,
-    session: string,
-    name: string = "default",
-    description: string = "None.",
-    allowProactive: boolean = false,
-  ) {
-    const existing = await this.getConversationBySession(actorId, session);
-    if (
-      existing &&
-      existing.name === name &&
-      existing.description === description &&
-      (existing.allowProactive ?? false) === allowProactive
-    ) {
-      return existing;
-    }
-    const id = await this.conversationDB.upsertConversation({
-      ...(existing?.id ? { id: existing.id } : {}),
-      actorId,
-      session,
-      name,
-      description,
-      allowProactive,
-    });
-    const created = await this.conversationDB.getConversation(id);
-    if (!created) {
-      throw new Error(`Conversation with ID ${id} not found after creation.`);
-    }
-    return created;
-  }
-
-  /**
-   * Resolves the display name for a user.
-   * @param userId - The user ID to resolve.
-   * @returns The display name.
-   */
-  async getUserDisplayName(userId: number): Promise<string> {
-    const user = await this.userDB.getUser(userId);
-    return user?.name ?? `User ${userId}`;
-  }
-
-  /**
-   * Resolves the display name for an actor.
-   * @param actorId - The actor ID to resolve.
-   * @returns The display name.
-   */
-  async getActorDisplayName(actorId: number): Promise<string> {
-    const actor = await this.actorDB.getActor(actorId);
-    if (!actor) {
-      return `Actor ${actorId}`;
-    }
-    const role = await this.roleDB.getRole(actor.roleId);
-    return role?.name ?? `Actor ${actorId}`;
   }
 }

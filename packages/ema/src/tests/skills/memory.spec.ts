@@ -1,21 +1,10 @@
-import { expect, test, describe, beforeEach, afterEach } from "vitest";
-import {
-  createMongo,
-  MongoActorDB,
-  MongoConversationDB,
-  MongoConversationMessageDB,
-  MongoShortTermMemoryDB,
-  MongoLongTermMemoryDB,
-  MongoRoleDB,
-  MongoPersonalityDB,
-  MongoUserDB,
-  MongoUserOwnActorDB,
-  MongoExternalIdentityBindingDB,
-  LanceMemoryVectorSearcher,
-} from "../../db";
+import { expect, test, describe, beforeEach, afterEach, vi } from "vitest";
+import { createMongo, DBService } from "../../db";
 import type { Mongo } from "../../db";
 import { Config } from "../../config";
 import { MemoryManager } from "../../memory/manager";
+import type { Server } from "../../server";
+import { MemFs } from "../../fs";
 import * as lancedb from "@lancedb/lancedb";
 
 const describeLLM = describe.runIf(
@@ -42,6 +31,7 @@ describeLLM("MemorySkill", () => {
 
   let mongo: Mongo;
   let memoryManager: MemoryManager;
+  let dbService: DBService;
   let lance: lancedb.Connection;
 
   beforeEach(async () => {
@@ -50,22 +40,10 @@ describeLLM("MemorySkill", () => {
     lance = await lancedb.connect("memory://ema");
     await mongo.connect();
 
-    const searcher = new LanceMemoryVectorSearcher(mongo, lance);
-    memoryManager = new MemoryManager(
-      new MongoRoleDB(mongo),
-      new MongoPersonalityDB(mongo),
-      new MongoActorDB(mongo),
-      new MongoUserDB(mongo),
-      new MongoUserOwnActorDB(mongo),
-      new MongoExternalIdentityBindingDB(mongo),
-      new MongoConversationDB(mongo),
-      new MongoConversationMessageDB(mongo),
-      new MongoShortTermMemoryDB(mongo),
-      new MongoLongTermMemoryDB(mongo),
-      searcher,
-    );
+    dbService = DBService.createSync(new MemFs(), Config.load(), mongo, lance);
+    memoryManager = new MemoryManager({ dbService } as Server);
 
-    await searcher.createIndices();
+    await dbService.longTermMemoryVectorSearcher.createIndices();
   });
 
   afterEach(async () => {

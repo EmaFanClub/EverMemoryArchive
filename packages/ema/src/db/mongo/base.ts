@@ -144,7 +144,7 @@ export async function createMongo(
 
   const impl: MongoProvider =
     kind === "memory"
-      ? (await import("./mongo/memory")).MemoryMongo
-      : (await import("./mongo/remote")).RemoteMongo;
+      ? (await import("./memory")).MemoryMongo
+      : (await import("./remote")).RemoteMongo;
   return new impl({ uri, dbName });
 }

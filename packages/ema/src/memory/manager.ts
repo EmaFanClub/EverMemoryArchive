@@ -9,18 +9,7 @@ import type {
   ShortTermMemoryRecord,
 } from "./base";
 import type {
-  ActorDB,
-  ConversationDB,
   ConversationMessageEntity,
-  ConversationMessageDB,
-  ExternalIdentityBindingDB,
-  LongTermMemoryDB,
-  LongTermMemorySearcher,
-  PersonalityDB,
-  RoleDB,
-  ShortTermMemoryDB,
-  UserDB,
-  UserOwnActorDB,
   ListShortTermMemoriesRequest,
 } from "../db";
 import { Logger } from "../logger";
@@ -65,43 +54,21 @@ export class MemoryManager implements BufferStorage, ActorMemory {
 
   /**
    * Creates a new MemoryManager instance.
-   * @param roleDB - Role persistence interface.
-   * @param personalityDB - Personality persistence interface.
-   * @param actorDB - Actor persistence interface.
-   * @param userDB - User persistence interface.
-   * @param userOwnActorDB - User-actor relation persistence interface.
-   * @param externalIdentityBindingDB - External identity binding persistence interface.
-   * @param conversationDB - Conversation persistence interface.
-   * @param conversationMessageDB - Conversation message persistence interface.
-   * @param shortTermMemoryDB - Short-term memory persistence interface.
-   * @param longTermMemoryDB - Long-term memory persistence interface.
-   * @param longTermMemorySearcher - Long-term memory search interface.
-   * @param server - Optional server runtime used for direct conversation-activity execution.
+   * @param server - Server runtime used for database access and background coordination.
    */
-  constructor(
-    private readonly roleDB: RoleDB,
-    private readonly personalityDB: PersonalityDB,
-    private readonly actorDB: ActorDB,
-    private readonly userDB: UserDB,
-    private readonly userOwnActorDB: UserOwnActorDB,
-    private readonly externalIdentityBindingDB: ExternalIdentityBindingDB,
-    private readonly conversationDB: ConversationDB,
-    private readonly conversationMessageDB: ConversationMessageDB,
-    private readonly shortTermMemoryDB: ShortTermMemoryDB,
-    private readonly longTermMemoryDB: LongTermMemoryDB,
-    private readonly longTermMemorySearcher: LongTermMemorySearcher,
-    private readonly server?: Server,
-  ) {}
+  constructor(private readonly server: Server) {}
 
   private async getBasePromptValues(actorId: number): Promise<{
     rolePrompt: string;
     personalityMemory: string;
   }> {
     const [actor, personality] = await Promise.all([
-      this.actorDB.getActor(actorId),
-      this.personalityDB.getPersonality(actorId),
+      this.server.dbService.actorDB.getActor(actorId),
+      this.server.dbService.personalityDB.getPersonality(actorId),
     ]);
-    const role = actor?.roleId ? await this.roleDB.getRole(actor.roleId) : null;
+    const role = actor?.roleId
+      ? await this.server.dbService.roleDB.getRole(actor.roleId)
+      : null;
     return {
       rolePrompt: role?.prompt ?? "None.",
       personalityMemory: personality?.memory ?? "None.",
@@ -130,7 +97,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       activityMemory,
       buffer,
     ] = await Promise.all([
-      this.conversationDB.getConversation(conversationId),
+      this.server.dbService.conversationDB.getConversation(conversationId),
       this.buildYearMemoryPrompt(actorId),
       this.buildMonthMemoryPrompt(actorId),
       this.buildDayMemoryPrompt(actorId),
@@ -221,7 +188,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   }
 
   private async buildSchedulePrompt(actorId: number): Promise<string> {
-    if (!this.server || !this.server.scheduler) {
+    if (!this.server.scheduler) {
       return stringifyModelScheduleList({
         overdue: [],
         upcoming: [],
@@ -236,7 +203,9 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     conversationId: number,
   ): Promise<number> {
     const conversation =
-      await this.conversationDB.getConversation(conversationId);
+      await this.server.dbService.conversationDB.getConversation(
+        conversationId,
+      );
     if (!conversation) {
       throw new Error(`Conversation with ID ${conversationId} not found.`);
     }
@@ -515,7 +484,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     msgIds: number[],
     processedAt: number,
   ): Promise<number> {
-    return await this.conversationMessageDB.markConversationMessagesActivityProcessed(
+    return await this.server.dbService.conversationMessageDB.markConversationMessagesActivityProcessed(
       conversationId,
       msgIds,
       processedAt,
@@ -527,13 +496,16 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     triggeredAt: number,
     count: number,
   ): Promise<ConversationMessageEntity[]> {
-    const messages = await this.conversationMessageDB.listConversationMessages({
-      conversationId,
-      limit: count,
-      buffered: true,
-      createdBefore: triggeredAt,
-      sort: "desc",
-    });
+    const messages =
+      await this.server.dbService.conversationMessageDB.listConversationMessages(
+        {
+          conversationId,
+          limit: count,
+          buffered: true,
+          createdBefore: triggeredAt,
+          sort: "desc",
+        },
+      );
     return [...messages].reverse();
   }
 
@@ -542,7 +514,9 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     messages: ConversationMessageEntity[],
   ): Promise<BufferMessage[]> {
     const conversation =
-      await this.conversationDB.getConversation(conversationId);
+      await this.server.dbService.conversationDB.getConversation(
+        conversationId,
+      );
     if (!conversation) {
       throw new Error(`Conversation with ID ${conversationId} not found.`);
     }
@@ -630,7 +604,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
                 ],
           think: message.ema_reply.think,
         };
-    await this.conversationMessageDB.addConversationMessage({
+    await this.server.dbService.conversationMessageDB.addConversationMessage({
       conversationId,
       actorId,
       channelMessageId: isActorChatInput(message)
@@ -676,7 +650,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     triggeredAt?: number,
   ): Promise<void> {
     const updated =
-      await this.conversationMessageDB.markConversationMessagesBuffered(
+      await this.server.dbService.conversationMessageDB.markConversationMessagesBuffered(
         conversationId,
         [msgId],
       );
@@ -691,11 +665,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         effectiveTriggeredAt,
       )
     ).count;
-    if (
-      !triggerActivityTick ||
-      pendingCount < this.diaryUpdateEvery ||
-      !this.server
-    ) {
+    if (!triggerActivityTick || pendingCount < this.diaryUpdateEvery) {
       return;
     }
 
@@ -733,13 +703,16 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     index0?: string,
     index1?: string,
   ): Promise<LongTermMemoryRecord[]> {
-    const items = await this.longTermMemorySearcher.searchLongTermMemories({
-      actorId,
-      memory,
-      limit,
-      index0,
-      index1,
-    });
+    const items =
+      await this.server.dbService.longTermMemoryVectorSearcher.searchLongTermMemories(
+        {
+          actorId,
+          memory,
+          limit,
+          index0,
+          index1,
+        },
+      );
     return items.map((item) => {
       if (typeof item.id !== "number") {
         throw new Error("LongTermMemory record is missing id");
@@ -784,10 +757,11 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     actorId: number,
     req: Omit<ListShortTermMemoriesRequest, "actorId"> = {},
   ): Promise<ShortTermMemoryRecord[]> {
-    const items = await this.shortTermMemoryDB.listShortTermMemories({
-      actorId,
-      ...req,
-    });
+    const items =
+      await this.server.dbService.shortTermMemoryDB.listShortTermMemories({
+        actorId,
+        ...req,
+      });
     return items.map((item) => {
       if (typeof item.id !== "number") {
         throw new Error("ShortTermMemory record is missing id");
@@ -815,7 +789,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     item: ShortTermMemory,
   ): Promise<void> {
     const now = item.updatedAt ?? Date.now();
-    await this.shortTermMemoryDB.appendShortTermMemory({
+    await this.server.dbService.shortTermMemoryDB.appendShortTermMemory({
       actorId,
       kind: item.kind,
       date: item.date,
@@ -843,7 +817,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     });
     const now = item.updatedAt ?? Date.now();
     if (existing.length === 0) {
-      await this.shortTermMemoryDB.appendShortTermMemory({
+      await this.server.dbService.shortTermMemoryDB.appendShortTermMemory({
         actorId,
         kind: item.kind,
         date: item.date,
@@ -855,7 +829,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       });
       return;
     }
-    await this.shortTermMemoryDB.upsertShortTermMemory({
+    await this.server.dbService.shortTermMemoryDB.upsertShortTermMemory({
       id: existing[0].id,
       actorId,
       kind: item.kind,
@@ -888,7 +862,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     });
     await Promise.all(
       records.map((record) =>
-        this.shortTermMemoryDB.upsertShortTermMemory({
+        this.server.dbService.shortTermMemoryDB.upsertShortTermMemory({
           id: record.id,
           actorId,
           kind: record.kind,
@@ -996,7 +970,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     actorId: number,
     item: LongTermMemory,
   ): Promise<number> {
-    return await this.longTermMemoryDB.appendLongTermMemory({
+    return await this.server.dbService.longTermMemoryDB.appendLongTermMemory({
       actorId,
       ...item,
     });
@@ -1009,13 +983,13 @@ export class MemoryManager implements BufferStorage, ActorMemory {
    * @returns The updated role identifier.
    */
   async upsertRolePrompt(actorId: number, prompt: string): Promise<number> {
-    const actor = await this.actorDB.getActor(actorId);
+    const actor = await this.server.dbService.actorDB.getActor(actorId);
     if (!actor) {
       throw new Error(`Actor with ID ${actorId} not found.`);
     }
-    const role = await this.roleDB.getRole(actor.roleId);
+    const role = await this.server.dbService.roleDB.getRole(actor.roleId);
     const roleName = role?.name ?? `Role ${actor.roleId}`;
-    return this.roleDB.upsertRole({
+    return this.server.dbService.roleDB.upsertRole({
       id: actor.roleId,
       name: roleName,
       prompt,
@@ -1032,7 +1006,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     actorId: number,
     memory: string,
   ): Promise<number> {
-    return this.personalityDB.upsertPersonality({
+    return this.server.dbService.personalityDB.upsertPersonality({
       actorId,
       memory,
     });
@@ -1045,24 +1019,27 @@ export class MemoryManager implements BufferStorage, ActorMemory {
    * @returns Matching owner UID or null.
    */
   async getOwnerUid(actorId: number, channel: string): Promise<string | null> {
-    const userId = await this.userOwnActorDB.getActorOwner(actorId);
+    const userId =
+      await this.server.dbService.userOwnActorDB.getActorOwner(actorId);
     if (userId === null) {
       return null;
     }
     const bindings =
-      await this.externalIdentityBindingDB.listExternalIdentityBindings({
-        userId,
-        channel,
-      });
+      await this.server.dbService.externalIdentityBindingDB.listExternalIdentityBindings(
+        {
+          userId,
+          channel,
+        },
+      );
     return bindings[0]?.uid ?? null;
   }
 
   private async getActorDisplayName(actorId: number): Promise<string> {
-    const actor = await this.actorDB.getActor(actorId);
+    const actor = await this.server.dbService.actorDB.getActor(actorId);
     if (!actor) {
       return `Actor ${actorId}`;
     }
-    const role = await this.roleDB.getRole(actor.roleId);
+    const role = await this.server.dbService.roleDB.getRole(actor.roleId);
     return role?.name ?? `Actor ${actorId}`;
   }
 }

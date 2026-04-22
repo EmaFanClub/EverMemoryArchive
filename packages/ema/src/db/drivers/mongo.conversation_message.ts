@@ -2,14 +2,14 @@ import type {
   ConversationMessageDB,
   ConversationMessageEntity,
   ListConversationMessagesRequest,
-} from "./base";
-import type { Mongo } from "./mongo";
+} from "../base";
+import type { Mongo } from "../mongo";
 import {
   deleteEntity,
   getNextId,
   omitMongoId,
   upsertEntity,
-} from "./mongo.util";
+} from "../mongo/utils";
 
 /**
  * MongoDB-based implementation of ConversationMessageDB

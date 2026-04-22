@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { RemoteMongo } from "../../db/mongo/remote";
+import { RemoteMongo } from "../remote";
 
 describe("RemoteMongo getUri", () => {
   test("adds db name when uri has no database path", () => {
