@@ -10,7 +10,7 @@ export type {
   ConversationActorMessage,
 } from "./db";
 export * from "./server";
-export * from "./schema";
+export * from "./shared/schema";
 export * from "./config/index";
 export * from "./agent";
 export * from "./actor";

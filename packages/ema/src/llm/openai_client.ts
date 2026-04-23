@@ -16,8 +16,13 @@ import {
   isFunctionResponse,
   isInlineDataItem,
   isTextItem,
-} from "../schema";
-import type { Content, LLMResponse, Message, ModelMessage } from "../schema";
+} from "../shared/schema";
+import type {
+  Content,
+  LLMResponse,
+  Message,
+  ModelMessage,
+} from "../shared/schema";
 import type { Tool } from "../tools/base";
 import { wrapWithRetry } from "./retry";
 import {

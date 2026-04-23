@@ -6,8 +6,13 @@ import {
   isFunctionResponse,
   isInlineDataItem,
   isTextItem,
-} from "../schema";
-import type { Content, LLMResponse, Message, SchemaAdapter } from "../schema";
+} from "../shared/schema";
+import type {
+  Content,
+  LLMResponse,
+  Message,
+  SchemaAdapter,
+} from "../shared/schema";
 import type { Tool } from "../tools";
 import { wrapWithRetry } from "./retry";
 import { FetchWithProxy } from "./proxy";

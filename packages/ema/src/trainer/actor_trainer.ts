@@ -1,6 +1,6 @@
 import type { ActorChatInput } from "../actor";
-import type { Fs } from "../fs";
-import { RealFs } from "../fs";
+import type { Fs } from "../shared/fs";
+import { RealFs } from "../shared/fs";
 import type { BufferWriteMessage, ShortTermMemory } from "../memory/base";
 import {
   EMA_CONVERSATION_ACTIVITY_PROMPT,
@@ -8,14 +8,14 @@ import {
 } from "../memory/prompts";
 import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
-import { formatTimestamp, parseTimestamp } from "../utils";
+import { formatTimestamp, parseTimestamp } from "../shared/utils";
 import type {
   ActorTrainingRequest,
   ActorTrainingResult,
   ActorTrainingMessage,
 } from "./base";
 import type { EmaReply } from "../tools/ema_reply_tool";
-import { collapseContents, type TextItem } from "../schema";
+import { collapseContents, type TextItem } from "../shared/schema";
 import {
   buildTrainingCheckpointSnapshot,
   resolveCheckpointRoot,

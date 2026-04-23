@@ -6,8 +6,8 @@ import {
   formatShortTermMemoryDate,
   getShortTermMemoryTaskData,
 } from "../../memory/utils";
-import { Logger } from "../../logger";
-import { formatTimestamp } from "../../utils";
+import { Logger } from "../../shared/logger";
+import { formatTimestamp } from "../../shared/utils";
 
 const SHORT_TERM_MEMORY_MAX_LENGTH = {
   activity: 100,

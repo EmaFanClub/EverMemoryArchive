@@ -4,8 +4,8 @@ import path from "node:path";
 
 import { DBService, createMongo, type Mongo } from "..";
 import { GlobalConfig } from "../../config/index";
-import { MemFs } from "../../fs";
-import { loadTestGlobalConfig } from "../../tests/helpers/config";
+import { MemFs } from "../../shared/fs";
+import { loadTestGlobalConfig } from "../../config/tests/helpers";
 
 describe("DBService", () => {
   let fs: MemFs;

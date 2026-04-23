@@ -1,4 +1,4 @@
-import { Logger } from "../logger";
+import { Logger } from "../shared/logger";
 import {
   EMA_MEMORY_ROLLUP_PROMPT,
   EMA_SLEEP_PROMPT,
@@ -6,7 +6,7 @@ import {
 } from "../memory/prompts";
 import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
-import { formatTimestamp } from "../utils";
+import { formatTimestamp } from "../shared/utils";
 import type { ChannelEvent } from "../channel";
 import type {
   ActorChatInput,

@@ -3,9 +3,9 @@ import { countApproxTextLength, Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
 import type { LongTermMemory } from "../../memory/base";
 import { getShortTermMemoryTaskData } from "../../memory/utils";
-import { Logger } from "../../logger";
+import { Logger } from "../../shared/logger";
 import { Index0Enum, Index1Enum } from "../../memory/utils";
-import { formatTimestamp } from "../../utils";
+import { formatTimestamp } from "../../shared/utils";
 
 const LONG_TERM_MEMORY_MAX_LENGTH = 100;
 

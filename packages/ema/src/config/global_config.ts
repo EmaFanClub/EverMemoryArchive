@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 
-import type { Fs } from "../fs";
-import { RealFs } from "../fs";
+import type { Fs } from "../shared/fs";
+import { RealFs } from "../shared/fs";
 import {
   cloneConfig,
   DEFAULT_AGENT_CONFIG,

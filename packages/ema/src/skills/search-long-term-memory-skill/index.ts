@@ -2,8 +2,8 @@ import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolResult, ToolContext } from "../../tools/base";
 import { Index0Enum, Index1Enum } from "../../memory/utils";
-import { formatTimestamp } from "../../utils";
-import { Logger } from "../../logger";
+import { formatTimestamp } from "../../shared/utils";
+import { Logger } from "../../shared/logger";
 
 export const SearchLongTermMemoryQuerySchema = z
   .object({

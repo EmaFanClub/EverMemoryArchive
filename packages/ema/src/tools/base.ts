@@ -1,4 +1,4 @@
-import type { InlineDataItem } from "../schema";
+import type { InlineDataItem } from "../shared/schema";
 import type { Server } from "../server";
 
 /** Tool execution result. */

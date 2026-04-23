@@ -4,13 +4,13 @@ import { afterEach, expect, test, describe } from "vitest";
 import * as lancedb from "@lancedb/lancedb";
 
 import { Server } from "./server";
-import { MemFs } from "./fs";
+import { MemFs } from "./shared/fs";
 import { createMongo, DBService, type Mongo } from "./db";
 import { AgendaScheduler } from "./scheduler";
 import { MemoryManager } from "./memory/manager";
 import { Gateway } from "./gateway";
 import { ActorRegistry } from "./actor";
-import { loadTestGlobalConfig } from "./tests/helpers/config";
+import { loadTestGlobalConfig } from "./config/tests/helpers";
 import { GlobalConfig } from "./config/index";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

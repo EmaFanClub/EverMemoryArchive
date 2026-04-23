@@ -1,5 +1,5 @@
-import { collapseContents, type UserMessage } from "../schema";
-import { formatTimestamp } from "../utils";
+import { collapseContents, type UserMessage } from "../shared/schema";
+import { formatTimestamp } from "../shared/utils";
 import { formatReplyRef } from "../channel";
 import type { ActorInput } from "./base";
 

@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { InputContent } from "../schema";
+import type { InputContent } from "../shared/schema";
 import type { MessageReplyRef, SpeakerInformation } from "../channel";
 import type { EmaReply } from "../tools/ema_reply_tool";
 

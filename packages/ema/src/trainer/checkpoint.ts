@@ -1,6 +1,6 @@
 import * as path from "node:path";
 
-import type { Fs } from "../fs";
+import type { Fs } from "../shared/fs";
 import type { Server } from "../server";
 import type {
   ActorTrainingCheckpoint,

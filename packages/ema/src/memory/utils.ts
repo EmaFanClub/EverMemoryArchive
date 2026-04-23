@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { collapseContents, type TextItem } from "../schema";
-import { formatTimestamp } from "../utils";
+import { collapseContents, type TextItem } from "../shared/schema";
+import { formatTimestamp } from "../shared/utils";
 import { formatReplyRef } from "../channel";
 import {
   type BufferMessage,

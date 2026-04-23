@@ -1,4 +1,4 @@
-import type { InputContent } from "../schema";
+import type { InputContent } from "../shared/schema";
 import type { MessageReplyRef } from "../channel";
 import type {
   ChannelConfig,

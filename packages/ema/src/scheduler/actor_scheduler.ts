@@ -4,7 +4,7 @@ import type {
 } from "./jobs/actor.job";
 import type { Job, JobEverySpec, JobId, JobSpec, Scheduler } from "./base";
 import cronParser from "cron-parser";
-import { formatTimestamp, parseTimestamp } from "../utils";
+import { formatTimestamp, parseTimestamp } from "../shared/utils";
 
 const RUN_AT_FORMAT = "YYYY-MM-DD HH:mm:ss";
 const SCHEDULE_TASKS = new Set<ActorScheduleTask>([

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { countApproxTextLength, Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
-import { Logger } from "../../logger";
+import { Logger } from "../../shared/logger";
 
 const PERSONALITY_MAX_LENGTH = 300;
 

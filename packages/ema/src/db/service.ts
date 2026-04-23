@@ -11,7 +11,7 @@ import {
   type LLMConfig,
   type WebSearchConfig,
 } from "../config/index";
-import type { Fs } from "../fs";
+import type { Fs } from "../shared/fs";
 import type {
   ActorDB,
   ConversationDB,

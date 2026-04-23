@@ -5,7 +5,7 @@ import type { ConversationMessageEntity } from "../../db/base";
 import { resolveSession } from "../../channel";
 import type { BufferMessage } from "../../memory/base";
 import { buildPromptFromBufferMessage } from "../../memory/utils";
-import { parseTimestamp } from "../../utils";
+import { parseTimestamp } from "../../shared/utils";
 
 const TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
 const DEFAULT_LIMIT = 50;

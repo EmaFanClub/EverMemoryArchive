@@ -2,10 +2,10 @@ import { describe, expect, test } from "vitest";
 import * as lancedb from "@lancedb/lancedb";
 
 import { ActorRegistry } from "../actor_registry";
-import { MemFs } from "../../fs";
+import { MemFs } from "../../shared/fs";
 import { Gateway } from "../../gateway";
 import { MemoryManager } from "../../memory/manager";
-import { loadTestGlobalConfig } from "../../tests/helpers/config";
+import { loadTestGlobalConfig } from "../../config/tests/helpers";
 import { createMongo, DBService, type Mongo } from "../../db";
 import { Server } from "../../server";
 

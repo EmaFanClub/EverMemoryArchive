@@ -1,7 +1,7 @@
 import { WebSocket } from "undici";
 
 import type { ActorChatResponse } from "../actor";
-import { Logger } from "../logger";
+import { Logger } from "../shared/logger";
 import type { Server } from "../server";
 import type {
   Channel,

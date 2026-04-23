@@ -7,7 +7,7 @@ import {
   type CreateScheduleInput,
   type UpdateScheduleInput,
 } from "../../scheduler/actor_scheduler";
-import { parseTimestamp } from "../../utils";
+import { parseTimestamp } from "../../shared/utils";
 
 const RUN_AT_FORMAT = "YYYY-MM-DD HH:mm:ss";
 const CronIntervalSchema = z

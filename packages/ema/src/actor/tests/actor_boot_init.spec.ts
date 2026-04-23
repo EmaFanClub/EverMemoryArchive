@@ -8,7 +8,7 @@ vi.mock("../../scheduler/jobs/actor.job", () => ({
   runActorBackgroundJob,
 }));
 
-vi.mock("../../logger", () => ({
+vi.mock("../../shared/logger", () => ({
   Logger: class Logger {
     static create() {
       return {

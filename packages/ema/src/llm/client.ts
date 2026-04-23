@@ -2,8 +2,8 @@ import type { LLMClientBase } from "./base";
 import type { LLMConfig } from "../config/index";
 import { GoogleClient } from "./google_client";
 import { OpenAIClient } from "./openai_client";
-import type { LLMResponse } from "../schema";
-import type { Message } from "../schema";
+import type { LLMResponse } from "../shared/schema";
+import type { Message } from "../shared/schema";
 import type { Tool } from "../tools/base";
 import { RetryConfig } from "./retry";
 

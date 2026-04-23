@@ -1,6 +1,6 @@
 import type { ActorChatInput, ActorChatResponse } from "../actor";
 import type { MessageReplyRef, SpeakerInformation } from "../channel";
-import type { InputContent } from "../schema";
+import type { InputContent } from "../shared/schema";
 
 export type BufferWriteMessage = ActorChatInput | ActorChatResponse;
 

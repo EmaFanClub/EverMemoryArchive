@@ -6,7 +6,7 @@ import {
   type MessageReplyRef,
   resolveSession,
 } from "../channel";
-import { Logger } from "../logger";
+import { Logger } from "../shared/logger";
 import type { Server } from "../server";
 import type { DispatchActorResponseResult } from "./base";
 

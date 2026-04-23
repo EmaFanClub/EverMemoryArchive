@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import path from "node:path";
 
-import { MemFs } from "../../fs";
+import { MemFs } from "../../shared/fs";
 import { GlobalConfig, GlobalConfigError } from "../global_config";
 
 async function loadExample(fs = new MemFs()): Promise<MemFs> {

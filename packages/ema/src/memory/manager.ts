@@ -12,7 +12,7 @@ import type {
   ConversationMessageEntity,
   ListShortTermMemoriesRequest,
 } from "../db";
-import { Logger } from "../logger";
+import { Logger } from "../shared/logger";
 import { EMA_CONVERSATION_ACTIVITY_PROMPT } from "./prompts";
 import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import { stringifyModelScheduleList } from "../scheduler/actor_scheduler";
@@ -22,8 +22,8 @@ import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
 import { buildPromptFromBufferMessage, isActorChatInput } from "./utils";
 import { parseReplyRef, resolveSession } from "../channel";
 import type { Server } from "../server";
-import type { InlineDataItem } from "../schema";
-import { formatTimestamp, parseTimestamp } from "../utils";
+import type { InlineDataItem } from "../shared/schema";
+import { formatTimestamp, parseTimestamp } from "../shared/utils";
 import { skillsPrompt } from "../skills";
 
 /**

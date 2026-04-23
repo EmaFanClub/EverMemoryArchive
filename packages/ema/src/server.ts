@@ -1,7 +1,7 @@
 import { GlobalConfig } from "./config/index";
 import { DBService } from "./db";
-import type { Fs } from "./fs";
-import { RealFs } from "./fs";
+import type { Fs } from "./shared/fs";
+import { RealFs } from "./shared/fs";
 import { ActorRegistry } from "./actor";
 import { ActorScheduler, AgendaScheduler } from "./scheduler";
 import { createJobHandlers } from "./scheduler/jobs";

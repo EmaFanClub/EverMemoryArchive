@@ -8,6 +8,7 @@
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "types": ["vitest/globals", "node"],
+    "rootDir": "./src",
     "outDir": "./dist"
   },
   "include": ["src/**/*"],

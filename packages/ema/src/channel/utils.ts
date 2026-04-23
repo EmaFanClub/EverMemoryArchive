@@ -4,7 +4,7 @@ import {
   IMAGE_MIME_TYPES,
   VIDEO_MIME_TYPES,
   type MIME,
-} from "../schema";
+} from "../shared/schema";
 import type {
   ChannelSessionInfo,
   ChannelSessionType,

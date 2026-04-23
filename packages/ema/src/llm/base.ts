@@ -4,7 +4,7 @@
  */
 
 import type { Tool } from "../tools/base";
-import type { Message, LLMResponse } from "../schema";
+import type { Message, LLMResponse } from "../shared/schema";
 
 /**
  * Abstract base class for LLM clients.

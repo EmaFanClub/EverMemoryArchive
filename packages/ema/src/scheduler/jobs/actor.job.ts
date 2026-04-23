@@ -1,7 +1,7 @@
 import { buildUserMessageFromActorInput } from "../../actor/utils";
 import { Agent, type AgentState } from "../../agent";
 import { LLMClient } from "../../llm";
-import { Logger } from "../../logger";
+import { Logger } from "../../shared/logger";
 import { GlobalConfig } from "../../config/index";
 import {
   EMA_MEMORY_ROLLUP_PROMPT,
@@ -13,7 +13,7 @@ import {
 import type { ShortTermMemoryRecord } from "../../memory/base";
 import type { Server } from "../../server";
 import { baseTools } from "../../tools";
-import { formatTimestamp } from "../../utils";
+import { formatTimestamp } from "../../shared/utils";
 import type { JobHandler } from "../base";
 
 const actorMemoryRollupQueue = new Map<number, Promise<unknown>>();
