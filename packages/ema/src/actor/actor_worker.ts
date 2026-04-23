@@ -1,10 +1,11 @@
 import { EventEmitter } from "node:events";
-import type { Config } from "../config";
+import { GlobalConfig } from "../config/index";
 import { Agent, AgentEventNames, checkCompleteMessages } from "../agent";
 import type { AgentEventName, AgentState } from "../agent";
 import type { Server } from "../server";
 import { Logger } from "../logger";
 import { LLMClient } from "../llm";
+import { baseTools } from "../tools";
 import { resolveSession } from "../channel";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
 import { stickerIdToBase64 } from "../skills/sticker-skill/utils";
@@ -36,20 +37,18 @@ export class ActorWorker {
   private processingQueue = false;
 
   private constructor(
-    private readonly config: Config,
     private readonly actorId: number,
     private readonly conversationId: number,
     private readonly session: string,
     private readonly ownerUid: string | null,
     private readonly server: Server,
+    llm: LLMClient,
   ) {
-    const llm = new LLMClient(this.config.llm);
-    this.agent = new Agent(config.agent, llm, this.logger);
+    this.agent = new Agent(GlobalConfig.agent, llm, this.logger);
     this.bindAgentEvent();
   }
 
   static async create(
-    config: Config,
     actorId: number,
     conversationId: number,
     server: Server,
@@ -67,13 +66,16 @@ export class ActorWorker {
       actorId,
       sessionInfo.channel,
     );
+    const llm = new LLMClient(
+      await server.dbService.getActorLLMConfig(actorId),
+    );
     return new ActorWorker(
-      config,
       actorId,
       conversationId,
       conversation.session,
       ownerUid,
       server,
+      llm,
     );
   }
 
@@ -250,7 +252,7 @@ export class ActorWorker {
             messages: batches.map((item) =>
               buildUserMessageFromActorInput(item, this.ownerUid ?? undefined),
             ),
-            tools: this.config.baseTools,
+            tools: baseTools,
             toolContext: {
               actorId: this.actorId,
               conversationId: this.conversationId,

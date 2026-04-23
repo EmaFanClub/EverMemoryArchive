@@ -2,6 +2,7 @@ import { buildUserMessageFromActorInput } from "../../actor/utils";
 import { Agent, type AgentState } from "../../agent";
 import { LLMClient } from "../../llm";
 import { Logger } from "../../logger";
+import { GlobalConfig } from "../../config/index";
 import {
   EMA_MEMORY_ROLLUP_PROMPT,
   EMA_SCHEDULED_ACTIVITY_PROMPT,
@@ -11,6 +12,7 @@ import {
 } from "../../memory/prompts";
 import type { ShortTermMemoryRecord } from "../../memory/base";
 import type { Server } from "../../server";
+import { baseTools } from "../../tools";
 import { formatTimestamp } from "../../utils";
 import type { JobHandler } from "../base";
 
@@ -272,7 +274,7 @@ async function runConversationRollupTaskOnce(
     job.actorId,
     job.triggeredAt,
   );
-  const agent = createBackgroundAgent(
+  const agent = await createBackgroundAgent(
     server,
     "ActorConversationRollupTask",
     job.actorId,
@@ -295,7 +297,7 @@ async function runConversationRollupTaskOnce(
         inputs: [{ type: "text", text: job.prompt }],
       }),
     ],
-    tools: server.config.baseTools,
+    tools: baseTools,
     toolContext: {
       actorId: job.actorId,
       conversationId: job.conversationId,
@@ -419,7 +421,7 @@ async function runActivityTask(
     job.actorId,
     job.triggeredAt,
   );
-  const agent = createBackgroundAgent(
+  const agent = await createBackgroundAgent(
     server,
     "ActorActivityTask",
     job.actorId,
@@ -447,7 +449,7 @@ async function runActivityTask(
         ],
       }),
     ],
-    tools: server.config.baseTools,
+    tools: baseTools,
     toolContext: {
       actorId: job.actorId,
       server,
@@ -481,7 +483,7 @@ async function runWakeTask(server: Server, job: WakeTaskData): Promise<void> {
       job.actorId,
       job.triggeredAt,
     );
-    const agent = createBackgroundAgent(
+    const agent = await createBackgroundAgent(
       server,
       "ActorWakeTask",
       job.actorId,
@@ -501,7 +503,7 @@ async function runWakeTask(server: Server, job: WakeTaskData): Promise<void> {
           inputs: [{ type: "text", text: EMA_WAKE_PROMPT }],
         }),
       ],
-      tools: server.config.baseTools,
+      tools: baseTools,
       toolContext: {
         actorId: job.actorId,
         server,
@@ -544,7 +546,7 @@ async function runSleepTask(server: Server, job: SleepTaskData): Promise<void> {
       job.actorId,
       job.triggeredAt,
     );
-    const agent = createBackgroundAgent(
+    const agent = await createBackgroundAgent(
       server,
       "ActorSleepTask",
       job.actorId,
@@ -564,7 +566,7 @@ async function runSleepTask(server: Server, job: SleepTaskData): Promise<void> {
           inputs: [{ type: "text", text: EMA_SLEEP_PROMPT }],
         }),
       ],
-      tools: server.config.baseTools,
+      tools: baseTools,
       toolContext: {
         actorId: job.actorId,
         server,
@@ -652,7 +654,7 @@ async function runMemoryRollupTaskOnce(
     job.actorId,
     job.triggeredAt,
   );
-  const agent = createBackgroundAgent(
+  const agent = await createBackgroundAgent(
     server,
     "ActorMemoryRollupTask",
     job.actorId,
@@ -672,7 +674,7 @@ async function runMemoryRollupTaskOnce(
         inputs: [{ type: "text", text: job.prompt }],
       }),
     ],
-    tools: server.config.baseTools,
+    tools: baseTools,
     toolContext: {
       actorId: job.actorId,
       server,
@@ -751,16 +753,16 @@ function stripInternalSleepSource(
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
-function createBackgroundAgent(
+async function createBackgroundAgent(
   server: Server,
   name: string,
   actorId: number,
   triggeredAt: number,
-): Agent {
+): Promise<Agent> {
   const fileName = `${formatTimestamp("YYYY-MM-DD-HH-mm-ss", triggeredAt)}.log`;
   return new Agent(
-    server.config.agent,
-    new LLMClient(server.config.llm),
+    GlobalConfig.agent,
+    new LLMClient(await server.dbService.getActorLLMConfig(actorId)),
     Logger.create({
       name,
       level: "debug",

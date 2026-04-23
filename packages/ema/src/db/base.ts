@@ -1,5 +1,10 @@
 import type { InputContent } from "../schema";
 import type { MessageReplyRef } from "../channel";
+import type {
+  ChannelConfig,
+  LLMConfig,
+  WebSearchConfig,
+} from "../config/index";
 
 /**
  * Represents an entity in the database
@@ -146,6 +151,19 @@ export interface ActorEntity extends Entity {
    * Each actor has exactly one role
    */
   roleId: number;
+  /**
+   * Optional actor-specific LLM configuration. Falls back to global defaults
+   * when omitted.
+   */
+  llmConfig?: LLMConfig;
+  /**
+   * Optional actor-specific web search configuration.
+   */
+  webSearchConfig?: WebSearchConfig;
+  /**
+   * Optional actor-specific channel configuration.
+   */
+  channelConfig?: ChannelConfig;
   /**
    * The date and time the actor was last updated
    */

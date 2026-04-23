@@ -126,16 +126,22 @@ export class ChannelRegistry {
     }
 
     if (channelName === "qq") {
-      const napcatAccessToken = process.env.EMA_QQ_TOKEN?.trim() || null;
-      const qqWsUrl =
-        process.env.EMA_QQ_WS_URL?.trim() || "ws://127.0.0.1:3001";
+      const config = await this.server.dbService.getActorChannelConfig(actorId);
+      if (!config.qq.enabled) {
+        return null;
+      }
+      if (!config.qq.wsUrl.trim() || !config.qq.accessToken.trim()) {
+        throw new Error(
+          `QQ channel config for actor ${actorId} is incomplete.`,
+        );
+      }
       return await WebsocketChannelClient.create(
         channelName,
         actorId,
-        qqWsUrl,
+        config.qq.wsUrl,
         this.server,
         adapterFactory,
-        napcatAccessToken,
+        config.qq.accessToken,
       );
     }
 

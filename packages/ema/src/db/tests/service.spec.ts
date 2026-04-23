@@ -1,30 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import * as lancedb from "@lancedb/lancedb";
+import path from "node:path";
 
 import { DBService, createMongo, type Mongo } from "..";
+import { GlobalConfig } from "../../config/index";
 import { MemFs } from "../../fs";
-import {
-  Config,
-  LLMConfig,
-  OpenAIApiConfig,
-  GoogleApiConfig,
-  AgentConfig,
-  ToolsConfig,
-  MongoConfig,
-  SystemConfig,
-} from "../../config";
-
-const createTestConfig = () =>
-  new Config(
-    new LLMConfig(
-      new OpenAIApiConfig("test-openai-key", "https://example.com/openai/v1/"),
-      new GoogleApiConfig("test-google-key", "https://example.com/google/v1/"),
-    ),
-    new AgentConfig(),
-    new ToolsConfig(),
-    new MongoConfig(),
-    new SystemConfig(),
-  );
+import { loadTestGlobalConfig } from "../../tests/helpers/config";
 
 describe("DBService", () => {
   let fs: MemFs;
@@ -33,11 +14,11 @@ describe("DBService", () => {
   let dbService: DBService;
 
   beforeEach(async () => {
-    fs = new MemFs();
+    fs = await loadTestGlobalConfig();
     mongo = await createMongo("", "db_service_test", "memory");
     await mongo.connect();
     lance = await lancedb.connect("memory://ema-db-service");
-    dbService = DBService.createSync(fs, createTestConfig(), mongo, lance);
+    dbService = DBService.createSync(fs, mongo, lance);
   });
 
   afterEach(async () => {
@@ -83,7 +64,11 @@ describe("DBService", () => {
 
     const result = await dbService.snapshot("db-service-snapshot");
     expect(result.fileName).toBe(
-      ".data/mongo-snapshots/db-service-snapshot.json",
+      path.join(
+        GlobalConfig.system.dataRoot,
+        "mongo-snapshots",
+        "db-service-snapshot.json",
+      ),
     );
 
     await mongo.restoreFromSnapshot({ roles: [] });

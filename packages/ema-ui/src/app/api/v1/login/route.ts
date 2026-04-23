@@ -1,4 +1,4 @@
-import { getServer } from "../../shared-server";
+import { getServer } from "@/server";
 
 export async function GET() {
   const server = await getServer();

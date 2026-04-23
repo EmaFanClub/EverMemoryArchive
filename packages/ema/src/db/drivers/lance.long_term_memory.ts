@@ -16,8 +16,13 @@ import {
 } from "apache-arrow";
 
 import { FetchWithProxy } from "../../llm/proxy";
-import { GenAI } from "../../llm/google_client";
+import { GenAI, withGoogleApiVersion } from "../../llm/google_client";
 import { type GoogleGenAIOptions } from "@google/genai";
+import {
+  DEFAULT_GOOGLE_BASE_URL,
+  GlobalConfig,
+  type EmbeddingConfig,
+} from "../../config/index";
 
 /**
  * The text input used to compute an embedding.
@@ -57,7 +62,7 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
   constructor(
     mongo: Mongo,
     private readonly lancedb: lancedb.Connection,
-    private readonly embeddingEngine: LongTermMemoryEmbeddingEngine = new LongTermMemoryGeminiEmbeddingEngine(),
+    private embeddingEngine?: LongTermMemoryEmbeddingEngine,
   ) {
     super(mongo);
   }
@@ -70,7 +75,7 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
     if (!req.memory) {
       throw new Error("memory must be provided");
     }
-    const embedding = await this.embeddingEngine.createEmbedding(
+    const embedding = await this.getEmbeddingEngine().createEmbedding(
       this.$dim,
       req.memory,
     );
@@ -118,7 +123,7 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
       throw new Error("actorId must be provided");
     }
 
-    const embedding = await this.embeddingEngine.createEmbedding(
+    const embedding = await this.getEmbeddingEngine().createEmbedding(
       this.$dim,
       entity.memory,
     );
@@ -168,6 +173,13 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
       );
     }
   }
+
+  private getEmbeddingEngine(): LongTermMemoryEmbeddingEngine {
+    this.embeddingEngine ??= new LongTermMemoryGeminiEmbeddingEngine(
+      GlobalConfig.defaultEmbedding,
+    );
+    return this.embeddingEngine;
+  }
 }
 
 /**
@@ -175,31 +187,41 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
  */
 class LongTermMemoryGeminiEmbeddingEngine implements LongTermMemoryEmbeddingEngine {
   private readonly ai: GoogleGenAI;
+  private readonly model: string;
 
-  constructor() {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not set");
+  constructor(config: EmbeddingConfig) {
+    if (config.provider !== "google") {
+      throw new Error("Only Google embedding is supported.");
+    }
+    if (!config.google.useVertexAi && !config.google.apiKey) {
+      throw new Error("Google embedding API key is required.");
     }
 
+    this.model = config.google.model;
     const vertexAIOptions = {
+      apiVersion: "v1",
       vertexai: true,
-      project: process.env.GOOGLE_CLOUD_PROJECT,
-      location: process.env.GOOGLE_CLOUD_LOCATION,
+      project: config.google.project,
+      location: config.google.location,
     };
-    const googleAIOptions = {
-      apiKey: apiKey,
+    const googleAIOptions: GoogleGenAIOptions = {
+      apiVersion: "v1",
+      apiKey: config.google.apiKey,
     };
-    const options: GoogleGenAIOptions =
-      process.env.GOOGLE_GENAI_USE_VERTEXAI === "True"
-        ? vertexAIOptions
-        : googleAIOptions;
-    console.log("GoogleClient options:", options);
+    if (
+      config.google.baseUrl &&
+      config.google.baseUrl !== DEFAULT_GOOGLE_BASE_URL
+    ) {
+      googleAIOptions.httpOptions = {
+        baseUrl: withGoogleApiVersion(config.google.baseUrl, "v1"),
+      };
+    }
+    const options: GoogleGenAIOptions = config.google.useVertexAi
+      ? vertexAIOptions
+      : googleAIOptions;
     this.ai = new GenAI(
       options,
-      new FetchWithProxy(
-        process.env.HTTPS_PROXY || process.env.https_proxy,
-      ).createFetcher(),
+      new FetchWithProxy(GlobalConfig.system.httpsProxy).createFetcher(),
     );
   }
   /**
@@ -217,7 +239,7 @@ class LongTermMemoryGeminiEmbeddingEngine implements LongTermMemoryEmbeddingEngi
       return undefined;
     }
     const response = await this.ai.models.embedContent({
-      model: "gemini-embedding-001",
+      model: this.model,
       contents: [embeddingContent],
       config: {
         // todo: find the best task type.

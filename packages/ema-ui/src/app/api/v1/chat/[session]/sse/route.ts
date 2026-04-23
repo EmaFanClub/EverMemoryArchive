@@ -1,5 +1,5 @@
 import { buildSession, resolveSession } from "ema";
-import { getServer } from "../../../../shared-server";
+import { getServer } from "@/server";
 
 const DEFAULT_ACTOR_ID = 1;
 

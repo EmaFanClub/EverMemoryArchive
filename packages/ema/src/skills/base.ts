@@ -139,7 +139,7 @@ export async function loadSkills(
   }
   skillsRel = skillsRel.split(path.sep).join("/");
 
-  console.log(`Loading skills from: ${skillsRel} relative to ${baseDir}`);
+  // console.log(`Loading skills from: ${skillsRel} relative to ${baseDir}`);
 
   const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
   const skillNames = entries

@@ -6,28 +6,6 @@ import type { Server } from "../../server";
 import { MemFs } from "../../fs";
 import { createMongo, type Mongo } from "../../db";
 import { parseTimestamp } from "../../utils";
-import {
-  Config,
-  LLMConfig,
-  OpenAIApiConfig,
-  GoogleApiConfig,
-  AgentConfig,
-  ToolsConfig,
-  MongoConfig,
-  SystemConfig,
-} from "../../config";
-
-const createTestConfig = () =>
-  new Config(
-    new LLMConfig(
-      new OpenAIApiConfig("test-openai-key", "https://example.com/openai/v1/"),
-      new GoogleApiConfig("test-google-key", "https://example.com/google/v1/"),
-    ),
-    new AgentConfig(),
-    new ToolsConfig(),
-    new MongoConfig(),
-    new SystemConfig(),
-  );
 
 describe("ActorTrainer", () => {
   let mongo: Mongo;

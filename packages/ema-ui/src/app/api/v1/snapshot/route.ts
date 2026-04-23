@@ -1,4 +1,4 @@
-import { getServer } from "../../shared-server";
+import { getServer } from "@/server";
 
 export async function POST(request: Request) {
   const server = await getServer();

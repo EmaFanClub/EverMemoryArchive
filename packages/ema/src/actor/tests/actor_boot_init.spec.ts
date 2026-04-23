@@ -49,7 +49,7 @@ function createActor(
       }),
     }),
   };
-  return new (Actor as any)({}, 1, server);
+  return new (Actor as any)(1, server);
 }
 
 describe("Actor boot init", () => {

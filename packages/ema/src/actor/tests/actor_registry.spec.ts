@@ -5,39 +5,19 @@ import { ActorRegistry } from "../actor_registry";
 import { MemFs } from "../../fs";
 import { Gateway } from "../../gateway";
 import { MemoryManager } from "../../memory/manager";
-import {
-  Config,
-  LLMConfig,
-  OpenAIApiConfig,
-  GoogleApiConfig,
-  AgentConfig,
-  ToolsConfig,
-  MongoConfig,
-  SystemConfig,
-} from "../../config";
+import { loadTestGlobalConfig } from "../../tests/helpers/config";
 import { createMongo, DBService, type Mongo } from "../../db";
 import { Server } from "../../server";
-
-const createTestConfig = () =>
-  new Config(
-    new LLMConfig(
-      new OpenAIApiConfig("test-openai-key", "https://example.com/openai/v1/"),
-      new GoogleApiConfig("test-google-key", "https://example.com/google/v1/"),
-    ),
-    new AgentConfig(),
-    new ToolsConfig(),
-    new MongoConfig(),
-    new SystemConfig(),
-  );
 
 const createServerForTest = async (
   fs: MemFs,
   mongo: Mongo,
   lance: lancedb.Connection,
 ) => {
-  const config = createTestConfig();
-  const server = new (Server as any)(config) as Server;
-  server.dbService = DBService.createSync(fs, config, mongo, lance);
+  await loadTestGlobalConfig(fs);
+  const server = new (Server as any)() as Server;
+  (server as any).fs = fs;
+  server.dbService = DBService.createSync(fs, mongo, lance);
   server.actorRegistry = new ActorRegistry(server);
   server.gateway = new Gateway(server);
   server.memoryManager = new MemoryManager(server);

@@ -20,7 +20,11 @@ import {
 import type { Content, LLMResponse, Message, ModelMessage } from "../schema";
 import type { Tool } from "../tools/base";
 import { wrapWithRetry } from "./retry";
-import type { LLMApiConfig, RetryConfig } from "../config";
+import {
+  GlobalConfig,
+  type OpenAILLMConfig,
+  type RetryConfig,
+} from "../config/index";
 import { FetchWithProxy } from "./proxy";
 
 type OpenAIMessage =
@@ -33,17 +37,17 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
   private readonly client: OpenAI;
 
   constructor(
-    readonly model: string,
-    readonly config: LLMApiConfig,
+    readonly config: OpenAILLMConfig,
     readonly retryConfig: RetryConfig,
   ) {
     super();
+    if (config.mode !== "responses") {
+      throw new Error("OpenAI chat mode is not supported yet.");
+    }
     const options: ClientOptions = {
-      apiKey: config.key,
-      baseURL: config.base_url,
-      fetch: new FetchWithProxy(
-        process.env.HTTPS_PROXY || process.env.https_proxy,
-      ).createFetcher(),
+      apiKey: config.apiKey,
+      baseURL: config.baseUrl,
+      fetch: new FetchWithProxy(GlobalConfig.system.httpsProxy).createFetcher(),
     };
     this.client = new OpenAI(options);
   }
@@ -258,7 +262,7 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
     console.log("API Request Messages:", JSON.stringify(apiMessages, null, 2));
     return this.client.responses.create(
       {
-        model: this.model,
+        model: this.config.model,
         input: apiMessages,
         tools: apiTools,
         instructions: systemPrompt,

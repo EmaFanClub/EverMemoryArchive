@@ -1,6 +1,10 @@
 import { EventEmitter } from "node:events";
 import { type LLMClient } from "./llm";
-import { AgentConfig } from "./config";
+import {
+  DEFAULT_AGENT_MAX_STEPS,
+  DEFAULT_AGENT_TOKEN_LIMIT,
+  type AgentConfig,
+} from "./config/index";
 import { Logger } from "./logger";
 import { RetryExhaustedError, isAbortError } from "./llm/retry";
 import type { LLMResponse, Message, Content, FunctionResponse } from "./schema";
@@ -189,7 +193,7 @@ export class Agent {
       this.llm,
       this.events,
       this.logger,
-      this.config.tokenLimit,
+      DEFAULT_AGENT_TOKEN_LIMIT,
     );
   }
 
@@ -237,7 +241,7 @@ export class Agent {
     console.log(this.contextManager.state.systemPrompt);
 
     const toolDict = new Map(this.contextManager.tools.map((t) => [t.name, t]));
-    const maxSteps = this.config.maxSteps;
+    const maxSteps = DEFAULT_AGENT_MAX_STEPS;
     let step = 0;
 
     this.logger.debug(

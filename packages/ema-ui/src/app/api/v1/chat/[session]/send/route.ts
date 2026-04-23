@@ -1,5 +1,5 @@
 import { buildSession, resolveSession, type ChannelChatEvent } from "ema";
-import { getServer } from "../../../../shared-server";
+import { getServer } from "@/server";
 
 interface ChatSendRequest {
   userId: number;

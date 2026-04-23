@@ -2,7 +2,15 @@ import * as lancedb from "@lancedb/lancedb";
 import * as path from "node:path";
 import { BSON } from "mongodb";
 
-import { Config } from "../config";
+import {
+  cloneConfig,
+  DEFAULT_CHANNEL_CONFIG,
+  DEFAULT_WEB_SEARCH_CONFIG,
+  GlobalConfig,
+  type ChannelConfig,
+  type LLMConfig,
+  type WebSearchConfig,
+} from "../config/index";
 import type { Fs } from "../fs";
 import type {
   ActorDB,
@@ -81,20 +89,17 @@ export class DBService {
   /**
    * Creates a DB service from config by connecting Mongo and LanceDB.
    */
-  static async create(fs: Fs, config: Config): Promise<DBService> {
+  static async create(fs: Fs): Promise<DBService> {
     const mongo = await createMongo(
-      config.mongo.uri,
-      config.mongo.db_name,
-      config.mongo.kind,
+      GlobalConfig.mongo.uri,
+      GlobalConfig.mongo.dbName,
+      GlobalConfig.mongo.kind,
     );
     await mongo.connect();
 
-    const databaseDir = path.join(
-      process.env.DATA_ROOT || config.system.data_root || ".data",
-      "lancedb",
-    );
+    const databaseDir = path.join(GlobalConfig.system.dataRoot, "lancedb");
     const lance = await lancedb.connect(databaseDir);
-    return DBService.createSync(fs, config, mongo, lance);
+    return DBService.createSync(fs, mongo, lance);
   }
 
   /**
@@ -102,16 +107,14 @@ export class DBService {
    */
   static createSync(
     fs: Fs,
-    config: Config,
     mongo: Mongo,
     lancedbConnection: lancedb.Connection,
   ): DBService {
-    return new DBService(fs, config, mongo, lancedbConnection);
+    return new DBService(fs, mongo, lancedbConnection);
   }
 
   private constructor(
     private readonly fs: Fs,
-    private readonly config: Config,
     readonly mongo: Mongo,
     readonly lancedb: lancedb.Connection,
   ) {
@@ -278,12 +281,55 @@ export class DBService {
     return role?.name ?? `Actor ${actorId}`;
   }
 
+  /**
+   * Gets the complete LLM config for one actor.
+   * @param actorId - Actor identifier.
+   * @returns Actor-specific LLM config, or the global default.
+   */
+  async getActorLLMConfig(actorId: number): Promise<LLMConfig> {
+    const actor = await this.actorDB.getActor(actorId);
+    if (!actor) {
+      throw new Error(`Actor ${actorId} not found.`);
+    }
+    return cloneConfig(actor.llmConfig ?? GlobalConfig.defaultLlm);
+  }
+
+  /**
+   * Gets the complete web search config for one actor.
+   * @param actorId - Actor identifier.
+   * @returns Actor-specific web search config, or the disabled default.
+   */
+  async getActorWebSearchConfig(actorId: number): Promise<WebSearchConfig> {
+    const actor = await this.actorDB.getActor(actorId);
+    if (!actor) {
+      throw new Error(`Actor ${actorId} not found.`);
+    }
+    return cloneConfig(actor.webSearchConfig ?? DEFAULT_WEB_SEARCH_CONFIG);
+  }
+
+  /**
+   * Gets the complete channel config for one actor.
+   * @param actorId - Actor identifier.
+   * @returns Actor-specific channel config, or the disabled default.
+   */
+  async getActorChannelConfig(actorId: number): Promise<ChannelConfig> {
+    const actor = await this.actorDB.getActor(actorId);
+    if (!actor) {
+      throw new Error(`Actor ${actorId} not found.`);
+    }
+    return cloneConfig(actor.channelConfig ?? DEFAULT_CHANNEL_CONFIG);
+  }
+
   private snapshotPath(name: string): string {
     if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
       throw new Error(
         `Invalid snapshot name: ${name}. Only letters, numbers, underscores, and hyphens are allowed.`,
       );
     }
-    return `${this.config.system.data_root}/mongo-snapshots/${name}.json`;
+    return path.join(
+      GlobalConfig.system.dataRoot,
+      "mongo-snapshots",
+      `${name}.json`,
+    );
   }
 }

@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { fileURLToPath } from "node:url";
 import pino, { type Logger as PinoLogger, type LoggerOptions } from "pino";
 import pinoPretty from "pino-pretty";
+
+import { GlobalConfig } from "../config/global_config";
 
 /** Runtime log levels exposed by the wrapper. */
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -121,11 +122,6 @@ function buildTransport(
   level: LoggerLevel,
   filePath?: string,
 ) {
-  const logsRoot = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "logs",
-  );
   const hasConsole = transports.includes("console");
   const hasFile = transports.includes("file");
   const hasDb = transports.includes("db");
@@ -135,6 +131,7 @@ function buildTransport(
   if (hasFile && !filePath) {
     throw new Error("filePath is required for file transport.");
   }
+  const logsRoot = hasFile ? GlobalConfig.system.logsDir : "";
   const resolvedFilePath =
     hasFile && filePath ? resolveLogFilePath(filePath, logsRoot) : undefined;
   // "full" means multiline output; other levels keep a single line.

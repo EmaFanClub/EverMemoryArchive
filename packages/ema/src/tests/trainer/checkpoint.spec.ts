@@ -4,30 +4,8 @@ import * as lancedb from "@lancedb/lancedb";
 import { buildTrainingCheckpointSnapshot } from "../../trainer/checkpoint";
 import { MemoryManager } from "../../memory/manager";
 import type { Server } from "../../server";
-import { MemFs } from "../../fs";
 import { createMongo, DBService, type Mongo } from "../../db";
-import {
-  Config,
-  LLMConfig,
-  OpenAIApiConfig,
-  GoogleApiConfig,
-  AgentConfig,
-  ToolsConfig,
-  MongoConfig,
-  SystemConfig,
-} from "../../config";
-
-const createTestConfig = () =>
-  new Config(
-    new LLMConfig(
-      new OpenAIApiConfig("test-openai-key", "https://example.com/openai/v1/"),
-      new GoogleApiConfig("test-google-key", "https://example.com/google/v1/"),
-    ),
-    new AgentConfig(),
-    new ToolsConfig(),
-    new MongoConfig(),
-    new SystemConfig(),
-  );
+import { loadTestGlobalConfig } from "../helpers/config";
 
 describe("buildTrainingCheckpointSnapshot", () => {
   let mongo: Mongo;
@@ -35,15 +13,11 @@ describe("buildTrainingCheckpointSnapshot", () => {
   let dbService: DBService;
 
   beforeEach(async () => {
+    const fs = await loadTestGlobalConfig();
     mongo = await createMongo("", "test", "memory");
     await mongo.connect();
     lance = await lancedb.connect("memory://ema-checkpoint");
-    dbService = DBService.createSync(
-      new MemFs(),
-      createTestConfig(),
-      mongo,
-      lance,
-    );
+    dbService = DBService.createSync(fs, mongo, lance);
   });
 
   afterEach(async () => {

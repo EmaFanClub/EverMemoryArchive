@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("../llm", () => ({
   LLMClient: class LLMClient {},
@@ -23,6 +23,7 @@ import {
   type ActorBackgroundJobData,
 } from "../scheduler/jobs/actor.job";
 import type { ShortTermMemoryRecord } from "../memory/base";
+import { loadTestGlobalConfig } from "./helpers/config";
 
 type BufferedMessageRecord = {
   msgId: number;
@@ -62,10 +63,8 @@ type FakeMemoryManager = {
 };
 
 type FakeServer = {
-  config: {
-    agent: Record<string, unknown>;
-    llm: Record<string, unknown>;
-    baseTools: [];
+  dbService: {
+    getActorLLMConfig: (actorId: number) => Promise<Record<string, unknown>>;
   };
   memoryManager: FakeMemoryManager;
 };
@@ -90,10 +89,10 @@ function createFakeServer(
       .slice(-30);
 
   return {
-    config: {
-      agent: {},
-      llm: {},
-      baseTools: [],
+    dbService: {
+      async getActorLLMConfig() {
+        return {};
+      },
     },
     memoryManager: {
       diaryUpdateEvery: 20,
@@ -213,6 +212,10 @@ function mockNowSequence(values: number[]) {
     return value;
   });
 }
+
+beforeEach(async () => {
+  await loadTestGlobalConfig();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();

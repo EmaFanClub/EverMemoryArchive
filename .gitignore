@@ -38,17 +38,17 @@ env/
 *.swo
 *~
 
-# Workspace
-workspace/
-*.log
+# Runtime directories
+/.data/
+/workspace/
+/logs/
 
 # OS
 .DS_Store
 Thumbs.db
 
 # Config (contains API keys)
-config.yaml
-.data
+config/**
 
 # test file
 demo.py

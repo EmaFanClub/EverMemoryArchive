@@ -1,18 +1,39 @@
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import { globSync } from "fs";
 
 /**
  * Generate the documentation for the core and HTTP endpoints.
  */
 function docsGen() {
-  execSync(
-    "typedoc --entryPoints packages/ema/src/index.ts --entryPoints packages/ema/src/config.ts --entryPoints packages/ema/src/db/index.ts --entryPoints packages/ema/src/skills/index.ts --tsconfig packages/ema/tsconfig.json --out docs/core",
+  execFileSync(
+    "typedoc",
+    [
+      "--entryPoints",
+      "packages/ema/src/index.ts",
+      "--entryPoints",
+      "packages/ema/src/config/index.ts",
+      "--entryPoints",
+      "packages/ema/src/db/index.ts",
+      "--entryPoints",
+      "packages/ema/src/skills/index.ts",
+      "--tsconfig",
+      "packages/ema/tsconfig.json",
+      "--out",
+      "docs/core",
+    ],
+    { stdio: "inherit" },
   );
-  const routes = globSync("packages/ema-ui/src/app/api/**/route.ts").map(
-    (it) => `--entryPoints ${it}`,
-  );
-  execSync(
-    `typedoc ${routes.join(" ")} --tsconfig packages/ema-ui/tsconfig.json --out docs/http`,
+  const routes = globSync("packages/ema-ui/src/app/api/**/route.ts");
+  execFileSync(
+    "typedoc",
+    [
+      ...routes.flatMap((it) => ["--entryPoints", it]),
+      "--tsconfig",
+      "packages/ema-ui/tsconfig.json",
+      "--out",
+      "docs/http",
+    ],
+    { stdio: "inherit" },
   );
 }
 

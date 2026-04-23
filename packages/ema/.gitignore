@@ -11,13 +11,7 @@
 # deps
 node_modules/
 
-# env
-.env
-.env.production
-
-# logs
-logs/
-*.log
+# debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

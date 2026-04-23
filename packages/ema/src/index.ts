@@ -11,7 +11,7 @@ export type {
 } from "./db";
 export * from "./server";
 export * from "./schema";
-export * from "./config";
+export * from "./config/index";
 export * from "./agent";
 export * from "./actor";
 export * from "./channel";

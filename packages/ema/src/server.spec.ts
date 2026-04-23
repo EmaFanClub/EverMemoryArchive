@@ -1,4 +1,8 @@
-import { expect, test, describe } from "vitest";
+import path from "node:path";
+
+import { afterEach, expect, test, describe } from "vitest";
+import * as lancedb from "@lancedb/lancedb";
+
 import { Server } from "./server";
 import { MemFs } from "./fs";
 import { createMongo, DBService, type Mongo } from "./db";
@@ -6,38 +10,20 @@ import { AgendaScheduler } from "./scheduler";
 import { MemoryManager } from "./memory/manager";
 import { Gateway } from "./gateway";
 import { ActorRegistry } from "./actor";
-import {
-  Config,
-  LLMConfig,
-  OpenAIApiConfig,
-  GoogleApiConfig,
-  AgentConfig,
-  ToolsConfig,
-  MongoConfig,
-  SystemConfig,
-} from "./config";
-import * as lancedb from "@lancedb/lancedb";
+import { loadTestGlobalConfig } from "./tests/helpers/config";
+import { GlobalConfig } from "./config/index";
 
-const createTestConfig = () =>
-  new Config(
-    new LLMConfig(
-      new OpenAIApiConfig("test-openai-key", "https://example.com/openai/v1/"),
-      new GoogleApiConfig("test-google-key", "https://example.com/google/v1/"),
-    ),
-    new AgentConfig(),
-    new ToolsConfig(),
-    new MongoConfig(),
-    new SystemConfig(),
-  );
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const createServerForTest = async (
   fs: MemFs,
   mongo: Mongo,
   lance: lancedb.Connection,
 ) => {
-  const config = createTestConfig();
-  const server = new (Server as any)(config) as Server;
-  server.dbService = DBService.createSync(fs, config, mongo, lance);
+  await loadTestGlobalConfig(fs);
+  const server = new (Server as any)() as Server;
+  (server as any).fs = fs;
+  server.dbService = DBService.createSync(fs, mongo, lance);
   server.actorRegistry = new ActorRegistry(server);
   server.gateway = new Gateway(server);
   server.memoryManager = new MemoryManager(server);
@@ -45,11 +31,11 @@ const createServerForTest = async (
 };
 
 describe("Server", () => {
+  afterEach(() => {
+    GlobalConfig.resetForTests();
+  });
+
   test("should initialize default user, bindings, and conversations", async () => {
-    const previousQqUid = process.env.EMA_QQ_UID;
-    const previousQqGroupId = process.env.EMA_QQ_GROUP_ID;
-    process.env.EMA_QQ_UID = "10726371";
-    process.env.EMA_QQ_GROUP_ID = "114514";
     const fs = new MemFs();
     const mongo = await createMongo("", "test_login", "memory");
     await mongo.connect();
@@ -72,46 +58,7 @@ describe("Server", () => {
         channel: "web",
         uid: "1",
       });
-      const qqBinding =
-        await server.dbService.externalIdentityBindingDB.getExternalIdentityBindingByUid(
-          "10726371",
-        );
-      expect(qqBinding).toMatchObject({
-        userId: 1,
-        channel: "qq",
-        uid: "10726371",
-      });
-      const qqConversation =
-        await server.dbService.conversationDB.getConversationByActorAndSession(
-          1,
-          "qq-chat-10726371",
-        );
-      expect(qqConversation).toMatchObject({
-        actorId: 1,
-        session: "qq-chat-10726371",
-        allowProactive: false,
-      });
-      const qqGroupConversation =
-        await server.dbService.conversationDB.getConversationByActorAndSession(
-          1,
-          "qq-group-114514",
-        );
-      expect(qqGroupConversation).toMatchObject({
-        actorId: 1,
-        session: "qq-group-114514",
-        allowProactive: false,
-      });
     } finally {
-      if (typeof previousQqUid === "undefined") {
-        delete process.env.EMA_QQ_UID;
-      } else {
-        process.env.EMA_QQ_UID = previousQqUid;
-      }
-      if (typeof previousQqGroupId === "undefined") {
-        delete process.env.EMA_QQ_GROUP_ID;
-      } else {
-        process.env.EMA_QQ_GROUP_ID = previousQqGroupId;
-      }
       await mongo.close();
       await lance.close();
     }
@@ -202,6 +149,48 @@ describe("Server", () => {
       await server.scheduler.stop();
       await mongo.close();
       await lance.close();
+    }
+  });
+
+  test("does not restore default snapshot when disabled by config", async () => {
+    const fs = new MemFs();
+    await fs.write(
+      GlobalConfig.configPath,
+      GlobalConfig.example
+        .replace(
+          "restore_default_snapshot = true",
+          "restore_default_snapshot = false",
+        )
+        .replace("require_dev_seed = true", "require_dev_seed = false"),
+    );
+    await fs.write(
+      path.join(
+        path.dirname(GlobalConfig.configPath),
+        "..",
+        ".data",
+        "mongo-snapshots",
+        "default.json",
+      ),
+      JSON.stringify({
+        roles: [
+          {
+            id: 123,
+            name: "Snapshot Role",
+            prompt: "should not restore",
+          },
+        ],
+      }),
+    );
+
+    const server = await Server.create(fs);
+
+    try {
+      await expect(server.dbService.roleDB.getRole(123)).resolves.toBeNull();
+    } finally {
+      await server.scheduler.stop();
+      await sleep(50);
+      await server.dbService.mongo.close();
+      await server.dbService.lancedb.close();
     }
   });
 });

@@ -35,11 +35,7 @@ export class ActorRegistry {
           if (!actorEntity) {
             throw new Error(`Actor ${actorId} not found.`);
           }
-          const created = await Actor.create(
-            this.server.config,
-            actorId,
-            this.server,
-          );
+          const created = await Actor.create(actorId, this.server);
           this.actors.set(actorId, created);
           try {
             await this.server.gateway.channelRegistry.ensureStarted(actorId);

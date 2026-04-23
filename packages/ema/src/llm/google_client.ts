@@ -12,6 +12,12 @@ import type { Tool } from "../tools";
 import { wrapWithRetry } from "./retry";
 import { FetchWithProxy } from "./proxy";
 import {
+  DEFAULT_GOOGLE_BASE_URL,
+  GlobalConfig,
+  type GoogleLLMConfig,
+  type RetryConfig,
+} from "../config/index";
+import {
   GenerateContentResponse as GenAIResponse,
   GoogleGenAI,
   ThinkingLevel,
@@ -21,11 +27,22 @@ import type {
   Part as GenAIContent,
   FunctionDeclaration,
 } from "@google/genai";
-import type { LLMApiConfig, RetryConfig } from "../config";
 
 export interface GenAIMessage {
   role: "user" | "model";
   parts: GenAIContent[];
+}
+
+/** Appends the API version when a custom Google base URL omits it. */
+export function withGoogleApiVersion(
+  baseUrl: string,
+  apiVersion: string,
+): string {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  if (/\/v\d+(beta|alpha)?$/i.test(normalized)) {
+    return normalized;
+  }
+  return `${normalized}/${apiVersion}`;
 }
 
 /**
@@ -63,33 +80,31 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
   ]);
 
   constructor(
-    readonly model: string,
-    readonly config: LLMApiConfig,
+    readonly config: GoogleLLMConfig,
     readonly retryConfig: RetryConfig,
   ) {
     super();
     const vertexAIOptions: GoogleGenAIOptions = {
       apiVersion: "v1",
       vertexai: true,
-      project: process.env.GOOGLE_CLOUD_PROJECT,
-      location: process.env.GOOGLE_CLOUD_LOCATION,
+      project: config.project,
+      location: config.location,
     };
     const googleAIOptions: GoogleGenAIOptions = {
       apiVersion: "v1",
-      apiKey: config.key,
-      httpOptions: {
-        baseUrl: config.base_url,
-      },
+      apiKey: config.apiKey,
     };
-    const options: GoogleGenAIOptions =
-      process.env.GOOGLE_GENAI_USE_VERTEXAI === "True"
-        ? vertexAIOptions
-        : googleAIOptions;
+    if (config.baseUrl && config.baseUrl !== DEFAULT_GOOGLE_BASE_URL) {
+      googleAIOptions.httpOptions = {
+        baseUrl: withGoogleApiVersion(config.baseUrl, "v1"),
+      };
+    }
+    const options: GoogleGenAIOptions = config.useVertexAi
+      ? vertexAIOptions
+      : googleAIOptions;
     this.client = new GenAI(
       options,
-      new FetchWithProxy(
-        process.env.HTTPS_PROXY || process.env.https_proxy,
-      ).createFetcher(),
+      new FetchWithProxy(GlobalConfig.system.httpsProxy).createFetcher(),
     );
   }
 
@@ -295,7 +310,7 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
   ): Promise<GenAIResponse> {
     // console.log("API Request Messages:", JSON.stringify(apiMessages, null, 2));
     return this.client.models.generateContent({
-      model: this.model,
+      model: this.config.model,
       contents: apiMessages,
       config: {
         candidateCount: 1,
@@ -303,7 +318,7 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
         tools: [{ functionDeclarations: apiTools }],
         abortSignal: signal,
         thinkingConfig: {
-          thinkingLevel: this.thinkingLevelMap.get(this.model),
+          thinkingLevel: this.thinkingLevelMap.get(this.config.model),
         },
       },
     });

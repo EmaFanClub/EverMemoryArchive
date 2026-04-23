@@ -8,30 +8,6 @@ describe("web-search-skill", () => {
     vi.unstubAllGlobals();
   });
 
-  test("returns error when actor owner is missing", async () => {
-    const skill = new WebSearchSkill(".", "web-search-skill");
-
-    const res = await skill.execute(
-      { action: "search", query: "今天适合看什么新闻" },
-      {
-        actorId: 1,
-        server: {
-          dbService: {
-            userOwnActorDB: {
-              getActorOwner: vi.fn().mockResolvedValue(null),
-            },
-            userDB: {
-              getUser: vi.fn(),
-            },
-          },
-        } as any,
-      },
-    );
-
-    expect(res.success).toBe(false);
-    expect(res.error).toContain("No owner user found");
-  });
-
   test("returns error when Tavily API key is missing", async () => {
     const skill = new WebSearchSkill(".", "web-search-skill");
 
@@ -41,23 +17,17 @@ describe("web-search-skill", () => {
         actorId: 1,
         server: {
           dbService: {
-            userOwnActorDB: {
-              getActorOwner: vi.fn().mockResolvedValue(7),
-            },
-            userDB: {
-              getUser: vi.fn().mockResolvedValue({
-                id: 7,
-                name: "alice",
-                email: "alice@example.com",
-              }),
-            },
+            getActorWebSearchConfig: vi.fn().mockResolvedValue({
+              enabled: false,
+              tavilyApiKey: "",
+            }),
           },
         } as any,
       },
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Missing Tavily API key");
+    expect(res.error).toContain("Web search is not configured");
   });
 
   test("returns error when Tavily API key is invalid", async () => {
@@ -76,17 +46,10 @@ describe("web-search-skill", () => {
         actorId: 1,
         server: {
           dbService: {
-            userOwnActorDB: {
-              getActorOwner: vi.fn().mockResolvedValue(7),
-            },
-            userDB: {
-              getUser: vi.fn().mockResolvedValue({
-                id: 7,
-                name: "alice",
-                email: "alice@example.com",
-                tavilyApiKey: "bad-key",
-              }),
-            },
+            getActorWebSearchConfig: vi.fn().mockResolvedValue({
+              enabled: true,
+              tavilyApiKey: "bad-key",
+            }),
           },
         } as any,
       },
@@ -96,7 +59,7 @@ describe("web-search-skill", () => {
     expect(res.error).toContain("Invalid Tavily API key");
   });
 
-  test("returns trimmed search results for the current actor owner", async () => {
+  test("returns trimmed search results for the current actor", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -132,17 +95,10 @@ describe("web-search-skill", () => {
         actorId: 1,
         server: {
           dbService: {
-            userOwnActorDB: {
-              getActorOwner: vi.fn().mockResolvedValue(7),
-            },
-            userDB: {
-              getUser: vi.fn().mockResolvedValue({
-                id: 7,
-                name: "alice",
-                email: "alice@example.com",
-                tavilyApiKey: "good-key",
-              }),
-            },
+            getActorWebSearchConfig: vi.fn().mockResolvedValue({
+              enabled: true,
+              tavilyApiKey: "good-key",
+            }),
           },
         } as any,
       },
@@ -218,17 +174,10 @@ describe("web-search-skill", () => {
         actorId: 1,
         server: {
           dbService: {
-            userOwnActorDB: {
-              getActorOwner: vi.fn().mockResolvedValue(7),
-            },
-            userDB: {
-              getUser: vi.fn().mockResolvedValue({
-                id: 7,
-                name: "alice",
-                email: "alice@example.com",
-                tavilyApiKey: "good-key",
-              }),
-            },
+            getActorWebSearchConfig: vi.fn().mockResolvedValue({
+              enabled: true,
+              tavilyApiKey: "good-key",
+            }),
           },
         } as any,
       },

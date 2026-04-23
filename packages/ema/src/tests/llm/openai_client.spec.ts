@@ -1,21 +1,24 @@
 import { expect, test, describe } from "vitest";
-import { RetryConfig, type LLMApiConfig } from "../../config";
+
+import { GlobalConfig, RetryConfig } from "../../config/index";
 import { OpenAIClient } from "../../llm/openai_client";
 import { type Message } from "../../schema";
+import { loadTestGlobalConfig } from "../helpers/config";
 
 describe.skip("OpenAI", () => {
   test("should make a simple completion", async () => {
-    const config: LLMApiConfig = {
-      key: process.env.GEMINI_API_KEY || "",
-      base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    };
-    // todo: document that `GEMINI_API_KEY` is required for testing.
-    if (!config.key) {
-      throw new Error("GEMINI_API_KEY is not set to test OpenAIClient");
+    await loadTestGlobalConfig();
+    const config = GlobalConfig.defaultLlm.google;
+    if (!config.apiKey) {
+      throw new Error("Google API key is not set to test OpenAIClient");
     }
     const client = new OpenAIClient(
-      "gemini-2.5-flash",
-      config,
+      {
+        mode: "responses",
+        model: config.model,
+        apiKey: config.apiKey,
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
+      },
       new RetryConfig(),
     );
 

@@ -4,13 +4,27 @@ import { ChannelRegistry } from "../channel_registry";
 import { NapCatQQAdapter } from "../napcatqq_adapter";
 import { WebsocketChannelClient } from "../channel_client";
 
+function createServer() {
+  return {
+    dbService: {
+      getActorChannelConfig: vi.fn().mockResolvedValue({
+        qq: {
+          enabled: true,
+          wsUrl: "ws://127.0.0.1:3001",
+          accessToken: "token",
+        },
+      }),
+    },
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe("ChannelRegistry", () => {
   test("lists adapters and exposes the shared web channel", () => {
-    const registry = new ChannelRegistry({} as never);
+    const registry = new ChannelRegistry(createServer() as never);
 
     expect(registry.listAdapterNames()).toEqual(["qq"]);
     expect(registry.getAdapterFactory("qq")).toBeTypeOf("function");
@@ -37,7 +51,7 @@ describe("ChannelRegistry", () => {
       .spyOn(WebsocketChannelClient, "create")
       .mockResolvedValue(client);
 
-    const registry = new ChannelRegistry({} as never);
+    const registry = new ChannelRegistry(createServer() as never);
     await registry.ensureStarted(1);
     await registry.ensureStarted(1);
 

@@ -1,4 +1,3 @@
-import type { Config } from "../config";
 import { Logger } from "../logger";
 import {
   EMA_MEMORY_ROLLUP_PROMPT,
@@ -40,7 +39,6 @@ export class Actor {
   });
 
   private constructor(
-    private readonly config: Config,
     readonly actorId: number,
     private readonly server: Server,
   ) {
@@ -52,12 +50,8 @@ export class Actor {
     });
   }
 
-  static async create(
-    config: Config,
-    actorId: number,
-    server: Server,
-  ): Promise<Actor> {
-    return new Actor(config, actorId, server);
+  static async create(actorId: number, server: Server): Promise<Actor> {
+    return new Actor(actorId, server);
   }
 
   getStatus(): ActorStatus {
@@ -293,7 +287,6 @@ export class Actor {
 
   private async holdConversation(conversationId: number): Promise<void> {
     const worker = await ActorWorker.create(
-      this.config,
       this.actorId,
       conversationId,
       this.server,

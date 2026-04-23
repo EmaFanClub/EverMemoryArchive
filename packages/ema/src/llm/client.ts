@@ -1,10 +1,11 @@
 import type { LLMClientBase } from "./base";
-import { LLMConfig } from "../config";
+import type { LLMConfig } from "../config/index";
 import { GoogleClient } from "./google_client";
 import { OpenAIClient } from "./openai_client";
 import type { LLMResponse } from "../schema";
 import type { Message } from "../schema";
 import type { Tool } from "../tools/base";
+import { RetryConfig } from "./retry";
 
 export enum LLMProvider {
   GOOGLE = "google",
@@ -17,34 +18,21 @@ export class LLMClient {
   private readonly client: LLMClientBase;
 
   constructor(readonly config: LLMConfig) {
-    if (!this.config.chat_provider) {
-      throw new Error("Missing LLM provider.");
-    }
-    switch (this.config.chat_provider) {
+    switch (this.config.provider) {
       case LLMProvider.GOOGLE:
-        if (!this.config.google.key) {
+        if (!this.config.google.useVertexAi && !this.config.google.apiKey) {
           throw new Error("Google API key is required.");
         }
-        this.client = new GoogleClient(
-          this.config.chat_model,
-          this.config.google,
-          this.config.retry,
-        );
+        this.client = new GoogleClient(this.config.google, new RetryConfig());
         break;
       case LLMProvider.OPENAI:
-        if (!this.config.openai.key) {
+        if (!this.config.openai.apiKey) {
           throw new Error("OpenAI API key is required.");
         }
-        this.client = new OpenAIClient(
-          this.config.chat_model,
-          this.config.openai,
-          this.config.retry,
-        );
+        this.client = new OpenAIClient(this.config.openai, new RetryConfig());
         break;
       default:
-        throw new Error(
-          `Unsupported LLM provider: ${this.config.chat_provider}`,
-        );
+        throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
     }
   }
 
