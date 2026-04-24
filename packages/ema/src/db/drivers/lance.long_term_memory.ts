@@ -16,7 +16,12 @@ import {
 } from "apache-arrow";
 
 import { FetchWithProxy } from "../../llm/proxy";
-import { GenAI, withGoogleApiVersion } from "../../llm/google_client";
+import {
+  GenAI,
+  GOOGLE_AI_API_VERSION,
+  VERTEX_AI_API_VERSION,
+  withGoogleApiVersion,
+} from "../../llm/google_client";
 import { type GoogleGenAIOptions } from "@google/genai";
 import {
   DEFAULT_GOOGLE_BASE_URL,
@@ -207,13 +212,14 @@ class LongTermMemoryGeminiEmbeddingEngine implements LongTermMemoryEmbeddingEngi
 
     this.model = config.google.model;
     const vertexAIOptions = {
-      apiVersion: "v1",
+      apiVersion: VERTEX_AI_API_VERSION,
       vertexai: true,
       project: config.google.project,
       location: config.google.location,
     };
     const googleAIOptions: GoogleGenAIOptions = {
-      apiVersion: "v1",
+      apiVersion: GOOGLE_AI_API_VERSION,
+      vertexai: false,
       apiKey: config.google.apiKey,
     };
     if (
@@ -221,7 +227,10 @@ class LongTermMemoryGeminiEmbeddingEngine implements LongTermMemoryEmbeddingEngi
       config.google.baseUrl !== DEFAULT_GOOGLE_BASE_URL
     ) {
       googleAIOptions.httpOptions = {
-        baseUrl: withGoogleApiVersion(config.google.baseUrl, "v1"),
+        baseUrl: withGoogleApiVersion(
+          config.google.baseUrl,
+          GOOGLE_AI_API_VERSION,
+        ),
       };
     }
     const options: GoogleGenAIOptions = config.google.useVertexAi

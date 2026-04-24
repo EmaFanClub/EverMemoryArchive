@@ -38,6 +38,9 @@ export interface GenAIMessage {
   parts: GenAIContent[];
 }
 
+export const GOOGLE_AI_API_VERSION = "v1beta";
+export const VERTEX_AI_API_VERSION = "v1";
+
 /** Appends the API version when a custom Google base URL omits it. */
 export function withGoogleApiVersion(
   baseUrl: string,
@@ -121,18 +124,19 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
   ) {
     super();
     const vertexAIOptions: GoogleGenAIOptions = {
-      apiVersion: "v1",
+      apiVersion: VERTEX_AI_API_VERSION,
       vertexai: true,
       project: config.project,
       location: config.location,
     };
     const googleAIOptions: GoogleGenAIOptions = {
-      apiVersion: "v1",
+      apiVersion: GOOGLE_AI_API_VERSION,
+      vertexai: false,
       apiKey: config.apiKey,
     };
     if (config.baseUrl && config.baseUrl !== DEFAULT_GOOGLE_BASE_URL) {
       googleAIOptions.httpOptions = {
-        baseUrl: withGoogleApiVersion(config.baseUrl, "v1"),
+        baseUrl: withGoogleApiVersion(config.baseUrl, GOOGLE_AI_API_VERSION),
       };
     }
     const options: GoogleGenAIOptions = config.useVertexAi
