@@ -108,9 +108,6 @@ export function wrapWithRetry<T extends (...args: any[]) => Promise<any>>(
           throw lastException;
         }
         if (attempt >= config.max_retries) {
-          console.error(
-            `Function retry failed, reached maximum retry count ${config.max_retries}`,
-          );
           throw new RetryExhaustedError(lastException, attempt + 1);
         }
         const delay = calculateDelay(
@@ -118,9 +115,6 @@ export function wrapWithRetry<T extends (...args: any[]) => Promise<any>>(
           config.initial_delay,
           config.exponential_base,
           config.max_delay,
-        );
-        console.warn(
-          `Function call ${attempt + 1} failed: ${lastException.message}, retrying attempt ${attempt + 2} after ${delay.toFixed(2)} seconds`,
         );
         // Call callback function
         if (onRetry) {

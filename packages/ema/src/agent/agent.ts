@@ -115,8 +115,10 @@ export class Agent {
   /** Logger instance used for agent-related logging. */
   private logger: Logger = Logger.create({
     name: "agent",
-    level: "debug",
-    transport: "console",
+    outputs: [
+      { type: "console", level: "warn" },
+      { type: "file", level: "debug" },
+    ],
   });
   private status: "idle" | "running" = "idle";
   private abortController: AbortController | null = null;
@@ -183,12 +185,18 @@ export class Agent {
 
   /** Execute agent loop until task is complete or max steps reached. */
   async mainLoop(): Promise<void> {
-    console.log(this.contextManager.state.systemPrompt);
-
     const toolDict = new Map(this.contextManager.tools.map((t) => [t.name, t]));
     const maxSteps = DEFAULT_AGENT_MAX_STEPS;
     let step = 0;
 
+    this.logger.info("Agent run started", {
+      maxSteps,
+      messageCount: this.contextManager.messages.length,
+      toolNames: this.contextManager.tools.map((tool) => tool.name),
+    });
+    this.logger.debug("Agent system prompt prepared", {
+      systemPrompt: this.contextManager.systemPrompt,
+    });
     this.logger.debug(
       `request ${this.contextManager.messages.length} messages`,
       this.contextManager.messages,
@@ -204,13 +212,35 @@ export class Agent {
       // Call LLM with context from context manager
       let response: LLMResponse;
       try {
+        this.llm.setRetryCallback((exception, attempt) => {
+          this.logger.warn("LLM request retry", {
+            step: step + 1,
+            attempt,
+            error: exception,
+          });
+        });
+        const startedAt = Date.now();
+        this.logger.debug("LLM request", {
+          step: step + 1,
+          systemPrompt: this.contextManager.systemPrompt,
+          messages: this.contextManager.messages,
+          tools: this.contextManager.tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+          })),
+        });
         response = await this.llm.generate(
           this.contextManager.messages,
           this.contextManager.tools,
           this.contextManager.systemPrompt,
           this.abortController?.signal,
         );
-        this.logger.debug(`LLM response received.`, response);
+        this.logger.debug(`LLM response received.`, {
+          step: step + 1,
+          durationMs: Date.now() - startedAt,
+          response,
+        });
       } catch (error) {
         if (isAbortError(error)) {
           this.finishAborted();
@@ -265,7 +295,11 @@ export class Agent {
         const functionName = functionCall.name;
         const callArgs = functionCall.args;
 
-        this.logger.debug(`Tool call [${functionName}]`, callArgs);
+        this.logger.debug(`Tool call [${functionName}]`, {
+          step: step + 1,
+          toolName: functionName,
+          args: callArgs,
+        });
 
         if (functionCalls.length > 1) {
           functionResponses.push({
@@ -277,7 +311,7 @@ export class Agent {
               error: `Don't call multiple functions parallely.`,
             },
           });
-          this.logger.error(
+          this.logger.warn(
             `Multiple tool calls in a single response are not supported. Skipping tool [${functionName}].`,
           );
           continue;
@@ -286,6 +320,7 @@ export class Agent {
         // Execute tool
         let result: ToolResult;
         const tool = toolDict.get(functionName);
+        const toolStartedAt = Date.now();
         if (!tool) {
           result = {
             success: false,
@@ -315,9 +350,19 @@ export class Agent {
             });
             result.content = undefined;
           }
-          this.logger.debug(`Tool [${functionName}] done.`, result.content);
+          this.logger.debug(`Tool [${functionName}] done.`, {
+            step: step + 1,
+            toolName: functionName,
+            durationMs: Date.now() - toolStartedAt,
+            result,
+          });
         } else {
-          this.logger.error(`Tool [${functionName}] failed.`, result.error);
+          this.logger.warn(`Tool [${functionName}] failed.`, {
+            step: step + 1,
+            toolName: functionName,
+            durationMs: Date.now() - toolStartedAt,
+            result,
+          });
         }
 
         const functionResponseParts = result.parts;
@@ -354,6 +399,7 @@ export class Agent {
 
   private finishAborted(): void {
     const error = new Error("Aborted");
+    this.logger.debug("Agent run aborted");
     this.events.emit("runFinished", {
       ok: false,
       msg: error.message,

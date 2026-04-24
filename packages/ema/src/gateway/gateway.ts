@@ -18,14 +18,17 @@ export class Gateway {
 
   private readonly channelMessageToMsg = new Map<string, number>();
   private readonly msgToChannelMessage = new Map<string, string>();
-  private readonly logger: Logger = Logger.create({
-    name: "gateway",
-    level: "debug",
-    transport: "console",
-  });
+  private readonly logger: Logger;
 
   constructor(private readonly server: Server) {
     this.channelRegistry = new ChannelRegistry(server);
+    this.logger = Logger.create({
+      name: "gateway",
+      outputs: [
+        { type: "console", level: "warn" },
+        { type: "file", level: "debug" },
+      ],
+    });
   }
 
   /**

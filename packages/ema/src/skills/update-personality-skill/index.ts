@@ -19,8 +19,7 @@ export default class UpdatePersonalitySkill extends Skill {
 
   private logger: Logger = Logger.create({
     name: "UpdatePersonalitySkill",
-    level: "full",
-    transport: "console",
+    outputs: [{ type: "console", level: "warn" }],
   });
 
   /**

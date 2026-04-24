@@ -70,8 +70,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
 
   private readonly logger: Logger = Logger.create({
     name: "UpdateShortTermMemorySkill",
-    level: "full",
-    transport: "console",
+    outputs: [{ type: "console", level: "warn" }],
   });
 
   /**

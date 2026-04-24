@@ -23,6 +23,7 @@ import {
   GlobalConfig,
   type EmbeddingConfig,
 } from "../../config/index";
+import { Logger } from "../../shared/logger";
 
 /**
  * The text input used to compute an embedding.
@@ -58,6 +59,13 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
   private readonly $itn = `long_term_memories_gemini-embedding-001_${this.$dim}`;
   /** index table */
   private indexTable!: lancedb.Table;
+  private readonly logger: Logger = Logger.create({
+    name: "lancedb.memory",
+    outputs: [
+      { type: "console", level: "warn" },
+      { type: "file", level: "debug" },
+    ],
+  });
 
   constructor(
     mongo: Mongo,
@@ -100,7 +108,7 @@ export class LanceMemoryVectorSearcher extends MongoMemorySearchAdaptor {
       ? await query.toArray()
       : await query.select(["id", "_distance"]).toArray();
     if (this.isDebug) {
-      console.log("[LanceMemoryVectorSearcher]", ids);
+      this.logger.debug("LanceDB memory search result", ids);
     }
 
     return ids.map((res) =>

@@ -1,5 +1,11 @@
 import type { ActorInput } from "./base";
-import { SessionQueue, type SessionQueueOptions } from "./session_queue";
+import {
+  SessionQueue,
+  type SessionQueueEvent,
+  type SessionQueueOptions,
+} from "./session_queue";
+
+export type SessionManagerQueueEvent = SessionQueueEvent;
 
 export class SessionManager {
   private readonly queues = new Map<number, SessionQueue<ActorInput>>();
@@ -7,6 +13,10 @@ export class SessionManager {
   constructor(
     private readonly onQueueUnlocked: (conversationId: number) => void,
     private readonly queueOptions: SessionQueueOptions = {},
+    private readonly onQueueEvent: (
+      conversationId: number,
+      event: SessionQueueEvent,
+    ) => void = () => {},
   ) {}
 
   enqueue(conversationId: number, input: ActorInput): void {
@@ -35,6 +45,9 @@ export class SessionManager {
     let queue = this.queues.get(conversationId);
     if (!queue) {
       const queue = new SessionQueue<ActorInput>(this.queueOptions);
+      queue.onEvent((event) => {
+        this.onQueueEvent(conversationId, event);
+      });
       queue.onUnlocked(() => {
         this.onQueueUnlocked(conversationId);
       });

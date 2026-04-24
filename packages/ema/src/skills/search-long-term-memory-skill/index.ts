@@ -35,8 +35,7 @@ export default class SearchLongTermMemorySkill extends Skill {
 
   private logger: Logger = Logger.create({
     name: "SearchLongTermMemorySkill",
-    level: "debug",
-    transport: "console",
+    outputs: [{ type: "console", level: "warn" }],
   });
 
   /**

@@ -5,6 +5,8 @@ vi.mock("../../llm", () => ({
 }));
 
 vi.mock("../../shared/logger", () => ({
+  formatLogTimestamp: (timestamp: number = 0) =>
+    new Date(timestamp).toISOString().replace("T", "_").replace(/[:.Z]/g, "-"),
   Logger: class Logger {
     static create() {
       return {
@@ -62,7 +64,31 @@ type FakeMemoryManager = {
   buildSystemPromptForBackground: () => Promise<string>;
 };
 
+type FakeLogger = {
+  debug: ReturnType<typeof vi.fn>;
+  info: ReturnType<typeof vi.fn>;
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+};
+
+type FakeActor = {
+  status: "sleep" | "awake" | "switching";
+  getStatus: () => "sleep" | "awake" | "switching";
+  canRunActiveTasks: () => boolean;
+  beginWake: () => boolean;
+  completeWake: () => void;
+  failWake: () => void;
+  startSleepTimer: () => boolean;
+  beginSleep: () => boolean;
+  completeSleep: () => void;
+  failSleep: () => void;
+};
+
 type FakeServer = {
+  logger: FakeLogger;
+  actorRegistry: {
+    ensure: (actorId: number) => Promise<FakeActor>;
+  };
   dbService: {
     getActorLLMConfig: (actorId: number) => Promise<Record<string, unknown>>;
   };
@@ -72,6 +98,7 @@ type FakeServer = {
 function createFakeServer(
   bufferedMessages: BufferedMessageRecord[] = [],
   activities: ShortTermMemoryRecord[] = [],
+  actor: FakeActor = createFakeActor(),
 ): FakeServer {
   const runningConversationActivities = new Set<number>();
   const runningActivityToDayRollups = new Set<number>();
@@ -89,6 +116,17 @@ function createFakeServer(
       .slice(-30);
 
   return {
+    logger: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
+    actorRegistry: {
+      async ensure() {
+        return actor;
+      },
+    },
     dbService: {
       async getActorLLMConfig() {
         return {};
@@ -178,6 +216,50 @@ function createFakeServer(
   };
 }
 
+function createFakeActor(
+  initialStatus: FakeActor["status"] = "awake",
+): FakeActor {
+  const actor: FakeActor = {
+    status: initialStatus,
+    getStatus() {
+      return actor.status;
+    },
+    canRunActiveTasks() {
+      return actor.status === "awake";
+    },
+    beginWake() {
+      if (actor.status !== "sleep") {
+        return false;
+      }
+      actor.status = "switching";
+      return true;
+    },
+    completeWake() {
+      actor.status = "awake";
+    },
+    failWake() {
+      actor.status = "sleep";
+    },
+    startSleepTimer() {
+      return actor.status === "awake";
+    },
+    beginSleep() {
+      if (actor.status !== "awake") {
+        return false;
+      }
+      actor.status = "switching";
+      return true;
+    },
+    completeSleep() {
+      actor.status = "sleep";
+    },
+    failSleep() {
+      actor.status = "awake";
+    },
+  };
+  return actor;
+}
+
 function createBufferedMessages(
   startId: number,
   count: number,
@@ -213,6 +295,17 @@ function mockNowSequence(values: number[]) {
   });
 }
 
+function expectInfoLog(
+  server: FakeServer,
+  message: string,
+  data: Record<string, unknown>,
+) {
+  expect(server.logger.info).toHaveBeenCalledWith(
+    message,
+    expect.objectContaining(data),
+  );
+}
+
 beforeEach(async () => {
   await loadTestGlobalConfig();
 });
@@ -237,6 +330,145 @@ const memoryRollupJob = (
   task: "memory_rollup",
   prompt: "memory-rollup",
   addition: { reason },
+});
+
+describe("actor background job lifecycle logs", () => {
+  test("conversation rollup logs request, start, and completion", async () => {
+    const bufferedMessages = createBufferedMessages(1, 20, 1000);
+    const server = createFakeServer(bufferedMessages);
+
+    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
+      async (state) => {
+        if (state.toolContext?.data) {
+          state.toolContext.data.activityAdded = true;
+        }
+      },
+    );
+
+    await runActorBackgroundJob(server as any, conversationRollupJob(), 2000);
+
+    expectInfoLog(server, "Actor background task requested", {
+      actorId: 1,
+      task: "conversation_rollup",
+      conversationId: 1,
+      triggeredAt: 2000,
+    });
+    expectInfoLog(server, "Actor background task started", {
+      actorId: 1,
+      task: "conversation_rollup",
+      conversationId: 1,
+      pendingCount: 20,
+      threshold: 20,
+    });
+    expectInfoLog(server, "Actor background task completed", {
+      actorId: 1,
+      task: "conversation_rollup",
+      conversationId: 1,
+      activityAdded: true,
+      processedMessageCount: 20,
+      pendingBefore: 20,
+      pendingAfter: 0,
+      followUpScheduled: false,
+      durationMs: expect.any(Number),
+    });
+  });
+
+  test("conversation rollup logs skipped when another run owns the lock", async () => {
+    const server = createFakeServer(createBufferedMessages(1, 20, 1000));
+    server.memoryManager.tryEnterConversationActivity = vi.fn(() => false);
+    const runWithStateSpy = vi.spyOn(Agent.prototype, "runWithState");
+
+    await runActorBackgroundJob(server as any, conversationRollupJob(), 2000);
+
+    expect(runWithStateSpy).not.toHaveBeenCalled();
+    expectInfoLog(server, "Actor background task skipped", {
+      actorId: 1,
+      task: "conversation_rollup",
+      conversationId: 1,
+      reason: "already_running",
+    });
+  });
+
+  test("conversation rollup logs skipped when the threshold is not reached", async () => {
+    const server = createFakeServer(createBufferedMessages(1, 19, 1000));
+    const runWithStateSpy = vi.spyOn(Agent.prototype, "runWithState");
+
+    await runActorBackgroundJob(server as any, conversationRollupJob(), 2000);
+
+    expect(runWithStateSpy).not.toHaveBeenCalled();
+    expectInfoLog(server, "Actor background task skipped", {
+      actorId: 1,
+      task: "conversation_rollup",
+      conversationId: 1,
+      reason: "threshold_not_reached",
+      pendingBefore: 19,
+      pendingAfter: 19,
+      threshold: 20,
+      followUpScheduled: false,
+    });
+  });
+
+  test("activity logs lifecycle for non-rollup background tasks", async () => {
+    const server = createFakeServer();
+    vi.spyOn(Agent.prototype, "runWithState").mockResolvedValue(undefined);
+
+    await runActorBackgroundJob(
+      server as any,
+      { actorId: 1, task: "activity", prompt: "activity" },
+      2000,
+    );
+
+    expectInfoLog(server, "Actor background task requested", {
+      actorId: 1,
+      task: "activity",
+      triggeredAt: 2000,
+    });
+    expectInfoLog(server, "Actor background task started", {
+      actorId: 1,
+      task: "activity",
+      triggeredAt: 2000,
+    });
+    expectInfoLog(server, "Actor background task completed", {
+      actorId: 1,
+      task: "activity",
+      triggeredAt: 2000,
+      activityAdded: false,
+      durationMs: expect.any(Number),
+    });
+  });
+
+  test("logs background task failure when the agent reports an unsuccessful run", async () => {
+    const server = createFakeServer();
+    const error = new Error("llm unavailable");
+    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
+      async function (this: Agent) {
+        this.events.emit("runFinished", {
+          ok: false,
+          msg: error.message,
+          error,
+        });
+      },
+    );
+
+    await expect(
+      runActorBackgroundJob(
+        server as any,
+        { actorId: 1, task: "activity", prompt: "activity" },
+        2000,
+      ),
+    ).rejects.toThrow("llm unavailable");
+
+    expect(server.logger.error).toHaveBeenCalledWith(
+      "Actor background task failed",
+      expect.objectContaining({
+        actorId: 1,
+        task: "activity",
+        triggeredAt: 2000,
+        durationMs: expect.any(Number),
+        error,
+      }),
+    );
+  });
 });
 
 describe("actor background job follow-up", () => {

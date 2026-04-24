@@ -19,8 +19,7 @@ export default class UpdateRoleBookSkill extends Skill {
 
   private logger: Logger = Logger.create({
     name: "UpdateRoleBookSkill",
-    level: "full",
-    transport: "console",
+    outputs: [{ type: "console", level: "warn" }],
   });
 
   /**

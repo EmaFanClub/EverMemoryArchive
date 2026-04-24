@@ -10,6 +10,26 @@ export const DEFAULT_SESSION_QUEUE_OPTIONS: Required<SessionQueueOptions> = {
   rateLimitWindowMs: 10_000,
 };
 
+export type SessionQueueEvent =
+  | {
+      type: "rate_limited";
+      queueSize: number;
+      dispatchesInWindow: number;
+      maxDispatchesPerWindow: number;
+      rateLimitWindowMs: number;
+      unlockAt: number;
+      delayMs: number;
+    }
+  | {
+      type: "unlocked";
+      queueSize: number;
+    }
+  | {
+      type: "dropped";
+      queueSize: number;
+      maxQueueSize: number;
+    };
+
 export class SessionQueue<T> {
   private readonly items: T[] = [];
   private readonly dequeueTimestamps: number[] = [];
@@ -17,6 +37,9 @@ export class SessionQueue<T> {
   private readonly maxDispatchesPerWindow: number;
   private readonly rateLimitWindowMs: number;
   private readonly unlockedListeners = new Set<() => void>();
+  private readonly eventListeners = new Set<
+    (event: SessionQueueEvent) => void
+  >();
   private locked = false;
   private unlockTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -33,10 +56,19 @@ export class SessionQueue<T> {
 
   push(value: T, now: number = Date.now()): void {
     this.refreshLock(now);
+    let dropped = false;
     if (this.items.length >= this.maxQueueSize) {
       this.items.shift();
+      dropped = true;
     }
     this.items.push(value);
+    if (dropped) {
+      this.emitEvent({
+        type: "dropped",
+        queueSize: this.items.length,
+        maxQueueSize: this.maxQueueSize,
+      });
+    }
   }
 
   tryPop(now: number = Date.now()): T | null {
@@ -53,7 +85,6 @@ export class SessionQueue<T> {
     this.dequeueTimestamps.push(now);
     this.pruneDequeueTimestamps(now);
     if (this.dequeueTimestamps.length >= this.maxDispatchesPerWindow) {
-      console.log("SessionQueue is locked due to rate limiting.");
       this.lock(now);
     }
     return value;
@@ -91,6 +122,13 @@ export class SessionQueue<T> {
     };
   }
 
+  onEvent(listener: (event: SessionQueueEvent) => void): () => void {
+    this.eventListeners.add(listener);
+    return () => {
+      this.eventListeners.delete(listener);
+    };
+  }
+
   private pruneDequeueTimestamps(now: number): void {
     while (
       this.dequeueTimestamps.length > 0 &&
@@ -115,8 +153,17 @@ export class SessionQueue<T> {
       return;
     }
     this.locked = true;
-    const unlockAt = this.dequeueTimestamps[0] + this.rateLimitWindowMs;
+    const unlockAt = this.getUnlockAt();
     const delay = Math.max(0, unlockAt - now);
+    this.emitEvent({
+      type: "rate_limited",
+      queueSize: this.items.length,
+      dispatchesInWindow: this.dequeueTimestamps.length,
+      maxDispatchesPerWindow: this.maxDispatchesPerWindow,
+      rateLimitWindowMs: this.rateLimitWindowMs,
+      unlockAt,
+      delayMs: delay,
+    });
     if (this.unlockTimer) {
       clearTimeout(this.unlockTimer);
     }
@@ -134,19 +181,33 @@ export class SessionQueue<T> {
       return;
     }
     this.locked = false;
+    this.dequeueTimestamps.length = 0;
     if (this.unlockTimer) {
       clearTimeout(this.unlockTimer);
       this.unlockTimer = null;
     }
+    this.emitEvent({
+      type: "unlocked",
+      queueSize: this.items.length,
+    });
     if (emitUnlocked) {
       this.emitUnlocked();
     }
   }
 
   private emitUnlocked(): void {
-    console.log("SessionQueue is unlocked.");
     for (const listener of this.unlockedListeners) {
       listener();
     }
+  }
+
+  private emitEvent(event: SessionQueueEvent): void {
+    for (const listener of this.eventListeners) {
+      listener(event);
+    }
+  }
+
+  private getUnlockAt(): number {
+    return (this.dequeueTimestamps[0] ?? Date.now()) + this.rateLimitWindowMs;
   }
 }

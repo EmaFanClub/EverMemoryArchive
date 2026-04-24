@@ -66,8 +66,7 @@ export default class UpdateLongTermMemorySkill extends Skill {
 
   private logger: Logger = Logger.create({
     name: "UpdateLongTermMemorySkill",
-    level: "full",
-    transport: "console",
+    outputs: [{ type: "console", level: "warn" }],
   });
 
   /**

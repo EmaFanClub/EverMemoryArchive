@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ToolResult, ToolContext } from "../tools/base";
+import { Logger } from "../shared/logger";
 
 /** Skill name -> Skill instance registry. */
 export type SkillRegistry = Record<string, Skill>;
@@ -126,6 +127,13 @@ function stripYamlFrontmatter(markdown: string): {
 export async function loadSkills(
   skillsDir: string = path.dirname(fileURLToPath(import.meta.url)),
 ): Promise<SkillRegistry> {
+  const logger = Logger.create({
+    name: "skills",
+    outputs: [
+      { type: "console", level: "warn" },
+      { type: "file", level: "debug" },
+    ],
+  });
   const registry: SkillRegistry = {};
   if (!fs.existsSync(skillsDir)) {
     throw new Error(`Skills directory does not exist: ${skillsDir}`);
@@ -138,8 +146,6 @@ export async function loadSkills(
     skillsRel = `./${skillsRel}`;
   }
   skillsRel = skillsRel.split(path.sep).join("/");
-
-  // console.log(`Loading skills from: ${skillsRel} relative to ${baseDir}`);
 
   const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
   const skillNames = entries
@@ -159,7 +165,7 @@ export async function loadSkills(
         }
         registry[name] = new mod.default(skillsDir, name);
       } catch (error) {
-        console.error(`Failed to load skill "${name}":`, error);
+        logger.warn(`Failed to load skill "${name}"`, { error });
         return;
       }
     }),

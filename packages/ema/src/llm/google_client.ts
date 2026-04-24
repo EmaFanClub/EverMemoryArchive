@@ -61,7 +61,12 @@ export class GenAI extends GoogleGenAI {
       requestInit?: RequestInit,
     ) => Promise<Response>,
   ) {
-    super({ ...options });
+    const restoreEnv = suppressGoogleApiKeyEnvForVertex(options);
+    try {
+      super({ ...options });
+    } finally {
+      restoreEnv();
+    }
     if (!(this.apiClient as any).apiCall) {
       throw new Error("apiCall cannot be patched");
     }
@@ -72,6 +77,32 @@ export class GenAI extends GoogleGenAI {
       });
     };
   }
+}
+
+function suppressGoogleApiKeyEnvForVertex(
+  options: GoogleGenAIOptions,
+): () => void {
+  if (!options.vertexai) {
+    return () => {};
+  }
+
+  const googleApiKey = process.env.GOOGLE_API_KEY;
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+
+  return () => {
+    if (googleApiKey === undefined) {
+      delete process.env.GOOGLE_API_KEY;
+    } else {
+      process.env.GOOGLE_API_KEY = googleApiKey;
+    }
+    if (geminiApiKey === undefined) {
+      delete process.env.GEMINI_API_KEY;
+    } else {
+      process.env.GEMINI_API_KEY = geminiApiKey;
+    }
+  };
 }
 
 /** Google Generative AI client that adapts EMA schema to the native Gemini API format. */
@@ -155,9 +186,6 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
           continue;
         }
         /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in user message: ${JSON.stringify(content)}`,
-        );
       }
       return { role: "user", parts: contents };
     }
@@ -192,9 +220,6 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
           continue;
         }
         /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in model message: ${JSON.stringify(content)}`,
-        );
       }
       return { role: "model", parts: contents };
     }
@@ -241,9 +266,6 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
       );
     }
     if (!candidate || !candidate.content || !candidate.content.parts) {
-      // console.warn(
-      //   `No valid candidate in response: ${JSON.stringify(response)}`,
-      // );
       return {
         message: {
           role: "model",
@@ -254,9 +276,6 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
       };
     }
     if (!candidate.finishReason || candidate.finishReason !== "STOP") {
-      console.warn(
-        `Non-stop finish reason in response: ${JSON.stringify(response)}`,
-      );
       return {
         message: {
           role: "model",
@@ -271,9 +290,6 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
     for (const part of candidate.content.parts) {
       if (part.functionCall) {
         if (!part.functionCall.name || !part.functionCall.args) {
-          console.warn(
-            `Invalid function call part in response: ${JSON.stringify(part)}`,
-          );
           continue;
         }
         contents.push({
@@ -294,7 +310,6 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
         continue;
       }
       /** Additional part types can be handled here. */
-      console.warn(`Unsupported part in response: ${JSON.stringify(part)}`);
     }
     return {
       message: {
@@ -313,7 +328,6 @@ export class GoogleClient extends LLMClientBase implements SchemaAdapter {
     systemPrompt?: string,
     signal?: AbortSignal,
   ): Promise<GenAIResponse> {
-    // console.log("API Request Messages:", JSON.stringify(apiMessages, null, 2));
     return this.client.models.generateContent({
       model: this.config.model,
       contents: apiMessages,

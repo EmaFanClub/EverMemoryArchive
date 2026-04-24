@@ -15,7 +15,10 @@ import type {
   ActorSystemInput,
 } from "./base";
 import { ActorWorker } from "./actor_worker";
-import { SessionManager } from "./session_manager";
+import {
+  SessionManager,
+  type SessionManagerQueueEvent,
+} from "./session_manager";
 import { HeartbeatTimer } from "./timer";
 
 const DEFAULT_SLEEP_QUIET_PERIOD_MS = 5 * 60_000;
@@ -32,18 +35,26 @@ export class Actor {
   private bootInitPromise: Promise<void> | null = null;
   private status: ActorStatus = "sleep";
   private dayDate: string | null = null;
-  private readonly logger: Logger = Logger.create({
-    name: "actor",
-    level: "debug",
-    transport: "console",
-  });
+  private readonly logger: Logger;
 
   private constructor(
     readonly actorId: number,
     private readonly server: Server,
   ) {
+    this.logger = Logger.create({
+      name: "actor",
+      context: {
+        actorId,
+      },
+      outputs: [
+        { type: "console", level: "info" },
+        { type: "file", level: "debug" },
+      ],
+    });
     this.sessionManager = new SessionManager(
       this.handleQueueUnlocked.bind(this),
+      {},
+      this.handleQueueEvent.bind(this),
     );
     this.sleepTimer.on(() => {
       this.runDetached(this.handleSleepTimerFired(), "handle sleep timer");
@@ -51,7 +62,9 @@ export class Actor {
   }
 
   static async create(actorId: number, server: Server): Promise<Actor> {
-    return new Actor(actorId, server);
+    const actor = new Actor(actorId, server);
+    actor.logger.info("Actor runtime created");
+    return actor;
   }
 
   getStatus(): ActorStatus {
@@ -70,6 +83,7 @@ export class Actor {
     if (this.bootInitPromise) {
       return;
     }
+    this.logger.info("Actor boot initialization started");
     const task = this.runBootInit().finally(() => {
       if (this.bootInitPromise === task) {
         this.bootInitPromise = null;
@@ -85,17 +99,20 @@ export class Actor {
     }
     this.stopSleepTimer();
     this.status = "switching";
+    this.logger.info("Actor waking");
     return true;
   }
 
   completeWake(): void {
     this.dayDate = formatTimestamp("YYYY-MM-DD", Date.now());
     this.status = "awake";
+    this.logger.info("Actor awake", { dayDate: this.dayDate });
     this.tryAcquireConversation();
   }
 
   failWake(): void {
     this.status = "sleep";
+    this.logger.warn("Actor wake failed");
   }
 
   startSleepTimer(): boolean {
@@ -123,6 +140,7 @@ export class Actor {
       return false;
     }
     this.status = "switching";
+    this.logger.info("Actor sleeping");
     return true;
   }
 
@@ -130,10 +148,12 @@ export class Actor {
     this.stopSleepTimer();
     this.dayDate = null;
     this.status = "sleep";
+    this.logger.info("Actor asleep");
   }
 
   failSleep(): void {
     this.status = "awake";
+    this.logger.warn("Actor sleep failed");
     this.tryAcquireConversation();
   }
 
@@ -176,6 +196,10 @@ export class Actor {
       await this.server.memoryManager.persistChatMessage(input);
     }
     this.sessionManager.enqueue(conversationId, input);
+    this.logger.debug("Actor input enqueued", {
+      conversationId,
+      kind: input.kind,
+    });
     this.resetSleepTimer();
     if (this.status !== "awake") {
       return;
@@ -293,6 +317,10 @@ export class Actor {
     );
     this.currentConversationId = conversationId;
     this.currentWorker = worker;
+    this.logger.info("Conversation acquired", {
+      conversationId,
+      session: worker.session,
+    });
     worker.events.on("actorResponsed", (event) => {
       this.runDetached(
         this.server.gateway.dispatchActorResponse(event.response),
@@ -348,13 +376,53 @@ export class Actor {
     }
   }
 
+  private handleQueueEvent(
+    conversationId: number,
+    event: SessionManagerQueueEvent,
+  ): void {
+    switch (event.type) {
+      case "rate_limited":
+        this.logger.info("Session queue rate limited", {
+          conversationId,
+          queueSize: event.queueSize,
+          dispatchesInWindow: event.dispatchesInWindow,
+          maxDispatchesPerWindow: event.maxDispatchesPerWindow,
+          rateLimitWindowMs: event.rateLimitWindowMs,
+          unlockAt: event.unlockAt,
+          delayMs: event.delayMs,
+        });
+        return;
+      case "unlocked":
+        this.logger.info("Session queue unlocked", {
+          conversationId,
+          queueSize: event.queueSize,
+        });
+        return;
+      case "dropped":
+        this.logger.warn("Session queue dropped oldest input", {
+          conversationId,
+          queueSize: event.queueSize,
+          maxQueueSize: event.maxQueueSize,
+        });
+        return;
+    }
+  }
+
   private releaseConversation(): void {
+    const conversationId = this.currentConversationId;
+    const session = this.currentWorker?.session;
     if (this.currentWorker) {
       this.currentWorker.events.removeAllListeners("actorResponsed");
       this.currentWorker.events.removeAllListeners("workFinished");
     }
     this.currentWorker = null;
     this.currentConversationId = null;
+    if (conversationId !== null) {
+      this.logger.info("Conversation released", {
+        conversationId,
+        ...(session ? { session } : {}),
+      });
+    }
   }
 
   private runDetached(task: Promise<unknown>, label: string): void {

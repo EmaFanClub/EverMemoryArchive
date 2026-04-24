@@ -48,8 +48,10 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   private readonly runningActivityToDayRollups = new Set<number>();
   private readonly logger: Logger = Logger.create({
     name: "MemoryManager",
-    level: "debug",
-    transport: "console",
+    outputs: [
+      { type: "console", level: "warn" },
+      { type: "file", level: "debug" },
+    ],
   });
 
   /**

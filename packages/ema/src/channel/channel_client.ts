@@ -15,7 +15,6 @@ import type {
 } from "./base";
 import { formatReplyRef, parseReplyRef } from "./utils";
 
-const DEFAULT_START_MAX_ATTEMPTS = 100_000_000;
 const DEFAULT_START_RETRY_DELAY_MS = 60_000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
 
@@ -59,9 +58,15 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
     this.server = server;
     this.accessToken = accessToken;
     this.logger = Logger.create({
-      name: `channel:${channel}`,
-      level: "debug",
-      transport: "console",
+      name: `channel.${channel}`,
+      context: {
+        actorId,
+        channel,
+      },
+      outputs: [
+        { type: "console", level: "info" },
+        { type: "file", level: "debug" },
+      ],
     });
     this.enabled = enabled;
     this.adapter = adapterFactory(this.call.bind(this));
@@ -104,7 +109,6 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
       return;
     }
 
-    const maxAttempts = options.maxAttempts ?? DEFAULT_START_MAX_ATTEMPTS;
     const retryDelayMs = options.retryDelayMs ?? DEFAULT_START_RETRY_DELAY_MS;
     const connectTimeoutMs =
       options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
@@ -112,7 +116,6 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
     const loopVersion = ++this.loopVersion;
     const runningPromise = this.runLoop(
       loopVersion,
-      Math.max(1, maxAttempts),
       Math.max(0, retryDelayMs),
       Math.max(0, connectTimeoutMs),
     );
@@ -238,20 +241,16 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
 
   private async runLoop(
     loopVersion: number,
-    maxAttempts: number,
     retryDelayMs: number,
     connectTimeoutMs: number,
   ): Promise<void> {
     while (this.enabled && this.loopVersion === loopVersion) {
       let connected = false;
 
-      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      for (;;) {
         if (!this.enabled || this.loopVersion !== loopVersion) {
           return;
         }
-        this.logger.info(
-          `Attempting to connect ${this.name} (attempt ${attempt}/${maxAttempts}, timeout ${connectTimeoutMs}ms)...`,
-        );
         this.status = "connecting";
 
         try {
@@ -264,20 +263,8 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
           this.logger.info(`Connected ${this.name} to ${this.url}.`);
           await this.waitForSocketClose(socket, loopVersion);
           break;
-        } catch (error) {
+        } catch {
           this.closeSocket();
-          if (attempt >= maxAttempts) {
-            this.status = "exhausted";
-            this.logger.error(
-              `Failed to connect ${this.name} after ${maxAttempts} attempts:`,
-              error,
-            );
-            return;
-          }
-          this.logger.warn(
-            `Failed to connect ${this.name} (attempt ${attempt}/${maxAttempts}):`,
-            error,
-          );
           await this.sleep(retryDelayMs, loopVersion);
         }
       }
@@ -383,7 +370,7 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
         this.socket = null;
       }
       this.clearPendingRequests();
-      this.logger.warn(
+      this.logger.info(
         `Disconnected ${this.name} from ${this.url} before close event could be observed.`,
       );
       return;
@@ -404,7 +391,7 @@ export class WebsocketChannelClient implements Channel, ChannelClient {
           "reason" in event && typeof event.reason === "string"
             ? event.reason
             : "";
-        this.logger.warn(
+        this.logger.info(
           `Disconnected ${this.name} from ${this.url}${
             typeof code === "number" ? ` (code=${code}` : ""
           }${

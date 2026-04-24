@@ -22,6 +22,7 @@ import {
   writeCheckpointFile,
 } from "./checkpoint";
 import { buildSession } from "../channel";
+import { Logger } from "../shared/logger";
 
 const TRAINING_TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
 
@@ -43,6 +44,13 @@ export class ActorTrainer {
   constructor(
     private readonly server: Server,
     private readonly fs: Fs = new RealFs(),
+    private readonly logger: Logger = Logger.create({
+      name: "trainer",
+      outputs: [
+        { type: "console", level: "info" },
+        { type: "file", level: "debug" },
+      ],
+    }),
   ) {}
 
   /**
@@ -92,9 +100,13 @@ export class ActorTrainer {
     const actorId = req.actorId;
     const conversationId = conversation.id;
 
-    console.log(
-      `>>> train start actor=${req.actorId} session=${trainingSession} inputs=${normalizedInputs.length} activityEvery=${req.diaryUpdateEvery} bufferWindow=${req.bufferWindowSize}`,
-    );
+    this.logger.info("Training started", {
+      actorId: req.actorId,
+      session: trainingSession,
+      inputCount: normalizedInputs.length,
+      activityEvery: req.diaryUpdateEvery,
+      bufferWindowSize: req.bufferWindowSize,
+    });
 
     let checkpointId = 0;
     let stepCount = 0;
@@ -105,9 +117,10 @@ export class ActorTrainer {
         const currentDayKey = normalizedInputs[nextInputIndex].dayKey;
         let lastMessageTimestamp = normalizedInputs[nextInputIndex].timestamp;
 
-        console.log(
-          `>>> day start day=${currentDayKey} fromIndex=${nextInputIndex + 1}`,
-        );
+        this.logger.info("Training day started", {
+          day: currentDayKey,
+          fromIndex: nextInputIndex + 1,
+        });
 
         while (
           nextInputIndex < normalizedInputs.length &&
@@ -235,9 +248,13 @@ export class ActorTrainer {
         conversationId,
         checkpointRoot,
       );
-      console.log(
-        `>>> train completed actor=${req.actorId} conversation=${conversationId} checkpoints=${checkpointId} messages=${messageCount} session=${trainingSession}`,
-      );
+      this.logger.info("Training completed", {
+        actorId: req.actorId,
+        conversationId,
+        checkpointCount: checkpointId,
+        messageCount,
+        session: trainingSession,
+      });
 
       return {
         actorId: req.actorId,
@@ -248,9 +265,12 @@ export class ActorTrainer {
         checkpointCount: checkpointId,
       };
     } catch (error) {
-      console.error(
-        `>>> train failed actor=${req.actorId} messages=${messageCount} session=${trainingSession}`,
-      );
+      this.logger.error("Training failed", {
+        actorId: req.actorId,
+        messageCount,
+        session: trainingSession,
+        error,
+      });
       try {
         checkpointId += 1;
         await this.saveCheckpoint(
@@ -404,13 +424,13 @@ export class ActorTrainer {
       snapshot,
       ...(error ? { error } : {}),
     });
-    console.log(
-      target === "final"
-        ? error
-          ? `>>> checkpoint saved target=final step=${stepCount ?? "n/a"} messages=${messageCount} error=${error}`
-          : `>>> checkpoint saved target=final step=${stepCount ?? "n/a"} messages=${messageCount}`
-        : `>>> checkpoint saved target=${id} step=${stepCount ?? "n/a"} messages=${messageCount}`,
-    );
+    this.logger.info("Training checkpoint saved", {
+      target,
+      id,
+      step: stepCount,
+      messageCount,
+      ...(error ? { error } : {}),
+    });
   }
 
   private async advanceStep(
@@ -428,9 +448,13 @@ export class ActorTrainer {
     const nextStepCount = stepCount + 1;
     const kinds = updateKinds.join(",");
     const gameTime = formatTimestamp(TRAINING_TIME_FORMAT, triggeredAt);
-    console.log(
-      `>>> step=${nextStepCount} messages=${messageCount} update=${updateType} kinds=[${kinds}] gameTime=${gameTime}`,
-    );
+    this.logger.info("Training step advanced", {
+      step: nextStepCount,
+      messageCount,
+      update: updateType,
+      kinds,
+      gameTime,
+    });
     if (nextStepCount % saveEverySteps !== 0) {
       return {
         checkpointId,

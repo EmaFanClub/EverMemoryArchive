@@ -37,6 +37,16 @@ export class LLMClient {
   }
 
   /**
+   * Sets a callback invoked before retrying provider requests.
+   * @param callback - Retry callback, or undefined to clear it.
+   */
+  setRetryCallback(
+    callback: ((exception: Error, attempt: number) => void) | undefined,
+  ): void {
+    this.client.retryCallback = callback;
+  }
+
+  /**
    * Proxy a generate request to the selected provider.
    * @param messages Internal message array (EMA schema)
    * @param tools Optional tool definitions (EMA schema)

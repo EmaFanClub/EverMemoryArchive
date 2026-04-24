@@ -3,7 +3,7 @@ import { GlobalConfig } from "../config/index";
 import { Agent, AgentEventNames, checkCompleteMessages } from "../agent";
 import type { AgentEventName, AgentState } from "../agent";
 import type { Server } from "../server";
-import { Logger } from "../shared/logger";
+import { formatLogTimestamp, Logger } from "../shared/logger";
 import { LLMClient } from "../llm";
 import { baseTools } from "../tools";
 import { resolveSession } from "../channel";
@@ -26,11 +26,7 @@ export class ActorWorker {
     new EventEmitter<ActorWorkerEventMap>() as ActorWorkerEventsEmitter;
   private readonly agent: Agent;
   private currentStatus: ActorWorkerStatus = "idle";
-  private readonly logger: Logger = Logger.create({
-    name: "actor",
-    level: "debug",
-    transport: "console",
-  });
+  private readonly logger: Logger;
   private agentState: AgentState | null = null;
   private queue: ActorInput[] = [];
   private currentRunPromise: Promise<void> | null = null;
@@ -39,13 +35,16 @@ export class ActorWorker {
   private constructor(
     private readonly actorId: number,
     private readonly conversationId: number,
-    private readonly session: string,
+    readonly session: string,
     private readonly ownerUid: string | null,
     private readonly server: Server,
     llm: LLMClient,
+    logger: Logger,
   ) {
+    this.logger = logger;
     this.agent = new Agent(GlobalConfig.agent, llm, this.logger);
     this.bindAgentEvent();
+    this.logger.info("Actor chat worker created");
   }
 
   static async create(
@@ -69,6 +68,24 @@ export class ActorWorker {
     const llm = new LLMClient(
       await server.dbService.getActorLLMConfig(actorId),
     );
+    const startedAt = formatLogTimestamp();
+    const date = startedAt.slice(0, 10);
+    const logger = Logger.create({
+      name: "agent.chat",
+      context: {
+        actorId,
+        conversationId,
+        session: conversation.session,
+      },
+      outputs: [
+        { type: "console", level: "warn" },
+        {
+          type: "file",
+          level: "debug",
+          filePath: `actors/actor_${actorId}/chat/${date}/${startedAt}.jsonl`,
+        },
+      ],
+    });
     return new ActorWorker(
       actorId,
       conversationId,
@@ -76,6 +93,7 @@ export class ActorWorker {
       ownerUid,
       server,
       llm,
+      logger,
     );
   }
 

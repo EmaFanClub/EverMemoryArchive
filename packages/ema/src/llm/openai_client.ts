@@ -92,15 +92,9 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
           continue;
         }
         if (isInlineDataItem(content)) {
-          console.log(
-            `[OpenAIClient] Inline data in user message is not supported yet and will be implemented later.`,
-          );
           continue;
         }
         /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in user message: ${JSON.stringify(content)}`,
-        );
       }
       return items;
     }
@@ -137,15 +131,9 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
           continue;
         }
         if (isInlineDataItem(content)) {
-          console.log(
-            `[OpenAIClient] Inline data in model message is not supported yet and will be implemented later.`,
-          );
           continue;
         }
         /** Additional content types can be handled here. */
-        console.warn(
-          `Unsupported content type in model message: ${JSON.stringify(content)}`,
-        );
       }
       return items;
     }
@@ -188,7 +176,6 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
       );
     }
     if (!Array.isArray(output)) {
-      console.warn(`No valid output in response: ${JSON.stringify(response)}`);
       return {
         message: {
           role: "model",
@@ -199,9 +186,6 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
       };
     }
     if (!response.status || response.status !== "completed") {
-      console.warn(
-        `Non-stop finish reason in response: ${JSON.stringify(response)}`,
-      );
       return {
         message: {
           role: "model",
@@ -218,11 +202,7 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
         let parsedArgs: Record<string, unknown> = {};
         try {
           parsedArgs = JSON.parse(item.arguments);
-        } catch (error) {
-          console.warn(
-            `Failed to parse tool call arguments: ${item.arguments}`,
-          );
-        }
+        } catch (error) {}
         contents.push({
           type: "function_call",
           id: item.call_id,
@@ -238,14 +218,10 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
             continue;
           }
           /** Additional content types can be handled here. */
-          console.warn(
-            `Unsupported content in response: ${JSON.stringify(content)}`,
-          );
         }
         continue;
       }
       /** Additional output types can be handled here. */
-      console.warn(`Unsupported output in response: ${JSON.stringify(item)}`);
     }
     return {
       message: {
@@ -264,7 +240,6 @@ export class OpenAIClient extends LLMClientBase implements SchemaAdapter {
     systemPrompt?: string,
     signal?: AbortSignal,
   ): Promise<OpenAIResponse> {
-    console.log("API Request Messages:", JSON.stringify(apiMessages, null, 2));
     return this.client.responses.create(
       {
         model: this.config.model,

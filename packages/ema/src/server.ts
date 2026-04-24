@@ -8,6 +8,7 @@ import { createJobHandlers } from "./scheduler/jobs";
 import { MemoryManager } from "./memory/manager";
 import { Gateway } from "./gateway";
 import { buildSession } from "./channel";
+import { Logger } from "./shared/logger";
 
 /**
  * Top-level server container that wires and starts the core runtime services.
@@ -45,6 +46,11 @@ export class Server {
   memoryManager!: MemoryManager;
 
   /**
+   * System-level logger for server lifecycle and infrastructure events.
+   */
+  logger!: Logger;
+
+  /**
    * Creates an uninitialized server container.
    *
    * Use {@link Server.create} for normal startup so all dependencies are wired
@@ -68,7 +74,22 @@ export class Server {
 
     const server = new Server();
     server.fs = fs;
+    server.logger = Logger.create({
+      name: "server",
+      context: {
+        mode: GlobalConfig.system.mode,
+      },
+      outputs: [
+        { type: "console", level: "info" },
+        { type: "file", level: "debug" },
+      ],
+    });
+    server.logger.info("Server starting");
     server.dbService = await DBService.create(fs);
+    server.logger.info("Database service initialized", {
+      mongo: GlobalConfig.mongo,
+      dataRoot: GlobalConfig.system.dataRoot,
+    });
 
     let restored = false;
     if (
@@ -77,18 +98,20 @@ export class Server {
     ) {
       restored = await server.dbService.restoreFromSnapshot("default");
       if (!restored) {
-        console.error("Failed to restore snapshot 'default'");
+        server.logger.warn("Failed to restore snapshot", { name: "default" });
       } else {
-        console.log("Snapshot 'default' restored");
+        server.logger.info("Snapshot restored", { name: "default" });
       }
     }
 
     await server.dbService.createIndices();
+    server.logger.info("Database indices created");
 
     server.gateway = new Gateway(server);
     server.actorRegistry = new ActorRegistry(server);
     server.memoryManager = new MemoryManager(server);
     server.scheduler = await AgendaScheduler.create(server.dbService.mongo);
+    server.logger.info("Scheduler initialized");
 
     if (
       GlobalConfig.system.mode === "dev" &&
@@ -98,9 +121,12 @@ export class Server {
       await server.createInitialCharacters();
     }
     await server.actorRegistry.restoreAll();
+    server.logger.info("Actors restored");
 
     await server.scheduler.start(createJobHandlers(server));
+    server.logger.info("Scheduler started");
     server.actorRegistry.startBootInitAll();
+    server.logger.info("Server ready");
 
     return server;
   }
@@ -137,19 +163,21 @@ export class Server {
     try {
       seed = await GlobalConfig.loadDevSeed(this.fs);
     } catch (error) {
-      console.warn(
-        `Failed to load development seed from ${GlobalConfig.devSeedPath}:`,
+      this.logger?.warn("Failed to load development seed", {
+        path: GlobalConfig.devSeedPath,
         error,
-      );
+      });
       return;
     }
     if (!seed) {
-      console.warn(
-        `Development seed not found at ${GlobalConfig.devSeedPath}, skipped bootstrap.`,
-      );
+      this.logger?.warn("Development seed not found, skipped bootstrap", {
+        path: GlobalConfig.devSeedPath,
+      });
       return;
     }
-    console.log(`Development seed loaded from ${GlobalConfig.devSeedPath}`);
+    this.logger?.info("Development seed loaded", {
+      path: GlobalConfig.devSeedPath,
+    });
 
     for (const user of seed.users) {
       await this.dbService.userDB.upsertUser({ ...user });
@@ -177,5 +205,11 @@ export class Server {
         conversation.allowProactive,
       );
     }
+    this.logger?.info("Development seed applied", {
+      users: seed.users.length,
+      roles: seed.roles.length,
+      actors: seed.actors.length,
+      conversations: seed.conversations.length,
+    });
   }
 }
