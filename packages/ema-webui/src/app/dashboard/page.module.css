@@ -1,0 +1,5788 @@
+.dashboardShell {
+  --panel-radius: 14px;
+  --rail-radius: var(--panel-radius);
+  --chat-panel-max-width: 1056px;
+  --sidebar-width: 268px;
+  --chat-panel-width: 672px;
+  --actor-info-width: 336px;
+  --actor-workspace-width: 1020px;
+  --resize-track-width: 12px;
+  --chat-panel-min-width: 520px;
+  position: relative;
+  display: flex;
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: 16px;
+  background: var(--bg);
+}
+
+.createActorGuideOverlay {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.76);
+  pointer-events: auto;
+}
+
+.sidebar {
+  display: flex;
+  flex: 0 0 var(--sidebar-width);
+  width: var(--sidebar-width);
+  min-width: 0;
+  height: calc(100dvh - 32px);
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--rail-radius);
+  padding: 10px;
+  background: var(--surface-inset);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.16);
+  animation: railEnter 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transition:
+    flex-basis 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    padding 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.sidebarCoachmarkActive {
+  position: relative;
+  z-index: 6;
+  overflow: visible;
+}
+
+.sidebarCoachmarkActive::after {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.66);
+  content: "";
+  pointer-events: none;
+}
+
+.sidebarCoachmarkActive .userButton,
+.sidebarCoachmarkActive .actorItem,
+.sidebarCoachmarkActive .createActorButton {
+  pointer-events: none;
+}
+
+.dashboardShellResizing,
+.dashboardShellResizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.layoutResizer {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--resize-track-width);
+  width: var(--resize-track-width);
+  min-width: var(--resize-track-width);
+  height: calc(100dvh - 32px);
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  outline: 0;
+  opacity: 1;
+  transition:
+    flex-basis 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    min-width 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+}
+
+.layoutResizer::before {
+  display: block;
+  width: 2px;
+  height: 32px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-strong) 60%, transparent);
+  content: "";
+  opacity: 0.54;
+  transition:
+    height 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.layoutResizer:hover::before,
+.layoutResizer:focus-visible::before,
+.layoutResizerActive::before {
+  height: 56px;
+  background: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 11%, transparent);
+  opacity: 1;
+}
+
+.layoutResizerHidden {
+  flex-basis: 0;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebarCollapsed {
+  align-items: center;
+  gap: 9px;
+  border-radius: 999px;
+  padding: 7px 5px;
+}
+
+.userButton,
+.actorItem,
+.createActorButton {
+  min-width: 0;
+  border: 0;
+  color: var(--text);
+  transition:
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.userButton:focus-visible,
+.actorItem:focus-visible,
+.createActorButton:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.userButton {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border-radius: 999px;
+  padding: 4px 11px 4px 4px;
+  background: transparent;
+  text-align: left;
+}
+
+.sidebarCollapsed .userButton,
+.sidebarCollapsed .actorItem,
+.sidebarCollapsed .createActorButton {
+  width: 52px;
+  min-height: 52px;
+  grid-template-columns: 48px;
+  justify-content: center;
+  gap: 0;
+  padding: 2px;
+}
+
+.sidebarCollapsed .userName,
+.sidebarCollapsed .actorCopy {
+  display: none;
+}
+
+.sidebarCollapsed .sectionDivider {
+  display: block;
+  width: 34px;
+  height: 1px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--border-strong) 58%, transparent);
+}
+
+.sidebarCollapsed .sectionDivider span,
+.sidebarCollapsed .sectionDivider::after {
+  display: none;
+}
+
+.sidebarCollapsed .actorList {
+  width: 100%;
+  justify-items: center;
+  gap: 9px;
+}
+
+.sidebarCollapsed .actorUnreadBadge {
+  top: 5px;
+  right: 3px;
+  transform: none;
+}
+
+.userButton:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.userButton:active {
+  background: var(--surface-active);
+  transform: translateY(0) scale(0.99);
+}
+
+.userButtonActive {
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface-raised));
+  color: var(--text);
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--accent) 13%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.userButtonActive .userAvatar {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-raised));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.userAvatar {
+  position: relative;
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 760;
+  letter-spacing: -0.035em;
+}
+
+.sidebarCollapsed .userAvatar,
+.sidebarCollapsed .actorAvatar,
+.sidebarCollapsed .createActorIcon {
+  width: 48px;
+  height: 48px;
+}
+
+.sidebarCollapsed .userAvatar,
+.sidebarCollapsed .actorAvatar {
+  font-size: 0.76rem;
+}
+
+.userName {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 660;
+  letter-spacing: -0.018em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sectionDivider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 0;
+  color: var(--text-subtle);
+  font-size: 0.67rem;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sectionDivider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+  content: "";
+}
+
+.actorList {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.actorItem,
+.createActorButton {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border-radius: 999px;
+  padding: 4px 11px 4px 4px;
+  background: transparent;
+  text-align: left;
+}
+
+.actorItem:hover,
+.createActorButton:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.actorItem:active,
+.createActorButton:active {
+  background: var(--surface-active);
+  transform: translateY(0) scale(0.99);
+}
+
+.createActorButton {
+  margin-top: 2px;
+  border: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 34%, transparent);
+}
+
+.createActorEntry {
+  position: relative;
+  min-width: 0;
+}
+
+.sidebarCoachmarkActive .createActorEntry {
+  z-index: 8;
+}
+
+.createActorEntry .createActorButton {
+  width: 100%;
+}
+
+.createActorButtonCoachTarget {
+  z-index: 7;
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface-raised));
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent),
+    0 0 0 10px color-mix(in srgb, var(--accent) 5%, transparent),
+    0 14px 34px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+  cursor: default;
+  pointer-events: none;
+}
+
+.createActorButton.createActorButtonCoachTarget:hover {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent-soft) 88%, var(--surface-raised));
+}
+
+.createActorBubbleTip {
+  --guide-tip-bg: color-mix(in srgb, var(--surface-raised) 96%, black 4%);
+  --guide-tip-border: color-mix(in srgb, var(--accent) 28%, var(--border));
+  position: absolute;
+  z-index: 9;
+  top: 50%;
+  left: calc(100% + 14px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-width: 262px;
+  min-height: 44px;
+  border: 1px solid var(--guide-tip-border);
+  border-radius: 16px;
+  padding: 7px 8px 7px 15px;
+  background: var(--guide-tip-bg);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.32),
+    0 0 0 4px color-mix(in srgb, var(--accent) 7%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
+  color: color-mix(in srgb, var(--text) 90%, var(--accent-hover));
+  font-size: 0.78rem;
+  font-weight: 720;
+  letter-spacing: -0.018em;
+  line-height: 1;
+  outline: 0;
+  pointer-events: none;
+  transform: translate3d(0, -50%, 0);
+  transition:
+    border-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+  white-space: nowrap;
+  animation: createActorBubbleTipIn 360ms 160ms cubic-bezier(0.16, 1, 0.3, 1)
+    both;
+}
+
+.createActorBubbleTip > span {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: color-mix(in srgb, var(--text) 92%, var(--accent-hover));
+  font-size: 0.8rem;
+  font-weight: 720;
+  line-height: 1.2;
+}
+
+.createActorBubbleTip::before {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 0;
+  height: 0;
+  border-top: 12px solid transparent;
+  border-right: 14px solid var(--guide-tip-border);
+  border-bottom: 12px solid transparent;
+  content: "";
+  transform: translate3d(0, -50%, 0);
+}
+
+.createActorBubbleTip::after {
+  position: absolute;
+  top: 50%;
+  right: calc(100% - 1px);
+  width: 0;
+  height: 0;
+  border-top: 10px solid transparent;
+  border-right: 12px solid var(--guide-tip-bg);
+  border-bottom: 10px solid transparent;
+  content: "";
+  transform: translate3d(0, -50%, 0);
+}
+
+.createActorBubbleTip:focus-within {
+  --guide-tip-bg: color-mix(
+    in srgb,
+    var(--surface-raised) 94%,
+    var(--accent-soft)
+  );
+  --guide-tip-border: color-mix(
+    in srgb,
+    var(--accent) 46%,
+    var(--border-strong)
+  );
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.34),
+    0 0 0 5px color-mix(in srgb, var(--accent) 11%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+  transform: translate3d(2px, -50%, 0);
+}
+
+.createActorGuideDismissButton {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface-active));
+  color: color-mix(in srgb, var(--text) 94%, var(--accent-hover));
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 760;
+  letter-spacing: -0.014em;
+  cursor: pointer;
+  outline: 0;
+  pointer-events: auto;
+  transition:
+    border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorGuideDismissButton:hover,
+.createActorGuideDismissButton:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 34%, var(--surface-active));
+  color: var(--text);
+}
+
+.createActorGuideDismissButton:active {
+  transform: scale(0.97);
+}
+
+.createActorButton:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border-strong));
+}
+
+.createActorButtonActive {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-raised));
+  color: var(--text);
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.createActorButtonActive .createActorIcon {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface-raised));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.actorItemActive {
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface-raised));
+  color: var(--text);
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--accent) 13%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.actorItemActive .actorAvatar {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-raised));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.actorItemActive .actorPreviewText,
+.actorItemActive .actorPreviewTime {
+  color: color-mix(in srgb, var(--text-muted) 82%, var(--accent));
+}
+
+.statusDot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--surface-inset);
+  border-radius: 999px;
+  background: var(--text-subtle);
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.online {
+  background: var(--success);
+  color: var(--success);
+}
+
+.busy {
+  background: var(--warning);
+  color: var(--warning);
+}
+
+.sleep {
+  background: #7dbbff;
+  color: #7dbbff;
+}
+
+.preparing {
+  background: var(--accent);
+  color: var(--accent);
+  animation: statusDotPulse 1100ms cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.offline {
+  background: var(--text-subtle);
+  color: var(--text-subtle);
+}
+
+.actorAvatar {
+  position: relative;
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 760;
+  letter-spacing: -0.035em;
+}
+
+.createActorIcon {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-subtle);
+  transition:
+    border-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorButton:hover .createActorIcon {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+  color: var(--accent);
+}
+
+.createActorIcon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.actorCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding-right: 36px;
+}
+
+.actorItemNoPreview .actorCopy {
+  align-self: center;
+}
+
+.actorItemNoPreview .actorName {
+  line-height: 1;
+}
+
+.actorName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actorName {
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 650;
+  letter-spacing: -0.018em;
+}
+
+.actorPreviewViewport {
+  position: relative;
+  display: block;
+  min-width: 0;
+  height: 1rem;
+  overflow: hidden;
+}
+
+.actorPreviewLine {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  column-gap: 8px;
+}
+
+.actorPreviewLineEnter {
+  animation: actorPreviewEnter 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.actorPreviewLineExit {
+  animation: actorPreviewExit 360ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.actorPreviewText {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 0.62rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actorPreviewTime {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 400;
+  justify-self: end;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  opacity: 0.78;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.actorUnreadBadge {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 2px solid var(--surface-inset);
+  border-radius: 999px;
+  padding: 0 5px;
+  background: var(--danger);
+  box-shadow:
+    0 8px 18px color-mix(in srgb, var(--danger) 22%, transparent),
+    0 0 0 3px var(--danger-soft);
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 0.61rem;
+  font-weight: 780;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  pointer-events: none;
+  transform: translate3d(0, -50%, 0);
+  user-select: none;
+  animation: actorUnreadBadgeIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.actorWorkspace {
+  display: flex;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: calc(100dvh - 32px);
+  min-height: 0;
+}
+
+.actorWorkspaceSingle {
+  --actor-info-width: 0px;
+  --actor-workspace-width: 100%;
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.actorWorkspaceSideHidden {
+  --actor-info-width: 0px;
+}
+
+.detailPanel {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: min(100%, var(--chat-panel-min-width));
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  background: var(--surface-inset);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.16);
+  animation: panelEnter 320ms 40ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.homePanel {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: clamp(28px, 5vw, 64px);
+  isolation: isolate;
+}
+
+.homeBrand {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  max-width: 100%;
+  justify-items: center;
+  gap: 18px;
+  justify-content: center;
+  animation: homeBrandEnter 420ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.homeTitleLockup {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+.homeTitle {
+  display: inline-block;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 3.2rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.12;
+  text-align: center;
+  white-space: normal;
+}
+
+.homeSettingsButton {
+  display: inline-grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 999px;
+  padding: 0;
+  background: color-mix(
+    in srgb,
+    var(--surface-raised) 56%,
+    var(--accent-soft) 10%
+  );
+  color: color-mix(in srgb, var(--accent) 76%, var(--text-subtle));
+  outline: 0;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.16),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.homeSettingsButton:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface-raised));
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.homeSettingsButton:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.homeSettingsButton:focus-visible {
+  box-shadow:
+    0 0 0 4px var(--accent-soft),
+    0 12px 30px rgba(0, 0, 0, 0.16);
+}
+
+.homeSettingsButtonActive {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border));
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-raised));
+  color: var(--text);
+  box-shadow:
+    0 12px 30px color-mix(in srgb, var(--accent) 16%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.homeSettingsButton svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.homeVersion {
+  position: absolute;
+  z-index: 1;
+  bottom: 20px;
+  left: 50%;
+  color: color-mix(in srgb, var(--text-subtle) 88%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 520;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  opacity: 0.86;
+  transform: translate3d(-50%, 0, 0);
+  white-space: nowrap;
+}
+
+.actorInfoPanel {
+  display: flex;
+  flex: 0 0 var(--actor-info-width);
+  width: var(--actor-info-width);
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  background: var(--surface-inset);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.16);
+  animation: panelEnter 320ms 70ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transition:
+    flex-basis 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorInfoPanelHidden {
+  flex-basis: 0;
+  width: 0;
+  border-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(18px, 0, 0);
+  box-shadow: none;
+}
+
+.actorInfoTabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: 1px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 7px;
+  background: color-mix(in srgb, var(--surface-raised) 18%, transparent);
+}
+
+.actorInfoTab {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border: 0;
+  padding: 0 5px;
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 0.76rem;
+  font-weight: 720;
+  letter-spacing: -0.018em;
+  white-space: nowrap;
+  transition:
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorInfoTab::after {
+  position: absolute;
+  right: 6px;
+  bottom: 0;
+  left: 6px;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+  background: var(--accent);
+  content: "";
+  opacity: 0;
+  transform: scaleX(0.48);
+  transition:
+    opacity 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorInfoTab:hover {
+  color: var(--text-muted);
+  transform: translateY(-1px);
+}
+
+.actorInfoTab:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.actorInfoTab:focus-visible {
+  outline: 0;
+  box-shadow: inset 0 0 0 3px var(--accent-soft);
+}
+
+.actorInfoTabActive {
+  color: var(--text);
+}
+
+.actorInfoTabActive::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.actorInfoTab svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.actorInfoBody {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.actorInfoComingSoon {
+  display: flex;
+  width: auto;
+  height: 180px;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 68%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-raised) 9%, transparent);
+  color: var(--text-subtle);
+  margin: 14px;
+  text-align: center;
+  user-select: none;
+}
+
+.actorInfoComingSoon span {
+  display: none;
+}
+
+.actorInfoComingSoon strong {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 760;
+  letter-spacing: 0.24em;
+  opacity: 0.78;
+  text-transform: uppercase;
+}
+
+.actorSchedulePanel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  scrollbar-width: none;
+}
+
+.actorSchedulePanel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.actorSchedulePanel .actorInfoComingSoon {
+  height: 108px;
+  margin: 0;
+}
+
+.actorSleepScheduleCard {
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 42%, transparent);
+  border-radius: 14px;
+  padding: 14px 14px 13px;
+  background: color-mix(in srgb, var(--surface-raised) 22%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 3%, transparent);
+}
+
+.actorSleepScheduleHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.actorSleepScheduleHeader > span {
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+}
+
+.actorSleepScheduleHeader > strong {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.actorSleepScheduleSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.actorSleepScheduleSummary > span {
+  display: inline-flex;
+  min-width: 0;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 34%, transparent);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--surface-inset) 44%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  white-space: nowrap;
+}
+
+.actorSleepScheduleSummary svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
+.actorSleepScheduleSummary > span:first-child svg {
+  color: color-mix(in srgb, var(--accent) 86%, white);
+}
+
+.actorSleepScheduleSummary > span:last-child svg {
+  color: color-mix(in srgb, #ffb26a 82%, var(--text));
+}
+
+.actorSleepScheduleTrackWrap {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px 0;
+}
+
+.actorSleepScheduleTrack {
+  position: relative;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-inset) 68%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 3%, transparent);
+}
+
+.actorSleepScheduleTicks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.actorSleepScheduleTick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 10px;
+  background: color-mix(in srgb, var(--text-subtle) 48%, transparent);
+  opacity: 0.58;
+  transform: translate(-0.5px, -50%);
+}
+
+.actorSleepScheduleRange {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 78%, black 7%) 0%,
+    color-mix(in srgb, var(--accent) 52%, #4a9ff0 42%) 100%
+  );
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--accent) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+}
+
+.actorSleepScheduleNow {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 1.5px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--success) 74%, transparent) 18%,
+    color-mix(in srgb, var(--success) 56%, transparent) 82%,
+    transparent 100%
+  );
+  transform: translateX(-50%);
+}
+
+.actorSleepScheduleNow::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 88%, white 4%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--success) 52%, transparent);
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.actorSleepScheduleHandle {
+  position: absolute;
+  top: 50%;
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 52%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 94%, white 3%);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.28);
+  transform: translate(-50%, -50%);
+}
+
+.actorSleepScheduleHandleStart {
+  color: color-mix(in srgb, var(--accent) 86%, white);
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border-strong));
+}
+
+.actorSleepScheduleHandleEnd {
+  color: color-mix(in srgb, #ffb26a 82%, var(--text));
+  border-color: color-mix(in srgb, #ffb26a 42%, var(--border-strong));
+}
+
+.actorSleepScheduleHandle svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.25;
+}
+
+.actorSleepScheduleAxis {
+  position: relative;
+  height: 14px;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 640;
+  letter-spacing: -0.008em;
+  pointer-events: none;
+}
+
+.actorSleepScheduleAxis span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.actorSleepScheduleEmpty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 560;
+  line-height: 1.55;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.actorSettings {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.actorSettingsScroll {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 16px 14px 10px;
+  scrollbar-color: transparent transparent;
+  scrollbar-width: none;
+}
+
+.actorSettingsScroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.actorSettingsScroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+
+.actorSettingsScroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.actorSettingsScrollbar {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.actorSettingsScrollbarVisible {
+  opacity: 1;
+}
+
+.actorSettingsScrollbarThumb {
+  position: absolute;
+  top: var(--actor-settings-scrollbar-thumb-top);
+  right: 0;
+  width: 8px;
+  height: var(--actor-settings-scrollbar-thumb-height);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: var(--border-strong);
+}
+
+.actorSettingsToast {
+  position: absolute;
+  z-index: 42;
+  left: 50%;
+  top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 7px 11px;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  font-size: 0.76rem;
+  font-weight: 680;
+  letter-spacing: -0.016em;
+  line-height: 1;
+  pointer-events: none;
+  transform: translate3d(-50%, 0, 0);
+  user-select: none !important;
+  white-space: nowrap;
+  animation: copyToastLife 1400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.actorSettingsToastSuccess {
+  border: 1px solid color-mix(in srgb, var(--success) 22%, var(--border));
+  background: color-mix(
+    in srgb,
+    var(--success-soft) 34%,
+    var(--surface-raised)
+  );
+  color: color-mix(in srgb, var(--success) 70%, var(--text-muted));
+}
+
+.actorSettingsToastError {
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--border));
+  background: color-mix(in srgb, var(--danger-soft) 38%, var(--surface-raised));
+  color: color-mix(in srgb, var(--danger) 72%, var(--text-muted));
+}
+
+.actorSettingsToast svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+}
+
+.actorSettingsContent {
+  display: flex;
+  width: min(100%, 400px);
+  min-height: min-content;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 auto;
+}
+
+.actorSettingsProfile,
+.actorSettingsSection {
+  display: grid;
+  min-width: 0;
+}
+
+.actorSettingsProfile {
+  gap: 16px;
+  padding-top: 8px;
+}
+
+.actorSettingsSection {
+  gap: 9px;
+  padding-top: 8px;
+}
+
+.actorSettingsSectionTitle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 780;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  user-select: none;
+}
+
+.actorSettingsSectionTitle::after {
+  height: 1px;
+  flex: 1;
+  background: color-mix(in srgb, var(--border-strong) 54%, transparent);
+  content: "";
+}
+
+.actorSettingsAvatarButton {
+  position: relative;
+  display: inline-grid;
+  width: 96px;
+  height: 96px;
+  margin: 8px 0 6px;
+  place-self: center;
+  place-items: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: color-mix(in srgb, var(--surface-raised) 92%, white 2%);
+  color: var(--text);
+  outline: 0;
+  transition:
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsAvatarButton:hover {
+  background: color-mix(in srgb, var(--surface-raised) 82%, var(--accent) 18%);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: translateY(-1px);
+}
+
+.actorSettingsAvatarButton:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.actorSettingsAvatarButton:focus-visible {
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.actorSettingsAvatarText {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 1.32rem;
+  font-weight: 820;
+  letter-spacing: -0.05em;
+  transition:
+    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsAvatarOverlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, black 52%, transparent);
+  color: var(--text);
+  opacity: 0;
+  transform: scale(1.04);
+  transition:
+    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsAvatarOverlay svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.1;
+}
+
+.actorSettingsAvatarButton:hover .actorSettingsAvatarText {
+  opacity: 0.34;
+  transform: scale(0.96);
+}
+
+.actorSettingsAvatarButton:hover .actorSettingsAvatarOverlay {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.actorSettingsProfileName {
+  max-width: 100%;
+  margin: -2px 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.026em;
+  line-height: 1.1;
+  text-align: center;
+  text-overflow: ellipsis;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.actorSettingsStartupTip {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 999px;
+  padding: 7px 8px 7px 10px;
+  background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface-raised));
+  color: color-mix(in srgb, var(--accent) 62%, var(--text-muted));
+  font-size: 0.72rem;
+  font-weight: 610;
+  letter-spacing: -0.014em;
+  line-height: 1.25;
+  animation: panelEnter 260ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.actorSettingsStartupTip > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
+.actorSettingsStartupTip > span {
+  min-width: 0;
+  flex: 1;
+}
+
+.actorSettingsStartupTip button {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: currentColor;
+  opacity: 0.74;
+  outline: 0;
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsStartupTip button:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.actorSettingsStartupTip button:active {
+  transform: translateY(0) scale(0.94);
+}
+
+.actorSettingsStartupTip button:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.actorSettingsStartupTip button svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
+}
+
+.actorSettingsFieldGroup {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.actorSettingsFieldTitle {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 780;
+  letter-spacing: -0.018em;
+  line-height: 1;
+  user-select: none;
+}
+
+.actorSettingsDisplayField {
+  display: flex;
+  width: 100%;
+  height: 40px;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 66%, transparent);
+  border-radius: 999px;
+  padding: 0 15px;
+  background: color-mix(in srgb, var(--surface-inset) 58%, transparent);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 400;
+  letter-spacing: -0.006em;
+  outline: 0;
+  opacity: 1;
+  text-overflow: ellipsis;
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  white-space: nowrap;
+  -webkit-text-fill-color: var(--text);
+}
+
+.actorSettingsDisplayField:focus {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 26%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.actorSettingsDisplayField:disabled {
+  border-color: color-mix(in srgb, var(--border) 68%, transparent);
+  background: color-mix(in srgb, var(--surface-inset) 72%, black 6%);
+  color: color-mix(in srgb, var(--text) 78%, var(--text-subtle));
+  cursor: not-allowed;
+  opacity: 0.82;
+  -webkit-text-fill-color: color-mix(
+    in srgb,
+    var(--text) 78%,
+    var(--text-subtle)
+  );
+}
+
+.actorSettingsDisplayField:disabled:hover {
+  border-color: color-mix(in srgb, var(--border-strong) 54%, transparent);
+  background: color-mix(in srgb, var(--surface-inset) 78%, black 8%);
+}
+
+.actorSettingsMenuList {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.actorSettingsMenuItem {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  min-width: 0;
+  height: 46px;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 13px 0 9px;
+  background: color-mix(in srgb, var(--surface-raised) 86%, white 2%);
+  color: var(--text);
+  text-align: left;
+  outline: 0;
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsMenuButton {
+  grid-template-columns: 30px minmax(0, 1fr);
+}
+
+.actorSettingsMenuItem:hover {
+  background: color-mix(in srgb, var(--surface-raised) 74%, white 8%);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.actorSettingsMenuItem:active {
+  background: color-mix(in srgb, var(--surface-active) 84%, white 4%);
+  transform: translateY(0) scale(0.99);
+}
+
+.actorSettingsMenuItem:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.actorSettingsMenuItem:disabled {
+  cursor: default;
+  opacity: 0.86;
+}
+
+.actorSettingsMenuItem:disabled:hover {
+  background: color-mix(in srgb, var(--surface-raised) 86%, white 2%);
+  transform: none;
+}
+
+.actorSettingsMenuItem > svg {
+  width: 17px;
+  height: 17px;
+  justify-self: end;
+  color: var(--text-muted);
+  stroke-width: 2.4;
+  transition:
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsMenuItem:hover > svg {
+  color: var(--text);
+  transform: translateX(2px);
+}
+
+.actorSettingsMenuIcon {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-hover) 68%, transparent);
+  color: color-mix(in srgb, var(--text-muted) 78%, var(--accent));
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsMenuItem:hover .actorSettingsMenuIcon {
+  background: color-mix(in srgb, var(--surface-active) 82%, transparent);
+  color: color-mix(in srgb, var(--text) 86%, var(--accent));
+}
+
+.actorSettingsMenuIcon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.1;
+}
+
+.actorActivitySwitchItem .actorSettingsMenuIcon {
+  background: color-mix(in srgb, var(--actor-activity-color) 13%, transparent);
+  color: color-mix(in srgb, var(--actor-activity-color) 84%, var(--text-muted));
+}
+
+.actorActivitySwitchItem:hover .actorSettingsMenuIcon {
+  background: color-mix(in srgb, var(--actor-activity-color) 18%, transparent);
+  color: color-mix(in srgb, var(--actor-activity-color) 92%, var(--text));
+}
+
+.actorActivitySwitchItem:has(.actorActivityIcon_offline) {
+  --actor-activity-color: var(--text-subtle);
+}
+
+.actorActivitySwitchItem:has(.actorActivityIcon_sleeping) {
+  --actor-activity-color: #7dbbff;
+}
+
+.actorActivitySwitchItem:has(.actorActivityIcon_preparing) {
+  --actor-activity-color: var(--accent);
+}
+
+.actorActivitySwitchItem:has(.actorActivityIcon_online) {
+  --actor-activity-color: var(--success);
+}
+
+.actorActivitySwitchItem:has(.actorActivityIcon_busy) {
+  --actor-activity-color: var(--warning);
+}
+
+.actorSettingsMenuText {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  align-content: center;
+  gap: 3px;
+}
+
+.actorSettingsMenuTitle {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actorSettingsMenuDescription {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
+  font-size: 0.7rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actorSettingsSwitchItem {
+  margin-top: 2px;
+}
+
+.actorActivitySwitchItem .actorSettingsMenuTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.actorActivitySwitchItem .actorSettingsMenuIcon svg {
+  transition: transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorActivitySwitchItem:disabled .actorSettingsMenuIcon svg {
+  animation: spin 900ms linear infinite;
+}
+
+.actorSettingsSwitch {
+  position: relative;
+  display: inline-flex;
+  width: 40px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: color-mix(in srgb, var(--surface-active) 70%, transparent);
+  outline: 0;
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsSwitchKnob {
+  position: absolute;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 80%, var(--surface-raised));
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.28);
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsSwitchOn {
+  background: color-mix(in srgb, var(--accent) 58%, var(--surface-active));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.actorSettingsSwitchOn .actorSettingsSwitchKnob {
+  background: color-mix(in srgb, white 90%, var(--accent));
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.3),
+    0 0 10px color-mix(in srgb, var(--accent) 24%, transparent);
+  transform: translateX(18px);
+}
+
+.actorSettingsSwitchLoading .actorSettingsSwitchKnob {
+  display: grid;
+  place-items: center;
+}
+
+.actorSettingsSwitchLoading .actorSettingsSwitchKnob svg {
+  width: 11px;
+  height: 11px;
+  animation: spin 900ms linear infinite;
+  color: color-mix(in srgb, var(--surface-raised) 65%, var(--accent));
+}
+
+.actorSettingsMenuItemDanger .actorSettingsMenuTitle {
+  color: color-mix(in srgb, var(--danger) 88%, var(--text));
+}
+
+.actorSettingsMenuItemDanger .actorSettingsMenuIcon {
+  background: color-mix(in srgb, var(--danger-soft) 64%, transparent);
+  color: color-mix(in srgb, var(--danger) 88%, var(--text-muted));
+}
+
+.actorSettingsMenuItemDanger:hover {
+  background: color-mix(in srgb, var(--danger-soft) 38%, var(--surface-raised));
+}
+
+.actorSettingsMenuItemDanger:hover .actorSettingsMenuIcon {
+  background: color-mix(in srgb, var(--danger-soft) 78%, transparent);
+  color: color-mix(in srgb, var(--danger) 92%, var(--text));
+}
+
+.actorSettingsDetail {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-inset);
+  box-shadow: -18px 0 42px rgba(0, 0, 0, 0.2);
+  animation: settingsDetailEnter 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.actorSettingsDetailClosing {
+  pointer-events: none;
+  animation: settingsDetailExit 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.actorSettingsDetailHeader {
+  position: relative;
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 18%, transparent);
+}
+
+.actorSettingsDetailHeaderInner {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px 7px 16px;
+}
+
+.actorSettingsDetailHeader h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actorSettingsDetailClose {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  outline: 0;
+  overflow: visible;
+  transition:
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorSettingsDetailClose:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.actorSettingsDetailClose:active {
+  background: var(--surface-active);
+  transform: translateY(0) scale(0.96);
+}
+
+.actorSettingsDetailClose:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.actorSettingsDetailClose svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.4;
+}
+
+.llmSettingsBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 16px 14px 14px;
+  scrollbar-width: none;
+}
+
+.llmSettingsBody::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.llmSettingsContent {
+  display: grid;
+  width: min(100%, 400px);
+  min-height: min-content;
+  gap: 12px;
+  margin: 0 auto;
+}
+
+.llmSettingsScrollbar {
+  position: absolute;
+  z-index: 4;
+  top: 52px;
+  right: 0;
+  bottom: 65px;
+  width: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.llmSettingsScrollbarVisible {
+  opacity: 1;
+}
+
+.llmSettingsScrollbarThumb {
+  position: absolute;
+  top: var(--llm-settings-scrollbar-thumb-top);
+  right: 0;
+  width: 8px;
+  height: var(--llm-settings-scrollbar-thumb-height);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: var(--border-strong);
+}
+
+.llmGlobalSwitch,
+.llmTestButton,
+.llmSaveButton {
+  border: 0;
+  outline: 0;
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.llmGlobalSwitch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  height: 46px;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  border-radius: 999px;
+  padding: 0 13px 0 16px;
+  background: color-mix(in srgb, var(--surface-raised) 86%, white 2%);
+  color: var(--text);
+  text-align: left;
+}
+
+.llmGlobalSwitch:hover {
+  background: color-mix(in srgb, var(--surface-raised) 74%, white 8%);
+  transform: translateY(-1px);
+}
+
+.llmGlobalSwitch:disabled {
+  cursor: default;
+  opacity: 0.82;
+}
+
+.llmGlobalSwitch:disabled:hover {
+  background: color-mix(in srgb, var(--surface-raised) 86%, white 2%);
+  transform: none;
+}
+
+.llmGlobalSwitch:active {
+  background: color-mix(in srgb, var(--surface-active) 84%, white 4%);
+  transform: translateY(0) scale(0.99);
+}
+
+.llmGlobalSwitch:focus-visible,
+.llmTestButton:focus-visible,
+.llmSaveButton:focus-visible,
+.llmProviderTab:focus-visible,
+.llmEndpointTab:focus-visible,
+.llmSettingsField input:focus,
+.llmModelSelectButton:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.llmGlobalSwitchOn {
+  background: color-mix(in srgb, var(--surface-raised) 86%, white 2%);
+}
+
+.llmSettingsItemText {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  align-content: center;
+  gap: 3px;
+}
+
+.llmSettingsItemTitle {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llmSettingsItemDescription {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
+  font-size: 0.7rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llmSettingsSection {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.llmSettingsSectionEnter {
+  animation: llmSettingsSectionEnter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.llmSettingsSection h4 {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 780;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.searchIntroCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, #5aa7ff 38%, var(--border));
+  border-radius: 12px;
+  padding: 10px 11px;
+  background: color-mix(in srgb, #5aa7ff 5%, var(--surface-raised));
+  animation: llmSettingsSectionEnter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.settingsInfoCard {
+  --settings-info-color: #5aa7ff;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  border: 1px solid
+    color-mix(in srgb, var(--settings-info-color) 34%, var(--border));
+  border-radius: 12px;
+  padding: 10px 11px;
+  background: color-mix(
+    in srgb,
+    var(--settings-info-color) 5%,
+    var(--surface-raised)
+  );
+  animation: llmSettingsSectionEnter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.settingsInfoCardWarning {
+  --settings-info-color: var(--warning);
+}
+
+.settingsInfoCardError {
+  --settings-info-color: var(--danger);
+}
+
+.settingsInfoCard > svg {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  color: color-mix(in srgb, var(--settings-info-color) 86%, var(--text-muted));
+  stroke-width: 2.2;
+}
+
+.settingsInfoCard > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.settingsInfoCard strong {
+  color: color-mix(in srgb, var(--settings-info-color) 74%, var(--text));
+  font-size: 0.78rem;
+  font-weight: 740;
+  letter-spacing: -0.014em;
+  line-height: 1.2;
+}
+
+.settingsInfoCard small {
+  color: color-mix(in srgb, var(--text-muted) 88%, transparent);
+  font-size: 0.73rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.searchIntroIcon {
+  display: flex;
+  width: 15px;
+  height: 18px;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 1px;
+  color: color-mix(in srgb, #7dbbff 88%, var(--text-muted));
+}
+
+.searchIntroIcon svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.2;
+}
+
+.searchIntroContent {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.searchIntroContent p {
+  margin: 0;
+  color: color-mix(in srgb, #8fc4ff 72%, var(--text-muted));
+  font-size: 0.76rem;
+  font-weight: 520;
+  letter-spacing: -0.012em;
+  line-height: 1.42;
+}
+
+.qqIntroSteps {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 16px;
+  color: color-mix(in srgb, #8fc4ff 72%, var(--text-muted));
+  font-size: 0.76rem;
+  font-weight: 520;
+  letter-spacing: -0.012em;
+  line-height: 1.38;
+}
+
+.qqIntroSteps li {
+  padding-left: 1px;
+}
+
+.searchIntroLink {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  color: color-mix(in srgb, #8fc4ff 84%, var(--text-muted));
+  font-size: 0.76rem;
+  font-weight: 520;
+  letter-spacing: -0.012em;
+  line-height: 1;
+  outline: 0;
+  text-decoration: none;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition:
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.searchIntroLink:hover {
+  color: color-mix(in srgb, #c4e1ff 90%, var(--text));
+  text-decoration-line: underline;
+  transform: translateY(-1px);
+}
+
+.searchIntroLink:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.searchIntroLink:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  text-decoration-line: underline;
+}
+
+.searchIntroLink svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
+.llmGlobalSummary {
+  display: grid;
+  gap: 7px;
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--surface-raised) 64%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 64%, transparent);
+}
+
+.llmGlobalSummaryRow {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 22px;
+  align-items: center;
+  gap: 10px;
+}
+
+.llmGlobalSummaryRow > span {
+  color: var(--text-subtle);
+  font-size: 0.74rem;
+  font-weight: 560;
+  line-height: 1.12;
+  white-space: nowrap;
+}
+
+.llmGlobalSummaryRow > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llmSettingsControl {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.llmSettingsControlTitle {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 760;
+  letter-spacing: -0.014em;
+  line-height: 1;
+}
+
+.llmProviderTabs,
+.llmEndpointTabs {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--surface-raised) 68%, transparent);
+}
+
+.llmProviderTabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.llmProviderTabsCompact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.llmEndpointTabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.llmProviderTab,
+.llmEndpointTab {
+  height: 32px;
+  min-width: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  outline: 0;
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.llmProviderTab:hover,
+.llmEndpointTab:hover {
+  background: color-mix(in srgb, var(--surface-hover) 72%, transparent);
+  color: var(--text);
+}
+
+.llmProviderTab:disabled,
+.llmEndpointTab:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.llmProviderTab:disabled:hover,
+.llmEndpointTab:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.llmProviderTabActive:disabled,
+.llmEndpointTabActive:disabled,
+.llmProviderTabActive:disabled:hover,
+.llmEndpointTabActive:disabled:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-active));
+  color: color-mix(in srgb, var(--text) 82%, var(--text-subtle));
+}
+
+.llmProviderTab:active,
+.llmEndpointTab:active {
+  transform: scale(0.98);
+}
+
+.llmProviderTabActive,
+.llmEndpointTabActive {
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface-active));
+  color: var(--text);
+}
+
+.llmSettingsFields {
+  display: grid;
+  gap: 11px;
+  min-width: 0;
+}
+
+.llmComingSoon {
+  display: flex;
+  height: 92px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 64%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-raised) 18%, transparent);
+  color: var(--text-subtle);
+  user-select: none;
+  animation: llmSettingsSectionEnter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.llmComingSoon strong {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 760;
+  letter-spacing: 0.22em;
+  opacity: 0.78;
+  text-transform: uppercase;
+}
+
+.llmSettingsField {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.llmSettingsField input,
+.llmModelSelectButton {
+  width: 100%;
+  height: 40px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 62%, transparent);
+  border-radius: 999px;
+  padding: 0 14px;
+  background: color-mix(in srgb, var(--surface-inset) 58%, transparent);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 430;
+  letter-spacing: -0.006em;
+  outline: 0;
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.llmSettingsField input::placeholder {
+  color: var(--text-subtle);
+}
+
+.llmSettingsField input:disabled {
+  border-color: color-mix(in srgb, var(--border) 64%, transparent);
+  background: color-mix(in srgb, var(--surface-inset) 72%, black 6%);
+  color: color-mix(in srgb, var(--text) 76%, var(--text-subtle));
+  cursor: not-allowed;
+  opacity: 0.82;
+  -webkit-text-fill-color: color-mix(
+    in srgb,
+    var(--text) 76%,
+    var(--text-subtle)
+  );
+}
+
+.llmSettingsField input:focus,
+.llmModelSelectButtonOpen {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 26%, transparent);
+}
+
+.llmSettingsFieldInvalid .llmSettingsControlTitle {
+  color: color-mix(in srgb, var(--danger) 72%, var(--text));
+}
+
+.llmSettingsFieldInvalid input,
+.llmSettingsFieldInvalid .llmModelSelectButton {
+  border-color: color-mix(in srgb, var(--danger) 46%, var(--border-strong));
+  background: color-mix(in srgb, var(--danger-soft) 28%, var(--surface-inset));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.llmSettingsFieldInvalid input:focus,
+.llmSettingsFieldInvalid .llmModelSelectButton:focus-visible,
+.llmSettingsFieldInvalid .llmModelSelectButtonOpen {
+  border-color: color-mix(in srgb, var(--danger) 58%, var(--border-strong));
+  background: color-mix(in srgb, var(--danger-soft) 34%, var(--surface-raised));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 13%, transparent);
+}
+
+.searchSettingsFieldHint {
+  margin: -2px 0 0;
+  color: color-mix(in srgb, var(--danger) 72%, var(--text-muted));
+  font-size: 0.72rem;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.settingsFieldHint {
+  margin: -2px 0 0;
+  color: color-mix(in srgb, var(--text-subtle) 88%, transparent);
+  font-size: 0.72rem;
+  font-weight: 520;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.qqStatusCard {
+  --qq-status-color: var(--text-subtle);
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid
+    color-mix(in srgb, var(--qq-status-color) 24%, var(--border));
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: color-mix(
+    in srgb,
+    var(--qq-status-color) 5%,
+    var(--surface-raised)
+  );
+  animation: llmSettingsSectionEnter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.qqStatusCard_connected {
+  --qq-status-color: var(--success);
+}
+
+.qqStatusCard_connecting {
+  --qq-status-color: var(--accent);
+}
+
+.qqStatusCard_disconnected {
+  --qq-status-color: var(--danger);
+}
+
+.qqStatusCard_offline {
+  --qq-status-color: var(--accent);
+}
+
+.qqStatusCard_disabled {
+  --qq-status-color: var(--text-subtle);
+}
+
+.qqStatusIcon {
+  position: relative;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--qq-status-color) 12%, transparent);
+  color: color-mix(in srgb, var(--qq-status-color) 86%, var(--text));
+}
+
+.qqStatusIcon::after {
+  position: absolute;
+  inset: 5px;
+  border: 1px solid color-mix(in srgb, var(--qq-status-color) 38%, transparent);
+  border-radius: inherit;
+  content: "";
+  opacity: 0;
+  transform: scale(1);
+}
+
+.qqStatusCard_connecting .qqStatusIcon::after {
+  animation: qqStatusPulse 1200ms cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.qqStatusIcon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.3;
+}
+
+.qqStatusCard_connecting .qqStatusIcon svg {
+  animation: spin 900ms linear infinite;
+}
+
+.qqStatusContent {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.qqStatusTitleRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.qqStatusTitleRow span {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 760;
+  letter-spacing: -0.015em;
+  line-height: 1;
+}
+
+.qqStatusTitleRow strong {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--qq-status-color) 82%, var(--text));
+  font-size: 0.74rem;
+  font-weight: 740;
+  line-height: 1;
+}
+
+.qqStatusDetail {
+  margin: 0;
+  color: color-mix(in srgb, var(--text-muted) 88%, transparent);
+  font-size: 0.74rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.38;
+}
+
+.qqStatusDetail code {
+  color: color-mix(in srgb, var(--text) 78%, var(--text-muted));
+  font-family: var(--font-mono);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.qqStatusDetail button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0 2px;
+  background: transparent;
+  color: color-mix(in srgb, var(--qq-status-color) 82%, var(--text-muted));
+  font: inherit;
+  font-weight: 650;
+  outline: 0;
+  text-decoration: none;
+  transition:
+    color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    text-decoration-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.qqStatusDetail button:hover {
+  color: color-mix(in srgb, var(--qq-status-color) 92%, var(--text));
+  text-decoration-line: underline;
+  text-underline-offset: 3px;
+}
+
+.qqStatusDetail button:active {
+  color: var(--text);
+}
+
+.qqStatusDetail button:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.qqConversationSection {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.qqConversationHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qqConversationHeader > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.qqConversationHeaderTitleRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.qqConversationCount {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0 6px;
+  background: color-mix(in srgb, var(--surface-raised) 78%, transparent);
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.qqConversationHeader p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qqConversationAddButton {
+  display: inline-flex;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 11px 0 9px;
+  background: color-mix(in srgb, var(--surface-raised) 76%, white 3%);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+  outline: 0;
+  transition:
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.qqConversationAddButton:hover {
+  background: color-mix(in srgb, var(--surface-raised) 66%, white 9%);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.qqConversationAddButton:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.qqConversationAddButton:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.qqConversationAddButton svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+}
+
+.qqConversationList {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 58%, transparent);
+  border-radius: 18px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--surface-raised) 10%, transparent);
+}
+
+.qqConversationCard {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border-radius: 16px;
+  padding: 10px 8px 10px 10px;
+  background: color-mix(in srgb, var(--surface-raised) 70%, transparent);
+  cursor: pointer;
+  outline: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 52%, transparent);
+  transition:
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.qqConversationCard:hover {
+  background: color-mix(in srgb, var(--surface-raised) 74%, white 3%);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--border-strong) 62%, transparent);
+  transform: translateY(-1px);
+}
+
+.qqConversationCard:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 44%, var(--border-strong)),
+    0 0 0 3px var(--accent-soft);
+}
+
+.qqConversationIcon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--qq-conversation-color) 13%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--qq-conversation-color) 82%,
+    var(--text-muted)
+  );
+}
+
+.qqConversationIconChat {
+  --qq-conversation-color: var(--accent);
+}
+
+.qqConversationIconGroup {
+  --qq-conversation-color: #7dbbff;
+}
+
+.qqConversationIcon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.2;
+}
+
+.qqConversationMain {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.qqConversationTitleRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.qqConversationTitleRow strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 740;
+  letter-spacing: -0.018em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qqConversationTitleRow span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--surface-inset) 74%, transparent);
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 690;
+  line-height: 1;
+}
+
+.qqConversationMain p {
+  margin: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text-muted) 82%, transparent);
+  font-size: 0.72rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qqConversationMeta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qqConversationMeta span {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qqConversationSessionMeta {
+  padding-right: 1px;
+}
+
+.qqConversationMeta .qqConversationProactiveMeta {
+  min-width: 64px;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--success-soft) 54%, transparent);
+  color: color-mix(in srgb, var(--success) 74%, var(--text-muted));
+  font-family: var(--font-sans);
+  font-weight: 700;
+}
+
+.qqConversationMeta .qqConversationPassiveMeta {
+  min-width: 64px;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--warning-soft) 54%, transparent);
+  color: color-mix(in srgb, var(--warning) 70%, var(--text-muted));
+  font-family: var(--font-sans);
+  font-weight: 700;
+}
+
+.qqConversationMeta svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
+.qqConversationActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.qqConversationActions button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  outline: 0;
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.qqConversationActions button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.qqConversationActions button:active {
+  background: var(--surface-active);
+  transform: translateY(0) scale(0.93);
+}
+
+.qqConversationActions button:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.qqConversationActions svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.3;
+}
+
+.qqConversationActions .qqConversationDeleteButton:hover {
+  color: var(--danger);
+}
+
+.qqConversationEmpty {
+  display: inline-flex;
+  width: 100%;
+  height: 54px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 58%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-raised) 18%, transparent);
+  color: var(--text-subtle);
+  font-size: 0.78rem;
+  font-weight: 650;
+  user-select: none;
+}
+
+.qqDialogOverlay {
+  position: absolute;
+  z-index: 7;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(10px);
+  animation: llmUnsavedOverlayEnter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.qqDialog {
+  display: grid;
+  width: min(100%, 386px);
+  max-height: min(86%, 640px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, black 4%);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.42);
+  animation: llmUnsavedDialogEnter 210ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.qqDialogHeader {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 14px 13px 12px 16px;
+}
+
+.qqDialogHeader > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.qqDialogHeader h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: -0.024em;
+  line-height: 1.1;
+}
+
+.qqDialogHeader p {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.qqDialogHeader button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  outline: 0;
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.qqDialogHeader button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.qqDialogHeader button:active {
+  background: var(--surface-active);
+  transform: translateY(0) scale(0.94);
+}
+
+.qqDialogHeader button:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.qqDialogHeader svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.4;
+}
+
+.qqDialogBody {
+  display: grid;
+  min-height: 0;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 14px 16px;
+  scrollbar-width: none;
+}
+
+.qqDialogBody::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.qqConversationTextarea {
+  width: 100%;
+  min-height: 74px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 62%, transparent);
+  border-radius: 18px;
+  padding: 10px 13px;
+  background: color-mix(in srgb, var(--surface-inset) 58%, transparent);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 430;
+  letter-spacing: -0.006em;
+  line-height: 1.45;
+  outline: 0;
+  resize: none;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 62%, transparent)
+    transparent;
+  scrollbar-width: thin;
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.qqConversationTextarea::placeholder {
+  color: var(--text-subtle);
+}
+
+.qqConversationTextarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 26%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.qqConversationTextarea::-webkit-scrollbar {
+  width: 7px;
+}
+
+.qqConversationTextarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.qqConversationTextarea::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 62%, transparent);
+}
+
+.llmSettingsFieldInvalid .qqConversationTextarea {
+  border-color: color-mix(in srgb, var(--danger) 46%, var(--border-strong));
+  background: color-mix(in srgb, var(--danger-soft) 28%, var(--surface-inset));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.qqDialogActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding: 12px 16px 14px;
+}
+
+.qqDialogActions button {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 14px;
+  background: color-mix(in srgb, var(--surface-raised) 72%, white 3%);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 740;
+  letter-spacing: -0.01em;
+  outline: 0;
+  transition:
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.qqDialogActions button:hover {
+  background: color-mix(in srgb, var(--surface-raised) 62%, white 9%);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.qqDialogActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+  transform: none;
+}
+
+.qqDialogActions button svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.3;
+}
+
+.qqDialogActions button:disabled svg {
+  animation: spin 900ms linear infinite;
+}
+
+.qqDialogActions button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.qqDialogActions button:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.qqDialogActions button:last-child {
+  background: color-mix(in srgb, var(--accent) 76%, var(--surface-raised));
+  color: var(--text);
+}
+
+.qqDialogActions button:last-child:hover {
+  background: color-mix(
+    in srgb,
+    var(--accent-hover) 82%,
+    var(--surface-raised)
+  );
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.qqDialogActions .qqDialogDangerAction {
+  background: color-mix(in srgb, var(--danger) 68%, var(--surface-raised));
+  color: var(--text);
+}
+
+.qqDialogActions .qqDialogDangerAction:hover {
+  background: color-mix(in srgb, var(--danger) 78%, var(--surface-raised));
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.qqDeleteDialog {
+  width: min(100%, 360px);
+}
+
+.qqDeleteSummary {
+  display: grid;
+  gap: 7px;
+  margin: 14px 16px 2px;
+  border-radius: 15px;
+  padding: 11px 12px;
+  background: color-mix(in srgb, var(--surface-inset) 72%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 56%, transparent);
+}
+
+.qqDeleteSummary span {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--surface-raised) 74%, transparent);
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.qqDeleteSummary strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 760;
+  letter-spacing: -0.018em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qqDeleteSummary code {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llmModelSelect {
+  position: relative;
+  min-width: 0;
+}
+
+.llmModelSelectButton {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  outline: 0;
+}
+
+.llmModelSelectButton:hover {
+  background: color-mix(in srgb, var(--surface-raised) 34%, transparent);
+  border-color: color-mix(in srgb, var(--border-strong) 78%, transparent);
+}
+
+.llmModelSelectButton:active {
+  transform: scale(0.995);
+}
+
+.llmModelSelectButton > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llmModelSelectButton > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  stroke-width: 2.4;
+  transition:
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 190ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.llmModelSelectButtonOpen > svg {
+  color: var(--text);
+  transform: rotate(180deg);
+}
+
+.llmModelSelectPlaceholder {
+  color: var(--text-subtle);
+}
+
+.llmModelSelectMenu {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 7px);
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  border-radius: 18px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--surface-raised) 92%, black 6%);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+  transform-origin: top center;
+  animation: llmModelSelectMenuEnter 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.llmModelSelectOption {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 34px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 10px 0 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  text-align: left;
+  outline: 0;
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.llmModelSelectOption > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llmModelSelectOption > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+  stroke-width: 2.6;
+}
+
+.llmModelSelectOption:hover,
+.llmModelSelectOption:focus-visible {
+  background: color-mix(in srgb, var(--surface-hover) 72%, transparent);
+  color: var(--text);
+}
+
+.llmModelSelectOption:active {
+  transform: scale(0.99);
+}
+
+.llmModelSelectOptionActive {
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface-active));
+  color: var(--text);
+  font-weight: 700;
+}
+
+.llmModelSelectOptionDisabled {
+  color: color-mix(in srgb, var(--text-subtle) 88%, transparent);
+  cursor: not-allowed;
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.llmTestButton {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: color-mix(in srgb, var(--surface-raised) 76%, white 3%);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 740;
+}
+
+.llmTestButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-raised) 66%, white 9%);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.llmTestButton:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+.llmTestButton:disabled {
+  cursor: wait;
+  opacity: 0.82;
+}
+
+.llmTestButton svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.2;
+}
+
+.llmTestButton:disabled svg {
+  animation: spin 900ms linear infinite;
+}
+
+.llmTestButtonSuccess {
+  background: color-mix(
+    in srgb,
+    var(--success-soft) 64%,
+    var(--surface-raised)
+  );
+  color: color-mix(in srgb, var(--success) 78%, var(--text));
+}
+
+.llmTestButtonError {
+  background: color-mix(in srgb, var(--danger-soft) 62%, var(--surface-raised));
+  color: color-mix(in srgb, var(--danger) 84%, var(--text));
+}
+
+.llmErrorDetails {
+  display: grid;
+  width: 100%;
+  gap: 9px;
+  overflow: hidden;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--danger-soft) 42%, var(--surface-raised));
+  color: var(--text-muted);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--danger) 14%, var(--border));
+  animation: llmErrorDetailsReveal 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.llmErrorDetailsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.llmErrorDetailsHeader span {
+  color: var(--danger);
+  font-size: 0.82rem;
+  font-weight: 680;
+}
+
+.llmErrorDetailsHeader code {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--danger-soft) 56%, var(--surface-inset));
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llmErrorDetailText {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 430;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.llmErrorTechnicalCard {
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border-radius: 13px;
+  padding: 8px 11px;
+  background: color-mix(in srgb, var(--surface-inset) 72%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+.llmErrorMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 1px 0 0;
+}
+
+.llmErrorMeta div {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--surface-inset) 72%, transparent);
+}
+
+.llmErrorMeta dt,
+.llmErrorMeta dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.llmErrorMeta dt {
+  flex: 0 0 auto;
+  color: var(--text-subtle);
+}
+
+.llmErrorMeta dd {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llmSettingsFooter {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--surface-raised) 10%, transparent);
+}
+
+.llmSettingsFooterInner {
+  width: min(100%, 400px);
+  margin: 0 auto;
+}
+
+.llmSaveButton {
+  display: inline-flex;
+  width: 100%;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 78%, var(--surface-raised));
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 780;
+  letter-spacing: -0.01em;
+}
+
+.llmSaveButton:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--accent-hover) 82%,
+    var(--surface-raised)
+  );
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.llmSaveButton:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+.llmSaveButton:disabled {
+  background: color-mix(in srgb, var(--surface-raised) 64%, transparent);
+  color: var(--text-subtle);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.llmSaveButtonSaving:disabled {
+  background: color-mix(in srgb, var(--surface-raised) 66%, transparent);
+  color: var(--text-subtle);
+  cursor: not-allowed;
+  opacity: 0.82;
+}
+
+.llmSaveButton svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke-width: 2.3;
+}
+
+.llmSaveButtonSaving svg {
+  animation: spin 900ms linear infinite;
+}
+
+.llmUnsavedOverlay {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: color-mix(in srgb, black 48%, transparent);
+  animation: llmUnsavedOverlayEnter 170ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.llmUnsavedDialog {
+  display: grid;
+  width: min(100%, 340px);
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 76%, transparent);
+  border-radius: 18px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--surface-raised) 94%, black 8%);
+  box-shadow: 0 24px 68px rgba(0, 0, 0, 0.38);
+  animation: llmUnsavedDialogEnter 210ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.llmUnsavedDialog h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.94rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.llmUnsavedDialog p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 430;
+  line-height: 1.45;
+}
+
+.llmUnsavedActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.llmUnsavedActions button {
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-hover) 72%, transparent);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 740;
+  outline: 0;
+  transition:
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.llmUnsavedActions button:hover {
+  background: color-mix(in srgb, var(--surface-active) 80%, transparent);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.llmUnsavedActions button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.llmUnsavedActions button:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.llmUnsavedActions .llmUnsavedDangerButton {
+  background: color-mix(in srgb, var(--danger-soft) 56%, var(--surface-hover));
+  color: color-mix(in srgb, var(--danger) 88%, var(--text));
+}
+
+.chatShell {
+  --message-lane-max-width: var(--chat-panel-max-width);
+  position: relative;
+  display: flex;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.chatHeader {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  min-height: 46px;
+  padding: 5px 12px 5px 16px;
+  background: var(--surface-inset);
+}
+
+.chatIdentity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.chatHeaderActions {
+  display: inline-flex;
+  align-self: stretch;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatPanelToggle {
+  display: inline-grid;
+  align-self: stretch;
+  width: 36px;
+  min-height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  transition:
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.chatPanelToggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.chatPanelToggle:active {
+  background: var(--surface-active);
+  transform: translateY(0) scale(0.94);
+}
+
+.chatPanelToggle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.chatPanelToggleInactive {
+  color: var(--text);
+}
+
+.chatPanelToggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.35;
+  animation: chatPanelToggleIconIn 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.chatTitleLine {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.chatTitleStatus {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  transform: translateY(-1px);
+}
+
+.chatIdentity h1 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.96rem;
+  font-weight: 720;
+  letter-spacing: -0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatInlineStatus {
+  flex: 0 0 auto;
+  min-width: 2.2em;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 620;
+  line-height: 1;
+}
+
+.chatInlineStatusTyping {
+  min-width: 5.2em;
+}
+
+.typingDots {
+  display: inline-grid;
+  width: 1.2em;
+  grid-template-columns: repeat(3, 0.34em);
+}
+
+.typingDots span {
+  animation: typingDotPulse 980ms ease-in-out infinite;
+}
+
+.typingDots span:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.typingDots span:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+.messageStage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--surface-inset);
+}
+
+.conversationViewport {
+  --conversation-track-inset: 16px;
+  --conversation-scrollbar-size: 8px;
+  --composer-outer-gap: 14px;
+  --composer-corner-radius: 16px;
+  --composer-bottom-mask-height: 30px;
+  --composer-reserved-height: 120px;
+  position: relative;
+  display: flex;
+  width: min(100%, var(--message-lane-max-width));
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.messageStream {
+  position: absolute;
+  inset: 0;
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 22px
+    calc(var(--conversation-track-inset) - var(--conversation-scrollbar-size))
+    calc(var(--composer-reserved-height) + var(--composer-outer-gap))
+    var(--conversation-track-inset);
+  overflow-anchor: none;
+  scrollbar-color: transparent transparent;
+}
+
+.messageList {
+  --message-list-gap: 18px;
+  display: flex;
+  width: 100%;
+  min-height: 100%;
+  flex-direction: column;
+  gap: var(--message-list-gap);
+  justify-content: flex-start;
+}
+
+.messageStream::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messageStream::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: transparent;
+}
+
+.messageStream::-webkit-scrollbar-track {
+  margin-bottom: var(--composer-reserved-height);
+}
+
+.messageScrollbar {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: 0;
+  bottom: var(--composer-reserved-height);
+  width: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.messageScrollbarVisible {
+  opacity: 1;
+}
+
+.messageScrollbarThumb {
+  position: absolute;
+  top: var(--message-scrollbar-thumb-top);
+  right: 0;
+  width: 8px;
+  height: var(--message-scrollbar-thumb-height);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: var(--border-strong);
+}
+
+.messageLoading {
+  position: absolute;
+  z-index: 5;
+  inset: 0 0 var(--composer-reserved-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 9px;
+  color: var(--text-subtle);
+  pointer-events: none;
+  user-select: none;
+  animation: messageLoadingIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.messageLoading svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  animation: messageLoadingSpin 1s linear infinite;
+}
+
+.messageLoading span {
+  color: var(--text-subtle);
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+}
+
+.historyPullLoader {
+  display: flex;
+  height: var(--history-pull-height);
+  min-height: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--text-subtle);
+  opacity: 0;
+  transition:
+    height 360ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  margin-bottom: calc(var(--message-list-gap) * -1);
+  user-select: none;
+}
+
+.historyPullLoaderVisible {
+  opacity: 1;
+}
+
+.historyPullLoaderSettling {
+  opacity: 0;
+}
+
+.historyPullLoader svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  animation: messageLoadingSpin 1s linear infinite;
+}
+
+.historyPullLoader span {
+  color: var(--text-subtle);
+  font-size: 0.67rem;
+  font-weight: 680;
+  letter-spacing: -0.012em;
+}
+
+.timelineSeparator {
+  display: inline-flex;
+  width: max-content;
+  max-width: min(76%, 420px);
+  align-items: center;
+  align-self: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--surface-raised) 58%, transparent);
+  color: var(--text-subtle);
+  font-size: 0.67rem;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  user-select: none;
+}
+
+.timelineSeparatorLive {
+  animation: timelineItemHistoryReveal 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.timelineItemHistoryReveal {
+  animation: timelineItemHistoryReveal 360ms
+    calc(var(--timeline-reveal-index) * 42ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
+
+.messageGroup {
+  --message-index: 0;
+  display: flex;
+  flex: 0 0 auto;
+  width: 100%;
+  align-items: flex-end;
+  gap: 9px;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+}
+
+.messageGroupUser {
+  justify-content: flex-end;
+}
+
+.messageAvatar {
+  flex: 0 0 auto;
+}
+
+.messageGroupBody {
+  display: flex;
+  max-width: min(58%, 520px);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.messageGroupUser .messageGroupBody {
+  align-items: flex-end;
+}
+
+.messageBubble {
+  --message-actor-bubble: color-mix(
+    in srgb,
+    var(--surface-raised) 92%,
+    var(--text) 8%
+  );
+  --message-time-edge-x: 8px;
+  --message-time-edge-y: 7px;
+  position: relative;
+  border: 0;
+  padding: 9px 12px;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  user-select: text;
+}
+
+.messageBubble * {
+  user-select: text;
+}
+
+.messageBubble [data-copy-ignore="true"],
+.messageBubble [data-copy-ignore="true"] * {
+  user-select: none !important;
+}
+
+.messageBubble ::selection {
+  background: rgba(238, 240, 255, 0.88);
+  color: #0f1013;
+}
+
+.messageBubbleActor {
+  border-radius: 16px 16px 16px 6px;
+  background: var(--message-actor-bubble);
+}
+
+.messageBubbleUser {
+  border-radius: 16px 16px 6px;
+  background: var(--accent);
+}
+
+.messageBubbleLive {
+  animation: messageBubbleLiveIn 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform;
+}
+
+.messageBubbleUser.messageBubbleLive {
+  transform-origin: bottom right;
+}
+
+.messageBubbleHasOlder.messageBubbleActor {
+  border-top-left-radius: 6px;
+}
+
+.messageBubbleHasNewer.messageBubbleActor {
+  border-bottom-left-radius: 6px;
+}
+
+.messageBubbleHasOlder.messageBubbleUser {
+  border-top-right-radius: 6px;
+}
+
+.messageBubbleHasNewer.messageBubbleUser {
+  border-bottom-right-radius: 6px;
+}
+
+.messageBubble p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.58;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.messageBubbleTextOnly p:last-of-type {
+  padding-right: 44px;
+}
+
+.messageBubbleUser p {
+  color: #ffffff;
+}
+
+.messageTime {
+  color: rgba(255, 255, 255, 0.64);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-shadow: none;
+  user-select: none !important;
+  white-space: nowrap;
+}
+
+.messageBubbleUser .messageTime {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.messageBubbleTextOnly .messageTime {
+  position: absolute;
+  right: var(--message-time-edge-x);
+  bottom: var(--message-time-edge-y);
+}
+
+.messageBubble:not(.messageBubbleTextOnly) .messageTime {
+  display: block;
+  width: max-content;
+  margin: 5px -4px -2px auto;
+}
+
+.messageIdBadge {
+  position: absolute;
+  bottom: var(--message-time-edge-y);
+  z-index: 2;
+  color: rgba(255, 255, 255, 0.64);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none !important;
+  white-space: nowrap;
+}
+
+.messageBubbleActor .messageIdBadge {
+  left: calc(100% + 7px);
+}
+
+.messageBubbleUser .messageIdBadge {
+  right: calc(100% + 7px);
+}
+
+.messageBubbleShowId .messageIdBadge {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.messageBubbleHighlighted {
+  animation: messageTargetPulse 1700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.messageBubbleUser.messageBubbleHighlighted {
+  animation-name: messageTargetPulseUser;
+}
+
+.replyPreview {
+  appearance: none;
+  display: grid;
+  width: clamp(220px, 100%, 100%);
+  max-width: 100%;
+  gap: 2px;
+  margin-bottom: 7px;
+  border: 0;
+  border-radius: 9px;
+  padding: 5px 8px;
+  background: color-mix(in srgb, var(--surface-inset) 46%, transparent);
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  user-select: none !important;
+}
+
+.replyPreview * {
+  user-select: none !important;
+}
+
+.replyPreviewClickable {
+  cursor: pointer;
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.replyPreviewClickable:hover {
+  background: color-mix(in srgb, var(--surface-inset) 62%, transparent);
+  color: var(--text-muted);
+}
+
+.replyPreviewClickable:active {
+  background: color-mix(in srgb, var(--surface-inset) 72%, transparent);
+}
+
+.replyPreviewClickable:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.messageBubbleUser .replyPreview {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.messageBubbleUser .replyPreviewClickable:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.messageBubbleUser .replyPreviewClickable:active {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.replyPreviewMeta,
+.replyPreviewTitle,
+.replyPreviewText {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.replyPreviewMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.replyPreviewTitle {
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 5px;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.replyPreviewTitle svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+  opacity: 0.72;
+}
+
+.replyPreviewTitle span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replyPreviewId {
+  flex: 0 0 auto;
+  color: currentColor;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  opacity: 0.72;
+}
+
+.messageBubbleUser .replyPreviewTitle {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.replyPreviewText {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.messageBubbleUser .replyPreviewText {
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.inlineImage {
+  display: block;
+  width: auto;
+  max-width: min(280px, 100%);
+  height: auto;
+  max-height: 240px;
+  border-radius: 12px;
+  object-fit: contain;
+  user-select: text;
+}
+
+.messageBubble p + .inlineImage,
+.inlineImage + p,
+.inlineImage + .inlineImage {
+  margin-top: 8px;
+}
+
+.attachmentText {
+  color: var(--text-muted);
+}
+
+.bottomJumpButton {
+  position: absolute;
+  z-index: 18;
+  left: 50%;
+  bottom: calc(var(--composer-reserved-height) + 10px);
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0;
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  opacity: 1;
+  transform: translate3d(-50%, 0, 0);
+  transition:
+    width 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    gap 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    padding 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+  white-space: nowrap;
+  animation: bottomJumpButtonIn 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.bottomJumpButton:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--surface-raised) 86%, var(--text) 8%);
+  color: var(--text);
+  transform: translate3d(-50%, -1px, 0);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.32),
+    0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.bottomJumpButton:active {
+  background: var(--surface-active);
+  transform: translate3d(-50%, 0, 0) scale(0.96);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+}
+
+.bottomJumpButton:focus-visible {
+  outline: 0;
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.bottomJumpButton:disabled,
+.bottomJumpButtonReturning {
+  cursor: default;
+  opacity: 0.82;
+}
+
+.bottomJumpButton:disabled:hover,
+.bottomJumpButtonReturning:hover {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  color: var(--text-muted);
+  transform: translate3d(-50%, 0, 0);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.bottomJumpButtonUnread {
+  width: 116px;
+  gap: 7px;
+  padding: 0 12px 0 10px;
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  background: color-mix(in srgb, var(--surface-raised) 94%, var(--accent) 6%);
+  color: color-mix(in srgb, var(--accent) 82%, var(--text));
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.28),
+    0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.bottomJumpButtonUnread:hover {
+  border-color: color-mix(in srgb, var(--accent-hover) 68%, var(--border));
+  background: color-mix(in srgb, var(--surface-raised) 88%, var(--accent) 12%);
+  color: color-mix(in srgb, var(--accent-hover) 86%, var(--text));
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.32),
+    0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.bottomJumpButtonUnread:active {
+  background: color-mix(in srgb, var(--surface-raised) 82%, var(--accent) 18%);
+}
+
+.bottomJumpButton svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.bottomJumpButton span {
+  max-width: 0;
+  overflow: hidden;
+  color: currentColor;
+  font-size: 0.76rem;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  opacity: 0;
+  transition:
+    max-width 250ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 160ms 70ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.bottomJumpButtonUnread span {
+  max-width: 76px;
+  opacity: 1;
+}
+
+.copyToast {
+  position: absolute;
+  z-index: 32;
+  left: 50%;
+  bottom: calc(var(--composer-reserved-height) + 52px);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, var(--accent) 4%);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.26),
+    0 0 0 3px color-mix(in srgb, var(--accent) 7%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: color-mix(in srgb, var(--text-muted) 88%, var(--accent) 12%);
+  font-size: 0.76rem;
+  font-weight: 680;
+  letter-spacing: -0.016em;
+  line-height: 1;
+  pointer-events: none;
+  transform: translate3d(-50%, 0, 0);
+  user-select: none !important;
+  white-space: nowrap;
+  animation: copyToastLife 1400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.copyToast svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+}
+
+.composer {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  padding: 0 var(--conversation-track-inset) var(--composer-outer-gap);
+  background: transparent;
+  isolation: isolate;
+}
+
+.composer::before,
+.composer::after {
+  position: absolute;
+  z-index: 0;
+  background: var(--surface-inset);
+  content: "";
+  pointer-events: none;
+}
+
+.composer::before {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--composer-outer-gap);
+}
+
+.composer::after {
+  right: var(--conversation-track-inset);
+  bottom: var(--composer-outer-gap);
+  left: var(--conversation-track-inset);
+  height: var(--composer-bottom-mask-height);
+}
+
+.composerFrame {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  min-height: 92px;
+  margin-inline: auto;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--composer-corner-radius);
+  padding: 13px 13px 10px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 12px 34px rgba(0, 0, 0, 0.18);
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.composerFrameStacked {
+  min-height: 92px;
+}
+
+.composerFrame:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised));
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    0 14px 38px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.composerFrame[data-locked="true"] {
+  border-color: color-mix(in srgb, var(--border) 76%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--surface-raised) 82%,
+    var(--surface-inset)
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.composerReplyPreview {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 11px;
+  padding: 7px 6px 7px 9px;
+  background: color-mix(in srgb, var(--surface-inset) 50%, transparent);
+  color: var(--text-muted);
+  user-select: none;
+  animation: composerReplyIn 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.composerReplyPreview * {
+  user-select: none !important;
+}
+
+.composerReplyPreview .replyPreviewMeta,
+.composerReplyPreview .replyPreviewText {
+  grid-column: 1;
+}
+
+.composerReplyPreview .replyPreviewTitle {
+  color: var(--text);
+}
+
+.composerReplyPreview .replyPreviewTitle svg,
+.composerReplyPreview .replyPreviewId {
+  color: color-mix(in srgb, var(--accent) 82%, var(--text));
+}
+
+.composerReplyCancel {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  grid-column: 2;
+  grid-row: 1 / 3;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.composerReplyCancel:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: scale(1.04);
+}
+
+.composerReplyCancel:active {
+  background: var(--surface-active);
+  transform: scale(0.93);
+}
+
+.composerReplyCancel:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.composerReplyCancel svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+}
+
+.composerAttachmentTray {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1px 1px 2px;
+  scrollbar-width: none;
+}
+
+.composerAttachmentTray::-webkit-scrollbar {
+  display: none;
+}
+
+.composerAttachment {
+  position: relative;
+  display: inline-flex;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 12px;
+  background: var(--surface-inset);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  user-select: none;
+  animation: composerReplyIn 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.composerAttachment img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.composerAttachment button {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.58);
+  color: rgba(255, 255, 255, 0.88);
+  transition:
+    background-color 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.composerAttachment button:hover {
+  background: rgba(0, 0, 0, 0.76);
+  color: #ffffff;
+  transform: scale(1.06);
+}
+
+.composerAttachment button:active {
+  transform: scale(0.92);
+}
+
+.composerAttachment button:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.composerAttachment button svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.composerTextarea {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 22px;
+  max-height: 116px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--text);
+  cursor: text;
+  font-size: 0.9rem;
+  font-weight: 520;
+  letter-spacing: -0.012em;
+  line-height: 1.45;
+  overflow-y: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.composerTextarea[data-scrollable="true"] {
+  overflow-y: auto;
+}
+
+.composerTextarea[data-empty="true"]::before {
+  position: absolute;
+  top: 0;
+  left: 4px;
+  color: color-mix(in srgb, var(--text-subtle) 86%, transparent);
+  content: attr(data-placeholder);
+  opacity: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.composerTextarea[data-disabled="true"] {
+  color: var(--text-subtle);
+  cursor: not-allowed;
+  user-select: none;
+}
+
+.composerTextarea[data-disabled="true"]::before {
+  color: color-mix(in srgb, var(--text-subtle) 92%, transparent);
+}
+
+.composerTextarea img {
+  width: auto;
+  max-width: min(280px, 100%);
+  height: auto;
+  max-height: calc(1.305rem * 4);
+  object-fit: contain;
+}
+
+.composerTextarea::-webkit-scrollbar {
+  width: 7px;
+}
+
+.composerTextarea::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 62%, transparent);
+}
+
+.composerInlineImageBlock {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 3px;
+  border-radius: 12px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  user-select: all;
+  vertical-align: middle;
+  transition:
+    outline-color 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.composerInlineImageBlock[data-selected="true"] {
+  outline-color: color-mix(in srgb, var(--accent) 78%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.composerInlineImageBlock img {
+  display: block;
+  width: auto;
+  max-width: min(280px, 100%);
+  height: auto;
+  max-height: calc(1.305rem * 4);
+  border-radius: 12px;
+  object-fit: contain;
+  user-select: all;
+}
+
+.composerToolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.composerFileInput {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.composerIconButton,
+.sendButton {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.composerIconButton:hover:not(:disabled),
+.sendButton:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.composerIconButton:active:not(:disabled),
+.sendButton:active:not(:disabled) {
+  background: var(--surface-active);
+  transform: translateY(0) scale(0.94);
+}
+
+.composerIconButton:focus-visible,
+.sendButton:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.composerIconButton:disabled {
+  color: color-mix(in srgb, var(--text-subtle) 48%, transparent);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.composerSendCluster {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composerNotice {
+  position: absolute;
+  right: calc(100% + 8px);
+  display: inline-flex;
+  width: max-content;
+  max-width: 180px;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: color-mix(in srgb, var(--surface-raised) 94%, var(--danger) 6%);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.24),
+    0 0 0 3px color-mix(in srgb, var(--danger) 9%, transparent);
+  color: color-mix(in srgb, var(--text) 86%, var(--danger));
+  font-size: 0.68rem;
+  font-weight: 620;
+  letter-spacing: -0.012em;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: composerNoticeIn 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.sendButton {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.sendButton:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: #ffffff;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.sendButton:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-hover) 78%, var(--accent));
+  transform: translateY(0) scale(0.94);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.sendButton:disabled {
+  background: color-mix(in srgb, var(--surface-hover) 70%, transparent);
+  color: color-mix(in srgb, var(--text-subtle) 54%, transparent);
+  cursor: not-allowed;
+  opacity: 1;
+  box-shadow: none;
+}
+
+.composerIconButton svg,
+.sendButton svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.sendButton svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+}
+
+.messageContextMenu {
+  --message-menu-height: 40px;
+  position: absolute;
+  z-index: 40;
+  bottom: 0;
+  left: calc(100% + 8px);
+  display: inline-flex;
+  height: var(--message-menu-height);
+  width: max-content;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  gap: 7px;
+  padding: 4px 6px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transform-origin: left center;
+  animation: contextMenuEnter 170ms cubic-bezier(0.2, 1.1, 0.2, 1) both;
+  user-select: none !important;
+}
+
+.messageContextMenu * {
+  user-select: none !important;
+}
+
+.messageContextMenuUser {
+  right: calc(100% + 8px);
+  left: auto;
+  transform-origin: right center;
+}
+
+.messageContextMenuClosing {
+  animation: contextMenuExit 120ms cubic-bezier(0.4, 0, 0.8, 0.2) both;
+}
+
+.messageMenuButton {
+  position: relative;
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+}
+
+.messageMenuButton:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: scale(1.06);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.messageMenuButton:active {
+  background: var(--surface-active);
+  color: var(--accent-hover);
+  transform: scale(0.93);
+  box-shadow: none;
+}
+
+.messageMenuButton:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.messageMenuButton svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.messageMenuButtonDisabled {
+  color: color-mix(in srgb, var(--text-subtle) 70%, transparent);
+  cursor: not-allowed;
+}
+
+.messageMenuButtonDisabled:hover {
+  background: color-mix(in srgb, var(--surface-hover) 62%, transparent);
+  color: var(--text-subtle);
+  transform: scale(1.03);
+  box-shadow: none;
+}
+
+.messageMenuButtonDisabled:active {
+  background: color-mix(in srgb, var(--surface-hover) 62%, transparent);
+  color: var(--text-subtle);
+  transform: scale(1.03);
+}
+
+.messageMenuTooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: max-content;
+  max-width: 120px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--surface-raised) 98%, transparent);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 620;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px) scale(0.96);
+  transition:
+    opacity 130ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 130ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  white-space: nowrap;
+}
+
+.messageMenuTooltip::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: inherit;
+  content: "";
+  transform: translate(-50%, -3px) rotate(45deg);
+}
+
+.messageMenuButton:hover .messageMenuTooltip,
+.messageMenuButton:focus-visible .messageMenuTooltip {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes messageLoadingIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes messageLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes timelineItemHistoryReveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes messageBubbleLiveIn {
+  0% {
+    transform: translate3d(0, 14px, 0);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes bottomJumpButtonIn {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, 6px, 0) scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+}
+
+@keyframes chatPanelToggleIconIn {
+  from {
+    opacity: 0;
+    transform: translate3d(2px, 0, 0) scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes typingDotPulse {
+  0%,
+  68%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+
+  28% {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes copyToastLife {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 7px, 0) scale(0.96);
+    filter: blur(2px);
+  }
+
+  14%,
+  76% {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+    filter: blur(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -5px, 0) scale(0.98);
+    filter: blur(1px);
+  }
+}
+
+@keyframes actorUnreadBadgeIn {
+  from {
+    opacity: 0;
+    transform: translate3d(3px, calc(-50% - 3px), 0) scale(0.72);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, -50%, 0) scale(1);
+  }
+}
+
+@keyframes actorPreviewEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 100%, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes actorPreviewExit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(0, -100%, 0);
+  }
+}
+
+@keyframes composerReplyIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 5px, 0) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes composerNoticeIn {
+  from {
+    opacity: 0;
+    transform: translate3d(5px, 0, 0) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes messageTargetPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(238, 240, 255, 0),
+      0 0 0 0 rgba(94, 106, 210, 0);
+  }
+
+  18% {
+    box-shadow:
+      0 0 0 3px rgba(238, 240, 255, 0.2),
+      0 0 0 9px rgba(94, 106, 210, 0.12);
+  }
+
+  52% {
+    box-shadow:
+      0 0 0 2px rgba(238, 240, 255, 0.14),
+      0 0 0 7px rgba(94, 106, 210, 0.08);
+  }
+}
+
+@keyframes messageTargetPulseUser {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(255, 255, 255, 0),
+      0 0 0 0 rgba(255, 255, 255, 0);
+  }
+
+  18% {
+    box-shadow:
+      0 0 0 3px rgba(255, 255, 255, 0.24),
+      0 0 0 9px rgba(255, 255, 255, 0.1);
+  }
+
+  52% {
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.16),
+      0 0 0 7px rgba(255, 255, 255, 0.07);
+  }
+}
+
+@keyframes railEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-6px) scale(0.995);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes panelEnter {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.996);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes homeBrandEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes createActorBubbleTipIn {
+  from {
+    opacity: 0;
+    transform: translate3d(-8px, -50%, 0) scale(0.96);
+    filter: blur(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, -50%, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes createActorTargetPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent),
+      0 0 0 10px color-mix(in srgb, var(--accent) 5%, transparent),
+      0 14px 34px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent),
+      0 0 0 16px color-mix(in srgb, var(--accent) 7%, transparent),
+      0 18px 42px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
+  }
+}
+
+@keyframes coachBackdropEnter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes contextMenuEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+    filter: blur(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes contextMenuExit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.86);
+    filter: blur(1px);
+  }
+}
+
+@keyframes settingsDetailEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(22px, 0, 0);
+    filter: blur(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+  }
+}
+
+@keyframes settingsDetailExit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(22px, 0, 0);
+    filter: blur(1px);
+  }
+}
+
+@keyframes llmSettingsSectionEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(1px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes llmModelSelectMenuEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    filter: blur(1px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes statusDotPulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 30%, transparent);
+  }
+
+  70% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 0%, transparent);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent);
+  }
+}
+
+@keyframes qqStatusPulse {
+  0% {
+    opacity: 0.62;
+    transform: scale(0.84);
+  }
+
+  75% {
+    opacity: 0;
+    transform: scale(1.55);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.55);
+  }
+}
+
+@keyframes llmErrorDetailsReveal {
+  from {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px) scale(0.992);
+  }
+
+  to {
+    max-height: 520px;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes llmUnsavedOverlayEnter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes llmUnsavedDialogEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+    filter: blur(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1180px) {
+  .actorWorkspace > .layoutResizer,
+  .actorInfoPanel {
+    display: none;
+  }
+
+  .detailPanel {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboardShell {
+    --sidebar-width: 208px;
+    padding: 10px;
+  }
+
+  .createActorGuideOverlay {
+    background: rgba(0, 0, 0, 0.76);
+  }
+
+  .createActorBubbleTip {
+    top: calc(100% + 9px);
+    right: 0;
+    left: 0;
+    justify-content: center;
+    min-width: 0;
+    gap: 10px;
+    transform: none;
+  }
+
+  .createActorBubbleTip::before {
+    top: auto;
+    right: auto;
+    bottom: 100%;
+    left: 24px;
+    border: 0;
+    border-right: 12px solid transparent;
+    border-bottom: 14px solid var(--guide-tip-border);
+    border-left: 12px solid transparent;
+    transform: none;
+  }
+
+  .createActorBubbleTip::after {
+    top: auto;
+    right: auto;
+    bottom: calc(100% - 1px);
+    left: 26px;
+    border: 0;
+    border-right: 10px solid transparent;
+    border-bottom: 12px solid var(--guide-tip-bg);
+    border-left: 10px solid transparent;
+    transform: none;
+  }
+
+  .createActorBubbleTip:focus-within {
+    transform: none;
+  }
+
+  .sidebar,
+  .actorWorkspace,
+  .detailPanel,
+  .layoutResizer {
+    height: calc(100dvh - 20px);
+    min-height: 0;
+  }
+
+  .userButton {
+    grid-template-columns: 30px minmax(0, 1fr);
+    min-height: 38px;
+    gap: 8px;
+  }
+
+  .userAvatar {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboardShell {
+    --sidebar-width: 100%;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .sidebar,
+  .actorWorkspace,
+  .detailPanel {
+    min-height: auto;
+  }
+
+  .sidebar {
+    border-radius: var(--panel-radius);
+  }
+
+  .dashboardShell > .layoutResizer {
+    display: none;
+  }
+
+  .detailPanel {
+    min-height: 520px;
+  }
+}

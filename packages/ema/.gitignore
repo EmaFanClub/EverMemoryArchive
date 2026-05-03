@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+
+# Local sticker assets
+src/skills/sticker-skill/assets/*
