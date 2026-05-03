@@ -22,6 +22,8 @@ function readWorkspaceVersion() {
 }
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: workspaceRoot,
   transpilePackages: ["ema"],
   env: {
     NEXT_PUBLIC_EMA_VERSION: readWorkspaceVersion(),

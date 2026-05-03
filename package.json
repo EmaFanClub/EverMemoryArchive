@@ -21,6 +21,12 @@
     "docs": "node scripts/docs.js --dev",
     "docs:gen": "node scripts/docs.js --gen",
     "docs:build": "node scripts/docs.js",
+    "dist:revision": "pnpm --filter ema-dist run revision",
+    "dist:download": "pnpm --filter ema-dist run download",
+    "dist:stage": "pnpm --filter ema-dist run stage",
+    "dist:pack": "pnpm --filter ema-dist run pack",
+    "dist:installers": "pnpm --filter ema-dist run installers",
+    "dist:build": "pnpm --filter ema-dist run build",
     "format": "prettier --write \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\"",
     "format:check": "prettier --check \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\""
   },

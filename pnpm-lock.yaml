@@ -108,6 +108,8 @@ importers:
         specifier: ^0.2.6
         version: 0.2.6
 
+  packages/ema-dist: {}
+
   packages/ema-webui:
     dependencies:
       '@lancedb/lancedb':

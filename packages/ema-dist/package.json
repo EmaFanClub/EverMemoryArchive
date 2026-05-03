@@ -1,0 +1,13 @@
+{
+  "name": "ema-dist",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "revision": "tsx src/cli.ts revision",
+    "download": "tsx src/cli.ts download",
+    "stage": "tsx src/cli.ts stage",
+    "pack": "tsx src/cli.ts pack",
+    "installers": "tsx src/cli.ts installers",
+    "build": "tsx src/cli.ts build"
+  }
+}
