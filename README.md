@@ -29,87 +29,55 @@ Ema 当前支持 macOS、Linux 与 Windows。运行 Ema 至少需要：
 - 硬盘空间 ≥ 4GB
 - 无需 GPU
 
-安装 Ema 之前，需要提前配置 Node.js、pnpm 和 MongoDB 环境。
+推荐优先下载发行包安装。只有使用 `minimal` 版本，或希望从源码运行 Ema 时，才需要手动准备 Node.js、pnpm 和 MongoDB；依赖安装请参考 [安装依赖文档](docs/installation.md)。
 
-### 1. 安装 Node.js 和 pnpm
+### 安装包版本
 
-前往 Node.js 官方网站下载安装 Node.js（推荐 v20+）。
+| 版本 | 说明 |
+| --- | --- |
+| `portable` | 内置 Node.js、MongoDB 和启动脚本，下载后通常可以直接运行。推荐大多数用户使用。 |
+| `minimal` | 只包含 Ema 应用和启动脚本，需要本机已有 Node.js 与 MongoDB，或配置外部 MongoDB。使用前请先参考 [安装依赖文档](docs/installation.md)。 |
 
-- Node.js 官方下载页：https://nodejs.org/en/download/
+### 安装方式
 
-安装完成后，执行下面的命令启用 pnpm：
+| 方式 | 说明 |
+| --- | --- |
+| `portable` | 下载 `.zip` 或 `.7z` 压缩包，解压后运行 `start.sh`、`start.cmd` 或对应平台的启动脚本。 |
+| `exe` | 下载安装器并按提示安装。当前构建产物的安装器文件名通常为 `*-installer.*`：Windows 为 `.bat`，macOS 为 `.command`，Linux 为 `.run`。 |
 
-```bash
-corepack enable pnpm
-```
+### 1. 从 GitHub Actions 下载安装
 
-验证安装：
+打开 GitHub Actions 的发行包构建页面：
 
-```bash
-node -v
-pnpm -v
-```
+https://github.com/EmaFanClub/EverMemoryArchive/actions/workflows/dist.yml
 
-### 2. 下载 Ema 源码包
+选择最新成功的 `Distribution Packages` 构建，在 `Artifacts` 中下载与你系统匹配的压缩包，例如：
 
-从 GitHub 克隆 Ema 仓库：
+- Windows x64：`ema-win32-x64-dist`
+- Apple Silicon macOS：`ema-darwin-arm64-dist`
+- Intel macOS：`ema-darwin-x64-dist`
+- Linux x64：`ema-linux-x64-dist`
 
-```bash
-git clone https://github.com/EmaFanClub/EverMemoryArchive.git
-cd EverMemoryArchive
-```
+下载后，在解压出的文件中选择合适的版本与安装方式：
 
-### 3. 构建 Ema 项目
+- 推荐：`portable` 版本 + `portable` 安装方式，即解压 `ema-<platform>-portable-<revision>.zip` 或 `.7z` 后运行启动脚本。
+- 需要安装向导：选择 `ema-<platform>-portable-<revision>-installer.*`。
+- 需要轻量包：选择 `minimal` 版本，并先根据 [安装依赖文档](docs/installation.md) 准备依赖。
 
-安装所有依赖并构建 WebUI：
+### 2. 从 GitHub Release 下载安装
 
-```bash
-pnpm install
-pnpm --filter ema-webui build
-```
+打开 GitHub Release 页面：
 
-### 4. 安装并启动 MongoDB
+https://github.com/EmaFanClub/EverMemoryArchive/releases
 
-Ema 使用 MongoDB 作为数据库，需要先安装并启动 MongoDB 服务。
+进入最新版本，在 `Assets` 中下载与你系统匹配的安装包。选择规则与 GitHub Actions 产物一致：
 
-#### macOS（Apple Silicon）
+- `portable` 版本适合直接运行。
+- `minimal` 版本适合已经安装 Node.js 与 MongoDB，或希望连接外部 MongoDB 的用户。
+- `.zip` / `.7z` 是解压运行方式。
+- `*-installer.*` 是安装器方式。
 
-```bash
-curl -L https://fastdl.mongodb.org/osx/mongodb-macos-arm64-8.2.7.tgz -o mongodb.tgz
-tar -xzf mongodb.tgz
-cd mongodb-macos-aarch64--8.2.7/bin
-mkdir data
-./mongod --port 27017 --dbpath ./data
-```
-
-#### Debian 12.0
-
-```bash
-wget https://repo.mongodb.org/apt/debian/dists/bookworm/mongodb-org/8.2/main/binary-amd64/mongodb-org-server_8.2.7_amd64.deb
-sudo dpkg -i mongodb-org-server_8.2.7_amd64.deb
-sudo systemctl start mongod
-sudo systemctl enable mongod
-```
-
-#### Windows
-
-下载安装包：https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.2.7-signed.msi
-
-默认情况下，MongoDB 会运行在 `mongodb://localhost:27017/`。
-
-更多版本安装请参考 MongoDB 官方文档：https://www.mongodb.com/try/download/community
-
-### 5. 启动 WebUI
-
-打开一个新的终端，执行：
-
-```bash
-pnpm webui -- --prod --mongo mongodb://127.0.0.1:27017/
-```
-
-启动成功后，在浏览器打开 http://localhost:3000/ 即可访问 WebUI。根据页面提示完成初始化配置。
-
-### 6. 配置模型 API Key（必须）
+### 3. 配置模型 API Key（必须）
 
 Ema 启动后，必须至少配置一个模型 API Key。
 
@@ -120,7 +88,7 @@ Ema 启动后，必须至少配置一个模型 API Key。
 
 获取 API Key 后，在 Ema 设置页面中填写即可。
 
-### 7. 配置 Tavily 搜索引擎 API Key（可选）
+### 4. 配置 Tavily 搜索引擎 API Key（可选）
 
 Ema 支持 Tavily 搜索引擎，用于联网搜索与信息检索。
 
@@ -128,7 +96,7 @@ Ema 支持 Tavily 搜索引擎，用于联网搜索与信息检索。
 
 然后在 Ema 设置页面中填写即可。
 
-### 8. 配置 NapCatQQ（可选）
+### 5. 配置 NapCatQQ（可选）
 
 如果你希望将 Ema 接入 QQ，请安装 NapCatQQ：
 
