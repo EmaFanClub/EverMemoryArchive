@@ -32,7 +32,7 @@ export async function stagePackage(options: StageOptions): Promise<string> {
   const root = stageRoot(options.platform, options.kind);
   await fs.rm(root, { recursive: true, force: true });
   await fs.mkdir(root, { recursive: true });
-  const app = await copyStandaloneApp(root);
+  const app = await copyStandaloneApp(root, options.platform);
   await copyIfExists(
     path.join(workspaceRoot(), "README.md"),
     path.join(root, "README.md"),
@@ -71,7 +71,10 @@ export async function refreshMinimalStageFromPortable(
   return target;
 }
 
-async function copyStandaloneApp(root: string): Promise<AppStageResult> {
+async function copyStandaloneApp(
+  root: string,
+  platform: Platform,
+): Promise<AppStageResult> {
   const workspace = workspaceRoot();
   const webuiRoot = path.join(workspace, "packages", "ema-webui");
   const standaloneRoot = path.join(webuiRoot, ".next", "standalone");
@@ -97,6 +100,7 @@ async function copyStandaloneApp(root: string): Promise<AppStageResult> {
   await copyIfExists(staticRoot, path.join(serverDir, ".next", "static"));
   await copyIfExists(publicRoot, path.join(serverDir, "public"));
   await copyEmaRuntimeAssets(appRoot);
+  await prunePlatformNativeDependencies(appRoot, platform);
 
   const serverRelativePath = toPosixPath(path.relative(root, serverPath));
   await fs.writeFile(
@@ -104,6 +108,176 @@ async function copyStandaloneApp(root: string): Promise<AppStageResult> {
     `${serverRelativePath}\n`,
   );
   return { root: appRoot, serverRelativePath };
+}
+
+const LANCEDB_NATIVE_PACKAGES = [
+  "@lancedb/lancedb-darwin-x64",
+  "@lancedb/lancedb-darwin-arm64",
+  "@lancedb/lancedb-linux-x64-gnu",
+  "@lancedb/lancedb-linux-arm64-gnu",
+  "@lancedb/lancedb-linux-x64-musl",
+  "@lancedb/lancedb-linux-arm64-musl",
+  "@lancedb/lancedb-win32-x64-msvc",
+  "@lancedb/lancedb-win32-arm64-msvc",
+] as const;
+
+const SHARP_NATIVE_PACKAGES = [
+  "@img/sharp-darwin-arm64",
+  "@img/sharp-darwin-x64",
+  "@img/sharp-libvips-darwin-arm64",
+  "@img/sharp-libvips-darwin-x64",
+  "@img/sharp-libvips-linux-arm",
+  "@img/sharp-libvips-linux-arm64",
+  "@img/sharp-libvips-linux-ppc64",
+  "@img/sharp-libvips-linux-riscv64",
+  "@img/sharp-libvips-linux-s390x",
+  "@img/sharp-libvips-linux-x64",
+  "@img/sharp-libvips-linuxmusl-arm64",
+  "@img/sharp-libvips-linuxmusl-x64",
+  "@img/sharp-linux-arm",
+  "@img/sharp-linux-arm64",
+  "@img/sharp-linux-ppc64",
+  "@img/sharp-linux-riscv64",
+  "@img/sharp-linux-s390x",
+  "@img/sharp-linux-x64",
+  "@img/sharp-linuxmusl-arm64",
+  "@img/sharp-linuxmusl-x64",
+  "@img/sharp-wasm32",
+  "@img/sharp-win32-arm64",
+  "@img/sharp-win32-ia32",
+  "@img/sharp-win32-x64",
+] as const;
+
+const PLATFORM_NATIVE_PACKAGES = [
+  ...LANCEDB_NATIVE_PACKAGES,
+  ...SHARP_NATIVE_PACKAGES,
+] as const;
+
+async function prunePlatformNativeDependencies(
+  appRoot: string,
+  platform: Platform,
+): Promise<void> {
+  const pnpmRoot = path.join(appRoot, "node_modules", ".pnpm");
+  if (!(await exists(pnpmRoot))) {
+    return;
+  }
+
+  const keep = new Set(platformNativePackages(platform));
+  const remove = PLATFORM_NATIVE_PACKAGES.filter((packageName) => {
+    return !keep.has(packageName);
+  });
+
+  await removePnpmPackageStores(pnpmRoot, remove);
+  await removePnpmPackageLinks(pnpmRoot, remove);
+}
+
+function platformNativePackages(platform: Platform): string[] {
+  return [
+    ...platformLancedbPackages(platform),
+    ...platformSharpPackages(platform),
+  ];
+}
+
+function platformLancedbPackages(platform: Platform): string[] {
+  if (platform.os === "darwin") {
+    return [`@lancedb/lancedb-darwin-${platform.arch}`];
+  }
+  if (platform.os === "win32") {
+    return [`@lancedb/lancedb-win32-${platform.arch}-msvc`];
+  }
+  if (platform.os === "alpine" && platform.arch === "x64") {
+    return ["@lancedb/lancedb-linux-x64-musl"];
+  }
+  if (platform.os === "linux" && platform.arch === "x64") {
+    return ["@lancedb/lancedb-linux-x64-gnu"];
+  }
+  if (platform.os === "linux" && platform.arch === "arm64") {
+    return ["@lancedb/lancedb-linux-arm64-gnu"];
+  }
+  return [];
+}
+
+function platformSharpPackages(platform: Platform): string[] {
+  if (platform.os === "darwin") {
+    return [
+      `@img/sharp-darwin-${platform.arch}`,
+      `@img/sharp-libvips-darwin-${platform.arch}`,
+    ];
+  }
+  if (platform.os === "win32") {
+    return [`@img/sharp-win32-${platform.arch}`];
+  }
+  if (platform.os === "alpine" && platform.arch === "x64") {
+    return ["@img/sharp-linuxmusl-x64", "@img/sharp-libvips-linuxmusl-x64"];
+  }
+  if (platform.os === "linux" && platform.arch === "x64") {
+    return ["@img/sharp-linux-x64", "@img/sharp-libvips-linux-x64"];
+  }
+  if (platform.os === "linux" && platform.arch === "arm64") {
+    return ["@img/sharp-linux-arm64", "@img/sharp-libvips-linux-arm64"];
+  }
+  if (platform.os === "linux" && platform.arch === "armhf") {
+    return ["@img/sharp-linux-arm", "@img/sharp-libvips-linux-arm"];
+  }
+  return [];
+}
+
+async function removePnpmPackageStores(
+  pnpmRoot: string,
+  packageNames: readonly string[],
+): Promise<void> {
+  const entries = await fs.readdir(pnpmRoot, { withFileTypes: true });
+  const prefixes = packageNames.map((packageName) => {
+    return pnpmPackageStorePrefix(packageName);
+  });
+
+  await Promise.all(
+    entries
+      .filter((entry) =>
+        prefixes.some((prefix) => entry.name.startsWith(prefix)),
+      )
+      .map((entry) => {
+        return fs.rm(path.join(pnpmRoot, entry.name), {
+          recursive: true,
+          force: true,
+        });
+      }),
+  );
+}
+
+async function removePnpmPackageLinks(
+  pnpmRoot: string,
+  packageNames: readonly string[],
+): Promise<void> {
+  const entries = await fs.readdir(pnpmRoot, { withFileTypes: true });
+  const nodeModulesRoots = [
+    path.join(pnpmRoot, "node_modules"),
+    ...entries.map((entry) => path.join(pnpmRoot, entry.name, "node_modules")),
+  ];
+
+  await Promise.all(
+    nodeModulesRoots.flatMap((nodeModulesRoot) => {
+      return packageNames.map((packageName) => {
+        return fs.rm(packageLinkPath(nodeModulesRoot, packageName), {
+          recursive: true,
+          force: true,
+        });
+      });
+    }),
+  );
+}
+
+function pnpmPackageStorePrefix(packageName: string): string {
+  return `${packageName.split("/").join("+")}@`;
+}
+
+function packageLinkPath(nodeModulesRoot: string, packageName: string): string {
+  if (!packageName.startsWith("@")) {
+    return path.join(nodeModulesRoot, packageName);
+  }
+
+  const [scope, name] = packageName.split("/");
+  return path.join(nodeModulesRoot, scope, name);
 }
 
 async function findServerEntry(appRoot: string): Promise<string> {
