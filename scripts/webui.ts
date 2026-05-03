@@ -1,8 +1,8 @@
-import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import spawn from "cross-spawn";
 
 const MONGO_DB_NAME = "ema";
 
@@ -83,9 +83,10 @@ function main() {
     EMA_SERVER_MONGO_URI: mongoUri,
     EMA_SERVER_MONGO_DB: MONGO_DB_NAME,
     EMA_SERVER_DATA_ROOT: dataRoot,
+    EMA_WORKSPACE_ROOT: repoRoot,
   };
 
-  const child = spawn(pnpmCommand(), nextArgs, {
+  const child = spawn("pnpm", nextArgs, {
     cwd: repoRoot,
     env,
     stdio: "inherit",
@@ -103,10 +104,6 @@ function main() {
 function fail(message: string): never {
   process.stderr.write(`EMA WebUI startup error: ${message}\n\n${HELP}`);
   process.exit(1);
-}
-
-function pnpmCommand() {
-  return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 }
 
 main();

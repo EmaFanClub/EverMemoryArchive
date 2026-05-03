@@ -1,11 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const TEMPLATE_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "templates",
-);
+import { resolveEmaSourcePath } from "../shared/package_path";
+
+const TEMPLATE_DIR = resolveEmaSourcePath("prompt", "templates");
 const templateCache = new Map<string, string>();
 
 /**

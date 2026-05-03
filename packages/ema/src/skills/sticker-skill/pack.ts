@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+
+import { resolveEmaSourcePath } from "../../shared/package_path";
 
 /**
  * One sticker entry inside one sticker pack.
@@ -54,8 +55,9 @@ export interface ResolvedStickerPack extends StickerPackDefinition {
   stickers: ResolvedStickerDefinition[];
 }
 
-const STICKER_ASSETS_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
+const STICKER_ASSETS_DIR = resolveEmaSourcePath(
+  "skills",
+  "sticker-skill",
   "assets",
 );
 
