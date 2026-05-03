@@ -89,6 +89,7 @@ async function copyStandaloneApp(root: string): Promise<AppStageResult> {
     recursive: true,
     force: true,
     preserveTimestamps: true,
+    verbatimSymlinks: true,
   });
 
   const serverPath = await findServerEntry(appRoot);
@@ -285,6 +286,7 @@ async function copyIfExists(
     recursive: true,
     force: true,
     preserveTimestamps: true,
+    verbatimSymlinks: true,
   });
 }
 
@@ -306,6 +308,7 @@ async function copyDirectoryWithout(
         recursive: true,
         force: true,
         preserveTimestamps: true,
+        verbatimSymlinks: true,
       },
     );
   }

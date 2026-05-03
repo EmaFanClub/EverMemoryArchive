@@ -52,6 +52,7 @@ export async function createPackageArchives(
   const sevenZip = await findSevenZip();
   const outDir = platformDistRoot(platform);
   await fs.mkdir(outDir, { recursive: true });
+  await removeDanglingSymlinks(sourceRoot);
   const parent = path.dirname(sourceRoot);
   const rootName = path.basename(sourceRoot);
   const outputs = [
@@ -105,6 +106,7 @@ async function copySingleRootContents(
       recursive: true,
       force: true,
       preserveTimestamps: true,
+      verbatimSymlinks: true,
     });
     return;
   }
@@ -116,7 +118,31 @@ async function copySingleRootContents(
         recursive: true,
         force: true,
         preserveTimestamps: true,
+        verbatimSymlinks: true,
       },
     );
+  }
+}
+
+async function removeDanglingSymlinks(root: string): Promise<void> {
+  const entries = await fs.readdir(root, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      await removeDanglingSymlinks(entryPath);
+      continue;
+    }
+    if (!entry.isSymbolicLink()) {
+      continue;
+    }
+    try {
+      await fs.stat(entryPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+      await fs.rm(entryPath, { force: true });
+      process.stderr.write(`Removed dangling staged symlink: ${entryPath}\n`);
+    }
   }
 }
