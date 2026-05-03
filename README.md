@@ -45,7 +45,11 @@ Ema 当前支持 macOS、Linux 与 Windows。运行 Ema 至少需要：
 | `portable` | 下载 `.zip` 或 `.7z` 压缩包，解压后运行 `start.sh`、`start.cmd` 或对应平台的启动脚本。 |
 | `exe` | 下载安装器并按提示安装。当前构建产物的安装器文件名通常为 `*-installer.*`：Windows 为 `.bat`，macOS 为 `.command`，Linux 为 `.run`。 |
 
-### 1. 从 GitHub Actions 下载安装
+### 1. 下载安装包
+
+可从以下任一来源下载安装包。
+
+#### 从 GitHub Actions 下载安装
 
 打开 GitHub Actions 的发行包构建页面：
 
@@ -64,7 +68,7 @@ https://github.com/EmaFanClub/EverMemoryArchive/actions/workflows/dist.yml
 - 需要安装向导：选择 `ema-<platform>-portable-<revision>-installer.*`。
 - 需要轻量包：选择 `minimal` 版本，并先根据 [安装依赖文档](docs/installation.md) 准备依赖。
 
-### 2. 从 GitHub Release 下载安装
+#### 从 GitHub Release 下载安装
 
 打开 GitHub Release 页面：
 
@@ -77,7 +81,11 @@ https://github.com/EmaFanClub/EverMemoryArchive/releases
 - `.zip` / `.7z` 是解压运行方式。
 - `*-installer.*` 是安装器方式。
 
-### 3. 配置模型 API Key（必须）
+### 2. 配置 Ema
+
+Ema 启动后必须配置模型 API Key；Tavily 搜索引擎 API Key 和 NapCatQQ 为可选配置，可按需启用。
+
+#### 配置模型 API Key（必须）
 
 Ema 启动后，必须至少配置一个模型 API Key。
 
@@ -88,7 +96,7 @@ Ema 启动后，必须至少配置一个模型 API Key。
 
 获取 API Key 后，在 Ema 设置页面中填写即可。
 
-### 4. 配置 Tavily 搜索引擎 API Key（可选）
+#### 配置 Tavily 搜索引擎 API Key（可选）
 
 Ema 支持 Tavily 搜索引擎，用于联网搜索与信息检索。
 
@@ -96,7 +104,7 @@ Ema 支持 Tavily 搜索引擎，用于联网搜索与信息检索。
 
 然后在 Ema 设置页面中填写即可。
 
-### 5. 配置 NapCatQQ（可选）
+#### 配置 NapCatQQ（可选）
 
 如果你希望将 Ema 接入 QQ，请安装 NapCatQQ：
 
