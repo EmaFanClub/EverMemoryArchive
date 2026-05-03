@@ -1,3 +1,5 @@
+import { once } from "node:events";
+import { createReadStream, createWriteStream, type WriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -27,16 +29,13 @@ export async function createSelfInstaller(
     installerFileName(platform, kind, revision),
   );
 
-  const [archive, sevenZip] = await Promise.all([
-    fs.readFile(archivePath),
-    fs.readFile(sevenZipPath),
-  ]);
-  const script =
-    platform.os === "win32"
-      ? windowsInstaller(platform, kind, archive, sevenZip)
-      : posixInstaller(platform, kind, archive, sevenZip);
-  await fs.writeFile(outputPath, script, {
+  await writeSelfInstaller({
+    archivePath,
+    kind,
     mode: platform.os === "win32" ? 0o644 : 0o755,
+    outputPath,
+    platform,
+    sevenZipPath,
   });
   if (platform.os !== "win32") {
     await fs.chmod(outputPath, 0o755);
@@ -49,54 +48,121 @@ function installerSevenZipPath(platform: Platform): string {
   return path.join(portableStageRoot(platform), "portables", "7zip", binary);
 }
 
-function posixInstaller(
-  platform: Platform,
-  kind: PackageKind,
-  archive: Buffer,
-  sevenZip: Buffer,
-): string {
-  return renderInstallerTemplate(installerShTemplate, {
-    archive,
-    kind,
-    platform,
-    sevenZip,
-  });
+async function writeSelfInstaller(options: {
+  readonly archivePath: string;
+  readonly kind: PackageKind;
+  readonly mode: number;
+  readonly outputPath: string;
+  readonly platform: Platform;
+  readonly sevenZipPath: string;
+}): Promise<void> {
+  const template =
+    options.platform.os === "win32" ? installerCmdTemplate : installerShTemplate;
+  const writer = createWriteStream(options.outputPath, { mode: options.mode });
+  try {
+    await writeRenderedTemplate(writer, template, {
+      archiveBase64: options.archivePath,
+      kind: options.kind,
+      platformId: options.platform.id,
+      sevenZipBase64: options.sevenZipPath,
+    });
+    writer.end();
+    await once(writer, "finish");
+  } catch (error) {
+    writer.destroy();
+    await fs.rm(options.outputPath, { force: true });
+    throw error;
+  }
 }
 
-function windowsInstaller(
-  platform: Platform,
-  kind: PackageKind,
-  archive: Buffer,
-  sevenZip: Buffer,
-): string {
-  return renderInstallerTemplate(installerCmdTemplate, {
-    archive,
-    kind,
-    platform,
-    sevenZip,
-  });
-}
-
-function renderInstallerTemplate(
+async function writeRenderedTemplate(
+  writer: WriteStream,
   template: string,
-  options: {
-    readonly archive: Buffer;
-    readonly kind: PackageKind;
-    readonly platform: Platform;
-    readonly sevenZip: Buffer;
-  },
-): string {
-  return renderTemplate(template, {
-    archiveBase64: wrapBase64(options.archive),
-    kind: options.kind,
-    platformId: options.platform.id,
-    sevenZipBase64: wrapBase64(options.sevenZip),
-  });
+  values: Readonly<Record<string, string>>,
+): Promise<void> {
+  let cursor = 0;
+  const sections = [
+    { key: "sevenZipBase64", token: "{{sevenZipBase64}}" },
+    { key: "archiveBase64", token: "{{archiveBase64}}" },
+  ];
+  const seen = new Set<string>();
+
+  while (cursor < template.length) {
+    const next = sections
+      .map((section) => ({
+        ...section,
+        index: template.indexOf(section.token, cursor),
+      }))
+      .filter((section) => section.index >= 0)
+      .sort((left, right) => left.index - right.index)[0];
+
+    if (!next) {
+      await writeString(writer, renderTemplate(template.slice(cursor), values));
+      break;
+    }
+
+    await writeString(
+      writer,
+      renderTemplate(template.slice(cursor, next.index), values),
+    );
+    await writeBase64File(writer, values[next.key]);
+    seen.add(next.key);
+    cursor = next.index + next.token.length;
+  }
+
+  for (const section of sections) {
+    if (!seen.has(section.key)) {
+      throw new Error(`Missing installer template section ${section.token}.`);
+    }
+  }
 }
 
-function wrapBase64(value: Buffer): string {
-  return value
-    .toString("base64")
-    .replace(/.{1,76}/gu, (chunk) => `${chunk}\n`)
-    .trimEnd();
+async function writeBase64File(
+  writer: WriteStream,
+  filePath: string,
+): Promise<void> {
+  let carry: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+  let wroteLine = false;
+  for await (const chunk of createReadStream(filePath, {
+    highWaterMark: 57 * 8192,
+  })) {
+    const buffer = carry.length
+      ? Buffer.concat([carry, chunk as Buffer])
+      : (chunk as Buffer);
+    const byteLength = buffer.length - (buffer.length % 57);
+    if (byteLength > 0) {
+      wroteLine = await writeWrappedBase64(
+        writer,
+        buffer.subarray(0, byteLength),
+        wroteLine,
+      );
+    }
+    carry = buffer.subarray(byteLength);
+  }
+  if (carry.length > 0) {
+    await writeWrappedBase64(writer, carry, wroteLine);
+  }
+}
+
+async function writeWrappedBase64(
+  writer: WriteStream,
+  value: Buffer,
+  wroteLine: boolean,
+): Promise<boolean> {
+  const encoded = value.toString("base64");
+  if (wroteLine) {
+    await writeString(writer, "\n");
+  }
+  await writeString(writer, encoded.match(/.{1,76}/gu)?.join("\n") ?? "");
+  return encoded.length > 0;
+}
+
+async function writeString(
+  writer: WriteStream,
+  value: string,
+): Promise<void> {
+  if (writer.write(value)) {
+    return;
+  }
+  await once(writer, "drain");
 }
