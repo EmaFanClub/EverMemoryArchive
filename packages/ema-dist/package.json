@@ -1,0 +1,13 @@
+{
+  "name": "ema-dist",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "revision": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts revision",
+    "download": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts download",
+    "stage": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts stage",
+    "pack": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts pack",
+    "installers": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts installers",
+    "build": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts build"
+  }
+}
