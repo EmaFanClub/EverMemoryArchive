@@ -68,13 +68,55 @@ jobs:
       - name: Build distribution package
         run: pnpm --filter ema-dist run build -- --platform ${{ matrix.platform }}
 
-      - name: Upload distribution artifacts
+      - name: Upload portable 7z artifact
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ema-${{ matrix.platform }}-dist
+          name: ema-${{ matrix.platform }}-portable-7z
           if-no-files-found: error
-          path: |
-            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-*.7z
-            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-*.zip
-            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-*-installer.*
-            dist/${{ matrix.platform }}/*.SKIPPED.txt
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.7z
+
+      - name: Upload portable zip artifact
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-portable-zip
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.zip
+
+      - name: Upload portable installer artifact
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-portable-installer
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*-installer.*
+
+      - name: Upload portable skipped note
+        if: ${{ matrix.platform == 'linux-armhf' || matrix.platform == 'alpine-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-portable-skipped
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/*.SKIPPED.txt
+
+      - name: Upload minimal 7z artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-minimal-7z
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.7z
+
+      - name: Upload minimal zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-minimal-zip
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.zip
+
+      - name: Upload minimal installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-minimal-installer
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*-installer.*
