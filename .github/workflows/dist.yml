@@ -60,7 +60,62 @@ jobs:
             ema-dist-downloads-${{ matrix.platform }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            win32-x64)
+              target_os=win32
+              target_cpu=x64
+              target_libc=current
+              ;;
+            win32-arm64)
+              target_os=win32
+              target_cpu=arm64
+              target_libc=current
+              ;;
+            linux-x64)
+              target_os=linux
+              target_cpu=x64
+              target_libc=glibc
+              ;;
+            linux-arm64)
+              target_os=linux
+              target_cpu=arm64
+              target_libc=glibc
+              ;;
+            linux-armhf)
+              target_os=linux
+              target_cpu=arm
+              target_libc=glibc
+              ;;
+            darwin-x64)
+              target_os=darwin
+              target_cpu=x64
+              target_libc=current
+              ;;
+            darwin-arm64)
+              target_os=darwin
+              target_cpu=arm64
+              target_libc=current
+              ;;
+            alpine-x64)
+              target_os=linux
+              target_cpu=x64
+              target_libc=musl
+              ;;
+            *)
+              echo "Unsupported distribution platform: ${{ matrix.platform }}" >&2
+              exit 1
+              ;;
+          esac
+
+          pnpm install --frozen-lockfile \
+            --os=current \
+            --os="$target_os" \
+            --cpu=current \
+            --cpu="$target_cpu" \
+            --libc=current \
+            --libc="$target_libc"
 
       - name: Build WebUI standalone app
         run: pnpm --filter ema-webui build

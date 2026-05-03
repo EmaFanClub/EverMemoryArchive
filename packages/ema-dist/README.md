@@ -69,6 +69,8 @@ Target-platform native runtime packages, such as LanceDB and Sharp binaries,
 must be present before staging. Cross-platform builds fail during staging when
 the matching optional native package is missing instead of producing an archive
 that fails at runtime.
+Distribution CI passes pnpm `--os`, `--cpu`, and `--libc` install options for
+the target bundle platform so these optional packages are present.
 
 `minimal` bundles only the built app and launch/configure scripts. It can use
 Node.js and MongoDB from configured paths, from `PATH`, or via `EMA_MONGO_URI`.
