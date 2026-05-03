@@ -53,6 +53,12 @@ worktrees append `-dirty`.
 `minimal` bundles only the built app and launch/configure scripts. It can use
 Node.js and MongoDB from configured paths, from `PATH`, or via `EMA_MONGO_URI`.
 
+Launchers open the WebUI in `EMA_OPEN_MODE=webview` by default. This uses an
+app-mode browser window without the normal browser toolbar when Edge, Chrome,
+Chromium, or Brave is available, and falls back to the system browser. During
+installation the user is asked whether to set `EMA_OPEN_MODE=browser` instead.
+`EMA_OPEN_MODE=none` starts only the server.
+
 MongoDB Community Server does not publish `linux-armhf` or Alpine/musl archives.
 For those platforms the CI produces minimal artifacts and a `.SKIPPED.txt` note
 for portable artifacts unless `--include-unsupported-portable` is passed.

@@ -91,6 +91,9 @@ mkdir -p "$INSTALL_PARENT"
 APP_DIR="$INSTALL_PARENT/EverMemoryArchive"
 chmod +x "$APP_DIR/start.sh" "$APP_DIR/configure.sh" 2>/dev/null || true
 
+NODE_PATH_INPUT=""
+MONGO_PATH_INPUT=""
+MONGO_URI_INPUT=""
 if [ "$KIND" = "minimal" ]; then
   printf "Node executable path [PATH]: "
   read -r NODE_PATH_INPUT
@@ -98,14 +101,25 @@ if [ "$KIND" = "minimal" ]; then
   read -r MONGO_PATH_INPUT
   printf "MongoDB URI [start local mongod]: "
   read -r MONGO_URI_INPUT
-  cat > "$APP_DIR/ema-runtime.sh" <<EOF
+fi
+
+OPEN_MODE="webview"
+printf "Use default browser instead of app/webview window? [y/N]: "
+read -r USE_BROWSER_INPUT
+case "$USE_BROWSER_INPUT" in
+  y|Y|yes|YES)
+    OPEN_MODE="browser"
+    ;;
+esac
+
+cat > "$APP_DIR/ema-runtime.sh" <<EOF
 export EMA_NODE_PATH="$NODE_PATH_INPUT"
 export EMA_MONGO_PATH="$MONGO_PATH_INPUT"
 export EMA_MONGO_URI="$MONGO_URI_INPUT"
 export EMA_HOST="127.0.0.1"
 export EMA_PORT="3000"
+export EMA_OPEN_MODE="$OPEN_MODE"
 EOF
-fi
 
 printf "Create shortcut? [Y/n]: "
 read -r CREATE_SHORTCUT
@@ -190,19 +204,30 @@ try {
   }
 
   $AppDir = Join-Path $InstallParent "EverMemoryArchive"
+  $NodePath = ""
+  $MongoPath = ""
+  $MongoUri = ""
   if ($Kind -eq "minimal") {
     $NodePath = Read-Host "Node executable path [PATH]"
     $MongoPath = Read-Host "mongod executable path [PATH]"
     $MongoUri = Read-Host "MongoDB URI [start local mongod]"
-    $RuntimeCmd = @(
-      'set "EMA_NODE_PATH=' + ($NodePath -replace '"', '') + '"',
-      'set "EMA_MONGO_PATH=' + ($MongoPath -replace '"', '') + '"',
-      'set "EMA_MONGO_URI=' + ($MongoUri -replace '"', '') + '"',
-      'set "EMA_HOST=127.0.0.1"',
-      'set "EMA_PORT=3000"'
-    ) -join [Environment]::NewLine
-    Set-Content -LiteralPath (Join-Path $AppDir "ema-runtime.cmd") -Value $RuntimeCmd -Encoding ASCII
   }
+
+  $UseBrowser = Read-Host "Use default browser instead of app/webview window? [y/N]"
+  $OpenMode = "webview"
+  if ($UseBrowser -match "^(y|yes)$") {
+    $OpenMode = "browser"
+  }
+
+  $RuntimeCmd = @(
+    'set "EMA_NODE_PATH=' + ($NodePath -replace '"', '') + '"',
+    'set "EMA_MONGO_PATH=' + ($MongoPath -replace '"', '') + '"',
+    'set "EMA_MONGO_URI=' + ($MongoUri -replace '"', '') + '"',
+    'set "EMA_HOST=127.0.0.1"',
+    'set "EMA_PORT=3000"',
+    'set "EMA_OPEN_MODE=' + $OpenMode + '"'
+  ) -join [Environment]::NewLine
+  Set-Content -LiteralPath (Join-Path $AppDir "ema-runtime.cmd") -Value $RuntimeCmd -Encoding ASCII
 
   $CreateShortcut = Read-Host "Create desktop shortcut? [Y/n]"
   if ([string]::IsNullOrWhiteSpace($CreateShortcut) -or $CreateShortcut -match "^(y|yes)$") {

@@ -169,6 +169,9 @@ async function writeLaunchers(
       mode: 0o755,
     },
   );
+  await fs.writeFile(path.join(root, "open-webui.sh"), posixOpenWebuiScript(), {
+    mode: 0o755,
+  });
   await fs.writeFile(path.join(root, "configure.sh"), posixConfigureScript(), {
     mode: 0o755,
   });
@@ -177,11 +180,16 @@ async function writeLaunchers(
     windowsStartScript(serverRelativePath),
   );
   await fs.writeFile(
+    path.join(root, "open-webui.ps1"),
+    windowsOpenWebuiScript(),
+  );
+  await fs.writeFile(
     path.join(root, "configure.cmd"),
     windowsConfigureScript(),
   );
   if (platform.os !== "win32") {
     await fs.chmod(path.join(root, "start.sh"), 0o755);
+    await fs.chmod(path.join(root, "open-webui.sh"), 0o755);
     await fs.chmod(path.join(root, "configure.sh"), 0o755);
   }
   await fs.writeFile(
@@ -237,6 +245,7 @@ DATA_ROOT="\${EMA_DATA_ROOT:-$APP_ROOT/.ema}"
 HOST="\${EMA_HOST:-127.0.0.1}"
 PORT="\${EMA_PORT:-3000}"
 MONGO_PORT="\${EMA_MONGO_PORT:-27017}"
+OPEN_MODE="\${EMA_OPEN_MODE:-webview}"
 NODE_BIN="\${EMA_NODE_PATH:-}"
 MONGO_BIN="\${EMA_MONGO_PATH:-}"
 
@@ -289,7 +298,12 @@ export EMA_SERVER_MONGO_URI="$MONGO_URI"
 export EMA_SERVER_MONGO_DB="\${EMA_MONGO_DB:-ema}"
 export EMA_SERVER_DATA_ROOT="$DATA_ROOT"
 
-echo "EverMemoryArchive is starting at http://$HOST:$PORT/"
+WEBUI_URL="http://$HOST:$PORT/"
+if [ "$OPEN_MODE" != "none" ]; then
+  "$APP_ROOT/open-webui.sh" "$WEBUI_URL" "$OPEN_MODE" "$NODE_BIN" &
+fi
+
+echo "EverMemoryArchive is starting at $WEBUI_URL"
 "$NODE_BIN" "$SERVER_JS"
 `;
 }
@@ -306,6 +320,7 @@ if not defined EMA_DATA_ROOT set "EMA_DATA_ROOT=%APP_ROOT%.ema"
 if not defined EMA_HOST set "EMA_HOST=127.0.0.1"
 if not defined EMA_PORT set "EMA_PORT=3000"
 if not defined EMA_MONGO_PORT set "EMA_MONGO_PORT=27017"
+if not defined EMA_OPEN_MODE set "EMA_OPEN_MODE=webview"
 
 set "NODE_BIN=%EMA_NODE_PATH%"
 if not defined NODE_BIN if exist "%APP_ROOT%portables\\node\\node.exe" set "NODE_BIN=%APP_ROOT%portables\\node\\node.exe"
@@ -338,10 +353,180 @@ set "EMA_SERVER_MONGO_KIND=remote"
 set "EMA_SERVER_MONGO_DB=ema"
 set "EMA_SERVER_DATA_ROOT=%EMA_DATA_ROOT%"
 set "EMA_SERVER_MONGO_URI=%EMA_MONGO_URI%"
+set "EMA_WEBUI_URL=http://%EMA_HOST%:%EMA_PORT%/"
 
-echo EverMemoryArchive is starting at http://%EMA_HOST%:%EMA_PORT%/
+if /I not "%EMA_OPEN_MODE%"=="none" (
+  start "" /B powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%APP_ROOT%open-webui.ps1" -Url "%EMA_WEBUI_URL%" -Mode "%EMA_OPEN_MODE%"
+)
+
+echo EverMemoryArchive is starting at %EMA_WEBUI_URL%
 "%NODE_BIN%" "%SERVER_JS%"
 endlocal
+`;
+}
+
+function posixOpenWebuiScript(): string {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+
+URL="\${1:?URL is required}"
+MODE="\${2:-webview}"
+NODE_BIN="\${3:-node}"
+
+if [ "$MODE" = "none" ]; then
+  exit 0
+fi
+
+wait_for_webui() {
+  "$NODE_BIN" - "$URL" <<'NODE'
+const url = process.argv[2];
+const deadline = Date.now() + 30000;
+
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+while (Date.now() < deadline) {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(1000) });
+    if (response.status < 500) {
+      process.exit(0);
+    }
+  } catch {
+    // Keep waiting until the server starts accepting connections.
+  }
+  await sleep(500);
+}
+
+process.exit(1);
+NODE
+}
+
+open_default_browser() {
+  case "$(uname -s)" in
+    Darwin)
+      open "$URL" >/dev/null 2>&1 &
+      return 0
+      ;;
+  esac
+
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$URL" >/dev/null 2>&1 &
+    return 0
+  fi
+  if command -v gio >/dev/null 2>&1; then
+    gio open "$URL" >/dev/null 2>&1 &
+    return 0
+  fi
+  echo "No default browser opener was found. Open $URL manually." >&2
+}
+
+open_webview_window() {
+  case "$(uname -s)" in
+    Darwin)
+      for app in "Microsoft Edge" "Google Chrome" "Chromium" "Brave Browser"; do
+        if open -Ra "$app" >/dev/null 2>&1; then
+          open -na "$app" --args --app="$URL" >/dev/null 2>&1 &
+          return 0
+        fi
+      done
+      ;;
+    *)
+      for command in microsoft-edge-stable microsoft-edge msedge google-chrome-stable google-chrome chromium chromium-browser brave-browser; do
+        if command -v "$command" >/dev/null 2>&1; then
+          "$command" --app="$URL" >/dev/null 2>&1 &
+          return 0
+        fi
+      done
+      ;;
+  esac
+
+  open_default_browser
+}
+
+wait_for_webui || exit 0
+case "$MODE" in
+  browser)
+    open_default_browser
+    ;;
+  webview|"")
+    open_webview_window
+    ;;
+  *)
+    echo "Unknown EMA_OPEN_MODE '$MODE'; falling back to webview." >&2
+    open_webview_window
+    ;;
+esac
+`;
+}
+
+function windowsOpenWebuiScript(): string {
+  return `param(
+  [Parameter(Mandatory = $true)]
+  [string]$Url,
+  [string]$Mode = "webview"
+)
+
+if ($Mode -eq "none") {
+  exit 0
+}
+
+$deadline = (Get-Date).AddSeconds(30)
+$ready = $false
+while ((Get-Date) -lt $deadline) {
+  try {
+    $response = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 1
+    if ($response.StatusCode -lt 500) {
+      $ready = $true
+      break
+    }
+  } catch {
+    Start-Sleep -Milliseconds 500
+    continue
+  }
+  Start-Sleep -Milliseconds 500
+}
+
+if (-not $ready) {
+  exit 0
+}
+
+function Open-DefaultBrowser {
+  Start-Process $Url | Out-Null
+}
+
+function Start-AppModeBrowser([string]$Path) {
+  Start-Process -FilePath $Path -ArgumentList @("--app=$Url") | Out-Null
+}
+
+if ($Mode -eq "browser") {
+  Open-DefaultBrowser
+  exit 0
+}
+
+$commands = @("msedge.exe", "chrome.exe", "chromium.exe", "brave.exe")
+foreach ($command in $commands) {
+  $resolved = Get-Command $command -ErrorAction SilentlyContinue
+  if ($resolved) {
+    Start-AppModeBrowser $resolved.Source
+    exit 0
+  }
+}
+
+$knownPaths = @(
+  "$env:ProgramFiles\\Microsoft\\Edge\\Application\\msedge.exe",
+  "$env:ProgramFiles(x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  "$env:ProgramFiles\\Google\\Chrome\\Application\\chrome.exe",
+  "$env:ProgramFiles(x86)\\Google\\Chrome\\Application\\chrome.exe"
+)
+foreach ($path in $knownPaths) {
+  if (Test-Path -LiteralPath $path) {
+    Start-AppModeBrowser $path
+    exit 0
+  }
+}
+
+Open-DefaultBrowser
 `;
 }
 
@@ -355,6 +540,14 @@ read -r -p "mongod executable path [PATH or portable]: " MONGO_PATH_INPUT
 read -r -p "MongoDB URI [start local mongod]: " MONGO_URI_INPUT
 read -r -p "WebUI host [127.0.0.1]: " HOST_INPUT
 read -r -p "WebUI port [3000]: " PORT_INPUT
+read -r -p "Use default browser instead of app/webview window? [y/N]: " USE_BROWSER_INPUT
+
+OPEN_MODE="webview"
+case "$USE_BROWSER_INPUT" in
+  y|Y|yes|YES)
+    OPEN_MODE="browser"
+    ;;
+esac
 
 cat > "$APP_ROOT/ema-runtime.sh" <<EOF
 export EMA_NODE_PATH="$NODE_PATH_INPUT"
@@ -362,6 +555,7 @@ export EMA_MONGO_PATH="$MONGO_PATH_INPUT"
 export EMA_MONGO_URI="$MONGO_URI_INPUT"
 export EMA_HOST="\${HOST_INPUT:-127.0.0.1}"
 export EMA_PORT="\${PORT_INPUT:-3000}"
+export EMA_OPEN_MODE="$OPEN_MODE"
 EOF
 
 echo "Wrote $APP_ROOT/ema-runtime.sh"
@@ -377,14 +571,19 @@ set /p EMA_MONGO_PATH=mongod executable path [PATH or portable]:
 set /p EMA_MONGO_URI=MongoDB URI [start local mongod]: 
 set /p EMA_HOST=WebUI host [127.0.0.1]: 
 set /p EMA_PORT=WebUI port [3000]: 
+set /p USE_BROWSER=Use default browser instead of app/webview window? [y/N]: 
 if not defined EMA_HOST set "EMA_HOST=127.0.0.1"
 if not defined EMA_PORT set "EMA_PORT=3000"
+set "EMA_OPEN_MODE=webview"
+if /I "%USE_BROWSER%"=="y" set "EMA_OPEN_MODE=browser"
+if /I "%USE_BROWSER%"=="yes" set "EMA_OPEN_MODE=browser"
 (
   echo set "EMA_NODE_PATH=%EMA_NODE_PATH%"
   echo set "EMA_MONGO_PATH=%EMA_MONGO_PATH%"
   echo set "EMA_MONGO_URI=%EMA_MONGO_URI%"
   echo set "EMA_HOST=%EMA_HOST%"
   echo set "EMA_PORT=%EMA_PORT%"
+  echo set "EMA_OPEN_MODE=%EMA_OPEN_MODE%"
 ) > "%APP_ROOT%ema-runtime.cmd"
 echo Wrote %APP_ROOT%ema-runtime.cmd
 endlocal
@@ -401,6 +600,10 @@ function installText(platform: Platform, kind: PackageKind): string {
   return `EverMemoryArchive ${kind} package for ${platform.label}
 
 Run ${launcher} to start the WebUI.
+
+By default the launcher opens the WebUI in an app/webview-style browser window
+without the normal browser toolbar. Set EMA_OPEN_MODE=browser to use the system
+default browser, or EMA_OPEN_MODE=none to skip opening a window.
 
 portable:
   Bundles Node.js and MongoDB when the platform has upstream MongoDB binaries.
