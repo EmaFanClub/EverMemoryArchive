@@ -18,12 +18,12 @@
 | 方式 | 说明 |
 | --- | --- |
 | `portable` | 下载 `.zip` 或 `.7z` 压缩包，解压后运行 `start.sh`、`start.cmd` 或对应平台的启动脚本。 |
-| `exe` | 下载安装器并按提示安装。当前构建产物的安装器文件名通常为 `*-installer.*`：Windows 为 `.bat`，macOS 为 `.command`，Linux 为 `.run`。 |
+| `installer` | 下载安装器并按提示安装。当前构建产物的安装器文件名通常为 `*-installer.*`：Windows 为 `.bat`，macOS 为 `.command`，Linux 为 `.run`。 |
 
 推荐组合：
 
 - 普通用户：`portable` 版本 + `portable` 安装方式。
-- 希望使用安装器：`portable` 版本 + `exe` 安装方式。
+- 希望使用安装器：`portable` 版本 + `installer` 安装方式。
 - 已经自行准备 Node.js 与 MongoDB，或希望连接外部 MongoDB：`minimal` 版本。
 
 ## 2. 从 GitHub Release 下载安装
@@ -150,7 +150,7 @@ Ema 使用 MongoDB 作为数据库，需要先安装并启动 MongoDB 服务。
 ```bash
 curl -L https://fastdl.mongodb.org/osx/mongodb-macos-arm64-8.2.7.tgz -o mongodb.tgz
 tar -xzf mongodb.tgz
-cd mongodb-macos-aarch64-8.2.7/bin
+cd mongodb-macos-arm64-8.2.7/bin
 mkdir data
 ./mongod --port 27017 --dbpath ./data
 ```
