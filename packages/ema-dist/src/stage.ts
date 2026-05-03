@@ -88,26 +88,46 @@ async function copyStandaloneApp(
   }
 
   const appRoot = path.join(root, "app");
-  await fs.cp(standaloneRoot, appRoot, {
+  const runtimeRoot = path.join(appRoot, APP_RUNTIME_ASSETS_DIR);
+  await fs.mkdir(appRoot, { recursive: true });
+  await writeCommonJsPackageManifest(appRoot);
+  await fs.cp(standaloneRoot, runtimeRoot, {
     recursive: true,
     force: true,
     preserveTimestamps: true,
     verbatimSymlinks: true,
   });
 
-  const serverPath = await findServerEntry(appRoot);
+  const serverPath = await findServerEntry(runtimeRoot);
   const serverDir = path.dirname(serverPath);
   await copyIfExists(staticRoot, path.join(serverDir, ".next", "static"));
   await copyIfExists(publicRoot, path.join(serverDir, "public"));
-  await copyEmaRuntimeAssets(appRoot);
-  await prunePlatformNativeDependencies(appRoot, platform);
+  await copyEmaRuntimeAssets(runtimeRoot);
+  await prunePlatformNativeDependencies(runtimeRoot, platform);
+  await ensurePlatformNativeDependencies(runtimeRoot, platform);
+  const flattenedServerPath = path.join(appRoot, "server.js");
+  await writeFlattenedServerEntry({
+    outputPath: flattenedServerPath,
+    runtimeRoot,
+    serverPath,
+  });
+  await fs.rm(serverPath, { force: true });
 
-  const serverRelativePath = toPosixPath(path.relative(root, serverPath));
+  const serverRelativePath = toPosixPath(
+    path.relative(root, flattenedServerPath),
+  );
   await fs.writeFile(
     path.join(root, "server-relpath.txt"),
     `${serverRelativePath}\n`,
   );
   return { root: appRoot, serverRelativePath };
+}
+
+async function writeCommonJsPackageManifest(appRoot: string): Promise<void> {
+  await fs.writeFile(
+    path.join(appRoot, "package.json"),
+    `${JSON.stringify({ type: "commonjs" }, null, 2)}\n`,
+  );
 }
 
 const LANCEDB_NATIVE_PACKAGES = [
@@ -153,6 +173,8 @@ const PLATFORM_NATIVE_PACKAGES = [
   ...SHARP_NATIVE_PACKAGES,
 ] as const;
 
+const APP_RUNTIME_ASSETS_DIR = path.join("assets", "runtime");
+
 async function prunePlatformNativeDependencies(
   appRoot: string,
   platform: Platform,
@@ -169,6 +191,45 @@ async function prunePlatformNativeDependencies(
 
   await removePnpmPackageStores(pnpmRoot, remove);
   await removePnpmPackageLinks(pnpmRoot, remove);
+}
+
+async function ensurePlatformNativeDependencies(
+  appRoot: string,
+  platform: Platform,
+): Promise<void> {
+  const pnpmRoot = path.join(appRoot, "node_modules", ".pnpm");
+  if (!(await exists(pnpmRoot))) {
+    return;
+  }
+
+  const missing = [];
+  for (const packageName of platformNativePackages(platform)) {
+    if (!(await pnpmPackageStoreExists(pnpmRoot, packageName))) {
+      missing.push(packageName);
+    }
+  }
+
+  if (missing.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    [
+      `Missing native runtime package(s) for ${platform.id}: ${missing.join(", ")}.`,
+      "Install optional dependencies for the target platform before running ema-dist build.",
+    ].join("\n"),
+  );
+}
+
+async function pnpmPackageStoreExists(
+  pnpmRoot: string,
+  packageName: string,
+): Promise<boolean> {
+  const prefix = pnpmPackageStorePrefix(packageName);
+  const entries = await fs.readdir(pnpmRoot, { withFileTypes: true });
+  return entries.some(
+    (entry) => entry.isDirectory() && entry.name.startsWith(prefix),
+  );
 }
 
 function platformNativePackages(platform: Platform): string[] {
@@ -300,6 +361,99 @@ async function findServerEntry(appRoot: string): Promise<string> {
     );
   }
   return found;
+}
+
+async function writeFlattenedServerEntry(options: {
+  readonly outputPath: string;
+  readonly runtimeRoot: string;
+  readonly serverPath: string;
+}): Promise<void> {
+  const source = await fs.readFile(options.serverPath, "utf8");
+  const relativeRuntimeRoot = toPosixPath(
+    path.relative(path.dirname(options.outputPath), options.runtimeRoot),
+  );
+  const relativeServerDir = toPosixPath(
+    path.relative(options.runtimeRoot, path.dirname(options.serverPath)),
+  );
+  const runtimeRootLiteral = JSON.stringify(relativeRuntimeRoot);
+  const serverDirLiteral = JSON.stringify(relativeServerDir);
+
+  let output = replaceRequired(
+    source,
+    "const path = require('path')",
+    [
+      "const path = require('path')",
+      "const fs = require('fs')",
+      "const Module = require('module')",
+      "",
+      `const runtimeRoot = path.join(__dirname, ${runtimeRootLiteral})`,
+      `const runtimeServerDir = path.join(runtimeRoot, ${serverDirLiteral})`,
+      "",
+      "function addModulePath(modulePath) {",
+      "  if (!fs.existsSync(modulePath)) return",
+      "  if (!module.paths.includes(modulePath)) module.paths.unshift(modulePath)",
+      "  if (!Module.globalPaths.includes(modulePath)) Module.globalPaths.unshift(modulePath)",
+      "}",
+      "",
+      "function addPnpmPackageStorePaths(pnpmRoot) {",
+      "  if (!fs.existsSync(pnpmRoot)) return",
+      "  for (const entry of fs.readdirSync(pnpmRoot, { withFileTypes: true })) {",
+      "    if (!entry.isDirectory()) continue",
+      "    if (entry.name === 'node_modules') continue",
+      "    addModulePath(path.join(pnpmRoot, entry.name, 'node_modules'))",
+      "  }",
+      "}",
+      "",
+      "addModulePath(path.join(runtimeRoot, 'node_modules'))",
+      "addModulePath(path.join(runtimeRoot, 'node_modules', '.pnpm', 'node_modules'))",
+      "addPnpmPackageStorePaths(path.join(runtimeRoot, 'node_modules', '.pnpm'))",
+      "",
+    ].join("\n"),
+    options.serverPath,
+  );
+
+  output = replaceRequired(
+    output,
+    "const dir = path.join(__dirname)",
+    "const dir = runtimeServerDir",
+    options.serverPath,
+  );
+  output = replaceRequired(
+    output,
+    "process.chdir(__dirname)",
+    "process.chdir(dir)",
+    options.serverPath,
+  );
+
+  const withSourceMap = `${output.trimEnd()}\n//# sourceMappingURL=server.js.map\n`;
+  await fs.writeFile(options.outputPath, withSourceMap);
+  await fs.writeFile(
+    `${options.outputPath}.map`,
+    `${JSON.stringify(
+      {
+        version: 3,
+        file: path.basename(options.outputPath),
+        sources: [path.basename(options.outputPath)],
+        sourcesContent: [withSourceMap],
+        names: [],
+        mappings: "",
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+function replaceRequired(
+  source: string,
+  search: string,
+  replacement: string,
+  filePath: string,
+): string {
+  if (!source.includes(search)) {
+    throw new Error(`Could not rewrite standalone server entry ${filePath}.`);
+  }
+  return source.replace(search, replacement);
 }
 
 async function copyEmaRuntimeAssets(appRoot: string): Promise<void> {

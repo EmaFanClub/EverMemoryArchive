@@ -18,15 +18,24 @@ pnpm --filter ema-dist run build -- --platform linux-x64
 dist/$platform/EverMemoryArchive/portables
 ```
 
+Application runtime files are staged under:
+
+```text
+dist/$platform/EverMemoryArchive/app/server.js
+dist/$platform/EverMemoryArchive/app/server.js.map
+dist/$platform/EverMemoryArchive/app/assets/
+```
+
 `build` writes CI-ready artifacts to `dist/$platform/`:
 
 ```text
-ema-$platform-portable-$revision.zip
-ema-$platform-portable-$revision.7z
-ema-$platform-portable-$revision-installer.{bat,run,command}
-ema-$platform-minimal-$revision.zip
 ema-$platform-minimal-$revision.7z
 ema-$platform-minimal-$revision-installer.{bat,run,command}
+ema-$platform-portable-$revision.7z
+ema-$platform-portable-$revision-installer.{bat,run,command}
+ema-$platform-portable-debug-symbols-$revision.7z
+ema-$platform-minimal-$revision.zip
+ema-$platform-portable-$revision.zip
 ```
 
 The platform ids are:
@@ -50,6 +59,16 @@ worktrees append `-dirty`.
 
 `portable` bundles Node.js, MongoDB, and the 7-Zip command-line extractor under
 `portables/` when upstream binaries exist for the platform.
+
+Portable `.pdb` files are removed from portable archives and written to
+`ema-$platform-portable-debug-symbols-$revision.7z` when present. The symbols
+archive preserves the `EverMemoryArchive/...` relative paths so it can be
+extracted over a matching portable package or added to a debugger symbol path.
+
+Target-platform native runtime packages, such as LanceDB and Sharp binaries,
+must be present before staging. Cross-platform builds fail during staging when
+the matching optional native package is missing instead of producing an archive
+that fails at runtime.
 
 `minimal` bundles only the built app and launch/configure scripts. It can use
 Node.js and MongoDB from configured paths, from `PATH`, or via `EMA_MONGO_URI`.

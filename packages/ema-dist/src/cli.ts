@@ -7,6 +7,11 @@ import {
   PACKAGE_ARCHIVE_FORMATS,
   type PackageArchiveFormat,
 } from "./archive";
+import {
+  createPortableDebugSymbolsArchive,
+  type PortableDebugSymbolsStageResult,
+  stagePortableDebugSymbols,
+} from "./debug-symbols";
 import { downloadPortableDependencies } from "./download";
 import { createSelfInstaller } from "./installer";
 import { packageFileName, platformDistRoot, stageRoot } from "./paths";
@@ -21,6 +26,14 @@ import {
 } from "./platforms";
 import { resolveRevision } from "./revision";
 import { refreshMinimalStageFromPortable, stagePackage } from "./stage";
+
+const BUILD_INSTALLER_ARCHIVE_FORMATS: readonly PackageArchiveFormat[] = ["7z"];
+const BUILD_OTHER_ARCHIVE_FORMATS: readonly PackageArchiveFormat[] =
+  PACKAGE_ARCHIVE_FORMATS.filter((format) => format !== "7z");
+
+interface PackKindOptions {
+  readonly preparePortableDebugSymbols?: boolean;
+}
 
 const HELP = `
 Usage:
@@ -104,7 +117,19 @@ async function main(): Promise<void> {
     case "pack":
       await requireKind(kind, async (packageKind) => {
         await runForPlatforms(platforms, async (platform) => {
-          await packKind(platform, packageKind, revision, archiveFormats);
+          const result = await packKind(
+            platform,
+            packageKind,
+            revision,
+            archiveFormats,
+          );
+          if (packageKind === "portable") {
+            await packPortableDebugSymbolsIfPresent(
+              platform,
+              revision,
+              result.debugSymbols,
+            );
+          }
         });
       });
       return;
@@ -143,11 +168,31 @@ async function buildPlatform(
   process.stdout.write(`Staging ${platform.id} portable package\n`);
   await stagePackage({ platform, kind: "portable", revision });
   await downloadPortableDependencies(platform);
+  const debugSymbols = await stagePortableDebugSymbols(platform, {
+    reset: true,
+  });
+
+  process.stdout.write(`Staging ${platform.id} minimal package\n`);
+  await refreshMinimalStageFromPortable(platform, revision);
+  await packKind(
+    platform,
+    "minimal",
+    revision,
+    BUILD_INSTALLER_ARCHIVE_FORMATS,
+  );
+  await createSelfInstaller(platform, "minimal", revision);
 
   const packagePortable = platform.canBundleMongo || includeUnsupportedPortable;
   if (packagePortable) {
-    await packKind(platform, "portable", revision, PACKAGE_ARCHIVE_FORMATS);
+    await packKind(
+      platform,
+      "portable",
+      revision,
+      BUILD_INSTALLER_ARCHIVE_FORMATS,
+      { preparePortableDebugSymbols: false },
+    );
     await createSelfInstaller(platform, "portable", revision);
+    await packPortableDebugSymbolsIfPresent(platform, revision, debugSymbols);
   } else {
     process.stdout.write(
       `Skipping ${platform.id} portable package: ${platform.mongoNote}\n`,
@@ -155,10 +200,44 @@ async function buildPlatform(
     await writeSkipNote(platform, revision);
   }
 
-  process.stdout.write(`Staging ${platform.id} minimal package\n`);
-  await refreshMinimalStageFromPortable(platform, revision);
-  await packKind(platform, "minimal", revision, PACKAGE_ARCHIVE_FORMATS);
-  await createSelfInstaller(platform, "minimal", revision);
+  await packOtherBuildFormats(platform, "minimal", revision);
+  if (packagePortable) {
+    await packOtherBuildFormats(platform, "portable", revision, {
+      preparePortableDebugSymbols: false,
+    });
+  }
+}
+
+async function packOtherBuildFormats(
+  platform: Platform,
+  kind: PackageKind,
+  revision: string,
+  options?: PackKindOptions,
+): Promise<void> {
+  if (BUILD_OTHER_ARCHIVE_FORMATS.length === 0) {
+    return;
+  }
+  await packKind(
+    platform,
+    kind,
+    revision,
+    BUILD_OTHER_ARCHIVE_FORMATS,
+    options,
+  );
+}
+
+async function packPortableDebugSymbolsIfPresent(
+  platform: Platform,
+  revision: string,
+  debugSymbols?: PortableDebugSymbolsStageResult,
+): Promise<void> {
+  if (debugSymbols && debugSymbols.count === 0) {
+    return;
+  }
+  const output = await createPortableDebugSymbolsArchive(platform, revision);
+  if (output) {
+    process.stdout.write(`Wrote ${output}\n`);
+  }
 }
 
 async function packKind(
@@ -166,7 +245,12 @@ async function packKind(
   kind: PackageKind,
   revision: string,
   formats: readonly PackageArchiveFormat[],
-): Promise<void> {
+  options?: PackKindOptions,
+): Promise<{ debugSymbols?: PortableDebugSymbolsStageResult }> {
+  const debugSymbols =
+    kind === "portable" && options?.preparePortableDebugSymbols !== false
+      ? await stagePortableDebugSymbols(platform)
+      : undefined;
   const root = stageRoot(platform, kind);
   await ensureStageExists(root, platform, kind);
   const outputs = await createPackageArchives(
@@ -179,6 +263,7 @@ async function packKind(
   for (const output of outputs) {
     process.stdout.write(`Wrote ${output}\n`);
   }
+  return { debugSymbols };
 }
 
 function resolveArchiveFormats(

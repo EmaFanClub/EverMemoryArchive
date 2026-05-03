@@ -54,15 +54,33 @@ export async function createPackageArchives(
   sourceRoot: string,
   formats: readonly PackageArchiveFormat[] = PACKAGE_ARCHIVE_FORMATS,
 ): Promise<string[]> {
-  const sevenZip = await findSevenZip();
   const outDir = platformDistRoot(platform);
-  await fs.mkdir(outDir, { recursive: true });
-  await removeDanglingSymlinks(sourceRoot);
-  const parent = path.dirname(sourceRoot);
-  const rootName = path.basename(sourceRoot);
   const outputs = formats.map((format) =>
     path.join(outDir, packageFileName(platform, kind, revision, format)),
   );
+
+  return createArchiveFiles(sourceRoot, outputs, formats);
+}
+
+export async function createArchiveFile(
+  sourceRoot: string,
+  output: string,
+  format: PackageArchiveFormat,
+): Promise<string> {
+  const outputs = await createArchiveFiles(sourceRoot, [output], [format]);
+  return outputs[0];
+}
+
+async function createArchiveFiles(
+  sourceRoot: string,
+  outputs: readonly string[],
+  formats: readonly PackageArchiveFormat[],
+): Promise<string[]> {
+  const sevenZip = await findSevenZip();
+  await fs.mkdir(path.dirname(outputs[0]), { recursive: true });
+  await removeDanglingSymlinks(sourceRoot);
+  const parent = path.dirname(sourceRoot);
+  const rootName = path.basename(sourceRoot);
 
   for (const output of outputs) {
     await fs.rm(output, { force: true });
@@ -74,7 +92,7 @@ export async function createPackageArchives(
     });
   }
 
-  return outputs;
+  return [...outputs];
 }
 
 export function assertPackageArchiveFormat(
