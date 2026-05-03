@@ -83,15 +83,15 @@ mkdir data
 ```bash
 wget https://repo.mongodb.org/apt/debian/dists/bookworm/mongodb-org/8.2/main/binary-amd64/mongodb-org-server_8.2.7_amd64.deb
 sudo dpkg -i mongodb-org-server_8.2.7_amd64.deb
-systemctl start mongod
-systemctl enable mongod
+sudo systemctl start mongod
+sudo systemctl enable mongod
 ```
 
 #### Windows
 
 下载安装包：https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.2.7-signed.msi
 
-默认清空下，MongoDB 会运行在 `mongodb://localhost:27017/`。
+默认情况下，MongoDB 会运行在 `mongodb://localhost:27017/`。
 
 更多版本安装请参考 MongoDB 官方文档：https://www.mongodb.com/try/download/community
 

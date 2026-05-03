@@ -61,7 +61,7 @@ git push origin feat/your-feature-name
 - When ready for release, create PR from `dev` to `preview` branch
 - Perform testing and validation on `preview` branch
 - After testing, create PR from `preview` to `main` branch
-- Merging to `main` branch triggers automatic deployment to production
+- Merging to `main` branch completes the release branch flow; perform production deployment using the project's current deployment process
 
 ### Branch Protection Rules
 
@@ -153,7 +153,7 @@ git push origin feat/your-feature-name
 - 当需要发布新版本时，从 `dev` 分支创建PR到 `preview` 分支
 - 在 `preview` 分支进行测试和验证
 - 测试通过后，从 `preview` 分支创建PR到 `main` 分支
-- 合并到 `main` 分支后自动部署到生产环境
+- 合并到 `main` 分支后，按照项目实际发布流程部署到生产环境
 
 ### 分支保护规则
 
