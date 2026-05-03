@@ -180,7 +180,7 @@ async function writeLaunchers(
     windowsStartScript(serverRelativePath),
   );
   await fs.writeFile(
-    path.join(root, "open-webui.ps1"),
+    path.join(root, "open-webui.cmd"),
     windowsOpenWebuiScript(),
   );
   await fs.writeFile(
@@ -356,7 +356,7 @@ set "EMA_SERVER_MONGO_URI=%EMA_MONGO_URI%"
 set "EMA_WEBUI_URL=http://%EMA_HOST%:%EMA_PORT%/"
 
 if /I not "%EMA_OPEN_MODE%"=="none" (
-  start "" /B powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%APP_ROOT%open-webui.ps1" -Url "%EMA_WEBUI_URL%" -Mode "%EMA_OPEN_MODE%"
+  start "" /B "%APP_ROOT%open-webui.cmd" "%EMA_WEBUI_URL%" "%EMA_OPEN_MODE%" "%NODE_BIN%"
 )
 
 echo EverMemoryArchive is starting at %EMA_WEBUI_URL%
@@ -461,72 +461,67 @@ esac
 }
 
 function windowsOpenWebuiScript(): string {
-  return `param(
-  [Parameter(Mandatory = $true)]
-  [string]$Url,
-  [string]$Mode = "webview"
-)
+  return `@echo off
+setlocal EnableExtensions
+set "URL=%~1"
+set "MODE=%~2"
+set "NODE_BIN=%~3"
+if not defined MODE set "MODE=webview"
+if not defined NODE_BIN set "NODE_BIN=node"
+if /I "%MODE%"=="none" exit /b 0
 
-if ($Mode -eq "none") {
-  exit 0
-}
+set "WAITER=%TEMP%\\ema-webui-wait-%RANDOM%%RANDOM%.js"
+> "%WAITER%" echo const url = process.argv[2];
+>> "%WAITER%" echo const deadline = Date.now() + 30000;
+>> "%WAITER%" echo const sleep = ms =^> new Promise^(resolve =^> setTimeout^(resolve, ms^)^);
+>> "%WAITER%" echo ^(async ^(^) =^> {
+>> "%WAITER%" echo   while ^(Date.now^(^) ^< deadline^) {
+>> "%WAITER%" echo     try {
+>> "%WAITER%" echo       const response = await fetch^(url, { signal: AbortSignal.timeout^(1000^) }^);
+>> "%WAITER%" echo       if ^(response.status ^< 500^) process.exit^(0^);
+>> "%WAITER%" echo     } catch {}
+>> "%WAITER%" echo     await sleep^(500^);
+>> "%WAITER%" echo   }
+>> "%WAITER%" echo   process.exit^(1^);
+>> "%WAITER%" echo }^)^(^);
 
-$deadline = (Get-Date).AddSeconds(30)
-$ready = $false
-while ((Get-Date) -lt $deadline) {
-  try {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 1
-    if ($response.StatusCode -lt 500) {
-      $ready = $true
-      break
-    }
-  } catch {
-    Start-Sleep -Milliseconds 500
-    continue
-  }
-  Start-Sleep -Milliseconds 500
-}
+"%NODE_BIN%" "%WAITER%" "%URL%" >nul 2>nul
+set "WAIT_EXIT=%ERRORLEVEL%"
+del "%WAITER%" >nul 2>nul
+if not "%WAIT_EXIT%"=="0" exit /b 0
 
-if (-not $ready) {
-  exit 0
-}
+if /I "%MODE%"=="browser" goto open_default_browser
 
-function Open-DefaultBrowser {
-  Start-Process $Url | Out-Null
-}
+call :try_app_path "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe"
+if not errorlevel 1 exit /b 0
+call :try_app_path "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe"
+if not errorlevel 1 exit /b 0
+call :try_app_path "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+if not errorlevel 1 exit /b 0
+call :try_app_path "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+if not errorlevel 1 exit /b 0
+call :try_app_command msedge.exe
+if not errorlevel 1 exit /b 0
+call :try_app_command chrome.exe
+if not errorlevel 1 exit /b 0
+call :try_app_command chromium.exe
+if not errorlevel 1 exit /b 0
+call :try_app_command brave.exe
+if not errorlevel 1 exit /b 0
 
-function Start-AppModeBrowser([string]$Path) {
-  Start-Process -FilePath $Path -ArgumentList @("--app=$Url") | Out-Null
-}
+:open_default_browser
+start "" "%URL%"
+exit /b 0
 
-if ($Mode -eq "browser") {
-  Open-DefaultBrowser
-  exit 0
-}
+:try_app_path
+if not exist "%~1" exit /b 1
+start "" "%~1" --app="%URL%"
+exit /b 0
 
-$commands = @("msedge.exe", "chrome.exe", "chromium.exe", "brave.exe")
-foreach ($command in $commands) {
-  $resolved = Get-Command $command -ErrorAction SilentlyContinue
-  if ($resolved) {
-    Start-AppModeBrowser $resolved.Source
-    exit 0
-  }
-}
-
-$knownPaths = @(
-  "$env:ProgramFiles\\Microsoft\\Edge\\Application\\msedge.exe",
-  "$env:ProgramFiles(x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-  "$env:ProgramFiles\\Google\\Chrome\\Application\\chrome.exe",
-  "$env:ProgramFiles(x86)\\Google\\Chrome\\Application\\chrome.exe"
-)
-foreach ($path in $knownPaths) {
-  if (Test-Path -LiteralPath $path) {
-    Start-AppModeBrowser $path
-    exit 0
-  }
-}
-
-Open-DefaultBrowser
+:try_app_command
+where "%~1" >nul 2>nul || exit /b 1
+start "" "%~1" --app="%URL%"
+exit /b 0
 `;
 }
 

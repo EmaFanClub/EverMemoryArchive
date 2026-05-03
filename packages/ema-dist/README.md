@@ -22,10 +22,10 @@ dist/$platform/EverMemoryArchive/portables
 ```text
 ema-$platform-portable-$revision.7z
 ema-$platform-portable-$revision.zip
-ema-$platform-portable-$revision-installer.{ps1,run,command}
+ema-$platform-portable-$revision-installer.{bat,run,command}
 ema-$platform-minimal-$revision.7z
 ema-$platform-minimal-$revision.zip
-ema-$platform-minimal-$revision-installer.{ps1,run,command}
+ema-$platform-minimal-$revision-installer.{bat,run,command}
 ```
 
 The platform ids are:
