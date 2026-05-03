@@ -64,10 +64,10 @@ export async function createPackageArchives(
     await fs.rm(output, { force: true });
   }
 
-  await execFile(sevenZip, ["a", "-t7z", "-mx=9", outputs[0], rootName], {
+  await execFile(sevenZip, ["a", "-t7z", outputs[0], rootName], {
     cwd: parent,
   });
-  await execFile(sevenZip, ["a", "-tzip", "-mx=9", outputs[1], rootName], {
+  await execFile(sevenZip, ["a", "-tzip", outputs[1], rootName], {
     cwd: parent,
   });
 
