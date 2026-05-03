@@ -22,7 +22,8 @@ call :extract_section EMA_ARCHIVE "%ARCHIVE_B64%" || goto fail
 call :decode_base64 "%ARCHIVE_B64%" "%ARCHIVE_PATH%" || goto fail
 
 call :set_config_dir
-if exist "%EMA_CONFIG_DIR%\ema-runtime.cmd" call "%EMA_CONFIG_DIR%\ema-runtime.cmd"
+set "CONFIG_FILE=%EMA_CONFIG_DIR%\ema-runtime.env"
+if exist "%CONFIG_FILE%" call :load_env_file "%CONFIG_FILE%"
 
 set "DEFAULT_PARENT=%EMA_INSTALL_PARENT%"
 if not defined DEFAULT_PARENT set "DEFAULT_PARENT=%USERPROFILE%"
@@ -53,17 +54,22 @@ if not defined EMA_HOST set "EMA_HOST=127.0.0.1"
 if not defined EMA_PORT set "EMA_PORT=3000"
 
 mkdir "%EMA_CONFIG_DIR%" >nul 2>nul
-(
-  echo set "EMA_INSTALL_PARENT=%INSTALL_PARENT%"
-  echo set "EMA_INSTALL_DIR=%APP_DIR%"
-  echo set "EMA_NODE_PATH=%NODE_PATH_INPUT%"
-  echo set "EMA_MONGO_PATH=%MONGO_PATH_INPUT%"
-  echo set "EMA_MONGO_URI=%MONGO_URI_INPUT%"
-  echo set "EMA_HOST=%EMA_HOST%"
-  echo set "EMA_PORT=%EMA_PORT%"
-  echo set "EMA_OPEN_MODE=%OPEN_MODE%"
-) > "%EMA_CONFIG_DIR%\ema-runtime.cmd"
-echo Wrote "%EMA_CONFIG_DIR%\ema-runtime.cmd"
+set "EMA_INSTALL_PARENT=%INSTALL_PARENT%"
+set "EMA_INSTALL_DIR=%APP_DIR%"
+set "EMA_NODE_PATH=%NODE_PATH_INPUT%"
+set "EMA_MONGO_PATH=%MONGO_PATH_INPUT%"
+set "EMA_MONGO_URI=%MONGO_URI_INPUT%"
+set "EMA_OPEN_MODE=%OPEN_MODE%"
+type nul > "%CONFIG_FILE%"
+call :write_env_value EMA_INSTALL_PARENT
+call :write_env_value EMA_INSTALL_DIR
+call :write_env_value EMA_NODE_PATH
+call :write_env_value EMA_MONGO_PATH
+call :write_env_value EMA_MONGO_URI
+call :write_env_value EMA_HOST
+call :write_env_value EMA_PORT
+call :write_env_value EMA_OPEN_MODE
+echo Wrote "%CONFIG_FILE%"
 
 set /p "CREATE_SHORTCUT=Create desktop shortcut? [Y/n]: "
 if not defined CREATE_SHORTCUT set "CREATE_SHORTCUT=Y"
@@ -112,6 +118,27 @@ if defined EMA_CONFIG_HOME (
 ) else (
   set "EMA_CONFIG_DIR=%USERPROFILE%\.config\ema"
 )
+exit /b 0
+
+:load_env_file
+if not exist "%~1" exit /b 0
+for /f "usebackq eol=# tokens=1* delims==" %%A in ("%~1") do (
+  if /I "%%~A"=="EMA_INSTALL_PARENT" set "EMA_INSTALL_PARENT=%%B"
+  if /I "%%~A"=="EMA_INSTALL_DIR" set "EMA_INSTALL_DIR=%%B"
+  if /I "%%~A"=="EMA_NODE_PATH" set "EMA_NODE_PATH=%%B"
+  if /I "%%~A"=="EMA_MONGO_PATH" set "EMA_MONGO_PATH=%%B"
+  if /I "%%~A"=="EMA_MONGO_URI" set "EMA_MONGO_URI=%%B"
+  if /I "%%~A"=="EMA_HOST" set "EMA_HOST=%%B"
+  if /I "%%~A"=="EMA_PORT" set "EMA_PORT=%%B"
+  if /I "%%~A"=="EMA_OPEN_MODE" set "EMA_OPEN_MODE=%%B"
+)
+exit /b 0
+
+:write_env_value
+set "ENV_NAME=%~1"
+setlocal EnableDelayedExpansion
+>> "%CONFIG_FILE%" echo(!ENV_NAME!=!%ENV_NAME%!
+endlocal
 exit /b 0
 
 :prompt

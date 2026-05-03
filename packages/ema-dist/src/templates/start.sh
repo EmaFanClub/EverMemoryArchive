@@ -22,13 +22,42 @@ ema_config_dir() {
   esac
 }
 
-CONFIG_FILE="$(ema_config_dir)/ema-runtime.sh"
+load_env_file() {
+  local file="$1"
+  local line key value
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    case "$line" in
+      ""|\#*)
+        continue
+        ;;
+      *=*)
+        key="${line%%=*}"
+        value="${line#*=}"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    case "$key" in
+      EMA_INSTALL_PARENT) EMA_INSTALL_PARENT="$value" ;;
+      EMA_INSTALL_DIR) EMA_INSTALL_DIR="$value" ;;
+      EMA_NODE_PATH) EMA_NODE_PATH="$value" ;;
+      EMA_MONGO_PATH) EMA_MONGO_PATH="$value" ;;
+      EMA_MONGO_URI) EMA_MONGO_URI="$value" ;;
+      EMA_HOST) EMA_HOST="$value" ;;
+      EMA_PORT) EMA_PORT="$value" ;;
+      EMA_OPEN_MODE) EMA_OPEN_MODE="$value" ;;
+    esac
+  done < "$file"
+}
+
+CONFIG_FILE="$(ema_config_dir)/ema-runtime.env"
 if [ -f "$CONFIG_FILE" ]; then
-  # shellcheck disable=SC1090
-  . "$CONFIG_FILE"
-elif [ -f "$APP_ROOT/ema-runtime.sh" ]; then
-  # shellcheck disable=SC1091
-  . "$APP_ROOT/ema-runtime.sh"
+  load_env_file "$CONFIG_FILE"
+elif [ -f "$APP_ROOT/ema-runtime.env" ]; then
+  load_env_file "$APP_ROOT/ema-runtime.env"
 fi
 
 SERVER_JS="$APP_ROOT/{{serverRelativePath}}"

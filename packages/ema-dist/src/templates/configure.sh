@@ -36,17 +36,52 @@ prompt_value() {
 }
 
 write_env_value() {
-  printf 'export %s=%q\n' "$1" "$2"
+  case "$2" in
+    *$'\n'*|*$'\r'*)
+      echo "Refusing to write newline in $1." >&2
+      exit 1
+      ;;
+  esac
+  printf '%s=%s\n' "$1" "$2"
+}
+
+load_env_file() {
+  local file="$1"
+  local line key value
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    case "$line" in
+      ""|\#*)
+        continue
+        ;;
+      *=*)
+        key="${line%%=*}"
+        value="${line#*=}"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    case "$key" in
+      EMA_INSTALL_PARENT) EMA_INSTALL_PARENT="$value" ;;
+      EMA_INSTALL_DIR) EMA_INSTALL_DIR="$value" ;;
+      EMA_NODE_PATH) EMA_NODE_PATH="$value" ;;
+      EMA_MONGO_PATH) EMA_MONGO_PATH="$value" ;;
+      EMA_MONGO_URI) EMA_MONGO_URI="$value" ;;
+      EMA_HOST) EMA_HOST="$value" ;;
+      EMA_PORT) EMA_PORT="$value" ;;
+      EMA_OPEN_MODE) EMA_OPEN_MODE="$value" ;;
+    esac
+  done < "$file"
 }
 
 CONFIG_DIR="$(ema_config_dir)"
-CONFIG_FILE="$CONFIG_DIR/ema-runtime.sh"
+CONFIG_FILE="$CONFIG_DIR/ema-runtime.env"
 if [ -f "$CONFIG_FILE" ]; then
-  # shellcheck disable=SC1090
-  . "$CONFIG_FILE"
-elif [ -f "$APP_ROOT/ema-runtime.sh" ]; then
-  # shellcheck disable=SC1091
-  . "$APP_ROOT/ema-runtime.sh"
+  load_env_file "$CONFIG_FILE"
+elif [ -f "$APP_ROOT/ema-runtime.env" ]; then
+  load_env_file "$APP_ROOT/ema-runtime.env"
 fi
 
 NODE_PATH_INPUT="$(prompt_value "Node executable path" "${EMA_NODE_PATH:-}")"

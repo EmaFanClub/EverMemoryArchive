@@ -2,10 +2,11 @@
 setlocal
 set "APP_ROOT=%~dp0"
 call :set_config_dir
-if exist "%EMA_CONFIG_DIR%\ema-runtime.cmd" (
-  call "%EMA_CONFIG_DIR%\ema-runtime.cmd"
-) else if exist "%APP_ROOT%ema-runtime.cmd" (
-  call "%APP_ROOT%ema-runtime.cmd"
+set "CONFIG_FILE=%EMA_CONFIG_DIR%\ema-runtime.env"
+if exist "%CONFIG_FILE%" (
+  call :load_env_file "%CONFIG_FILE%"
+) else if exist "%APP_ROOT%ema-runtime.env" (
+  call :load_env_file "%APP_ROOT%ema-runtime.env"
 )
 
 set "SERVER_JS=%APP_ROOT%{{serverRelativePath}}"
@@ -64,5 +65,19 @@ if defined EMA_CONFIG_HOME (
   set "EMA_CONFIG_DIR=%APPDATA%\ema"
 ) else (
   set "EMA_CONFIG_DIR=%USERPROFILE%\.config\ema"
+)
+exit /b 0
+
+:load_env_file
+if not exist "%~1" exit /b 0
+for /f "usebackq eol=# tokens=1* delims==" %%A in ("%~1") do (
+  if /I "%%~A"=="EMA_INSTALL_PARENT" set "EMA_INSTALL_PARENT=%%B"
+  if /I "%%~A"=="EMA_INSTALL_DIR" set "EMA_INSTALL_DIR=%%B"
+  if /I "%%~A"=="EMA_NODE_PATH" set "EMA_NODE_PATH=%%B"
+  if /I "%%~A"=="EMA_MONGO_PATH" set "EMA_MONGO_PATH=%%B"
+  if /I "%%~A"=="EMA_MONGO_URI" set "EMA_MONGO_URI=%%B"
+  if /I "%%~A"=="EMA_HOST" set "EMA_HOST=%%B"
+  if /I "%%~A"=="EMA_PORT" set "EMA_PORT=%%B"
+  if /I "%%~A"=="EMA_OPEN_MODE" set "EMA_OPEN_MODE=%%B"
 )
 exit /b 0
