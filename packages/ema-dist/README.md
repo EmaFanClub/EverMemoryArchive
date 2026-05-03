@@ -8,6 +8,7 @@ TypeScript distribution scripts for EverMemoryArchive.
 pnpm --filter ema-webui build
 pnpm --filter ema-dist run revision
 pnpm --filter ema-dist run download -- --platform linux-x64
+pnpm --filter ema-dist run pack -- --platform linux-x64 --kind portable --format zip
 pnpm --filter ema-dist run build -- --platform linux-x64
 ```
 
@@ -20,11 +21,11 @@ dist/$platform/EverMemoryArchive/portables
 `build` writes CI-ready artifacts to `dist/$platform/`:
 
 ```text
-ema-$platform-portable-$revision.7z
 ema-$platform-portable-$revision.zip
+ema-$platform-portable-$revision.7z
 ema-$platform-portable-$revision-installer.{bat,run,command}
-ema-$platform-minimal-$revision.7z
 ema-$platform-minimal-$revision.zip
+ema-$platform-minimal-$revision.7z
 ema-$platform-minimal-$revision-installer.{bat,run,command}
 ```
 

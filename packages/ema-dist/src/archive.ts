@@ -4,6 +4,10 @@ import { commandExists, execFile } from "./shell";
 import { packageFileName, platformDistRoot } from "./paths";
 import type { PackageKind, Platform } from "./platforms";
 
+export const PACKAGE_ARCHIVE_FORMATS = ["zip", "7z"] as const;
+
+export type PackageArchiveFormat = (typeof PACKAGE_ARCHIVE_FORMATS)[number];
+
 export async function findSevenZip(): Promise<string> {
   const configured = process.env.EMA_DIST_7Z?.trim();
   if (configured) {
@@ -48,6 +52,7 @@ export async function createPackageArchives(
   kind: PackageKind,
   revision: string,
   sourceRoot: string,
+  formats: readonly PackageArchiveFormat[] = PACKAGE_ARCHIVE_FORMATS,
 ): Promise<string[]> {
   const sevenZip = await findSevenZip();
   const outDir = platformDistRoot(platform);
@@ -55,23 +60,33 @@ export async function createPackageArchives(
   await removeDanglingSymlinks(sourceRoot);
   const parent = path.dirname(sourceRoot);
   const rootName = path.basename(sourceRoot);
-  const outputs = [
-    path.join(outDir, packageFileName(platform, kind, revision, "7z")),
-    path.join(outDir, packageFileName(platform, kind, revision, "zip")),
-  ];
+  const outputs = formats.map((format) =>
+    path.join(outDir, packageFileName(platform, kind, revision, format)),
+  );
 
   for (const output of outputs) {
     await fs.rm(output, { force: true });
   }
 
-  await execFile(sevenZip, ["a", "-t7z", outputs[0], rootName], {
-    cwd: parent,
-  });
-  await execFile(sevenZip, ["a", "-tzip", outputs[1], rootName], {
-    cwd: parent,
-  });
+  for (const [index, format] of formats.entries()) {
+    await execFile(sevenZip, ["a", `-t${format}`, outputs[index], rootName], {
+      cwd: parent,
+    });
+  }
 
   return outputs;
+}
+
+export function assertPackageArchiveFormat(
+  value: string,
+): PackageArchiveFormat | "all" {
+  if (
+    value === "all" ||
+    (PACKAGE_ARCHIVE_FORMATS as readonly string[]).includes(value)
+  ) {
+    return value as PackageArchiveFormat | "all";
+  }
+  throw new Error(`Unsupported archive format '${value}'.`);
 }
 
 async function findFirstFile(

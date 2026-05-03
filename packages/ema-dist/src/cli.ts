@@ -1,7 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { createPackageArchives } from "./archive";
+import {
+  assertPackageArchiveFormat,
+  createPackageArchives,
+  PACKAGE_ARCHIVE_FORMATS,
+  type PackageArchiveFormat,
+} from "./archive";
 import { downloadPortableDependencies } from "./download";
 import { createSelfInstaller } from "./installer";
 import { packageFileName, platformDistRoot, stageRoot } from "./paths";
@@ -24,12 +29,14 @@ Usage:
   pnpm --filter ema-dist run stage -- --platform linux-x64 --kind portable
   pnpm --filter ema-dist run pack -- --platform linux-x64 --kind portable
   pnpm --filter ema-dist run installers -- --platform linux-x64 --kind minimal
+  pnpm --filter ema-dist run skip-note -- --platform linux-armhf
   pnpm --filter ema-dist run build -- --platform linux-x64
 
 Options:
   --platform <id>                 Target platform. Defaults to the host platform.
   --all-platforms                 Run for every supported platform id.
   --kind <portable|minimal>        Package kind for stage/pack/installers.
+  --format <zip|7z|all>            Archive format for pack. Defaults to all.
   --revision <revision>           Override computed git revision.
   --include-unsupported-portable   Also package portable archives when MongoDB cannot be bundled.
   --help                          Show this help.
@@ -52,6 +59,7 @@ async function main(): Promise<void> {
       platform: { type: "string" },
       "all-platforms": { type: "boolean", default: false },
       kind: { type: "string" },
+      format: { type: "string" },
       revision: { type: "string" },
       "include-unsupported-portable": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -75,6 +83,7 @@ async function main(): Promise<void> {
   const kind = args.values.kind
     ? assertPackageKind(args.values.kind)
     : undefined;
+  const archiveFormats = resolveArchiveFormats(args.values.format);
 
   switch (command) {
     case "revision":
@@ -95,8 +104,13 @@ async function main(): Promise<void> {
     case "pack":
       await requireKind(kind, async (packageKind) => {
         await runForPlatforms(platforms, async (platform) => {
-          await packKind(platform, packageKind, revision);
+          await packKind(platform, packageKind, revision, archiveFormats);
         });
+      });
+      return;
+    case "skip-note":
+      await runForPlatforms(platforms, async (platform) => {
+        await writeSkipNote(platform, revision);
       });
       return;
     case "installers":
@@ -132,7 +146,7 @@ async function buildPlatform(
 
   const packagePortable = platform.canBundleMongo || includeUnsupportedPortable;
   if (packagePortable) {
-    await packKind(platform, "portable", revision);
+    await packKind(platform, "portable", revision, PACKAGE_ARCHIVE_FORMATS);
     await createSelfInstaller(platform, "portable", revision);
   } else {
     process.stdout.write(
@@ -143,7 +157,7 @@ async function buildPlatform(
 
   process.stdout.write(`Staging ${platform.id} minimal package\n`);
   await refreshMinimalStageFromPortable(platform, revision);
-  await packKind(platform, "minimal", revision);
+  await packKind(platform, "minimal", revision, PACKAGE_ARCHIVE_FORMATS);
   await createSelfInstaller(platform, "minimal", revision);
 }
 
@@ -151,13 +165,30 @@ async function packKind(
   platform: Platform,
   kind: PackageKind,
   revision: string,
+  formats: readonly PackageArchiveFormat[],
 ): Promise<void> {
   const root = stageRoot(platform, kind);
   await ensureStageExists(root, platform, kind);
-  const outputs = await createPackageArchives(platform, kind, revision, root);
+  const outputs = await createPackageArchives(
+    platform,
+    kind,
+    revision,
+    root,
+    formats,
+  );
   for (const output of outputs) {
     process.stdout.write(`Wrote ${output}\n`);
   }
+}
+
+function resolveArchiveFormats(
+  formatArg: string | undefined,
+): readonly PackageArchiveFormat[] {
+  if (!formatArg) {
+    return PACKAGE_ARCHIVE_FORMATS;
+  }
+  const format = assertPackageArchiveFormat(formatArg);
+  return format === "all" ? PACKAGE_ARCHIVE_FORMATS : [format];
 }
 
 async function writeSkipNote(
