@@ -22,7 +22,7 @@ call :extract_section EMA_ARCHIVE "%ARCHIVE_B64%" || goto fail
 call :decode_base64 "%ARCHIVE_B64%" "%ARCHIVE_PATH%" || goto fail
 
 set "DEFAULT_PARENT=%USERPROFILE%"
-set /p INSTALL_PARENT=Install parent directory [%DEFAULT_PARENT%]: 
+set /p "INSTALL_PARENT=Install parent directory [%DEFAULT_PARENT%]: "
 if not defined INSTALL_PARENT set "INSTALL_PARENT=%DEFAULT_PARENT%"
 mkdir "%INSTALL_PARENT%" >nul 2>nul
 
@@ -34,13 +34,13 @@ set "NODE_PATH_INPUT="
 set "MONGO_PATH_INPUT="
 set "MONGO_URI_INPUT="
 if /I "%KIND%"=="minimal" (
-  set /p NODE_PATH_INPUT=Node executable path [PATH]: 
-  set /p MONGO_PATH_INPUT=mongod executable path [PATH]: 
-  set /p MONGO_URI_INPUT=MongoDB URI [start local mongod]: 
+  set /p "NODE_PATH_INPUT=Node executable path [PATH]: "
+  set /p "MONGO_PATH_INPUT=mongod executable path [PATH]: "
+  set /p "MONGO_URI_INPUT=MongoDB URI [start local mongod]: "
 )
 
 set "OPEN_MODE=webview"
-set /p USE_BROWSER=Use default browser instead of app/webview window? [y/N]: 
+set /p "USE_BROWSER=Use default browser instead of app/webview window? [y/N]: "
 if /I "%USE_BROWSER%"=="y" set "OPEN_MODE=browser"
 if /I "%USE_BROWSER%"=="yes" set "OPEN_MODE=browser"
 
@@ -51,7 +51,7 @@ if /I "%USE_BROWSER%"=="yes" set "OPEN_MODE=browser"
 >> "%APP_DIR%\ema-runtime.cmd" echo set "EMA_PORT=3000"
 >> "%APP_DIR%\ema-runtime.cmd" echo set "EMA_OPEN_MODE=%OPEN_MODE%"
 
-set /p CREATE_SHORTCUT=Create desktop shortcut? [Y/n]: 
+set /p "CREATE_SHORTCUT=Create desktop shortcut? [Y/n]: "
 if not defined CREATE_SHORTCUT set "CREATE_SHORTCUT=Y"
 if /I "%CREATE_SHORTCUT%"=="y" call :create_shortcut
 if /I "%CREATE_SHORTCUT%"=="yes" call :create_shortcut
