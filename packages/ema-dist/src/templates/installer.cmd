@@ -21,7 +21,11 @@ call :decode_base64 "%SEVENZIP_B64%" "%SEVENZIP_PATH%" || goto fail
 call :extract_section EMA_ARCHIVE "%ARCHIVE_B64%" || goto fail
 call :decode_base64 "%ARCHIVE_B64%" "%ARCHIVE_PATH%" || goto fail
 
-set "DEFAULT_PARENT=%USERPROFILE%"
+call :set_config_dir
+if exist "%EMA_CONFIG_DIR%\ema-runtime.cmd" call "%EMA_CONFIG_DIR%\ema-runtime.cmd"
+
+set "DEFAULT_PARENT=%EMA_INSTALL_PARENT%"
+if not defined DEFAULT_PARENT set "DEFAULT_PARENT=%USERPROFILE%"
 set /p "INSTALL_PARENT=Install parent directory [%DEFAULT_PARENT%]: "
 if not defined INSTALL_PARENT set "INSTALL_PARENT=%DEFAULT_PARENT%"
 mkdir "%INSTALL_PARENT%" >nul 2>nul
@@ -34,22 +38,32 @@ set "NODE_PATH_INPUT="
 set "MONGO_PATH_INPUT="
 set "MONGO_URI_INPUT="
 if /I "%KIND%"=="minimal" (
-  set /p "NODE_PATH_INPUT=Node executable path [PATH]: "
-  set /p "MONGO_PATH_INPUT=mongod executable path [PATH]: "
-  set /p "MONGO_URI_INPUT=MongoDB URI [start local mongod]: "
+  call :prompt NODE_PATH_INPUT "Node executable path" "%EMA_NODE_PATH%"
+  call :prompt MONGO_PATH_INPUT "mongod executable path" "%EMA_MONGO_PATH%"
+  call :prompt MONGO_URI_INPUT "MongoDB URI [start local mongod]" "%EMA_MONGO_URI%"
 )
 
-set "OPEN_MODE=webview"
-set /p "USE_BROWSER=Use default browser instead of app/webview window? [y/N]: "
-if /I "%USE_BROWSER%"=="y" set "OPEN_MODE=browser"
-if /I "%USE_BROWSER%"=="yes" set "OPEN_MODE=browser"
+call :prompt OPEN_MODE "Open mode [webview/browser/none]" "%EMA_OPEN_MODE%"
+if not defined OPEN_MODE set "OPEN_MODE=webview"
+if /I "%OPEN_MODE%"=="y" set "OPEN_MODE=browser"
+if /I "%OPEN_MODE%"=="yes" set "OPEN_MODE=browser"
+if /I "%OPEN_MODE%"=="n" set "OPEN_MODE=webview"
+if /I "%OPEN_MODE%"=="no" set "OPEN_MODE=webview"
+if not defined EMA_HOST set "EMA_HOST=127.0.0.1"
+if not defined EMA_PORT set "EMA_PORT=3000"
 
-> "%APP_DIR%\ema-runtime.cmd" echo set "EMA_NODE_PATH=%NODE_PATH_INPUT%"
->> "%APP_DIR%\ema-runtime.cmd" echo set "EMA_MONGO_PATH=%MONGO_PATH_INPUT%"
->> "%APP_DIR%\ema-runtime.cmd" echo set "EMA_MONGO_URI=%MONGO_URI_INPUT%"
->> "%APP_DIR%\ema-runtime.cmd" echo set "EMA_HOST=127.0.0.1"
->> "%APP_DIR%\ema-runtime.cmd" echo set "EMA_PORT=3000"
->> "%APP_DIR%\ema-runtime.cmd" echo set "EMA_OPEN_MODE=%OPEN_MODE%"
+mkdir "%EMA_CONFIG_DIR%" >nul 2>nul
+(
+  echo set "EMA_INSTALL_PARENT=%INSTALL_PARENT%"
+  echo set "EMA_INSTALL_DIR=%APP_DIR%"
+  echo set "EMA_NODE_PATH=%NODE_PATH_INPUT%"
+  echo set "EMA_MONGO_PATH=%MONGO_PATH_INPUT%"
+  echo set "EMA_MONGO_URI=%MONGO_URI_INPUT%"
+  echo set "EMA_HOST=%EMA_HOST%"
+  echo set "EMA_PORT=%EMA_PORT%"
+  echo set "EMA_OPEN_MODE=%OPEN_MODE%"
+) > "%EMA_CONFIG_DIR%\ema-runtime.cmd"
+echo Wrote "%EMA_CONFIG_DIR%\ema-runtime.cmd"
 
 set /p "CREATE_SHORTCUT=Create desktop shortcut? [Y/n]: "
 if not defined CREATE_SHORTCUT set "CREATE_SHORTCUT=Y"
@@ -87,6 +101,33 @@ set "INSIDE="
     if defined INSIDE echo(%%L
     if "%%L"=="__%SECTION%_BEGIN__" set "INSIDE=1"
   )
+)
+exit /b 0
+
+:set_config_dir
+if defined EMA_CONFIG_HOME (
+  set "EMA_CONFIG_DIR=%EMA_CONFIG_HOME%"
+) else if defined APPDATA (
+  set "EMA_CONFIG_DIR=%APPDATA%\ema"
+) else (
+  set "EMA_CONFIG_DIR=%USERPROFILE%\.config\ema"
+)
+exit /b 0
+
+:prompt
+set "PROMPT_VAR=%~1"
+set "PROMPT_LABEL=%~2"
+set "PROMPT_DEFAULT=%~3"
+set "PROMPT_INPUT="
+if defined PROMPT_DEFAULT (
+  set /p "PROMPT_INPUT=%PROMPT_LABEL% [%PROMPT_DEFAULT%]: "
+) else (
+  set /p "PROMPT_INPUT=%PROMPT_LABEL%: "
+)
+if defined PROMPT_INPUT (
+  set "%PROMPT_VAR%=%PROMPT_INPUT%"
+) else (
+  set "%PROMPT_VAR%=%PROMPT_DEFAULT%"
 )
 exit /b 0
 

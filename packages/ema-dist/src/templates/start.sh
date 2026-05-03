@@ -2,7 +2,31 @@
 set -euo pipefail
 
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$APP_ROOT/ema-runtime.sh" ]; then
+
+ema_config_dir() {
+  if [ -n "${EMA_CONFIG_HOME:-}" ]; then
+    printf '%s\n' "$EMA_CONFIG_HOME"
+    return
+  fi
+  case "$(uname -s)" in
+    Darwin)
+      printf '%s\n' "${HOME:-.}/Library/Application Support/ema"
+      ;;
+    *)
+      if [ -n "${XDG_CONFIG_HOME:-}" ]; then
+        printf '%s\n' "$XDG_CONFIG_HOME/ema"
+      else
+        printf '%s\n' "${HOME:-.}/.config/ema"
+      fi
+      ;;
+  esac
+}
+
+CONFIG_FILE="$(ema_config_dir)/ema-runtime.sh"
+if [ -f "$CONFIG_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$CONFIG_FILE"
+elif [ -f "$APP_ROOT/ema-runtime.sh" ]; then
   # shellcheck disable=SC1091
   . "$APP_ROOT/ema-runtime.sh"
 fi

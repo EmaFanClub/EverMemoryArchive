@@ -79,6 +79,11 @@ Chromium, or Brave is available, and falls back to the system browser. During
 installation the user is asked whether to set `EMA_OPEN_MODE=browser` instead.
 `EMA_OPEN_MODE=none` starts only the server.
 
+Installer and `configure` answers are persisted in the normal user config
+directory under `ema`: `${XDG_CONFIG_HOME:-$HOME/.config}/ema` on Linux,
+`$HOME/Library/Application Support/ema` on macOS, and `%APPDATA%\ema` on
+Windows. Set `EMA_CONFIG_HOME` to override this directory.
+
 MongoDB Community Server does not publish `linux-armhf` or Alpine/musl archives.
 For those platforms the CI produces minimal artifacts and a `.SKIPPED.txt` note
 for portable artifacts unless `--include-unsupported-portable` is passed.

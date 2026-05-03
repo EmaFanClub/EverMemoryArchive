@@ -1,7 +1,12 @@
 @echo off
 setlocal
 set "APP_ROOT=%~dp0"
-if exist "%APP_ROOT%ema-runtime.cmd" call "%APP_ROOT%ema-runtime.cmd"
+call :set_config_dir
+if exist "%EMA_CONFIG_DIR%\ema-runtime.cmd" (
+  call "%EMA_CONFIG_DIR%\ema-runtime.cmd"
+) else if exist "%APP_ROOT%ema-runtime.cmd" (
+  call "%APP_ROOT%ema-runtime.cmd"
+)
 
 set "SERVER_JS=%APP_ROOT%{{serverRelativePath}}"
 if not defined EMA_DATA_ROOT set "EMA_DATA_ROOT=%APP_ROOT%.ema"
@@ -49,4 +54,15 @@ if /I not "%EMA_OPEN_MODE%"=="none" (
 
 echo EverMemoryArchive is starting at %EMA_WEBUI_URL%
 "%NODE_BIN%" "%SERVER_JS%"
-endlocal
+set "EXIT_CODE=%ERRORLEVEL%"
+endlocal & exit /b %EXIT_CODE%
+
+:set_config_dir
+if defined EMA_CONFIG_HOME (
+  set "EMA_CONFIG_DIR=%EMA_CONFIG_HOME%"
+) else if defined APPDATA (
+  set "EMA_CONFIG_DIR=%APPDATA%\ema"
+) else (
+  set "EMA_CONFIG_DIR=%USERPROFILE%\.config\ema"
+)
+exit /b 0
