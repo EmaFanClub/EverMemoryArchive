@@ -46,10 +46,12 @@ win32-arm64
 linux-x64
 linux-arm64
 linux-armhf
-darwin-x64
 darwin-arm64
 alpine-x64
 ```
+
+Intel macOS (`darwin-x64`) bundles are not built because LanceDB 0.23.0 does
+not publish `@lancedb/lancedb-darwin-x64`.
 
 The revision is the nearest previous `v*` tag, or `v0.0.0` when no tag
 exists. Untagged commits append the 12-character commit hash, and dirty

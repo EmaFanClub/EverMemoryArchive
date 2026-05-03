@@ -25,7 +25,6 @@ jobs:
           - linux-x64
           - linux-arm64
           - linux-armhf
-          - darwin-x64
           - darwin-arm64
           - alpine-x64
 
@@ -87,11 +86,6 @@ jobs:
               target_os=linux
               target_cpu=arm
               target_libc=glibc
-              ;;
-            darwin-x64)
-              target_os=darwin
-              target_cpu=x64
-              target_libc=current
               ;;
             darwin-arm64)
               target_os=darwin
