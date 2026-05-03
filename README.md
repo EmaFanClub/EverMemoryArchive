@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/ema-logo-min.png" alt="EMA Logo" width="200">
+  <img src=".github/assets/ema-logo-min.jpg" alt="EMA Logo" width="200">
 </p>
 
 <p align="center">
