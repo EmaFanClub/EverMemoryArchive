@@ -1,0 +1,75 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+      - preview
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.16.1
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve docs publish path
+        id: docs-path
+        shell: bash
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            main)
+              echo "base=/" >> "$GITHUB_OUTPUT"
+              echo "destination_dir=." >> "$GITHUB_OUTPUT"
+              ;;
+            preview)
+              echo "base=/preview/" >> "$GITHUB_OUTPUT"
+              echo "destination_dir=preview" >> "$GITHUB_OUTPUT"
+              ;;
+            dev)
+              echo "base=/dev/" >> "$GITHUB_OUTPUT"
+              echo "destination_dir=dev" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Build docs
+        env:
+          VITEPRESS_BASE: ${{ steps.docs-path.outputs.base }}
+        run: pnpm run docs:build
+
+      - name: Deploy docs
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./docs/.vitepress/dist
+          destination_dir: ${{ steps.docs-path.outputs.destination_dir }}
+          keep_files: true

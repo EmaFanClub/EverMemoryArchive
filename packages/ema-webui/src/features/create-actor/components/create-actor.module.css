@@ -1,0 +1,2166 @@
+@property --create-actor-progress-angle {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+
+.createActorOverlay {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  animation: createActorOverlayIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.createActorOverlay::before,
+.createActorOverlay::after {
+  display: none;
+}
+
+.createActorCloseButton {
+  position: fixed;
+  z-index: 3;
+  top: 22px;
+  left: 22px;
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: color-mix(in srgb, var(--surface-raised) 52%, transparent);
+  color: var(--text-muted);
+  outline: 0;
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorCloseButton:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.createActorCloseButton:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.createActorCloseButton:focus-visible {
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.createActorCloseButton svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.4;
+}
+
+.createActorToast {
+  position: fixed;
+  z-index: 4;
+  top: 24px;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 7px 11px;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  font-size: 0.76rem;
+  font-weight: 680;
+  letter-spacing: -0.016em;
+  line-height: 1;
+  pointer-events: none;
+  transform: translate3d(-50%, 0, 0);
+  user-select: none !important;
+  white-space: nowrap;
+  animation: createActorToastLife 1400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.createActorToastSuccess {
+  border: 1px solid color-mix(in srgb, var(--success) 22%, var(--border));
+  background: color-mix(
+    in srgb,
+    var(--success-soft) 34%,
+    var(--surface-raised)
+  );
+  color: color-mix(in srgb, var(--success) 70%, var(--text-muted));
+}
+
+.createActorToastError {
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--border));
+  background: color-mix(in srgb, var(--danger-soft) 38%, var(--surface-raised));
+  color: color-mix(in srgb, var(--danger) 72%, var(--text-muted));
+}
+
+.createActorToast svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke-width: 2.4;
+}
+
+.createActorCore {
+  --create-actor-progress-angle: 0deg;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 132px;
+  height: 132px;
+  place-items: center;
+  border-radius: 999px;
+  opacity: 0.98;
+  pointer-events: none;
+  transition: --create-actor-progress-angle 440ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: createActorCoreIn 420ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.createActorCoreRing,
+.createActorCoreRing::before,
+.createActorCoreRing::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  content: "";
+}
+
+.createActorCoreRing {
+  background: conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--accent) 88%, white 8%)
+      var(--create-actor-progress-angle),
+    color-mix(in srgb, var(--border-strong) 34%, transparent) 0
+  );
+  mask: radial-gradient(circle, transparent 56%, #000 57% 62%, transparent 63%);
+  transition: --create-actor-progress-angle 440ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.createActorCoreRing::before {
+  display: none;
+}
+
+.createActorCoreRing::after {
+  inset: 38px;
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
+}
+
+.createActorCoreAvatar {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 820;
+  letter-spacing: -0.055em;
+  opacity: 0.96;
+  transform: scale(0.92);
+  transition:
+    opacity 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorCore[data-has-initial="true"] .createActorCoreAvatar {
+  background: color-mix(in srgb, var(--surface-raised) 94%, white 4%);
+  transform: scale(1);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+}
+
+.createActorCore[data-step="5"] .createActorCoreAvatar {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 18px 46px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.createActorShell {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-rows:
+    14px
+    142px
+    154px
+    500px
+    88px
+    14px;
+  width: min(100% - 36px, 920px);
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  animation: createActorShellIn 360ms 100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.createActorTopSpacer,
+.createActorBottomSpacer {
+  min-height: 0;
+}
+
+.createActorCoreSlot {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+}
+
+.createActorIntro {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  align-content: center;
+  gap: 11px;
+  justify-items: center;
+  text-align: center;
+}
+
+.createActorIntro > span {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 680;
+  letter-spacing: 0.18em;
+}
+
+.createActorIntro h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.5rem;
+  font-weight: 840;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.createActorIntro p {
+  max-width: 500px;
+  width: min(100%, 560px);
+  min-height: 1.45em;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
+}
+
+.createActorIntroSubtitle {
+  position: relative;
+  animation: createActorSubtitleBreath 2.7s ease-in-out infinite;
+}
+
+.createActorSubtitleText {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: opacity, transform, filter;
+}
+
+.createActorSubtitleEnterForward {
+  animation: createActorSubtitleEnterForward 820ms
+    cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.createActorSubtitleExitForward {
+  animation: createActorSubtitleExitForward 820ms cubic-bezier(0.2, 0.8, 0.2, 1)
+    both;
+}
+
+.createActorSubtitleEnterBackward {
+  animation: createActorSubtitleEnterBackward 820ms
+    cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.createActorSubtitleExitBackward {
+  animation: createActorSubtitleExitBackward 820ms
+    cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.createActorStepRail {
+  --create-actor-rail-progress: 0;
+  position: relative;
+  display: flex;
+  width: min(34vw, 360px);
+  min-width: 260px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.createActorStepRail::before,
+.createActorStepRail::after {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  border-radius: 999px;
+  content: "";
+  transform: translateY(-50%);
+}
+
+.createActorStepRail::before {
+  background: color-mix(in srgb, var(--border-strong) 48%, transparent);
+}
+
+.createActorStepRail::after {
+  right: auto;
+  width: calc(100% - 32px);
+  background: color-mix(in srgb, var(--accent) 72%, var(--border-strong));
+  transform: translateY(-50%) scaleX(var(--create-actor-rail-progress));
+  transform-origin: left center;
+  transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.createActorStepChip {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  min-width: 0;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-subtle);
+  outline: 0;
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorStepChip:not(:disabled):hover {
+  background: var(--surface-raised);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.createActorStepChip:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.createActorStepChip > span {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 62%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 90%, transparent);
+  color: currentColor;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 820;
+  line-height: 1;
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorStepChipActive,
+.createActorStepChipDone {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text);
+}
+
+.createActorStepChipActive > span,
+.createActorStepChipDone > span {
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.createActorCard {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  align-content: start;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 28px 34px 30px;
+  background: color-mix(in srgb, var(--surface-raised) 48%, transparent);
+  scrollbar-color: color-mix(in srgb, var(--border-strong) 68%, transparent)
+    transparent;
+}
+
+.createActorCard::-webkit-scrollbar {
+  width: 8px;
+}
+
+.createActorCard::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--border-strong) 68%, transparent);
+}
+
+.createActorCard::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.createActorStepBody {
+  display: grid;
+  min-height: 0;
+  min-width: 0;
+  justify-items: center;
+  align-content: center;
+  overflow-y: auto;
+  padding: 18px 4px;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 58%, transparent)
+    transparent;
+  scrollbar-width: thin;
+  animation: createActorStepContentIn 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.createActorStepBody[data-step="3"] {
+  align-content: stretch;
+  justify-items: stretch;
+  overflow: hidden;
+}
+
+.createActorStepBody::-webkit-scrollbar {
+  width: 7px;
+}
+
+.createActorStepBody::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 58%, transparent);
+}
+
+.createActorStepBody::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.createActorCardHeader {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 14px;
+  margin: 0;
+  width: min(100%, 560px);
+}
+
+.createActorCardHeader > span {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: color-mix(in srgb, var(--accent) 68%, white);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.createActorCardHeader h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 810;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.createActorCardHeader p {
+  max-width: 440px;
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.48;
+}
+
+.createActorActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px) minmax(0, 1fr);
+  align-items: center;
+  justify-content: stretch;
+  gap: 18px;
+  min-height: 0;
+  align-self: center;
+}
+
+.createActorActions > button {
+  width: 126px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 16px;
+  outline: 0;
+  font-size: 0.76rem;
+  font-weight: 730;
+  letter-spacing: -0.016em;
+  transition:
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorActions > button:first-child {
+  justify-self: start;
+}
+
+.createActorActions > button:not(.createActorPrimaryAction) {
+  background: color-mix(in srgb, var(--surface-raised) 76%, white 4%);
+  color: color-mix(in srgb, var(--text-muted) 88%, var(--text));
+}
+
+.createActorActions > button:not(.createActorPrimaryAction):hover {
+  background: color-mix(in srgb, var(--surface-raised) 70%, white 9%);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.createActorPrimaryAction {
+  justify-self: end;
+  background: var(--accent);
+  color: #fff;
+}
+
+.createActorPrimaryAction:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--accent) 20%, transparent);
+  transform: translateY(-1px);
+}
+
+.createActorActions > button:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.createActorActions > button:focus-visible {
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.createActorActions > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+  transform: none;
+  box-shadow: none;
+}
+
+.createActorPrimaryAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.createActorPrimaryAction svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.4;
+}
+
+.createActorPrimarySpinner {
+  animation: createActorSpinnerRotate 900ms linear infinite;
+}
+
+.createActorPrimaryAction[data-loading="true"],
+.createActorPrimaryAction[data-loading="true"]:disabled {
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 82%, black 6%);
+  color: #fff;
+  opacity: 1;
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* ----- Step 1: Source cards ----- */
+
+.createActorSourceGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  width: min(100%, 640px);
+}
+
+.createActorSourceCard {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 56%, transparent);
+  background: color-mix(in srgb, var(--surface-inset) 56%, transparent);
+  transition:
+    border-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorSourceCardBody {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  min-width: 0;
+  min-height: 156px;
+  padding: 18px 16px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  outline: 0;
+  cursor: pointer;
+  transition:
+    color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorSourceCard:not(.createActorSourceCardDisabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 58%, transparent);
+  transform: translateY(-1px);
+}
+
+.createActorSourceCardActive {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 36%, var(--surface-raised));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.createActorSourceCardActive:hover {
+  border-color: color-mix(in srgb, var(--accent) 78%, transparent);
+}
+
+.createActorSourceCardBody:focus-visible {
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.createActorSourceIcon {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-raised) 80%, white 2%);
+  color: color-mix(in srgb, var(--text) 92%, var(--accent) 8%);
+  transition:
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorSourceIcon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.1;
+}
+
+.createActorSourceCardActive .createActorSourceIcon {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: color-mix(in srgb, var(--accent) 82%, white);
+}
+
+.createActorSourceCopy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.createActorSourceLabel {
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.createActorSourceDescription {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 430;
+  letter-spacing: -0.006em;
+  line-height: 1.5;
+}
+
+.createActorSourceCardDisabled .createActorSourceCardBody {
+  cursor: default;
+}
+
+.createActorSourceCardDisabled .createActorSourceLabel,
+.createActorSourceCardDisabled .createActorSourceDescription {
+  opacity: 0.55;
+}
+
+.createActorSourceComingSoon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  backdrop-filter: blur(2.5px);
+  pointer-events: none;
+}
+
+.createActorSourceComingSoon span {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 76%, white 2%);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 52%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ----- Step 2: Identity (name + gender) ----- */
+
+.createActorIdentityGroup {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  width: min(100%, 360px);
+  margin: 0 auto;
+}
+
+.createActorNameInput {
+  width: min(100%, 240px);
+  height: 40px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 66%, transparent);
+  border-radius: 999px;
+  padding: 0 16px;
+  background: color-mix(in srgb, var(--surface-inset) 58%, transparent);
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 520;
+  letter-spacing: -0.012em;
+  outline: 0;
+  text-align: center;
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorNameInput::placeholder {
+  color: var(--text-subtle);
+}
+
+.createActorNameInput:focus {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 26%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.createActorIdentityAvatar {
+  position: relative;
+  display: inline-grid;
+  width: 82px;
+  height: 82px;
+  place-items: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: color-mix(in srgb, var(--surface-raised) 90%, white 2%);
+  color: var(--text);
+  outline: 0;
+  transition:
+    background-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorIdentityAvatar:hover {
+  background: color-mix(in srgb, var(--surface-raised) 82%, var(--accent) 18%);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: translateY(-1px);
+}
+
+.createActorIdentityAvatar:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.createActorIdentityAvatar:focus-visible {
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.createActorIdentityAvatarText {
+  position: relative;
+  z-index: 1;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 820;
+  letter-spacing: -0.04em;
+  transition:
+    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorIdentityAvatarOverlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, black 52%, transparent);
+  color: var(--text);
+  opacity: 0;
+  transform: scale(1.04);
+  transition:
+    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorIdentityAvatarOverlay svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.1;
+}
+
+.createActorIdentityAvatar:hover .createActorIdentityAvatarText {
+  opacity: 0.34;
+  transform: scale(0.96);
+}
+
+.createActorIdentityAvatar:hover .createActorIdentityAvatarOverlay {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ----- Step 3: Soul (role book + presets) ----- */
+
+.createActorSoulLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1px 240px;
+  gap: 20px;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0 auto;
+}
+
+.createActorSoulDivider {
+  width: 1px;
+  background: color-mix(in srgb, var(--border-strong) 38%, transparent);
+}
+
+.createActorTextarea {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 62%, transparent);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--surface-inset) 58%, transparent);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 430;
+  letter-spacing: -0.006em;
+  line-height: 1.6;
+  outline: 0;
+  resize: none;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 62%, transparent)
+    transparent;
+  scrollbar-width: thin;
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorTextarea::placeholder {
+  color: var(--text-subtle);
+}
+
+.createActorTextarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 26%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.createActorTextarea::-webkit-scrollbar {
+  width: 7px;
+}
+
+.createActorTextarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.createActorTextarea::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 62%, transparent);
+}
+
+.createActorSoulPresets {
+  --preset-family-color: #88619a;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  transition: --preset-family-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@property --preset-family-color {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #88619a;
+}
+
+.createActorSoulPresets[data-family="analyst"] {
+  --preset-family-color: #88619a;
+}
+
+.createActorSoulPresets[data-family="diplomat"] {
+  --preset-family-color: #4c9e80;
+}
+
+.createActorSoulPresets[data-family="sentinel"] {
+  --preset-family-color: #5085b1;
+}
+
+.createActorSoulPresets[data-family="explorer"] {
+  --preset-family-color: #c79551;
+}
+
+.createActorSoulPresetTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 38%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-inset) 52%, transparent);
+}
+
+.createActorSoulPresetTab {
+  height: 28px;
+  min-width: 0;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 9px;
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  outline: 0;
+  transition:
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorSoulPresetTab:hover {
+  color: var(--text);
+}
+
+.createActorSoulPresetTab:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.createActorSoulPresetTab[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 72%, transparent);
+  color: #fff;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.createActorSoulPresetsScroll {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  overflow-y: auto;
+  padding: 2px 4px 2px 0;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 58%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+.createActorSoulPresetsScroll::-webkit-scrollbar {
+  width: 7px;
+}
+
+.createActorSoulPresetsScroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.createActorSoulPresetsScroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 58%, transparent);
+}
+
+.createActorSoulPresetSection {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.createActorRolePresetSelect {
+  position: relative;
+  min-width: 0;
+}
+
+.createActorRolePresetSelectButton {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
+  height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 48%, transparent);
+  border-radius: 999px;
+  padding: 0 12px 0 14px;
+  background: color-mix(in srgb, var(--surface-raised) 78%, white 2%);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+  outline: 0;
+  text-align: left;
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorRolePresetSelectButton:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 66%, white 8%);
+}
+
+.createActorRolePresetSelectButton:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.createActorRolePresetSelectButton span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.createActorRolePresetSelectButton svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-subtle);
+  stroke-width: 2.2;
+}
+
+.createActorRolePresetSelectMenu {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 3px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 52%, transparent);
+  border-radius: 14px;
+  padding: 5px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, black 2%);
+  box-shadow:
+    0 18px 38px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
+  animation: createActorStepContentIn 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.createActorRolePresetSelectOption {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: -0.006em;
+  outline: 0;
+  text-align: left;
+}
+
+.createActorRolePresetSelectOption:hover,
+.createActorRolePresetSelectOption[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-active));
+  color: var(--text);
+}
+
+.createActorRolePresetSelectOption:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.createActorRolePresetSelectOption svg {
+  width: 14px;
+  height: 14px;
+  color: color-mix(in srgb, var(--accent) 78%, white);
+  stroke-width: 2.3;
+}
+
+.createActorRolePresetPreview {
+  min-height: 148px;
+  max-height: 210px;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 22%, transparent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface-inset) 78%, black 4%);
+  color: color-mix(in srgb, var(--text) 62%, var(--text-subtle));
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 430;
+  letter-spacing: -0.002em;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 58%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+.createActorRolePresetPreview::-webkit-scrollbar {
+  width: 7px;
+}
+
+.createActorRolePresetPreview::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.createActorRolePresetPreview::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 58%, transparent);
+}
+
+.createActorSoulPresetSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 720;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+
+.createActorSoulPresetSectionTitle {
+  color: var(--text-muted);
+}
+
+.createActorSoulPresetHint {
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: -0.002em;
+}
+
+/* MBTI */
+
+.createActorSoulMbtiCode {
+  --mbti-family-color: #88619a;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--mbti-family-color) 18%, transparent);
+  color: color-mix(in srgb, var(--mbti-family-color) 84%, white);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 780;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  transition:
+    --mbti-family-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@property --mbti-family-color {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #88619a;
+}
+
+.createActorSoulMbtiCode[data-family="analyst"] {
+  --mbti-family-color: #88619a;
+}
+
+.createActorSoulMbtiCode[data-family="diplomat"] {
+  --mbti-family-color: #4c9e80;
+}
+
+.createActorSoulMbtiCode[data-family="sentinel"] {
+  --mbti-family-color: #5085b1;
+}
+
+.createActorSoulMbtiCode[data-family="explorer"] {
+  --mbti-family-color: #c79551;
+}
+
+.createActorSoulMbtiTitle {
+  color: color-mix(in srgb, var(--mbti-family-color) 58%, var(--text-muted));
+  font-size: 0.68rem;
+  font-weight: 620;
+  letter-spacing: 0;
+}
+
+.createActorSoulMbtiGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.createActorSoulMbtiPair {
+  --pair-family-color: #88619a;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 38%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-inset) 48%, transparent);
+  transition: --pair-family-color 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@property --pair-family-color {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #88619a;
+}
+
+.createActorSoulMbtiPair[data-family="analyst"] {
+  --pair-family-color: #88619a;
+}
+
+.createActorSoulMbtiPair[data-family="diplomat"] {
+  --pair-family-color: #4c9e80;
+}
+
+.createActorSoulMbtiPair[data-family="sentinel"] {
+  --pair-family-color: #5085b1;
+}
+
+.createActorSoulMbtiPair[data-family="explorer"] {
+  --pair-family-color: #c79551;
+}
+
+.createActorSoulMbtiChip {
+  height: 26px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 720;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  cursor: pointer;
+  outline: 0;
+  transition:
+    background-color 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorSoulMbtiChip:hover {
+  color: var(--text);
+}
+
+.createActorSoulMbtiChip:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.createActorSoulMbtiChip[data-active="true"] {
+  background: color-mix(in srgb, var(--pair-family-color) 88%, transparent);
+  color: #fff;
+  box-shadow: 0 6px 14px
+    color-mix(in srgb, var(--pair-family-color) 28%, transparent);
+}
+
+/* Traits */
+
+.createActorSoulTraitList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.createActorSoulTraitChip {
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-inset) 38%, transparent);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 540;
+  letter-spacing: -0.004em;
+  cursor: pointer;
+  outline: 0;
+  transition:
+    border-color 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorSoulTraitChip:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 60%, transparent);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.createActorSoulTraitChip:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.createActorSoulTraitChip[data-active="true"],
+.createActorSoulTraitChip[data-active="true"]:hover {
+  border-color: color-mix(in srgb, var(--preset-family-color) 62%, transparent);
+  background: color-mix(in srgb, var(--preset-family-color) 14%, transparent);
+  color: color-mix(in srgb, var(--preset-family-color) 78%, white);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--preset-family-color) 14%, transparent);
+  transform: none;
+}
+
+.createActorSoulTraitChip[data-disabled="true"],
+.createActorSoulTraitChip[data-disabled="true"]:hover {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  border-color: color-mix(in srgb, var(--border-strong) 42%, transparent);
+  background: color-mix(in srgb, var(--surface-inset) 38%, transparent);
+  color: var(--text-subtle);
+}
+
+.createActorSoulPresetHint[data-full="true"] {
+  color: color-mix(in srgb, var(--preset-family-color) 80%, white);
+  font-weight: 700;
+}
+
+/* Apply preset */
+
+.createActorSoulApplyButton {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 56%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-inset) 42%, transparent);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: -0.006em;
+  cursor: not-allowed;
+  outline: 0;
+  opacity: 0.78;
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorSoulApplyButtonEnabled {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface-raised));
+  color: var(--text);
+  cursor: pointer;
+  opacity: 1;
+}
+
+.createActorSoulApplyButtonEnabled:disabled {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--border-strong) 56%, transparent);
+  background: color-mix(in srgb, var(--surface-inset) 42%, transparent);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+  transform: none;
+}
+
+.createActorSoulApplyButtonEnabled:hover {
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 78%, var(--surface-hover));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: translateY(-1px);
+}
+
+.createActorSoulApplyButtonEnabled:disabled:hover {
+  border-color: color-mix(in srgb, var(--border-strong) 56%, transparent);
+  background: color-mix(in srgb, var(--surface-inset) 42%, transparent);
+  color: var(--text-muted);
+  transform: none;
+}
+
+.createActorSoulApplyButtonEnabled:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.createActorSoulApplyButton:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.createActorSoulApplyBadge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 76%, transparent);
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ----- Step 4: Sleep schedule ----- */
+
+.createActorSleepBlock {
+  display: grid;
+  gap: 22px;
+  width: min(100%, 640px);
+  margin: 0 auto;
+  padding: 4px 2px 2px;
+}
+
+.createActorSleepSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.createActorSleepSummaryCell {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 42%, transparent);
+}
+
+.createActorSleepSummarySleep {
+  justify-content: start;
+}
+
+.createActorSleepSummaryWake {
+  justify-content: end;
+  direction: rtl;
+}
+
+.createActorSleepSummaryWake > * {
+  direction: ltr;
+}
+
+.createActorSleepSummaryIcon {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-inset) 78%, transparent);
+  color: var(--text);
+}
+
+.createActorSleepSummarySleep .createActorSleepSummaryIcon {
+  color: color-mix(in srgb, var(--accent) 78%, white);
+}
+
+.createActorSleepSummaryWake .createActorSleepSummaryIcon {
+  color: color-mix(in srgb, #ffb26a 82%, var(--text));
+}
+
+.createActorSleepSummaryIcon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
+}
+
+.createActorSleepSummaryLabel {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 660;
+  letter-spacing: -0.004em;
+}
+
+.createActorSleepSummaryValue {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-align: right;
+  justify-self: end;
+}
+
+.createActorSleepSummarySleep .createActorSleepSummaryValue {
+  text-align: right;
+}
+
+.createActorSleepSummaryDuration {
+  display: grid;
+  justify-items: center;
+  align-items: center;
+  gap: 2px;
+  min-width: 76px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 640;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.createActorSleepSummaryDuration > span:last-child {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 720;
+  letter-spacing: -0.012em;
+}
+
+.createActorSleepTrackWrap {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  padding: 22px 14px 28px;
+}
+
+.createActorSleepTrack {
+  --create-actor-sleep-track-height: 44px;
+  position: relative;
+  height: var(--create-actor-sleep-track-height);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-inset) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 42%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 3%, transparent);
+  touch-action: none;
+}
+
+.createActorSleepTicks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.createActorSleepTick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 6px;
+  background: color-mix(in srgb, var(--border-strong) 62%, transparent);
+  transform: translate(-0.5px, -50%);
+  opacity: 0.65;
+}
+
+.createActorSleepTickMajor {
+  height: 12px;
+  background: color-mix(in srgb, var(--text-subtle) 68%, transparent);
+  opacity: 0.9;
+}
+
+.createActorSleepRange {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 82%, black 6%) 0%,
+    color-mix(in srgb, var(--accent) 60%, #4a9ff0 40%) 100%
+  );
+  box-shadow:
+    0 6px 18px color-mix(in srgb, var(--accent) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+  cursor: grab;
+  transition:
+    box-shadow 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  touch-action: none;
+}
+
+.createActorSleepRange:hover {
+  filter: brightness(1.06);
+}
+
+.createActorSleepTrackWrapActive .createActorSleepRange {
+  cursor: grabbing;
+  box-shadow:
+    0 10px 26px color-mix(in srgb, var(--accent) 28%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
+}
+
+.createActorSleepNow {
+  position: absolute;
+  top: -6px;
+  bottom: -46px;
+  width: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.createActorSleepNowDot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 88%, white 4%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--success) 55%, transparent);
+  transform: translate(-50%, -50%);
+}
+
+.createActorSleepNowLine {
+  position: absolute;
+  top: 0;
+  bottom: 30px;
+  left: 0;
+  width: 1.5px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--success) 72%, transparent) 0%,
+    color-mix(in srgb, var(--success) 38%, transparent) 70%,
+    transparent 100%
+  );
+  transform: translateX(-50%);
+}
+
+.createActorSleepNowLabel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-50%);
+  color: color-mix(in srgb, var(--success) 78%, var(--text));
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: -0.006em;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--success) 22%, transparent);
+}
+
+.createActorSleepThumb {
+  position: absolute;
+  top: 50%;
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 54%, transparent);
+  border-radius: 999px;
+  padding: 0;
+  background: color-mix(in srgb, var(--surface-raised) 94%, white 3%);
+  color: var(--text);
+  outline: 0;
+  cursor: grab;
+  transform: translate(-50%, -50%);
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
+  touch-action: none;
+  z-index: 2;
+}
+
+.createActorSleepThumb:hover {
+  background: color-mix(in srgb, var(--surface-raised) 98%, white 6%);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.34);
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.createActorSleepThumb:focus-visible {
+  box-shadow:
+    0 0 0 4px var(--accent-soft),
+    0 8px 18px rgba(0, 0, 0, 0.32);
+}
+
+.createActorSleepThumb:active,
+.createActorSleepThumbActive {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.08);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.38);
+}
+
+.createActorSleepThumbStart {
+  color: color-mix(in srgb, var(--accent) 86%, white);
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border-strong));
+}
+
+.createActorSleepThumbEnd {
+  color: color-mix(in srgb, #ffb26a 82%, var(--text));
+  border-color: color-mix(in srgb, #ffb26a 42%, var(--border-strong));
+}
+
+.createActorSleepThumb svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.2;
+}
+
+.createActorSleepAxis {
+  position: relative;
+  height: 16px;
+  margin-top: 4px;
+  pointer-events: none;
+}
+
+.createActorSleepAxisLabel {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 620;
+  letter-spacing: -0.008em;
+  white-space: nowrap;
+}
+
+.createActorSleepAxis .createActorSleepAxisLabel:first-child {
+  transform: translateX(0);
+}
+
+.createActorSleepAxis .createActorSleepAxisLabel:last-child {
+  transform: translateX(-100%);
+}
+
+.createActorSleepHint {
+  margin: 0;
+  text-align: center;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 450;
+  letter-spacing: -0.004em;
+}
+
+/* ----- Step 5: Archive summary ----- */
+
+.createActorArchive {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  width: min(100%, 560px);
+  margin: 0 auto;
+}
+
+.createActorArchiveCard {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  width: 100%;
+  padding: 26px 26px 22px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 58%, transparent);
+  border-radius: 18px;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--surface-raised) 88%, transparent) 0%,
+    color-mix(in srgb, var(--surface-inset) 80%, transparent) 100%
+  );
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
+  overflow: hidden;
+}
+
+.createActorArchiveCard::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 14px;
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 46%, transparent);
+  pointer-events: none;
+}
+
+.createActorArchiveStamp {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  color: color-mix(in srgb, var(--accent) 70%, white);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 760;
+  letter-spacing: 0.22em;
+  line-height: 1;
+  transform: rotate(6deg);
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.createActorArchiveHead {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-strong) 32%, transparent);
+}
+
+.createActorArchiveAvatar {
+  display: inline-grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 94%, white 4%);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 1.22rem;
+  font-weight: 820;
+  letter-spacing: -0.04em;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 40%, transparent);
+}
+
+.createActorArchiveAvatar[data-empty="true"] {
+  background: color-mix(in srgb, var(--surface-raised) 66%, transparent);
+}
+
+.createActorArchiveHeadText {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.createActorArchiveName {
+  color: var(--text);
+  font-size: 1.16rem;
+  font-weight: 820;
+  letter-spacing: -0.028em;
+  line-height: 1.1;
+}
+
+.createActorArchiveMeta {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 520;
+  letter-spacing: -0.006em;
+}
+
+.createActorArchiveList {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+
+.createActorArchiveRow {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.createActorArchiveRow dt {
+  margin: 0;
+  padding-top: 3px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.createActorArchiveRow dd {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 500;
+  letter-spacing: -0.008em;
+  line-height: 1.45;
+}
+
+.createActorArchiveClockPair {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 720;
+  letter-spacing: -0.018em;
+}
+
+.createActorArchiveClockPair svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+.createActorArchiveClockPair > span:first-child svg {
+  color: color-mix(in srgb, var(--accent) 78%, white);
+}
+
+.createActorArchiveClockPair > span:last-child svg {
+  color: color-mix(in srgb, #ffb26a 82%, var(--text));
+}
+
+.createActorArchiveArrow {
+  color: var(--text-subtle);
+  font-weight: 640;
+  letter-spacing: 0;
+}
+
+.createActorArchiveMutedInline {
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 480;
+  letter-spacing: -0.002em;
+}
+
+.createActorArchiveRowRoleBook dd {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.createActorArchiveRoleBook {
+  margin: 0;
+  max-height: 160px;
+  padding: 10px 12px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-inset) 78%, black 4%);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 22%, transparent);
+  color: color-mix(in srgb, var(--text) 62%, var(--text-subtle));
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 430;
+  letter-spacing: -0.002em;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 58%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+.createActorArchiveRoleBook::-webkit-scrollbar {
+  width: 7px;
+}
+
+.createActorArchiveRoleBook::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.createActorArchiveRoleBook::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 58%, transparent);
+}
+
+@keyframes createActorSpinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes createActorOverlayIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes createActorStepContentIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes createActorCoreIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes createActorShellIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes createActorToastLife {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 7px, 0) scale(0.96);
+    filter: blur(2px);
+  }
+
+  14%,
+  76% {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+    filter: blur(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -5px, 0) scale(0.98);
+    filter: blur(1px);
+  }
+}
+
+@keyframes createActorSubtitleEnterForward {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+    filter: blur(1px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes createActorSubtitleExitForward {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-28px);
+    filter: blur(1px);
+  }
+}
+
+@keyframes createActorSubtitleEnterBackward {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+    filter: blur(1px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes createActorSubtitleExitBackward {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(28px);
+    filter: blur(1px);
+  }
+}
+
+@keyframes createActorSubtitleBreath {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes createActorCoreBreath {
+  0%,
+  100% {
+    transform: scale(0.98);
+  }
+
+  50% {
+    transform: scale(1.04);
+  }
+}

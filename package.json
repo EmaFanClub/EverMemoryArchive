@@ -1,0 +1,40 @@
+{
+  "name": "ema-workspace",
+  "author": "Ema Fan Club",
+  "license": "Apache-2.0",
+  "version": "1.0.0-beta.1",
+  "description": "EverMemoryArchive represents Ema Fan Club's initiative to imbue agents with continuously evolving personalities via long-term memory mechanisms.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "webui": "tsx scripts/webui.ts",
+    "webui:dev": "pnpm webui -- --dev",
+    "webui:build": "pnpm --filter ema-webui build",
+    "webui:lint": "pnpm --filter ema-webui lint",
+    "dev": "pnpm webui -- --dev",
+    "build": "pnpm build:core && pnpm build:webui",
+    "build:core": "pnpm --filter ema build",
+    "build:webui": "pnpm --filter ema-webui build",
+    "test": "pnpm test:core --run",
+    "test:watch": "pnpm test:core",
+    "test:core": "pnpm --filter ema test",
+    "docs": "node scripts/docs.js --dev",
+    "docs:gen": "node scripts/docs.js --gen",
+    "docs:build": "node scripts/docs.js",
+    "format": "prettier --write \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\"",
+    "format:check": "prettier --check \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\""
+  },
+  "packageManager": "pnpm@10.16.1",
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "prettier": "^3.7.4",
+    "tsx": "^4.7.1",
+    "typedoc": "^0.28.15",
+    "typedoc-plugin-markdown": "^4.9.0",
+    "typedoc-vitepress-theme": "^1.1.2",
+    "typescript": "~5.9.0",
+    "vite": "^7.1.11",
+    "vitepress": "^1.6.4",
+    "vitest": "^3.2.4"
+  }
+}

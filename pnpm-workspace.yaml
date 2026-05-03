@@ -1,0 +1,5 @@
+packages:
+  - packages/*
+
+patchedDependencies:
+  '@hokify/agenda@6.3.0': patches/@hokify__agenda@6.3.0.patch

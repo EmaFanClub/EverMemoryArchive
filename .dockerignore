@@ -1,0 +1,45 @@
+# Dependencies
+node_modules
+**/node_modules
+pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+.next
+**/.next
+dist
+build
+coverage
+
+# Runtime data
+.ema
+.data
+*.log
+*.sqlite3
+*.db
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+*.cert
+*_credentials.json
+secrets
+
+# Git and local editor state
+.git
+.github
+.vscode
+.idea
+*.swp
+*.swo
+
+# Documentation output
+docs
+
+# OS/cache
+.DS_Store
+Thumbs.db

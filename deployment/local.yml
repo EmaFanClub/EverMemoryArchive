@@ -1,0 +1,52 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: ema-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - ../.ema/docker-mongodb:/data/db
+    networks:
+      - ema-network
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ema
+    container_name: ema-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../.ema/docker-local:/app/.ema
+      - ../packages:/app/packages
+      - ../scripts:/app/scripts
+      - ../.data/next-js-cache:/app/packages/ema-webui/.next
+      - node_modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+    depends_on:
+      - mongodb
+    networks:
+      - ema-network
+    command:
+      - pnpm
+      - webui
+      - --
+      - --dev
+      - --mongo
+      - mongodb://admin:password@mongodb:27017/ema?authSource=admin
+      - --host
+      - 0.0.0.0
+
+networks:
+  ema-network:
+    driver: bridge
+
+volumes:
+  node_modules:
