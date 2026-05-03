@@ -57,7 +57,9 @@ async function writeSelfInstaller(options: {
   readonly sevenZipPath: string;
 }): Promise<void> {
   const template =
-    options.platform.os === "win32" ? installerCmdTemplate : installerShTemplate;
+    options.platform.os === "win32"
+      ? installerCmdTemplate
+      : installerShTemplate;
   const writer = createWriteStream(options.outputPath, { mode: options.mode });
   try {
     await writeRenderedTemplate(writer, template, {
@@ -157,10 +159,7 @@ async function writeWrappedBase64(
   return encoded.length > 0;
 }
 
-async function writeString(
-  writer: WriteStream,
-  value: string,
-): Promise<void> {
+async function writeString(writer: WriteStream, value: string): Promise<void> {
   if (writer.write(value)) {
     return;
   }
