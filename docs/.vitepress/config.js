@@ -16,6 +16,10 @@ export default {
             text: "Introduction",
             link: "/",
           },
+          {
+            text: "Installation",
+            link: "/installation",
+          },
         ],
       },
       {
