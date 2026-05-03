@@ -1,0 +1,41 @@
+name: Branch Protection
+
+on:
+  pull_request:
+
+jobs:
+  check-branch-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch source rules
+        run: |
+          BASE_BRANCH="${{ github.base_ref }}"
+          HEAD_BRANCH="${{ github.head_ref }}"
+          
+          echo "Checking PR from $HEAD_BRANCH to $BASE_BRANCH"
+          
+          case $BASE_BRANCH in
+            main)
+              if [ "$HEAD_BRANCH" != "preview" ]; then
+                echo "::error::PR to main can only come from preview branch"
+                exit 1
+              fi
+              ;;
+            preview)
+              if [ "$HEAD_BRANCH" != "dev" ]; then
+                echo "::error::PR to preview can only come from dev branch"
+                exit 1
+              fi
+              ;;
+            dev)
+              if [[ ! "$HEAD_BRANCH" == *feat* ]]; then
+                echo "::error::PR to dev can only come from branches containing 'feat' in name"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::warning::No branch protection rules for $BASE_BRANCH"
+              ;;
+          esac
+          
+          echo "Branch source check passed"
