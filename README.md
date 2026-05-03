@@ -1,5 +1,9 @@
 <p align="center">
-  <img src=".github/assets/ema-logo-min.jpg" alt="EMA Logo" width="200">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/ema-logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/ema-logo-light.png">
+    <img alt="EMA Logo" src=".github/assets/ema-logo-light.png" width="200">
+  </picture>
 </p>
 
 <p align="center">
