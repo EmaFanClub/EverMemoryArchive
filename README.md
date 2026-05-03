@@ -29,63 +29,20 @@ Ema 当前支持 macOS、Linux 与 Windows。运行 Ema 至少需要：
 - 硬盘空间 ≥ 4GB
 - 无需 GPU
 
-推荐优先下载发行包安装。只有使用 `minimal` 版本，或希望从源码运行 Ema 时，才需要手动准备 Node.js、pnpm 和 MongoDB；依赖安装请参考 [安装依赖文档](docs/installation.md)。
-
-### 安装包版本
-
-| 版本 | 说明 |
-| --- | --- |
-| `portable` | 内置 Node.js、MongoDB 和启动脚本，下载后通常可以直接运行。推荐大多数用户使用。 |
-| `minimal` | 只包含 Ema 应用和启动脚本，需要本机已有 Node.js 与 MongoDB，或配置外部 MongoDB。使用前请先参考 [安装依赖文档](docs/installation.md)。 |
-
-### 安装方式
-
-| 方式 | 说明 |
-| --- | --- |
-| `portable` | 下载 `.zip` 或 `.7z` 压缩包，解压后运行 `start.sh`、`start.cmd` 或对应平台的启动脚本。 |
-| `exe` | 下载安装器并按提示安装。当前构建产物的安装器文件名通常为 `*-installer.*`：Windows 为 `.bat`，macOS 为 `.command`，Linux 为 `.run`。 |
+推荐大多数用户从 GitHub Release 下载 `portable` 版本安装包。`portable` 版本内置 Node.js、MongoDB 和启动脚本，通常下载后即可运行；如果希望通过安装器完成安装，可以选择文件名包含 `installer` 的安装包。
 
 ### 1. 下载安装包
-
-可从以下任一来源下载安装包。
-
-#### 从 GitHub Actions 下载安装
-
-打开 GitHub Actions 的发行包构建页面：
-
-https://github.com/EmaFanClub/EverMemoryArchive/actions/workflows/dist.yml
-
-选择最新成功的 `Distribution Packages` 构建，在 `Artifacts` 中下载与你系统匹配的压缩包，例如：
-
-- Windows x64：`ema-win32-x64-dist`
-- Apple Silicon macOS：`ema-darwin-arm64-dist`
-- Intel macOS：`ema-darwin-x64-dist`
-- Linux x64：`ema-linux-x64-dist`
-
-下载后，在解压出的文件中选择合适的版本与安装方式：
-
-- 推荐：`portable` 版本 + `portable` 安装方式，即解压 `ema-<platform>-portable-<revision>.zip` 或 `.7z` 后运行启动脚本。
-- 需要安装向导：选择 `ema-<platform>-portable-<revision>-installer.*`。
-- 需要轻量包：选择 `minimal` 版本，并先根据 [安装依赖文档](docs/installation.md) 准备依赖。
-
-#### 从 GitHub Release 下载安装
 
 打开 GitHub Release 页面：
 
 https://github.com/EmaFanClub/EverMemoryArchive/releases
 
-进入最新版本，在 `Assets` 中下载与你系统匹配的安装包。选择规则与 GitHub Actions 产物一致：
+进入最新版本，在 `Assets` 中下载与你系统匹配的 `portable` 安装包：
 
-- `portable` 版本适合直接运行。
-- `minimal` 版本适合已经安装 Node.js 与 MongoDB，或希望连接外部 MongoDB 的用户。
-- `.zip` / `.7z` 是解压运行方式。
-- `*-installer.*` 是安装器方式。
+- 解压运行：下载 `ema-<platform>-portable-<revision>.zip` 或 `.7z`，解压后运行 `start.sh`、`start.cmd` 或对应平台的启动脚本。
+- 安装器运行：下载 `ema-<platform>-portable-<revision>-installer.*`，按提示完成安装。当前构建产物的安装器通常为 Windows `.bat`、macOS `.command`、Linux `.run`。
 
 ### 2. 配置 Ema
-
-Ema 启动后必须配置模型 API Key；Tavily 搜索引擎 API Key 和 NapCatQQ 为可选配置，可按需启用。
-
-#### 配置模型 API Key（必须）
 
 Ema 启动后，必须至少配置一个模型 API Key。
 
@@ -96,21 +53,7 @@ Ema 启动后，必须至少配置一个模型 API Key。
 
 获取 API Key 后，在 Ema 设置页面中填写即可。
 
-#### 配置 Tavily 搜索引擎 API Key（可选）
-
-Ema 支持 Tavily 搜索引擎，用于联网搜索与信息检索。
-
-申请 API Key：https://www.tavily.com/
-
-然后在 Ema 设置页面中填写即可。
-
-#### 配置 NapCatQQ（可选）
-
-如果你希望将 Ema 接入 QQ，请安装 NapCatQQ：
-
-https://napneko.github.io/
-
-安装完成后，根据 NapCatQQ 文档完成配置，并在 Ema 中进行连接。
+Ema 也提供 `minimal` 版本、GitHub Actions 构建产物、Tavily 搜索引擎和 NapCatQQ 接入等进阶选择，详见 [安装文档](docs/installation.md)。
 
 ## Ema 技术特点
 
