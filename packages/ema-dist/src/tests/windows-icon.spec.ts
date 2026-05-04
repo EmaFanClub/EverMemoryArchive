@@ -1,0 +1,46 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, test } from "vitest";
+import { APP_ICON_SOURCE, generateWindowsIcon } from "../icons";
+
+const EXPECTED_ICON_SIZES = [256, 128, 64, 48, 32, 16] as const;
+
+describe("Windows icon generation", () => {
+  test("generates a multi-resolution ICO from the checked-in app logo", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ema-icon-"));
+    const iconPath = path.join(tempRoot, "ema-logo.ico");
+
+    try {
+      await generateWindowsIcon(APP_ICON_SOURCE, iconPath);
+      const icon = await fs.readFile(iconPath);
+
+      expect(icon.readUInt16LE(0)).toBe(0);
+      expect(icon.readUInt16LE(2)).toBe(1);
+      expect(icon.readUInt16LE(4)).toBe(EXPECTED_ICON_SIZES.length);
+
+      for (const [index, size] of EXPECTED_ICON_SIZES.entries()) {
+        const directoryOffset = 6 + index * 16;
+        const imageSize = icon[directoryOffset] || 256;
+        const imageHeight = icon[directoryOffset + 1] || 256;
+        const bytesInResource = icon.readUInt32LE(directoryOffset + 8);
+        const imageOffset = icon.readUInt32LE(directoryOffset + 12);
+
+        expect(imageSize).toBe(size);
+        expect(imageHeight).toBe(size);
+        expect(icon.readUInt16LE(directoryOffset + 4)).toBe(1);
+        expect(icon.readUInt16LE(directoryOffset + 6)).toBe(32);
+        expect(icon.readUInt32LE(imageOffset)).toBe(40);
+        expect(icon.readInt32LE(imageOffset + 4)).toBe(size);
+        expect(icon.readInt32LE(imageOffset + 8)).toBe(size * 2);
+        expect(icon.readUInt16LE(imageOffset + 12)).toBe(1);
+        expect(icon.readUInt16LE(imageOffset + 14)).toBe(32);
+        expect(bytesInResource).toBe(
+          40 + size * size * 4 + Math.ceil(size / 32) * 4 * size,
+        );
+      }
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+});

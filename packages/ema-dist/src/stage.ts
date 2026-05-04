@@ -15,6 +15,7 @@ import type { PackageKind, Platform } from "./platforms";
 import installTextTemplate from "./templates/INSTALL.txt?raw";
 import { renderTemplate } from "./templates";
 import { buildRustBinary } from "./rust";
+import { APP_ICON_SOURCE } from "./icons";
 
 interface StageOptions {
   readonly platform: Platform;
@@ -30,12 +31,6 @@ const NODE_BUILTINS = new Set([
   ...builtinModules,
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
 ]);
-const APP_ICON_SOURCE = path.join(
-  workspaceRoot(),
-  ".github",
-  "assets",
-  "ema-logo-min.jpg",
-);
 const APP_ICON_RELATIVE_PATH = path.join("resources", "ema-logo-min.jpg");
 
 export async function stagePackage(options: StageOptions): Promise<string> {

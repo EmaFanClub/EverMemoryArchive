@@ -5,6 +5,8 @@ const nodeTemplatePath = new URL(
   "../templates/open-webui.mjs",
   import.meta.url,
 );
+const iconPath = new URL("../icons.ts", import.meta.url);
+const rustBuildPath = new URL("../rust.ts", import.meta.url);
 const stagePath = new URL("../stage.ts", import.meta.url);
 const buildScriptPath = new URL("../../build.rs", import.meta.url);
 const rustLauncherPath = new URL("../../rust/launcher.rs", import.meta.url);
@@ -108,12 +110,20 @@ describe("WebUI opener launchers", () => {
   });
 
   test("distribution launchers include the application icon assets", async () => {
+    const iconSource = await fs.readFile(iconPath, "utf8");
+    const rustBuildSource = await fs.readFile(rustBuildPath, "utf8");
     const stageSource = await fs.readFile(stagePath, "utf8");
     const buildScriptSource = await fs.readFile(buildScriptPath, "utf8");
 
-    expect(stageSource).toContain('".github"');
-    expect(stageSource).toContain('"ema-logo-min.jpg"');
+    expect(stageSource).toContain("APP_ICON_SOURCE");
     expect(stageSource).toContain('"resources"');
+    expect(iconSource).toContain('".github"');
+    expect(iconSource).toContain('"ema-logo-min.jpg"');
+    expect(iconSource).toContain('"ema-logo.ico"');
+    expect(iconSource).toContain('require("sharp")');
+    expect(iconSource).toContain("generateWindowsIconAsset");
+    expect(rustBuildSource).toContain("ensureWindowsIconAsset");
+    expect(rustBuildSource).toContain('platform.os === "win32"');
     expect(buildScriptSource).toContain('"ema-logo.ico"');
     expect(buildScriptSource).toContain("write_windows_icon_resource");
     expect(buildScriptSource).toContain('"ema-dist-icon.res"');

@@ -110,9 +110,9 @@ it uses `default-browser` to identify the user's default browser before falling
 back to the system URL handler. During installation the user is asked whether to
 set `EMA_OPEN_MODE=browser` instead. `EMA_OPEN_MODE=none` starts only the server.
 The staged package copies `.github/assets/ema-logo-min.jpg` into
-`resources/ema-logo-min.jpg`; Windows setup and launcher executables embed a
-generated `.ico` version of that logo, and Linux desktop entries reference the
-staged jpg.
+`resources/ema-logo-min.jpg`; Windows setup and launcher builds generate and
+embed an ignored `packages/ema-dist/assets/ema-logo.ico` version of that logo,
+and Linux desktop entries reference the staged jpg.
 
 Installer artifacts are Rust `setup` executables. `createSelfInstaller` compiles
 `setup` with `EMA_DIST_SETUP_PAYLOAD_DIR` pointing at the staged package; the

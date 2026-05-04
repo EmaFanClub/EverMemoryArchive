@@ -9,6 +9,9 @@ target/
 out/
 coverage/
 
+# Generated distribution assets
+/packages/ema-dist/assets/ema-logo.ico
+
 # Runtime data
 /.ema/
 /.data/

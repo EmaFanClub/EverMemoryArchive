@@ -12,6 +12,7 @@
     "build": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts build"
   },
   "dependencies": {
-    "default-browser": "^5.5.0"
+    "default-browser": "^5.5.0",
+    "sharp": "^0.34.5"
   }
 }
