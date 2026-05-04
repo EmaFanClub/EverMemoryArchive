@@ -149,9 +149,10 @@ fn create_shortcut(app_dir: &Path) -> EmaResult<()> {
     fs::write(
         &desktop_file,
         format!(
-            "[Desktop Entry]\nType=Application\nName=EverMemoryArchive\nExec={}\nPath={}\nTerminal=true\nCategories=Utility;\n",
+            "[Desktop Entry]\nType=Application\nName=EverMemoryArchive\nExec={}\nPath={}\nIcon={}\nTerminal=true\nCategories=Utility;\n",
             launcher_path(app_dir).display(),
-            app_dir.display()
+            app_dir.display(),
+            app_icon_path(app_dir).display()
         ),
     )?;
     if home_dir().join("Desktop").is_dir() {
@@ -169,6 +170,10 @@ fn launcher_path(app_dir: &Path) -> PathBuf {
     } else {
         app_dir.join("ema-launcher")
     }
+}
+
+fn app_icon_path(app_dir: &Path) -> PathBuf {
+    app_dir.join("resources").join("ema-logo-min.jpg")
 }
 
 #[derive(Debug, Default)]

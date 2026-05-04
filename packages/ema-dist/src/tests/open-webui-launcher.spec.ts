@@ -6,6 +6,7 @@ const nodeTemplatePath = new URL(
   import.meta.url,
 );
 const stagePath = new URL("../stage.ts", import.meta.url);
+const buildScriptPath = new URL("../../build.rs", import.meta.url);
 const rustLauncherPath = new URL("../../rust/launcher.rs", import.meta.url);
 const rustSetupPath = new URL("../../rust/setup.rs", import.meta.url);
 
@@ -29,7 +30,13 @@ describe("WebUI opener launchers", () => {
     expect(source).toContain("bundleNextServerEntry");
     expect(source).toContain("bundleNextServerChunks");
     expect(source).toContain("patchNextServerRequireHook");
+    expect(source).toContain("patchNextServerRequirePage");
+    expect(source).toContain("module.require(pagePath)");
+    expect(source).toContain("patchEmaRuntimeSourceUrls");
+    expect(source).toContain('process.cwd().replace(/\\\\\\\\/g, "/")');
     expect(source).toContain("inlineNextServerCommonJsModules");
+    expect(source).toContain("isNextServerEdgeChunk");
+    expect(source).toContain('".next/server/edge/chunks/"');
     expect(source).toContain("ReactServerDOMWebpackServer");
     expect(source).toContain('moduleName === "critters"');
     expect(source).toContain('moduleName === "@opentelemetry/api"');
@@ -75,6 +82,8 @@ describe("WebUI opener launchers", () => {
 
     expect(source).toContain('call \\"{}\\"');
     expect(source).toContain("exec ./ema-launcher");
+    expect(source).toContain("Icon={}");
+    expect(source).toContain('"ema-logo-min.jpg"');
     expect(source).not.toContain("start.sh");
     expect(source).not.toContain("start.cmd");
   });
@@ -96,5 +105,22 @@ describe("WebUI opener launchers", () => {
     expect(source).toContain("noExternal: true");
     expect(source).toContain('fileName: () => "open-webui.mjs"');
     expect(source).not.toContain("copyNodePackageClosure");
+  });
+
+  test("distribution launchers include the application icon assets", async () => {
+    const stageSource = await fs.readFile(stagePath, "utf8");
+    const buildScriptSource = await fs.readFile(buildScriptPath, "utf8");
+
+    expect(stageSource).toContain('".github"');
+    expect(stageSource).toContain('"ema-logo-min.jpg"');
+    expect(stageSource).toContain('"resources"');
+    expect(buildScriptSource).toContain('"ema-logo.ico"');
+    expect(buildScriptSource).toContain("write_windows_icon_resource");
+    expect(buildScriptSource).toContain('"ema-dist-icon.res"');
+    expect(buildScriptSource).toContain(
+      "cargo:rustc-link-arg-bin=ema-launcher",
+    );
+    expect(buildScriptSource).toContain("cargo:rustc-link-arg-bin=setup");
+    expect(buildScriptSource).not.toContain("winres::WindowsResource");
   });
 });

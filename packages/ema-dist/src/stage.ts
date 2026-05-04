@@ -30,6 +30,13 @@ const NODE_BUILTINS = new Set([
   ...builtinModules,
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
 ]);
+const APP_ICON_SOURCE = path.join(
+  workspaceRoot(),
+  ".github",
+  "assets",
+  "ema-logo-min.jpg",
+);
+const APP_ICON_RELATIVE_PATH = path.join("resources", "ema-logo-min.jpg");
 
 export async function stagePackage(options: StageOptions): Promise<string> {
   const root = stageRoot(options.platform, options.kind);
@@ -44,6 +51,7 @@ export async function stagePackage(options: StageOptions): Promise<string> {
     path.join(workspaceRoot(), "LICENSE"),
     path.join(root, "LICENSE"),
   );
+  await copyAppIcon(root);
   await writeLaunchers(root, options.platform, options.kind);
   await writePackageManifest(root, options, app.serverRelativePath);
   return root;
@@ -125,6 +133,12 @@ async function writeCommonJsPackageManifest(appRoot: string): Promise<void> {
     path.join(appRoot, "package.json"),
     `${JSON.stringify({ type: "commonjs" }, null, 2)}\n`,
   );
+}
+
+async function copyAppIcon(root: string): Promise<void> {
+  const destination = path.join(root, APP_ICON_RELATIVE_PATH);
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.copyFile(APP_ICON_SOURCE, destination);
 }
 
 async function bundleNextServerEntry(options: {
@@ -214,6 +228,8 @@ async function bundleNextServerChunks(options: {
 function nextServerBundlePlugins(serverDir: string): Plugin[] {
   return [
     patchNextServerRequireHook(),
+    patchNextServerRequirePage(),
+    patchEmaRuntimeSourceUrls(),
     inlineNextServerCommonJsModules(serverDir),
     stubRelativeCommonJsExternals(),
     resolveStandaloneCommonJsPackages(serverDir),
@@ -245,6 +261,66 @@ function nextServerCommonJsOptions(): {
     ignoreDynamicRequires: true,
     transformMixedEsModules: true,
   };
+}
+
+function patchEmaRuntimeSourceUrls(): Plugin {
+  return {
+    name: "ema-dist-patch-ema-runtime-source-urls",
+    transform(code, id) {
+      if (!isNextServerChunk(id) || !code.includes('P("packages/ema/src/')) {
+        return null;
+      }
+
+      return {
+        code: code.replace(
+          /`file:\/\/\$\{[^}]+\.P\("packages\/ema\/src\/([^"]+)"\)\}`/g,
+          (_, relativePath: string) => {
+            return [
+              '`file://${process.cwd().startsWith("/") ? "" : "/"}${process.cwd().replace(/\\\\/g, "/")}/packages/ema/src/',
+              relativePath,
+              "`",
+            ].join("");
+          },
+        ),
+        map: null,
+      };
+    },
+  };
+}
+
+function isNextServerChunk(id: string): boolean {
+  return toPosixPath(id.split("?", 1)[0]).includes("/.next/server/");
+}
+
+function patchNextServerRequirePage(): Plugin {
+  return {
+    name: "ema-dist-patch-next-server-require-page",
+    transform(code, id) {
+      if (!isNextServerRequirePage(id)) {
+        return null;
+      }
+
+      const dynamicPageRequire =
+        "const mod = process.env.NEXT_MINIMAL ? __non_webpack_require__(pagePath) : require(/* turbopackIgnore: true */ pagePath);";
+      if (!code.includes(dynamicPageRequire)) {
+        return null;
+      }
+
+      return {
+        code: code.replace(
+          dynamicPageRequire,
+          "const mod = module.require(pagePath);",
+        ),
+        map: null,
+      };
+    },
+  };
+}
+
+function isNextServerRequirePage(id: string): boolean {
+  return toPosixPath(id.split("?", 1)[0]).endsWith(
+    "next/dist/server/require.js",
+  );
 }
 
 function patchNextServerRequireHook(): Plugin {
@@ -581,9 +657,16 @@ async function collectNextServerChunkEntries(
     if (!entryPath.split(path.sep).includes("chunks")) {
       continue;
     }
-    entries[toPosixPath(path.relative(serverDir, entryPath)).slice(0, -3)] =
-      entryPath;
+    const relativeEntryPath = toPosixPath(path.relative(serverDir, entryPath));
+    if (isNextServerEdgeChunk(relativeEntryPath)) {
+      continue;
+    }
+    entries[relativeEntryPath.slice(0, -3)] = entryPath;
   }
+}
+
+function isNextServerEdgeChunk(relativeEntryPath: string): boolean {
+  return relativeEntryPath.startsWith(".next/server/edge/chunks/");
 }
 
 const LANCEDB_NATIVE_PACKAGES = [
