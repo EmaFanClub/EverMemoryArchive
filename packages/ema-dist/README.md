@@ -79,12 +79,13 @@ Node.js and MongoDB from configured paths, from `PATH`, or via `EMA_MONGO_URI`.
 
 Launchers open the WebUI in `EMA_OPEN_MODE=webview` by default. The shell
 wrappers call the bundled `launcher/open-webui.mjs` script with the selected
-Node.js runtime. That script opens an app-mode browser window without the normal
-browser toolbar when Chrome, Edge, Chromium, or Brave is available from
-Chrome-launcher-style paths, Windows App Paths, or `PATH`. If that fails, it uses
-the packaged `default-browser` runtime to identify the user's default browser
-before falling back to the system URL handler. During installation the user is
-asked whether to set `EMA_OPEN_MODE=browser` instead.
+Node.js runtime. Staging bundles that script with Vite so its `default-browser`
+runtime dependency is included directly in `launcher/open-webui.mjs`. The script
+opens an app-mode browser window without the normal browser toolbar when Chrome,
+Edge, Chromium, or Brave is available from Chrome-launcher-style paths, Windows
+App Paths, or `PATH`. If that fails, it uses `default-browser` to identify the
+user's default browser before falling back to the system URL handler. During
+installation the user is asked whether to set `EMA_OPEN_MODE=browser` instead.
 `EMA_OPEN_MODE=none` starts only the server.
 
 Installer and `configure` answers are persisted in the normal user config

@@ -42,11 +42,13 @@ describe("WebUI opener templates", () => {
     );
   });
 
-  test("stage copies default-browser into the launcher runtime", async () => {
+  test("stage bundles default-browser into the launcher runtime with Vite", async () => {
     const source = await fs.readFile(stagePath, "utf8");
 
     expect(source).toContain('path.join(root, "launcher")');
-    expect(source).toContain('["default-browser"]');
-    expect(source).toContain("copyNodePackageClosure");
+    expect(source).toContain("viteBuild");
+    expect(source).toContain("noExternal: true");
+    expect(source).toContain('fileName: () => "open-webui.mjs"');
+    expect(source).not.toContain("copyNodePackageClosure");
   });
 });

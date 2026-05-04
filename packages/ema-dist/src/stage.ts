@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
-import { createRequire } from "node:module";
+import { builtinModules } from "node:module";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { build as viteBuild } from "vite";
 import {
   minimalStageRoot,
   portableStageRoot,
@@ -13,13 +15,10 @@ import installTextTemplate from "./templates/INSTALL.txt?raw";
 import configureCmdTemplate from "./templates/configure.cmd?raw";
 import configureShTemplate from "./templates/configure.sh?raw";
 import openWebuiCmdTemplate from "./templates/open-webui.cmd?raw";
-import openWebuiNodeTemplate from "./templates/open-webui.mjs?raw";
 import openWebuiShTemplate from "./templates/open-webui.sh?raw";
 import startCmdTemplate from "./templates/start.cmd?raw";
 import startShTemplate from "./templates/start.sh?raw";
 import { renderTemplate } from "./templates";
-
-const require = createRequire(import.meta.url);
 
 interface StageOptions {
   readonly platform: Platform;
@@ -543,105 +542,42 @@ async function writeLaunchers(
 async function writeLauncherRuntime(root: string): Promise<void> {
   const launcherRoot = path.join(root, "launcher");
   await fs.mkdir(launcherRoot, { recursive: true });
-  await fs.writeFile(
-    path.join(launcherRoot, "open-webui.mjs"),
-    openWebuiNodeTemplate,
+  const entry = fileURLToPath(
+    new URL("./templates/open-webui.mjs", import.meta.url),
   );
-  await copyNodePackageClosure(
-    ["default-browser"],
-    path.join(launcherRoot, "node_modules"),
-  );
-}
-
-async function copyNodePackageClosure(
-  packageNames: readonly string[],
-  destinationNodeModules: string,
-): Promise<void> {
-  const copied = new Set<string>();
-  await fs.mkdir(destinationNodeModules, { recursive: true });
-  for (const packageName of packageNames) {
-    await copyNodePackage(packageName, destinationNodeModules, copied);
-  }
-}
-
-async function copyNodePackage(
-  packageName: string,
-  destinationNodeModules: string,
-  copied: Set<string>,
-): Promise<void> {
-  if (copied.has(packageName)) {
-    return;
-  }
-  copied.add(packageName);
-
-  const sourceRoot = await resolvePackageRoot(packageName);
-  const manifest = await readPackageManifest(sourceRoot);
-  const destinationRoot = packageDestinationRoot(
-    destinationNodeModules,
-    packageName,
-  );
-  await fs.rm(destinationRoot, { recursive: true, force: true });
-  await fs.mkdir(path.dirname(destinationRoot), { recursive: true });
-  await fs.cp(sourceRoot, destinationRoot, {
-    recursive: true,
-    force: true,
-    preserveTimestamps: true,
-    dereference: true,
-    filter: (source) => {
-      const relative = path.relative(sourceRoot, source);
-      return !relative.split(path.sep).includes("node_modules");
+  await viteBuild({
+    configFile: false,
+    logLevel: "warn",
+    ssr: {
+      noExternal: true,
+    },
+    build: {
+      emptyOutDir: false,
+      minify: false,
+      outDir: launcherRoot,
+      ssr: true,
+      target: "node18",
+      lib: {
+        entry,
+        formats: ["es"],
+        fileName: () => "open-webui.mjs",
+      },
+      rollupOptions: {
+        external: nodeBuiltins(),
+        output: {
+          entryFileNames: "open-webui.mjs",
+          inlineDynamicImports: true,
+        },
+      },
     },
   });
-
-  const dependencies = {
-    ...manifest.dependencies,
-    ...manifest.optionalDependencies,
-  };
-  for (const dependencyName of Object.keys(dependencies)) {
-    await copyNodePackage(dependencyName, destinationNodeModules, copied);
-  }
 }
 
-async function resolvePackageRoot(packageName: string): Promise<string> {
-  const entryPath = require.resolve(packageName);
-  let current = path.dirname(await fs.realpath(entryPath));
-  while (true) {
-    const manifestPath = path.join(current, "package.json");
-    if (await exists(manifestPath)) {
-      const manifest = await readPackageManifest(current);
-      if (manifest.name === packageName) {
-        return current;
-      }
-    }
-
-    const parent = path.dirname(current);
-    if (parent === current) {
-      break;
-    }
-    current = parent;
-  }
-  throw new Error(`Could not resolve package root for ${packageName}.`);
-}
-
-async function readPackageManifest(packageRoot: string): Promise<{
-  readonly name?: string;
-  readonly dependencies?: Record<string, string>;
-  readonly optionalDependencies?: Record<string, string>;
-}> {
-  return JSON.parse(
-    await fs.readFile(path.join(packageRoot, "package.json"), "utf8"),
-  );
-}
-
-function packageDestinationRoot(
-  destinationNodeModules: string,
-  packageName: string,
-): string {
-  if (!packageName.startsWith("@")) {
-    return path.join(destinationNodeModules, packageName);
-  }
-  const [scope, name] = packageName.split("/");
-  return path.join(destinationNodeModules, scope, name);
+function nodeBuiltins(): string[] {
+  return [
+    ...builtinModules,
+    ...builtinModules.map((moduleName) => `node:${moduleName}`),
+  ];
 }
 
 async function writePackageManifest(
