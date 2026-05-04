@@ -114,6 +114,39 @@ jobs:
       - name: Build WebUI standalone app
         run: pnpm --filter ema-webui build
 
+      - name: Stage minimal package
+        run: pnpm --filter ema-dist run stage -- --platform ${{ matrix.platform }} --kind minimal
+
+      - name: Build minimal zip package
+        run: pnpm --filter ema-dist run pack -- --platform ${{ matrix.platform }} --kind minimal --format zip
+
+      - name: Upload minimal zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-minimal-zip
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.zip
+
+      - name: Build minimal 7z package
+        run: pnpm --filter ema-dist run pack -- --platform ${{ matrix.platform }} --kind minimal --format 7z
+
+      - name: Upload minimal 7z artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-minimal-7z
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.7z
+
+      - name: Build minimal installer
+        run: pnpm --filter ema-dist run installers -- --platform ${{ matrix.platform }} --kind minimal
+
+      - name: Upload minimal installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-minimal-installer
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*-installer.*
+
       - name: Stage portable package
         run: pnpm --filter ema-dist run stage -- --platform ${{ matrix.platform }} --kind portable
 
@@ -167,36 +200,3 @@ jobs:
           name: ema-${{ matrix.platform }}-portable-skipped
           if-no-files-found: error
           path: dist/${{ matrix.platform }}/*.SKIPPED.txt
-
-      - name: Stage minimal package
-        run: pnpm --filter ema-dist run stage -- --platform ${{ matrix.platform }} --kind minimal
-
-      - name: Build minimal zip package
-        run: pnpm --filter ema-dist run pack -- --platform ${{ matrix.platform }} --kind minimal --format zip
-
-      - name: Upload minimal zip artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ema-${{ matrix.platform }}-minimal-zip
-          if-no-files-found: error
-          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.zip
-
-      - name: Build minimal 7z package
-        run: pnpm --filter ema-dist run pack -- --platform ${{ matrix.platform }} --kind minimal --format 7z
-
-      - name: Upload minimal 7z artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ema-${{ matrix.platform }}-minimal-7z
-          if-no-files-found: error
-          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.7z
-
-      - name: Build minimal installer
-        run: pnpm --filter ema-dist run installers -- --platform ${{ matrix.platform }} --kind minimal
-
-      - name: Upload minimal installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ema-${{ matrix.platform }}-minimal-installer
-          if-no-files-found: error
-          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*-installer.*

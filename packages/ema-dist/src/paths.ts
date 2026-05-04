@@ -35,6 +35,14 @@ export function debugSymbolsStageRoot(platform: Platform): string {
   );
 }
 
+export function installerToolsRoot(platform: Platform): string {
+  return path.join(platformDistRoot(platform), ".installer-tools");
+}
+
+export function installerSevenZipRoot(platform: Platform): string {
+  return path.join(installerToolsRoot(platform), "7zip");
+}
+
 export function stageRoot(platform: Platform, kind: PackageKind): string {
   return kind === "portable"
     ? portableStageRoot(platform)

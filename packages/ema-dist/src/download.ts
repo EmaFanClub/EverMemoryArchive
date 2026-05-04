@@ -1,7 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { extractArchive } from "./archive";
-import { downloadsRoot, portableStageRoot } from "./paths";
+import {
+  downloadsRoot,
+  installerSevenZipRoot,
+  portableStageRoot,
+} from "./paths";
 import type { Platform } from "./platforms";
 
 interface RuntimeVersions {
@@ -57,14 +61,12 @@ export async function downloadPortableDependencies(
   }
 
   const sevenZip = sevenZipArtifact(platform, versions.sevenZip);
-  const sevenZipArchive = await downloadFile(sevenZip.url, sevenZip.fileName);
-  const sevenZipDest = path.join(portablesRoot, "7zip");
-  if (platform.os === "win32") {
-    await extractWindowsSevenZip(sevenZipArchive, sevenZipDest);
-  } else {
-    await extractArchive(sevenZipArchive, sevenZipDest);
-    await chmodIfExists(path.join(sevenZipDest, "7zz"), 0o755);
-  }
+  await downloadAndExtractSevenZip(
+    platform,
+    sevenZip.url,
+    sevenZip.fileName,
+    path.join(portablesRoot, "7zip"),
+  );
   dependencies.push({ name: "7zip", url: sevenZip.url, bundled: true });
 
   await fs.writeFile(
@@ -89,13 +91,30 @@ export async function downloadPortableDependencies(
   return dependencies;
 }
 
+export async function downloadInstallerDependencies(
+  platform: Platform,
+): Promise<DownloadedDependency[]> {
+  const sevenZip = sevenZipArtifact(platform, resolveSevenZipVersion());
+  await downloadAndExtractSevenZip(
+    platform,
+    sevenZip.url,
+    sevenZip.fileName,
+    installerSevenZipRoot(platform),
+  );
+  return [{ name: "7zip", url: sevenZip.url, bundled: true }];
+}
+
 export async function resolveRuntimeVersions(): Promise<RuntimeVersions> {
   const requestedNode = process.env.EMA_DIST_NODE_VERSION?.trim() || "22";
   return {
     node: await resolveNodeVersion(requestedNode),
     mongodb: process.env.EMA_DIST_MONGODB_VERSION?.trim() || "8.2.7",
-    sevenZip: process.env.EMA_DIST_7ZIP_VERSION?.trim() || "26.01",
+    sevenZip: resolveSevenZipVersion(),
   };
+}
+
+function resolveSevenZipVersion(): string {
+  return process.env.EMA_DIST_7ZIP_VERSION?.trim() || "26.01";
 }
 
 async function resolveNodeVersion(requested: string): Promise<string> {
@@ -242,6 +261,21 @@ async function downloadAndExtract(
 ): Promise<void> {
   const archivePath = await downloadFile(url, fileName);
   await extractArchive(archivePath, destination);
+}
+
+async function downloadAndExtractSevenZip(
+  platform: Platform,
+  url: string,
+  fileName: string,
+  destination: string,
+): Promise<void> {
+  const archivePath = await downloadFile(url, fileName);
+  if (platform.os === "win32") {
+    await extractWindowsSevenZip(archivePath, destination);
+    return;
+  }
+  await extractArchive(archivePath, destination);
+  await chmodIfExists(path.join(destination, "7zz"), 0o755);
 }
 
 async function downloadFile(url: string, fileName: string): Promise<string> {

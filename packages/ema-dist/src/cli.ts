@@ -25,7 +25,7 @@ import {
   type Platform,
 } from "./platforms";
 import { resolveRevision } from "./revision";
-import { refreshMinimalStageFromPortable, stagePackage } from "./stage";
+import { stagePackage } from "./stage";
 
 const BUILD_INSTALLER_ARCHIVE_FORMATS: readonly PackageArchiveFormat[] = ["7z"];
 const BUILD_OTHER_ARCHIVE_FORMATS: readonly PackageArchiveFormat[] =
@@ -165,15 +165,8 @@ async function buildPlatform(
   revision: string,
   includeUnsupportedPortable: boolean,
 ): Promise<void> {
-  process.stdout.write(`Staging ${platform.id} portable package\n`);
-  await stagePackage({ platform, kind: "portable", revision });
-  await downloadPortableDependencies(platform);
-  const debugSymbols = await stagePortableDebugSymbols(platform, {
-    reset: true,
-  });
-
   process.stdout.write(`Staging ${platform.id} minimal package\n`);
-  await refreshMinimalStageFromPortable(platform, revision);
+  await stagePackage({ platform, kind: "minimal", revision });
   await packKind(
     platform,
     "minimal",
@@ -181,6 +174,14 @@ async function buildPlatform(
     BUILD_INSTALLER_ARCHIVE_FORMATS,
   );
   await createSelfInstaller(platform, "minimal", revision);
+  await packOtherBuildFormats(platform, "minimal", revision);
+
+  process.stdout.write(`Staging ${platform.id} portable package\n`);
+  await stagePackage({ platform, kind: "portable", revision });
+  await downloadPortableDependencies(platform);
+  const debugSymbols = await stagePortableDebugSymbols(platform, {
+    reset: true,
+  });
 
   const packagePortable = platform.canBundleMongo || includeUnsupportedPortable;
   if (packagePortable) {
@@ -200,7 +201,6 @@ async function buildPlatform(
     await writeSkipNote(platform, revision);
   }
 
-  await packOtherBuildFormats(platform, "minimal", revision);
   if (packagePortable) {
     await packOtherBuildFormats(platform, "portable", revision, {
       preparePortableDebugSymbols: false,

@@ -2,11 +2,12 @@ import { once } from "node:events";
 import { createReadStream, createWriteStream, type WriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { downloadInstallerDependencies } from "./download";
 import {
+  installerSevenZipRoot,
   installerFileName,
   packageFileName,
   platformDistRoot,
-  portableStageRoot,
 } from "./paths";
 import type { PackageKind, Platform } from "./platforms";
 import installerCmdTemplate from "./templates/installer.cmd?raw";
@@ -23,7 +24,7 @@ export async function createSelfInstaller(
     outDir,
     packageFileName(platform, kind, revision, "7z"),
   );
-  const sevenZipPath = installerSevenZipPath(platform);
+  const sevenZipPath = await ensureInstallerSevenZip(platform);
   const outputPath = path.join(
     outDir,
     installerFileName(platform, kind, revision),
@@ -45,7 +46,18 @@ export async function createSelfInstaller(
 
 function installerSevenZipPath(platform: Platform): string {
   const binary = platform.os === "win32" ? "7za.exe" : "7zz";
-  return path.join(portableStageRoot(platform), "portables", "7zip", binary);
+  return path.join(installerSevenZipRoot(platform), binary);
+}
+
+async function ensureInstallerSevenZip(platform: Platform): Promise<string> {
+  const sevenZipPath = installerSevenZipPath(platform);
+  try {
+    await fs.access(sevenZipPath);
+    return sevenZipPath;
+  } catch {
+    await downloadInstallerDependencies(platform);
+    return sevenZipPath;
+  }
 }
 
 async function writeSelfInstaller(options: {
