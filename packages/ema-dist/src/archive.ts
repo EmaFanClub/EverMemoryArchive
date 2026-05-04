@@ -157,7 +157,7 @@ async function copySingleRootContents(
   }
 }
 
-async function removeDanglingSymlinks(root: string): Promise<void> {
+export async function removeDanglingSymlinks(root: string): Promise<void> {
   const entries = await fs.readdir(root, { withFileTypes: true });
   for (const entry of entries) {
     const entryPath = path.join(root, entry.name);

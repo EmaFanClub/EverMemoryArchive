@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { removeDanglingSymlinks } from "./archive";
 import { installerFileName, platformDistRoot, stageRoot } from "./paths";
 import type { PackageKind, Platform } from "./platforms";
 import { buildRustBinary } from "./rust";
@@ -16,6 +17,7 @@ export async function createSelfInstaller(
   );
   const payloadRoot = stageRoot(platform, kind);
   await fs.access(payloadRoot);
+  await removeDanglingSymlinks(payloadRoot);
 
   const setupBinary = await buildRustBinary(platform, "setup", {
     env: {
