@@ -7,6 +7,8 @@ const require = createRequire(import.meta.url);
 const sharp = require("sharp") as typeof import("sharp");
 
 const WINDOWS_ICON_SIZES = [256, 128, 64, 48, 32, 16] as const;
+const APPLE_ICON_CORNER_EXPONENT = 5;
+const ICON_MASK_SUPERSAMPLE = 4;
 
 interface IconImage {
   readonly size: number;
@@ -76,7 +78,38 @@ async function renderIconImage(
       `Unexpected ${size}px icon render: ${info.width}x${info.height}x${info.channels}.`,
     );
   }
-  return data;
+  return applyAppleIconMask(data, size);
+}
+
+function applyAppleIconMask(rgba: Buffer, size: number): Buffer {
+  const masked = Buffer.from(rgba);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const coverage = appleIconMaskCoverage(x, y, size);
+      const alphaOffset = (y * size + x) * 4 + 3;
+      masked[alphaOffset] = Math.round(masked[alphaOffset] * coverage);
+    }
+  }
+  return masked;
+}
+
+function appleIconMaskCoverage(x: number, y: number, size: number): number {
+  let covered = 0;
+  for (let sampleY = 0; sampleY < ICON_MASK_SUPERSAMPLE; sampleY += 1) {
+    for (let sampleX = 0; sampleX < ICON_MASK_SUPERSAMPLE; sampleX += 1) {
+      const normalizedX =
+        ((x + (sampleX + 0.5) / ICON_MASK_SUPERSAMPLE) / size) * 2 - 1;
+      const normalizedY =
+        ((y + (sampleY + 0.5) / ICON_MASK_SUPERSAMPLE) / size) * 2 - 1;
+      const superellipseDistance =
+        Math.abs(normalizedX) ** APPLE_ICON_CORNER_EXPONENT +
+        Math.abs(normalizedY) ** APPLE_ICON_CORNER_EXPONENT;
+      if (superellipseDistance <= 1) {
+        covered += 1;
+      }
+    }
+  }
+  return covered / (ICON_MASK_SUPERSAMPLE * ICON_MASK_SUPERSAMPLE);
 }
 
 function buildIco(images: readonly IconImage[]): Buffer {

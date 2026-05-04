@@ -38,9 +38,42 @@ describe("Windows icon generation", () => {
         expect(bytesInResource).toBe(
           40 + size * size * 4 + Math.ceil(size / 32) * 4 * size,
         );
+        expect(iconAlphaAt(icon, imageOffset, size, 0, 0)).toBe(0);
+        expect(iconAlphaAt(icon, imageOffset, size, size - 1, 0)).toBe(0);
+        expect(iconAlphaAt(icon, imageOffset, size, 0, size - 1)).toBe(0);
+        expect(iconAlphaAt(icon, imageOffset, size, size - 1, size - 1)).toBe(
+          0,
+        );
+        expect(
+          iconAlphaAt(icon, imageOffset, size, Math.floor(size / 2), 0),
+        ).toBe(255);
+        expect(
+          iconAlphaAt(icon, imageOffset, size, Math.floor(size / 2), size - 1),
+        ).toBe(255);
+        expect(
+          iconAlphaAt(
+            icon,
+            imageOffset,
+            size,
+            Math.floor(size / 2),
+            Math.floor(size / 2),
+          ),
+        ).toBe(255);
       }
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
   });
 });
+
+function iconAlphaAt(
+  icon: Buffer,
+  imageOffset: number,
+  size: number,
+  x: number,
+  y: number,
+): number {
+  const dibHeaderLength = 40;
+  const storedY = size - 1 - y;
+  return icon[imageOffset + dibHeaderLength + (storedY * size + x) * 4 + 3];
+}
