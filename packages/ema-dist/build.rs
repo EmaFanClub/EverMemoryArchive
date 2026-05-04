@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn write_payload_archive(source_root: &Path, output: &Path) -> Result<(), Box<dyn Error>> {
     let file = File::create(output)?;
-    let encoder = zstd::stream::write::Encoder::new(file, 19)?;
+    let encoder = zstd::stream::write::Encoder::new(file, 5)?;
     let mut archive = tar::Builder::new(encoder.auto_finish());
     archive.mode(tar::HeaderMode::Deterministic);
     archive.append_dir_all("EverMemoryArchive", source_root)?;
