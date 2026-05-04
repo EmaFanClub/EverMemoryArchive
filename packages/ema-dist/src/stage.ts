@@ -12,12 +12,6 @@ import {
 } from "./paths";
 import type { PackageKind, Platform } from "./platforms";
 import installTextTemplate from "./templates/INSTALL.txt?raw";
-import configureCmdTemplate from "./templates/configure.cmd?raw";
-import configureShTemplate from "./templates/configure.sh?raw";
-import openWebuiCmdTemplate from "./templates/open-webui.cmd?raw";
-import openWebuiShTemplate from "./templates/open-webui.sh?raw";
-import startCmdTemplate from "./templates/start.cmd?raw";
-import startShTemplate from "./templates/start.sh?raw";
 import { renderTemplate } from "./templates";
 import { buildRustBinary } from "./rust";
 
@@ -45,12 +39,7 @@ export async function stagePackage(options: StageOptions): Promise<string> {
     path.join(workspaceRoot(), "LICENSE"),
     path.join(root, "LICENSE"),
   );
-  await writeLaunchers(
-    root,
-    options.platform,
-    options.kind,
-    app.serverRelativePath,
-  );
+  await writeLaunchers(root, options.platform, options.kind);
   await writePackageManifest(root, options, app.serverRelativePath);
   return root;
 }
@@ -501,40 +490,9 @@ async function writeLaunchers(
   root: string,
   platform: Platform,
   kind: PackageKind,
-  serverRelativePath: string,
 ): Promise<void> {
   await writeRustLauncher(root, platform);
-  await fs.writeFile(
-    path.join(root, "start.sh"),
-    posixStartScript(serverRelativePath),
-    {
-      mode: 0o755,
-    },
-  );
-  await fs.writeFile(path.join(root, "open-webui.sh"), posixOpenWebuiScript(), {
-    mode: 0o755,
-  });
   await writeLauncherRuntime(root);
-  await fs.writeFile(path.join(root, "configure.sh"), posixConfigureScript(), {
-    mode: 0o755,
-  });
-  await fs.writeFile(
-    path.join(root, "start.cmd"),
-    windowsStartScript(serverRelativePath),
-  );
-  await fs.writeFile(
-    path.join(root, "open-webui.cmd"),
-    windowsOpenWebuiScript(),
-  );
-  await fs.writeFile(
-    path.join(root, "configure.cmd"),
-    windowsConfigureScript(),
-  );
-  if (platform.os !== "win32") {
-    await fs.chmod(path.join(root, "start.sh"), 0o755);
-    await fs.chmod(path.join(root, "open-webui.sh"), 0o755);
-    await fs.chmod(path.join(root, "configure.sh"), 0o755);
-  }
   await fs.writeFile(
     path.join(root, "INSTALL.txt"),
     installText(platform, kind),
@@ -626,35 +584,15 @@ async function readServerRelativePath(root: string): Promise<string> {
   ).trim();
 }
 
-function posixStartScript(serverRelativePath: string): string {
-  return renderTemplate(startShTemplate, { serverRelativePath });
-}
-
-function windowsStartScript(serverRelativePath: string): string {
-  return renderTemplate(startCmdTemplate, {
-    serverRelativePath: serverRelativePath.split("/").join("\\"),
-  });
-}
-
-function posixOpenWebuiScript(): string {
-  return openWebuiShTemplate;
-}
-
-function windowsOpenWebuiScript(): string {
-  return openWebuiCmdTemplate;
-}
-
-function posixConfigureScript(): string {
-  return configureShTemplate;
-}
-
-function windowsConfigureScript(): string {
-  return configureCmdTemplate;
-}
-
 function installText(platform: Platform, kind: PackageKind): string {
-  const launcher = platform.os === "win32" ? "start.cmd" : "start.sh";
+  const launcher =
+    platform.os === "win32" ? "ema-launcher.exe start" : "./ema-launcher start";
+  const configure =
+    platform.os === "win32"
+      ? "ema-launcher.exe configure"
+      : "./ema-launcher configure";
   return renderTemplate(installTextTemplate, {
+    configure,
     kind,
     launcher,
     platformLabel: platform.label,

@@ -1,7 +1,6 @@
 use crate::EmaResult;
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -71,14 +70,19 @@ pub fn find_on_path(command: &str) -> Option<PathBuf> {
     None
 }
 
+#[cfg(unix)]
 pub fn make_executable(path: &Path) -> EmaResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(path)?.permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(path, permissions)?;
-    }
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub fn make_executable(_path: &Path) -> EmaResult<()> {
     Ok(())
 }
 

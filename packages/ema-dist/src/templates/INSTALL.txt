@@ -16,5 +16,5 @@ portable:
   Bundles Node.js and MongoDB when the platform has upstream MongoDB binaries.
 
 minimal:
-  Run configure.sh/configure.cmd to set Node.js and MongoDB paths, or put node
-  and mongod on PATH. You may also set EMA_MONGO_URI to use an external MongoDB.
+  Run {{configure}} to set Node.js and MongoDB paths, or put node and mongod on
+  PATH. You may also set EMA_MONGO_URI to use an external MongoDB.

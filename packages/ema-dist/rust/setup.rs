@@ -86,7 +86,7 @@ pub fn run() -> EmaResult<i32> {
         "Installed EverMemoryArchive {SETUP_KIND} package for {SETUP_PLATFORM} to {}",
         app_dir.display()
     );
-    println!("Run {} to start.", start_launcher_path(&app_dir).display());
+    println!("Run {} to start.", start_command(&app_dir));
     Ok(0)
 }
 
@@ -98,9 +98,7 @@ fn extract_payload(install_parent: &Path) -> EmaResult<()> {
 }
 
 fn chmod_launchers(app_dir: &Path) {
-    for relative in ["ema-launcher", "start.sh", "configure.sh", "open-webui.sh"] {
-        let _ = make_executable(&app_dir.join(relative));
-    }
+    let _ = make_executable(&launcher_path(app_dir));
 }
 
 fn prompt_yes_default(label: &str, default_value: bool) -> EmaResult<bool> {
@@ -122,9 +120,9 @@ fn create_shortcut(app_dir: &Path) -> EmaResult<()> {
         fs::write(
             &shortcut,
             format!(
-                "@echo off\r\ncd /d \"{}\"\r\ncall \"{}\"\r\n",
+                "@echo off\r\ncd /d \"{}\"\r\ncall \"{}\" start\r\n",
                 app_dir.display(),
-                app_dir.join("start.cmd").display()
+                launcher_path(app_dir).display()
             ),
         )?;
         println!("Created {}", shortcut.display());
@@ -136,7 +134,7 @@ fn create_shortcut(app_dir: &Path) -> EmaResult<()> {
         fs::write(
             &shortcut,
             format!(
-                "#!/usr/bin/env bash\ncd \"{}\"\nexec ./start.sh\n",
+                "#!/usr/bin/env bash\ncd \"{}\"\nexec ./ema-launcher start\n",
                 app_dir.display()
             ),
         )?;
@@ -152,7 +150,7 @@ fn create_shortcut(app_dir: &Path) -> EmaResult<()> {
         &desktop_file,
         format!(
             "[Desktop Entry]\nType=Application\nName=EverMemoryArchive\nExec={}\nPath={}\nTerminal=true\nCategories=Utility;\n",
-            app_dir.join("start.sh").display(),
+            start_command(app_dir),
             app_dir.display()
         ),
     )?;
@@ -165,12 +163,16 @@ fn create_shortcut(app_dir: &Path) -> EmaResult<()> {
     Ok(())
 }
 
-fn start_launcher_path(app_dir: &Path) -> PathBuf {
+fn launcher_path(app_dir: &Path) -> PathBuf {
     if cfg!(windows) {
-        app_dir.join("start.cmd")
+        app_dir.join("ema-launcher.exe")
     } else {
-        app_dir.join("start.sh")
+        app_dir.join("ema-launcher")
     }
+}
+
+fn start_command(app_dir: &Path) -> String {
+    format!("{} start", launcher_path(app_dir).display())
 }
 
 #[derive(Debug, Default)]

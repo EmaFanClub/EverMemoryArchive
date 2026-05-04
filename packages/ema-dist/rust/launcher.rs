@@ -11,6 +11,7 @@ use std::process::{Command, Stdio};
 
 const HELP: &str = "\
 Usage:
+  ema-launcher
   ema-launcher configure
   ema-launcher start
   ema-launcher open-webui <url> [webview|browser|none] [node]
@@ -21,7 +22,7 @@ pub fn run() -> EmaResult<i32> {
     let command = args
         .next()
         .and_then(|value| value.into_string().ok())
-        .unwrap_or_else(|| "help".to_string());
+        .unwrap_or_else(|| "start".to_string());
     let app_root = app_root_from_current_exe()?;
 
     match command.as_str() {

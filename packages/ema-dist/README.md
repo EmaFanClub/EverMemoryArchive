@@ -79,8 +79,8 @@ can use Node.js and MongoDB from configured paths, from `PATH`, or via
 `EMA_MONGO_URI`.
 
 `packages/ema-dist/Cargo.toml` owns the Rust distribution helpers. Staging
-builds `ema-launcher` and writes it into the package root. The shell and cmd
-files are compatibility wrappers that call:
+builds `ema-launcher` and writes it into the package root as the only
+start/configure/open-webui entrypoint:
 
 ```text
 ema-launcher configure
