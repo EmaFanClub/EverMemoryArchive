@@ -81,6 +81,33 @@ jobs:
           GEMINI_API_KEY: "DUMMY_KEY"
         run: pnpm --filter ema test --run --reporter=dot
 
+  rust-check:
+    name: Rust Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: packages/ema-dist
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy, rustfmt
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --locked
+
+      - name: Run Rust Format Check
+        run: cargo fmt --check --all
+
+      - name: Build Rust Docs
+        run: cargo doc --workspace --no-deps
+
   docs-build:
     name: Build docs
     runs-on: ubuntu-latest

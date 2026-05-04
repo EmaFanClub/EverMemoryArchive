@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.23.0",
+    "apache-arrow": "^18.1.0",
     "ema": "workspace:*",
     "lucide-react": "^1.11.0",
     "mongodb": "^7.0.0",

@@ -8,6 +8,10 @@
     "stage": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts stage",
     "pack": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts pack",
     "installers": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts installers",
+    "skip-note": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts skip-note",
     "build": "node --import tsx --import ./src/raw-import-loader.mjs src/cli.ts build"
+  },
+  "dependencies": {
+    "default-browser": "^5.5.0"
   }
 }

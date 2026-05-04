@@ -24,18 +24,14 @@ function readWorkspaceVersion() {
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: workspaceRoot,
-  transpilePackages: ["ema"],
+  transpilePackages: ["ema", "mongodb"],
+  experimental: {
+    serverMinification: false,
+  },
   env: {
     NEXT_PUBLIC_EMA_VERSION: readWorkspaceVersion(),
   },
-  serverExternalPackages: [
-    "@lancedb/lancedb",
-    "mongodb",
-    "mongodb-agenda",
-    "pino",
-    "pino-pretty",
-    "thread-stream",
-  ],
+  serverExternalPackages: ["@lancedb/lancedb"],
 };
 
 export default nextConfig;

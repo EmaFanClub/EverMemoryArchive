@@ -6,9 +6,15 @@ By default the launcher opens the WebUI in an app/webview-style browser window
 without the normal browser toolbar. Set EMA_OPEN_MODE=browser to use the system
 default browser, or EMA_OPEN_MODE=none to skip opening a window.
 
+Runtime configuration is stored in the normal user config directory under ema:
+Linux uses ${XDG_CONFIG_HOME:-$HOME/.config}/ema, macOS uses
+$HOME/Library/Application Support/ema, and Windows uses %APPDATA%\ema.
+The persisted file is ema-runtime.env, a plain KEY=VALUE file parsed by the
+launchers without executing it as a shell script.
+
 portable:
   Bundles Node.js and MongoDB when the platform has upstream MongoDB binaries.
 
 minimal:
-  Run configure.sh/configure.cmd to set Node.js and MongoDB paths, or put node
-  and mongod on PATH. You may also set EMA_MONGO_URI to use an external MongoDB.
+  Run {{configure}} to set Node.js and MongoDB paths, or put node and mongod on
+  PATH. You may also set EMA_MONGO_URI to use an external MongoDB.

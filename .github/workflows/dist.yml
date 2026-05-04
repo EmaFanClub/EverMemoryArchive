@@ -13,21 +13,34 @@ on:
 jobs:
   build:
     name: Build ${{ matrix.platform }}
-    runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - win32-x64
-          - win32-arm64
-          - linux-x64
-          - linux-arm64
-          - linux-armhf
-          - darwin-x64
-          - darwin-arm64
-          - alpine-x64
+        include:
+          - platform: win32-x64
+            runner: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+          - platform: win32-arm64
+            runner: windows-latest
+            rust_target: aarch64-pc-windows-msvc
+          - platform: linux-x64
+            runner: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+          - platform: linux-arm64
+            runner: ubuntu-latest
+            rust_target: aarch64-unknown-linux-gnu
+          - platform: linux-armhf
+            runner: ubuntu-latest
+            rust_target: armv7-unknown-linux-gnueabihf
+          - platform: darwin-arm64
+            runner: macos-latest
+            rust_target: aarch64-apple-darwin
+          - platform: alpine-x64
+            runner: ubuntu-latest
+            rust_target: x86_64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
@@ -46,10 +59,38 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-      - name: Install 7-Zip
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.rust_target }}
+
+      - name: Install package tools
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y p7zip-full
+          case "${{ runner.os }}" in
+            Linux)
+              sudo apt-get update
+              sudo apt-get install -y p7zip-full gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf musl-tools
+              ;;
+            macOS)
+              brew install p7zip
+              ;;
+            Windows)
+              choco install 7zip -y
+              echo "/c/Program Files/7-Zip" >> "$GITHUB_PATH"
+              ;;
+            *)
+              echo "Unsupported runner OS: ${{ runner.os }}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Configure Rust Linux cross linkers
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
 
       - name: Restore portable dependency downloads
         uses: actions/cache@v4
@@ -60,21 +101,144 @@ jobs:
             ema-dist-downloads-${{ matrix.platform }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            win32-x64)
+              target_os=win32
+              target_cpu=x64
+              target_libc=current
+              ;;
+            win32-arm64)
+              target_os=win32
+              target_cpu=arm64
+              target_libc=current
+              ;;
+            linux-x64)
+              target_os=linux
+              target_cpu=x64
+              target_libc=glibc
+              ;;
+            linux-arm64)
+              target_os=linux
+              target_cpu=arm64
+              target_libc=glibc
+              ;;
+            linux-armhf)
+              target_os=linux
+              target_cpu=arm
+              target_libc=glibc
+              ;;
+            darwin-arm64)
+              target_os=darwin
+              target_cpu=arm64
+              target_libc=current
+              ;;
+            alpine-x64)
+              target_os=linux
+              target_cpu=x64
+              target_libc=musl
+              ;;
+            *)
+              echo "Unsupported distribution platform: ${{ matrix.platform }}" >&2
+              exit 1
+              ;;
+          esac
+
+          pnpm install --frozen-lockfile \
+            --os=current \
+            --os="$target_os" \
+            --cpu=current \
+            --cpu="$target_cpu" \
+            --libc=current \
+            --libc="$target_libc"
 
       - name: Build WebUI standalone app
         run: pnpm --filter ema-webui build
 
-      - name: Build distribution package
-        run: pnpm --filter ema-dist run build -- --platform ${{ matrix.platform }}
+      - name: Stage minimal package
+        run: pnpm --filter ema-dist run stage -- --platform ${{ matrix.platform }} --kind minimal
 
-      - name: Upload distribution artifacts
+      - name: Build minimal installer
+        run: pnpm --filter ema-dist run installers -- --platform ${{ matrix.platform }} --kind minimal
+
+      - name: Upload minimal installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ema-${{ matrix.platform }}-dist
+          name: ema-${{ matrix.platform }}-minimal-installer
           if-no-files-found: error
-          path: |
-            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-*.7z
-            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-*.zip
-            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-*-installer.*
-            dist/${{ matrix.platform }}/*.SKIPPED.txt
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*-installer.*
+
+      - name: Build minimal zip package
+        run: pnpm --filter ema-dist run pack -- --platform ${{ matrix.platform }} --kind minimal --format zip
+
+      - name: Upload minimal zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-minimal-zip
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.zip
+
+      - name: Build minimal 7z package
+        run: pnpm --filter ema-dist run pack -- --platform ${{ matrix.platform }} --kind minimal --format 7z
+
+      - name: Upload minimal 7z artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-minimal-7z
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.7z
+
+      - name: Stage portable package
+        run: pnpm --filter ema-dist run stage -- --platform ${{ matrix.platform }} --kind portable
+
+      - name: Download portable dependencies
+        run: pnpm --filter ema-dist run download -- --platform ${{ matrix.platform }}
+
+      - name: Build portable zip package
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
+        run: pnpm --filter ema-dist run pack -- --platform ${{ matrix.platform }} --kind portable --format zip
+
+      - name: Upload portable zip artifact
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-portable-zip
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.zip
+
+      - name: Build portable 7z package
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
+        run: pnpm --filter ema-dist run pack -- --platform ${{ matrix.platform }} --kind portable --format 7z
+
+      - name: Upload portable 7z artifact
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-portable-7z
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.7z
+
+      - name: Build portable installer
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
+        run: pnpm --filter ema-dist run installers -- --platform ${{ matrix.platform }} --kind portable
+
+      - name: Upload portable installer artifact
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-portable-installer
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*-installer.*
+
+      - name: Write portable skipped note
+        if: ${{ matrix.platform == 'linux-armhf' || matrix.platform == 'alpine-x64' }}
+        run: pnpm --filter ema-dist run skip-note -- --platform ${{ matrix.platform }}
+
+      - name: Upload portable skipped note
+        if: ${{ matrix.platform == 'linux-armhf' || matrix.platform == 'alpine-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-portable-skipped
+          if-no-files-found: error
+          path: dist/${{ matrix.platform }}/*.SKIPPED.txt
