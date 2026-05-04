@@ -7,13 +7,17 @@
 1. **main**: Production branch with stable code
 2. **preview**: Pre-release branch for testing and validation
 3. **dev**: Development branch integrating all feature developments
-4. **feat/**: Feature branches for developing new features
+4. **feat/**: Work branches for new features
+5. **fix/**: Work branches for bug fixes
+6. **docs/**: Work branches for documentation updates
+7. **refactor/**: Work branches for code restructuring
+8. **chore/**: Work branches for maintenance tasks
 
 ### Development Workflow
 
-#### 1. Create Feature Branch
+#### 1. Create Work Branch
 
-Pull the latest code from `dev` branch and create a new feature branch:
+Pull the latest code from `dev` branch and create a typed work branch:
 
 ```bash
 # Switch to dev branch
@@ -22,13 +26,13 @@ git checkout dev
 # Pull latest code
 git pull origin dev
 
-# Create feature branch (example: feat/login)
-git checkout -b feat/your-feature-name
+# Create work branch (examples: feat/login, fix/login-error)
+git checkout -b <type>/<description>
 ```
 
 #### 2. Develop and Commit
 
-Develop on the feature branch and commit changes regularly:
+Develop on the work branch and commit changes regularly:
 
 ```bash
 # Add modified files
@@ -38,13 +42,13 @@ git add .
 git commit -m "feat: implement login functionality"
 
 # Push branch to remote repository
-git push origin feat/your-feature-name
+git push origin <type>/<description>
 ```
 
 #### 3. Create Pull Request
 
 1. Go to the GitHub repository
-2. Switch to your feature branch
+2. Switch to your work branch
 3. Click "Compare & pull request" button
 4. Select `dev` as the target branch
 5. Fill in PR title and description
@@ -67,7 +71,7 @@ git push origin feat/your-feature-name
 
 1. **main**: Only accepts PRs from `preview` branch
 2. **preview**: Only accepts PRs from `dev` branch
-3. **dev**: Only accepts PRs from branches containing `feat` in name
+3. **dev**: Only accepts PRs from typed work branches using one of `feat/*`, `fix/*`, `docs/*`, `refactor/*`, or `chore/*`. An optional owner prefix is allowed, for example `<owner>/fix/<description>`
 
 ### Commit Message Guidelines
 
@@ -99,13 +103,17 @@ docs: update API documentation
 1. **main**：主分支，生产环境代码
 2. **preview**：预发布分支，用于测试和验证
 3. **dev**：开发分支，集成所有功能开发
-4. **feat/**：功能分支，用于开发新功能
+4. **feat/**：用于开发新功能的工作分支
+5. **fix/**：用于修复 bug 的工作分支
+6. **docs/**：用于文档更新的工作分支
+7. **refactor/**：用于代码重构的工作分支
+8. **chore/**：用于维护任务的工作分支
 
 ### 开发流程
 
-#### 1. 创建功能分支
+#### 1. 创建工作分支
 
-从 `dev` 分支拉取最新代码并创建新的功能分支：
+从 `dev` 分支拉取最新代码并创建类型化工作分支：
 
 ```bash
 # 切换到dev分支
@@ -114,13 +122,13 @@ git checkout dev
 # 拉取最新代码
 git pull origin dev
 
-# 创建功能分支（示例：feat/login）
-git checkout -b feat/your-feature-name
+# 创建工作分支（示例：feat/login、fix/login-error）
+git checkout -b <type>/<description>
 ```
 
 #### 2. 开发和提交
 
-在功能分支上进行开发，定期提交代码：
+在工作分支上进行开发，定期提交代码：
 
 ```bash
 # 添加修改文件
@@ -130,13 +138,13 @@ git add .
 git commit -m "feat: 实现登录功能"
 
 # 推送分支到远程仓库
-git push origin feat/your-feature-name
+git push origin <type>/<description>
 ```
 
 #### 3. 创建Pull Request
 
 1. 登录GitHub仓库
-2. 切换到你创建的功能分支
+2. 切换到你创建的工作分支
 3. 点击「Compare & pull request」按钮
 4. 目标分支选择 `dev`
 5. 填写PR标题和描述
@@ -159,7 +167,7 @@ git push origin feat/your-feature-name
 
 1. **main**：仅接受来自 `preview` 分支的PR
 2. **preview**：仅接受来自 `dev` 分支的PR
-3. **dev**：仅接受来自包含 `feat` 的分支的PR
+3. **dev**：仅接受来自类型化工作分支的PR，允许类型包括 `feat/*`、`fix/*`、`docs/*`、`refactor/*`、`chore/*`。允许添加所有者前缀，例如 `<owner>/fix/<description>`
 
 ### 提交信息规范
 

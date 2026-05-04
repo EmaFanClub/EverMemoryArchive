@@ -28,8 +28,9 @@ jobs:
               fi
               ;;
             dev)
-              if [[ ! "$HEAD_BRANCH" == *feat* ]]; then
-                echo "::error::PR to dev can only come from branches containing 'feat' in name"
+              ALLOWED_WORK_BRANCH_TYPES="feat|fix|docs|refactor|chore"
+              if [[ ! "$HEAD_BRANCH" =~ (^|/)($ALLOWED_WORK_BRANCH_TYPES)/[^/]+ ]]; then
+                echo "::error::PR to dev must come from a typed work branch: feat/*, fix/*, docs/*, refactor/*, or chore/*"
                 exit 1
               fi
               ;;
