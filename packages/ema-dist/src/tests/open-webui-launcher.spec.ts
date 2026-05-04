@@ -22,6 +22,22 @@ describe("WebUI opener launchers", () => {
     expect(source).not.toContain("open-webui.cmd");
   });
 
+  test("stage bundles a launcher for Next.js standalone server output with Vite", async () => {
+    const source = await fs.readFile(stagePath, "utf8");
+
+    expect(source).toContain("copyNextStandaloneApp");
+    expect(source).toContain("bundleNextServerEntry");
+    expect(source).toContain("entry: options.serverPath");
+    expect(source).toContain('path.join(appRoot, ".next")');
+    expect(source).toContain('path.join(appRoot, "public")');
+    expect(source).toContain(
+      "fileName: () => path.basename(options.outputPath)",
+    );
+    expect(source).not.toContain("writeFlattenedServerEntry");
+    expect(source).not.toContain("sourceMappingURL=server.js.map");
+    expect(source).not.toContain("createRequire(serverPath)(serverPath)");
+  });
+
   test("bundled Node opener still checks Chrome-style locations before default-browser fallback", async () => {
     const source = await fs.readFile(nodeTemplatePath, "utf8");
 

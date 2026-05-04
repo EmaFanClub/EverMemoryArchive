@@ -22,7 +22,6 @@ interface StageOptions {
 }
 
 interface AppStageResult {
-  readonly root: string;
   readonly serverRelativePath: string;
 }
 
@@ -30,7 +29,7 @@ export async function stagePackage(options: StageOptions): Promise<string> {
   const root = stageRoot(options.platform, options.kind);
   await fs.rm(root, { recursive: true, force: true });
   await fs.mkdir(root, { recursive: true });
-  const app = await copyStandaloneApp(root, options.platform);
+  const app = await copyNextStandaloneApp(root, options.platform);
   await copyIfExists(
     path.join(workspaceRoot(), "README.md"),
     path.join(root, "README.md"),
@@ -64,7 +63,7 @@ export async function refreshMinimalStageFromPortable(
   return target;
 }
 
-async function copyStandaloneApp(
+async function copyNextStandaloneApp(
   root: string,
   platform: Platform,
 ): Promise<AppStageResult> {
@@ -81,39 +80,36 @@ async function copyStandaloneApp(
   }
 
   const appRoot = path.join(root, "app");
-  const runtimeRoot = path.join(appRoot, APP_RUNTIME_ASSETS_DIR);
   await fs.mkdir(appRoot, { recursive: true });
   await writeCommonJsPackageManifest(appRoot);
-  await fs.cp(standaloneRoot, runtimeRoot, {
-    recursive: true,
-    force: true,
-    preserveTimestamps: true,
-    verbatimSymlinks: true,
-  });
 
-  const serverPath = await findServerEntry(runtimeRoot);
+  const serverPath = await findServerEntry(standaloneRoot);
   const serverDir = path.dirname(serverPath);
-  await copyIfExists(staticRoot, path.join(serverDir, ".next", "static"));
-  await copyIfExists(publicRoot, path.join(serverDir, "public"));
-  await copyEmaRuntimeAssets(runtimeRoot);
-  await prunePlatformNativeDependencies(runtimeRoot, platform);
-  await ensurePlatformNativeDependencies(runtimeRoot, platform);
-  const flattenedServerPath = path.join(appRoot, "server.js");
-  await writeFlattenedServerEntry({
-    outputPath: flattenedServerPath,
-    runtimeRoot,
+  const bundledServerPath = path.join(appRoot, "server.js");
+  await bundleNextServerEntry({
+    outputPath: bundledServerPath,
     serverPath,
   });
-  await fs.rm(serverPath, { force: true });
+
+  await copyIfExists(
+    path.join(serverDir, ".next"),
+    path.join(appRoot, ".next"),
+  );
+  await copyIfExists(staticRoot, path.join(appRoot, ".next", "static"));
+  await copyIfExists(publicRoot, path.join(appRoot, "public"));
+  await copyStandaloneNodeModules(standaloneRoot, serverDir, appRoot);
+  await copyEmaRuntimeAssets(appRoot);
+  await prunePlatformNativeDependencies(appRoot, platform);
+  await ensurePlatformNativeDependencies(appRoot, platform);
 
   const serverRelativePath = toPosixPath(
-    path.relative(root, flattenedServerPath),
+    path.relative(root, bundledServerPath),
   );
   await fs.writeFile(
     path.join(root, "server-relpath.txt"),
     `${serverRelativePath}\n`,
   );
-  return { root: appRoot, serverRelativePath };
+  return { serverRelativePath };
 }
 
 async function writeCommonJsPackageManifest(appRoot: string): Promise<void> {
@@ -121,6 +117,183 @@ async function writeCommonJsPackageManifest(appRoot: string): Promise<void> {
     path.join(appRoot, "package.json"),
     `${JSON.stringify({ type: "commonjs" }, null, 2)}\n`,
   );
+}
+
+async function bundleNextServerEntry(options: {
+  readonly outputPath: string;
+  readonly serverPath: string;
+}): Promise<void> {
+  await viteBuild({
+    configFile: false,
+    logLevel: "warn",
+    build: {
+      emptyOutDir: false,
+      minify: false,
+      outDir: path.dirname(options.outputPath),
+      ssr: true,
+      target: "node18",
+      lib: {
+        entry: options.serverPath,
+        formats: ["cjs"],
+        fileName: () => path.basename(options.outputPath),
+      },
+      rollupOptions: {
+        external: nodeBuiltins(),
+        output: {
+          entryFileNames: path.basename(options.outputPath),
+          inlineDynamicImports: true,
+        },
+      },
+    },
+  });
+}
+
+async function copyStandaloneNodeModules(
+  standaloneRoot: string,
+  serverDir: string,
+  appRoot: string,
+): Promise<void> {
+  const source = path.join(standaloneRoot, "node_modules");
+  const destination = path.join(appRoot, "node_modules");
+  await copyIfExists(source, destination);
+  await linkHoistedPnpmNodeModules(destination);
+  await linkPackageNodeModules(
+    path.join(serverDir, "node_modules"),
+    source,
+    destination,
+  );
+}
+
+async function linkHoistedPnpmNodeModules(
+  nodeModulesRoot: string,
+): Promise<void> {
+  const hoistedRoot = path.join(nodeModulesRoot, ".pnpm", "node_modules");
+  if (!(await exists(hoistedRoot))) {
+    return;
+  }
+
+  const entries = await fs.readdir(hoistedRoot, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) {
+      continue;
+    }
+    if (entry.name.startsWith("@") && entry.isDirectory()) {
+      await linkHoistedPnpmScope(nodeModulesRoot, hoistedRoot, entry.name);
+      continue;
+    }
+    await replaceWithSymlink(
+      path.join(".pnpm", "node_modules", entry.name),
+      path.join(nodeModulesRoot, entry.name),
+    );
+  }
+}
+
+async function linkHoistedPnpmScope(
+  nodeModulesRoot: string,
+  hoistedRoot: string,
+  scope: string,
+): Promise<void> {
+  const scopeRoot = path.join(hoistedRoot, scope);
+  const destinationScopeRoot = path.join(nodeModulesRoot, scope);
+  await fs.mkdir(destinationScopeRoot, { recursive: true });
+  const entries = await fs.readdir(scopeRoot, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) {
+      continue;
+    }
+    await replaceWithSymlink(
+      path.join("..", ".pnpm", "node_modules", scope, entry.name),
+      path.join(destinationScopeRoot, entry.name),
+    );
+  }
+}
+
+async function linkPackageNodeModules(
+  sourceNodeModulesRoot: string,
+  standaloneNodeModulesRoot: string,
+  destinationNodeModulesRoot: string,
+): Promise<void> {
+  if (!(await exists(sourceNodeModulesRoot))) {
+    return;
+  }
+
+  const entries = await fs.readdir(sourceNodeModulesRoot, {
+    withFileTypes: true,
+  });
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) {
+      continue;
+    }
+    if (entry.name.startsWith("@") && entry.isDirectory()) {
+      await linkPackageNodeModulesScope(
+        path.join(sourceNodeModulesRoot, entry.name),
+        standaloneNodeModulesRoot,
+        destinationNodeModulesRoot,
+        path.join(destinationNodeModulesRoot, entry.name),
+      );
+      continue;
+    }
+    await linkPackageNodeModule(
+      path.join(sourceNodeModulesRoot, entry.name),
+      standaloneNodeModulesRoot,
+      destinationNodeModulesRoot,
+      path.join(destinationNodeModulesRoot, entry.name),
+    );
+  }
+}
+
+async function linkPackageNodeModulesScope(
+  sourceScopeRoot: string,
+  standaloneNodeModulesRoot: string,
+  destinationNodeModulesRoot: string,
+  destinationScopeRoot: string,
+): Promise<void> {
+  await fs.mkdir(destinationScopeRoot, { recursive: true });
+  const entries = await fs.readdir(sourceScopeRoot, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) {
+      continue;
+    }
+    await linkPackageNodeModule(
+      path.join(sourceScopeRoot, entry.name),
+      standaloneNodeModulesRoot,
+      destinationNodeModulesRoot,
+      path.join(destinationScopeRoot, entry.name),
+    );
+  }
+}
+
+async function linkPackageNodeModule(
+  source: string,
+  standaloneNodeModulesRoot: string,
+  destinationNodeModulesRoot: string,
+  destination: string,
+): Promise<void> {
+  const realSource = await fs.realpath(source);
+  const relativeSource = path.relative(standaloneNodeModulesRoot, realSource);
+  if (relativeSource.startsWith("..") || path.isAbsolute(relativeSource)) {
+    await copyIfExists(source, destination);
+    return;
+  }
+
+  const target = path.relative(
+    path.dirname(destination),
+    path.join(destinationNodeModulesRoot, relativeSource),
+  );
+  await replaceWithSymlink(target, destination);
+}
+
+async function replaceWithSymlink(
+  target: string,
+  linkPath: string,
+): Promise<void> {
+  await fs.rm(linkPath, { recursive: true, force: true });
+  await fs.mkdir(path.dirname(linkPath), { recursive: true });
+  const linkTarget =
+    process.platform === "win32"
+      ? path.resolve(path.dirname(linkPath), target)
+      : target;
+  await fs.symlink(linkTarget, linkPath, "dir");
 }
 
 const LANCEDB_NATIVE_PACKAGES = [
@@ -165,8 +338,6 @@ const PLATFORM_NATIVE_PACKAGES = [
   ...LANCEDB_NATIVE_PACKAGES,
   ...SHARP_NATIVE_PACKAGES,
 ] as const;
-
-const APP_RUNTIME_ASSETS_DIR = path.join("assets", "runtime");
 
 async function prunePlatformNativeDependencies(
   appRoot: string,
@@ -305,6 +476,7 @@ async function removePnpmPackageLinks(
 ): Promise<void> {
   const entries = await fs.readdir(pnpmRoot, { withFileTypes: true });
   const nodeModulesRoots = [
+    path.dirname(pnpmRoot),
     path.join(pnpmRoot, "node_modules"),
     ...entries.map((entry) => path.join(pnpmRoot, entry.name, "node_modules")),
   ];
@@ -354,99 +526,6 @@ async function findServerEntry(appRoot: string): Promise<string> {
     );
   }
   return found;
-}
-
-async function writeFlattenedServerEntry(options: {
-  readonly outputPath: string;
-  readonly runtimeRoot: string;
-  readonly serverPath: string;
-}): Promise<void> {
-  const source = await fs.readFile(options.serverPath, "utf8");
-  const relativeRuntimeRoot = toPosixPath(
-    path.relative(path.dirname(options.outputPath), options.runtimeRoot),
-  );
-  const relativeServerDir = toPosixPath(
-    path.relative(options.runtimeRoot, path.dirname(options.serverPath)),
-  );
-  const runtimeRootLiteral = JSON.stringify(relativeRuntimeRoot);
-  const serverDirLiteral = JSON.stringify(relativeServerDir);
-
-  let output = replaceRequired(
-    source,
-    "const path = require('path')",
-    [
-      "const path = require('path')",
-      "const fs = require('fs')",
-      "const Module = require('module')",
-      "",
-      `const runtimeRoot = path.join(__dirname, ${runtimeRootLiteral})`,
-      `const runtimeServerDir = path.join(runtimeRoot, ${serverDirLiteral})`,
-      "",
-      "function addModulePath(modulePath) {",
-      "  if (!fs.existsSync(modulePath)) return",
-      "  if (!module.paths.includes(modulePath)) module.paths.unshift(modulePath)",
-      "  if (!Module.globalPaths.includes(modulePath)) Module.globalPaths.unshift(modulePath)",
-      "}",
-      "",
-      "function addPnpmPackageStorePaths(pnpmRoot) {",
-      "  if (!fs.existsSync(pnpmRoot)) return",
-      "  for (const entry of fs.readdirSync(pnpmRoot, { withFileTypes: true })) {",
-      "    if (!entry.isDirectory()) continue",
-      "    if (entry.name === 'node_modules') continue",
-      "    addModulePath(path.join(pnpmRoot, entry.name, 'node_modules'))",
-      "  }",
-      "}",
-      "",
-      "addModulePath(path.join(runtimeRoot, 'node_modules'))",
-      "addModulePath(path.join(runtimeRoot, 'node_modules', '.pnpm', 'node_modules'))",
-      "addPnpmPackageStorePaths(path.join(runtimeRoot, 'node_modules', '.pnpm'))",
-      "",
-    ].join("\n"),
-    options.serverPath,
-  );
-
-  output = replaceRequired(
-    output,
-    "const dir = path.join(__dirname)",
-    "const dir = runtimeServerDir",
-    options.serverPath,
-  );
-  output = replaceRequired(
-    output,
-    "process.chdir(__dirname)",
-    "process.chdir(dir)",
-    options.serverPath,
-  );
-
-  const withSourceMap = `${output.trimEnd()}\n//# sourceMappingURL=server.js.map\n`;
-  await fs.writeFile(options.outputPath, withSourceMap);
-  await fs.writeFile(
-    `${options.outputPath}.map`,
-    `${JSON.stringify(
-      {
-        version: 3,
-        file: path.basename(options.outputPath),
-        sources: [path.basename(options.outputPath)],
-        sourcesContent: [withSourceMap],
-        names: [],
-        mappings: "",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-}
-
-function replaceRequired(
-  source: string,
-  search: string,
-  replacement: string,
-  filePath: string,
-): string {
-  if (!source.includes(search)) {
-    throw new Error(`Could not rewrite standalone server entry ${filePath}.`);
-  }
-  return source.replace(search, replacement);
 }
 
 async function copyEmaRuntimeAssets(appRoot: string): Promise<void> {
