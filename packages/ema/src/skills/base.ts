@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ToolResult, ToolContext } from "../tools/base";
 import { Logger } from "../shared/logger";
+import { resolveEmaSourcePath } from "../shared/package_path";
 
 /** Skill name -> Skill instance registry. */
 export type SkillRegistry = Record<string, Skill>;
@@ -125,7 +125,7 @@ function stripYamlFrontmatter(markdown: string): {
  * @returns Registry keyed by skill name.
  */
 export async function loadSkills(
-  skillsDir: string = path.dirname(fileURLToPath(import.meta.url)),
+  skillsDir: string = resolveEmaSourcePath("skills"),
 ): Promise<SkillRegistry> {
   const logger = Logger.create({
     name: "skills",
@@ -139,7 +139,7 @@ export async function loadSkills(
     throw new Error(`Skills directory does not exist: ${skillsDir}`);
   }
 
-  const baseDir = path.dirname(fileURLToPath(import.meta.url));
+  const baseDir = resolveEmaSourcePath("skills");
   const skillsDirAbs = path.resolve(skillsDir);
   let skillsRel = path.relative(baseDir, skillsDirAbs) || ".";
   if (!skillsRel.startsWith(".")) {

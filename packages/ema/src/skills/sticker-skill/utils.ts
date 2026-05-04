@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ImageMIME, InlineDataItem } from "../../shared/schema";
+import { resolveEmaSourcePath } from "../../shared/package_path";
 import {
   getStickerById,
   getStickerInPack,
@@ -10,8 +10,9 @@ import {
 } from "./pack";
 
 const COLLECTION_PACK_NAME = "收藏";
-const STICKER_ASSETS_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
+const STICKER_ASSETS_DIR = resolveEmaSourcePath(
+  "skills",
+  "sticker-skill",
   "assets",
 );
 
