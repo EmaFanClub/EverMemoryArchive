@@ -83,8 +83,9 @@ builds `ema-launcher` and writes it into the package root as the only
 start/configure/open-webui entrypoint:
 
 ```text
+ema-launcher
 ema-launcher configure
-ema-launcher start
+ema-launcher start  # equivalent to no arguments
 ema-launcher open-webui <url> [webview|browser|none] [node]
 ```
 

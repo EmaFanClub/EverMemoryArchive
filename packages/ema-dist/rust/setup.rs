@@ -86,7 +86,7 @@ pub fn run() -> EmaResult<i32> {
         "Installed EverMemoryArchive {SETUP_KIND} package for {SETUP_PLATFORM} to {}",
         app_dir.display()
     );
-    println!("Run {} to start.", start_command(&app_dir));
+    println!("Run {} to start.", launcher_path(&app_dir).display());
     Ok(0)
 }
 
@@ -120,7 +120,7 @@ fn create_shortcut(app_dir: &Path) -> EmaResult<()> {
         fs::write(
             &shortcut,
             format!(
-                "@echo off\r\ncd /d \"{}\"\r\ncall \"{}\" start\r\n",
+                "@echo off\r\ncd /d \"{}\"\r\ncall \"{}\"\r\n",
                 app_dir.display(),
                 launcher_path(app_dir).display()
             ),
@@ -134,7 +134,7 @@ fn create_shortcut(app_dir: &Path) -> EmaResult<()> {
         fs::write(
             &shortcut,
             format!(
-                "#!/usr/bin/env bash\ncd \"{}\"\nexec ./ema-launcher start\n",
+                "#!/usr/bin/env bash\ncd \"{}\"\nexec ./ema-launcher\n",
                 app_dir.display()
             ),
         )?;
@@ -150,7 +150,7 @@ fn create_shortcut(app_dir: &Path) -> EmaResult<()> {
         &desktop_file,
         format!(
             "[Desktop Entry]\nType=Application\nName=EverMemoryArchive\nExec={}\nPath={}\nTerminal=true\nCategories=Utility;\n",
-            start_command(app_dir),
+            launcher_path(app_dir).display(),
             app_dir.display()
         ),
     )?;
@@ -169,10 +169,6 @@ fn launcher_path(app_dir: &Path) -> PathBuf {
     } else {
         app_dir.join("ema-launcher")
     }
-}
-
-fn start_command(app_dir: &Path) -> String {
-    format!("{} start", launcher_path(app_dir).display())
 }
 
 #[derive(Debug, Default)]

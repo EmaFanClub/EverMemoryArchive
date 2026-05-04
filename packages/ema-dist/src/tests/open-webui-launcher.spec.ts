@@ -43,11 +43,11 @@ describe("WebUI opener launchers", () => {
     expect(source).toContain("Command::new(&node_bin)");
   });
 
-  test("Rust setup creates shortcuts that call ema-launcher start directly", async () => {
+  test("Rust setup creates shortcuts that call ema-launcher directly", async () => {
     const source = await fs.readFile(rustSetupPath, "utf8");
 
-    expect(source).toContain('call \\"{}\\" start');
-    expect(source).toContain("exec ./ema-launcher start");
+    expect(source).toContain('call \\"{}\\"');
+    expect(source).toContain("exec ./ema-launcher");
     expect(source).not.toContain("start.sh");
     expect(source).not.toContain("start.cmd");
   });

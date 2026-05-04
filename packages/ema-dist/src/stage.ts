@@ -586,7 +586,7 @@ async function readServerRelativePath(root: string): Promise<string> {
 
 function installText(platform: Platform, kind: PackageKind): string {
   const launcher =
-    platform.os === "win32" ? "ema-launcher.exe start" : "./ema-launcher start";
+    platform.os === "win32" ? "ema-launcher.exe" : "./ema-launcher";
   const configure =
     platform.os === "win32"
       ? "ema-launcher.exe configure"
