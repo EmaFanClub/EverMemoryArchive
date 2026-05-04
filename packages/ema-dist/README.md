@@ -24,13 +24,17 @@ Application runtime files are staged under:
 dist/$platform/EverMemoryArchive/app/server.js
 dist/$platform/EverMemoryArchive/app/.next/
 dist/$platform/EverMemoryArchive/app/public/
-dist/$platform/EverMemoryArchive/app/node_modules/
+dist/$platform/EverMemoryArchive/app/node_modules/  # native .node packages only
 dist/$platform/EverMemoryArchive/server-relpath.txt
 ```
 
 `app/server.js` is Vite's CommonJS bundle of Next.js' generated standalone
-`packages/ema-webui/server.js`. Staging copies the generated `.next` runtime
-tree and `public` beside it so Next resolves runtime files from `app/`.
+`packages/ema-webui/server.js`. Staging also bundles the generated
+`.next/server/**/chunks/**/*.js` files in-place with Vite so the packaged app
+does not depend on pnpm's standalone `node_modules` link tree for JavaScript.
+Only Next runtime data files, static assets, `public`, EMA prompt/skill assets,
+and target-platform native `.node` packages remain as copied files beside the
+bundled JavaScript.
 
 `build` writes CI-ready artifacts to `dist/$platform/`:
 

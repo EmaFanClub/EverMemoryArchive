@@ -27,13 +27,24 @@ describe("WebUI opener launchers", () => {
 
     expect(source).toContain("copyNextStandaloneApp");
     expect(source).toContain("bundleNextServerEntry");
+    expect(source).toContain("bundleNextServerChunks");
+    expect(source).toContain("patchNextServerRequireHook");
+    expect(source).toContain("inlineNextServerCommonJsModules");
+    expect(source).toContain("ReactServerDOMWebpackServer");
+    expect(source).toContain('moduleName === "critters"');
+    expect(source).toContain('moduleName === "@opentelemetry/api"');
     expect(source).toContain("entry: options.serverPath");
     expect(source).toContain('path.join(appRoot, ".next")');
     expect(source).toContain('path.join(appRoot, "public")');
+    expect(source).toContain("noExternal: true");
+    expect(source).toContain("transformMixedEsModules: true");
+    expect(source).toContain('entryFileNames: "[name].js"');
     expect(source).toContain(
       "fileName: () => path.basename(options.outputPath)",
     );
     expect(source).not.toContain("writeFlattenedServerEntry");
+    expect(source).not.toContain("copyStandaloneNodeModules");
+    expect(source).not.toContain("replaceWithSymlink");
     expect(source).not.toContain("sourceMappingURL=server.js.map");
     expect(source).not.toContain("createRequire(serverPath)(serverPath)");
   });
