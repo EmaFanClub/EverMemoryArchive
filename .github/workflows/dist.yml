@@ -13,20 +13,34 @@ on:
 jobs:
   build:
     name: Build ${{ matrix.platform }}
-    runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - win32-x64
-          - win32-arm64
-          - linux-x64
-          - linux-arm64
-          - linux-armhf
-          - darwin-arm64
-          - alpine-x64
+        include:
+          - platform: win32-x64
+            runner: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+          - platform: win32-arm64
+            runner: windows-latest
+            rust_target: aarch64-pc-windows-msvc
+          - platform: linux-x64
+            runner: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+          - platform: linux-arm64
+            runner: ubuntu-latest
+            rust_target: aarch64-unknown-linux-gnu
+          - platform: linux-armhf
+            runner: ubuntu-latest
+            rust_target: armv7-unknown-linux-gnueabihf
+          - platform: darwin-arm64
+            runner: macos-latest
+            rust_target: aarch64-apple-darwin
+          - platform: alpine-x64
+            runner: ubuntu-latest
+            rust_target: x86_64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
@@ -45,47 +59,38 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-      - name: Resolve Rust target
-        id: rust-target
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.rust_target }}
+
+      - name: Install package tools
         shell: bash
         run: |
-          case "${{ matrix.platform }}" in
-            win32-x64)
-              echo "target=x86_64-pc-windows-msvc" >> "$GITHUB_OUTPUT"
+          case "${{ runner.os }}" in
+            Linux)
+              sudo apt-get update
+              sudo apt-get install -y p7zip-full gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf musl-tools
               ;;
-            win32-arm64)
-              echo "target=aarch64-pc-windows-msvc" >> "$GITHUB_OUTPUT"
+            macOS)
+              brew install p7zip
               ;;
-            linux-x64)
-              echo "target=x86_64-unknown-linux-gnu" >> "$GITHUB_OUTPUT"
-              ;;
-            linux-arm64)
-              echo "target=aarch64-unknown-linux-gnu" >> "$GITHUB_OUTPUT"
-              ;;
-            linux-armhf)
-              echo "target=armv7-unknown-linux-gnueabihf" >> "$GITHUB_OUTPUT"
-              ;;
-            darwin-arm64)
-              echo "target=aarch64-apple-darwin" >> "$GITHUB_OUTPUT"
-              ;;
-            alpine-x64)
-              echo "target=x86_64-unknown-linux-musl" >> "$GITHUB_OUTPUT"
+            Windows)
+              choco install 7zip -y
+              echo "/c/Program Files/7-Zip" >> "$GITHUB_PATH"
               ;;
             *)
-              echo "Unsupported distribution platform: ${{ matrix.platform }}" >&2
+              echo "Unsupported runner OS: ${{ runner.os }}" >&2
               exit 1
               ;;
           esac
 
-      - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: ${{ steps.rust-target.outputs.target }}
-
-      - name: Install 7-Zip
+      - name: Configure Rust Linux cross linkers
+        if: ${{ runner.os == 'Linux' }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y p7zip-full
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
 
       - name: Restore portable dependency downloads
         uses: actions/cache@v4
