@@ -8,29 +8,27 @@ const nodeTemplatePath = new URL(
   import.meta.url,
 );
 const stagePath = new URL("../stage.ts", import.meta.url);
+const rustLauncherPath = new URL("../../rust/launcher.rs", import.meta.url);
+const rustSetupPath = new URL("../../rust/setup.rs", import.meta.url);
 
 describe("WebUI opener templates", () => {
-  test("Windows wrapper delegates browser logic to the bundled Node opener", async () => {
+  test("Windows wrapper delegates browser logic to the Rust launcher", async () => {
     const source = await fs.readFile(cmdTemplatePath, "utf8");
 
-    expect(source).toContain(
-      '"%NODE_BIN%" "%APP_ROOT%launcher\\open-webui.mjs"',
-    );
+    expect(source).toContain('"%APP_ROOT%ema-launcher.exe" open-webui');
     expect(source).not.toContain("chrome.exe");
     expect(source).not.toContain('start "" "%URL%"');
   });
 
-  test("POSIX wrapper delegates browser logic to the bundled Node opener", async () => {
+  test("POSIX wrapper delegates browser logic to the Rust launcher", async () => {
     const source = await fs.readFile(shTemplatePath, "utf8");
 
-    expect(source).toContain(
-      '"$NODE_BIN" "$APP_ROOT/launcher/open-webui.mjs" "$URL" "$MODE"',
-    );
+    expect(source).toContain('"$APP_ROOT/ema-launcher" open-webui "$@"');
     expect(source).not.toContain("xdg-open");
     expect(source).not.toContain("google-chrome");
   });
 
-  test("Node opener checks Chrome-style locations before default-browser fallback", async () => {
+  test("bundled Node opener still checks Chrome-style locations before default-browser fallback", async () => {
     const source = await fs.readFile(nodeTemplatePath, "utf8");
 
     expect(source).toContain("process.env.CHROME_PATH");
@@ -42,10 +40,28 @@ describe("WebUI opener templates", () => {
     );
   });
 
+  test("Rust launcher calls the portable open-webui.mjs through Node", async () => {
+    const source = await fs.readFile(rustLauncherPath, "utf8");
+
+    expect(source).toContain('"open-webui.mjs"');
+    expect(source).toContain("resolve_node");
+    expect(source).toContain("Command::new(&node_bin)");
+  });
+
+  test("Rust setup embeds and extracts a zstd-compressed payload", async () => {
+    const source = await fs.readFile(rustSetupPath, "utf8");
+
+    expect(source).toContain("include_bytes!");
+    expect(source).toContain("setup-payload.tar.zst");
+    expect(source).toContain("ruzstd::decoding::StreamingDecoder");
+    expect(source).toContain("tar::Archive");
+  });
+
   test("stage bundles default-browser into the launcher runtime with Vite", async () => {
     const source = await fs.readFile(stagePath, "utf8");
 
     expect(source).toContain('path.join(root, "launcher")');
+    expect(source).toContain('buildRustBinary(platform, "ema-launcher")');
     expect(source).toContain("viteBuild");
     expect(source).toContain("noExternal: true");
     expect(source).toContain('fileName: () => "open-webui.mjs"');

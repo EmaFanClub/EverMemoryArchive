@@ -19,6 +19,7 @@ import openWebuiShTemplate from "./templates/open-webui.sh?raw";
 import startCmdTemplate from "./templates/start.cmd?raw";
 import startShTemplate from "./templates/start.sh?raw";
 import { renderTemplate } from "./templates";
+import { buildRustBinary } from "./rust";
 
 interface StageOptions {
   readonly platform: Platform;
@@ -502,6 +503,7 @@ async function writeLaunchers(
   kind: PackageKind,
   serverRelativePath: string,
 ): Promise<void> {
+  await writeRustLauncher(root, platform);
   await fs.writeFile(
     path.join(root, "start.sh"),
     posixStartScript(serverRelativePath),
@@ -537,6 +539,18 @@ async function writeLaunchers(
     path.join(root, "INSTALL.txt"),
     installText(platform, kind),
   );
+}
+
+async function writeRustLauncher(
+  root: string,
+  platform: Platform,
+): Promise<void> {
+  const source = await buildRustBinary(platform, "ema-launcher");
+  const output = path.join(root, `ema-launcher${platform.executableExt}`);
+  await fs.copyFile(source, output);
+  if (platform.os !== "win32") {
+    await fs.chmod(output, 0o755);
+  }
 }
 
 async function writeLauncherRuntime(root: string): Promise<void> {

@@ -12,7 +12,7 @@ export interface Platform {
   readonly label: string;
   readonly os: "win32" | "linux" | "darwin" | "alpine";
   readonly arch: "x64" | "arm64" | "armhf";
-  readonly installerExt: ".bat" | ".run" | ".command";
+  readonly installerExt: ".exe" | ".run" | ".command";
   readonly executableExt: "" | ".exe";
   readonly canBundleMongo: boolean;
   readonly mongoNote?: string;
@@ -22,14 +22,14 @@ const PLATFORM_DETAILS: Record<PlatformId, Omit<Platform, "id" | "label">> = {
   "win32-x64": {
     os: "win32",
     arch: "x64",
-    installerExt: ".bat",
+    installerExt: ".exe",
     executableExt: ".exe",
     canBundleMongo: true,
   },
   "win32-arm64": {
     os: "win32",
     arch: "arm64",
-    installerExt: ".bat",
+    installerExt: ".exe",
     executableExt: ".exe",
     canBundleMongo: true,
     mongoNote:

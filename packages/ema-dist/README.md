@@ -30,9 +30,9 @@ dist/$platform/EverMemoryArchive/app/assets/
 
 ```text
 ema-$platform-minimal-$revision.7z
-ema-$platform-minimal-$revision-installer.{bat,run,command}
+ema-$platform-minimal-$revision-installer.{exe,run,command}
 ema-$platform-portable-$revision.7z
-ema-$platform-portable-$revision-installer.{bat,run,command}
+ema-$platform-portable-$revision-installer.{exe,run,command}
 ema-$platform-portable-debug-symbols-$revision.7z
 ema-$platform-minimal-$revision.zip
 ema-$platform-portable-$revision.zip
@@ -74,19 +74,37 @@ that fails at runtime.
 Distribution CI passes pnpm `--os`, `--cpu`, and `--libc` install options for
 the target bundle platform so these optional packages are present.
 
-`minimal` bundles only the built app and launch/configure scripts. It can use
-Node.js and MongoDB from configured paths, from `PATH`, or via `EMA_MONGO_URI`.
+`minimal` bundles only the built app and Rust launch/configure executable. It
+can use Node.js and MongoDB from configured paths, from `PATH`, or via
+`EMA_MONGO_URI`.
 
-Launchers open the WebUI in `EMA_OPEN_MODE=webview` by default. The shell
-wrappers call the bundled `launcher/open-webui.mjs` script with the selected
-Node.js runtime. Staging bundles that script with Vite so its `default-browser`
-runtime dependency is included directly in `launcher/open-webui.mjs`. The script
-opens an app-mode browser window without the normal browser toolbar when Chrome,
-Edge, Chromium, or Brave is available from Chrome-launcher-style paths, Windows
-App Paths, or `PATH`. If that fails, it uses `default-browser` to identify the
-user's default browser before falling back to the system URL handler. During
-installation the user is asked whether to set `EMA_OPEN_MODE=browser` instead.
-`EMA_OPEN_MODE=none` starts only the server.
+`packages/ema-dist/Cargo.toml` owns the Rust distribution helpers. Staging
+builds `ema-launcher` and writes it into the package root. The shell and cmd
+files are compatibility wrappers that call:
+
+```text
+ema-launcher configure
+ema-launcher start
+ema-launcher open-webui <url> [webview|browser|none] [node]
+```
+
+Launchers open the WebUI in `EMA_OPEN_MODE=webview` by default. Rust keeps the
+start/configuration flow, then calls the bundled `launcher/open-webui.mjs` with
+the selected Node.js runtime. Staging still bundles that script with Vite so its
+`default-browser` runtime dependency is included directly in
+`launcher/open-webui.mjs`. The script opens an app-mode browser window without
+the normal browser toolbar when Chrome, Edge, Chromium, or Brave is available
+from Chrome-launcher-style paths, Windows App Paths, or `PATH`. If that fails,
+it uses `default-browser` to identify the user's default browser before falling
+back to the system URL handler. During installation the user is asked whether to
+set `EMA_OPEN_MODE=browser` instead. `EMA_OPEN_MODE=none` starts only the server.
+
+Installer artifacts are Rust `setup` executables. `createSelfInstaller` compiles
+`setup` with `EMA_DIST_SETUP_PAYLOAD_DIR` pointing at the staged package; the
+build script packs that directory as an inline `tar.zst` payload and the setup
+binary extracts it during installation. The portable setup therefore contains
+the portable app tree directly instead of a base64 shell/cmd section plus a
+bundled 7-Zip extractor.
 
 Installer and `configure` answers are persisted in the normal user config
 directory under `ema`: `${XDG_CONFIG_HOME:-$HOME/.config}/ema` on Linux,

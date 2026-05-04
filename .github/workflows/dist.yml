@@ -45,6 +45,43 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
+      - name: Resolve Rust target
+        id: rust-target
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            win32-x64)
+              echo "target=x86_64-pc-windows-msvc" >> "$GITHUB_OUTPUT"
+              ;;
+            win32-arm64)
+              echo "target=aarch64-pc-windows-msvc" >> "$GITHUB_OUTPUT"
+              ;;
+            linux-x64)
+              echo "target=x86_64-unknown-linux-gnu" >> "$GITHUB_OUTPUT"
+              ;;
+            linux-arm64)
+              echo "target=aarch64-unknown-linux-gnu" >> "$GITHUB_OUTPUT"
+              ;;
+            linux-armhf)
+              echo "target=armv7-unknown-linux-gnueabihf" >> "$GITHUB_OUTPUT"
+              ;;
+            darwin-arm64)
+              echo "target=aarch64-apple-darwin" >> "$GITHUB_OUTPUT"
+              ;;
+            alpine-x64)
+              echo "target=x86_64-unknown-linux-musl" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported distribution platform: ${{ matrix.platform }}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ steps.rust-target.outputs.target }}
+
       - name: Install 7-Zip
         run: |
           sudo apt-get update

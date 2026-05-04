@@ -1,0 +1,25 @@
+[package]
+name = "ema-dist"
+version = "0.1.0"
+edition = "2021"
+publish = false
+build = "build.rs"
+
+[lib]
+path = "rust/lib.rs"
+
+[[bin]]
+name = "ema-launcher"
+path = "rust/bin/ema-launcher.rs"
+
+[[bin]]
+name = "setup"
+path = "rust/bin/setup.rs"
+
+[dependencies]
+ruzstd = "0.8.2"
+tar = "0.4"
+
+[build-dependencies]
+tar = "0.4"
+zstd = "0.13"
