@@ -110,45 +110,7 @@ function hostFromUrl(value: string) {
 }
 
 function credentialDiagnosticValue(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed) ? trimmed : "configured";
-}
-
-function isEnvKeyValue(value: string) {
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value.trim());
-}
-
-function validateGlobalLlmEnvRefs(config: ActorLlmConfig): string | null {
-  if (config.provider === "openai") {
-    return isEnvKeyValue(config.openai.apiKey) ? null : "invalid api key env";
-  }
-  if (config.google.useVertexAi) {
-    return isEnvKeyValue(config.google.project) &&
-      isEnvKeyValue(config.google.location) &&
-      isEnvKeyValue(config.google.credentialsFile)
-      ? null
-      : "invalid vertex ai env";
-  }
-  return isEnvKeyValue(config.google.apiKey) ? null : "invalid api key env";
-}
-
-function validateGlobalEmbeddingEnvRefs(
-  config: GlobalEmbeddingSaveRequest["config"],
-): string | null {
-  if (config.provider === "openai") {
-    return isEnvKeyValue(config.openai.apiKey) ? null : "invalid api key env";
-  }
-  if (config.google.useVertexAi) {
-    return isEnvKeyValue(config.google.project) &&
-      isEnvKeyValue(config.google.location) &&
-      isEnvKeyValue(config.google.credentialsFile)
-      ? null
-      : "invalid vertex ai env";
-  }
-  return isEnvKeyValue(config.google.apiKey) ? null : "invalid api key env";
+  return value.trim() ? "configured" : "";
 }
 
 function selectedLlmConfig(config: ActorLlmConfig) {
@@ -1045,7 +1007,7 @@ function embeddingSaveDiagnostics(
       config.provider === "google" && config.google.useVertexAi
         ? "vertex-ai"
         : hostFromUrl(selected.baseUrl),
-    credentialRef:
+    credential:
       config.provider === "google" && config.google.useVertexAi
         ? credentialDiagnosticValue(config.google.credentialsFile)
         : credentialDiagnosticValue(selected.apiKey),
@@ -1115,8 +1077,7 @@ export async function runGlobalLlmServiceCheck(
 ): Promise<GlobalLlmCheckResponse> {
   const startedAt = now();
   const config = request.config;
-  const invalidEnvRefs = config ? validateGlobalLlmEnvRefs(config) : null;
-  if (!config || invalidEnvRefs) {
+  if (!config) {
     return createActorLlmCheckResponse({
       actorId: "global",
       startedAt,
@@ -1124,7 +1085,7 @@ export async function runGlobalLlmServiceCheck(
       errorCode: "INVALID_CONFIG",
       errorDetails: {
         issuePaths: ["llm"],
-        issueCodes: [invalidEnvRefs ? "invalid" : "required"],
+        issueCodes: ["required"],
       },
       retryable: true,
       diagnostics: {},
@@ -1162,7 +1123,7 @@ export async function runGlobalLlmServiceCheck(
         config.provider === "google" && config.google.useVertexAi
           ? "vertex-ai"
           : hostFromUrl(selected.baseUrl),
-      credentialRef:
+      credential:
         config.provider === "google" && config.google.useVertexAi
           ? credentialDiagnosticValue(config.google.credentialsFile)
           : credentialDiagnosticValue(selected.apiKey),
@@ -1176,15 +1137,14 @@ export async function runGlobalEmbeddingServiceCheck(
 ): Promise<GlobalEmbeddingCheckResponse> {
   const startedAt = now();
   const config = request.config;
-  const invalidEnvRefs = config ? validateGlobalEmbeddingEnvRefs(config) : null;
-  if (!config || invalidEnvRefs) {
+  if (!config) {
     return createGlobalEmbeddingCheckResponse({
       startedAt,
       ok: false,
       errorCode: "INVALID_CONFIG",
       errorDetails: {
         issuePaths: ["embedding"],
-        issueCodes: [invalidEnvRefs ? "invalid" : "required"],
+        issueCodes: ["required"],
       },
       diagnostics: {},
     });
@@ -1220,7 +1180,7 @@ export async function runGlobalEmbeddingServiceCheck(
         config.provider === "google" && config.google.useVertexAi
           ? "vertex-ai"
           : hostFromUrl(selected.baseUrl),
-      credentialRef:
+      credential:
         config.provider === "google" && config.google.useVertexAi
           ? credentialDiagnosticValue(config.google.credentialsFile)
           : credentialDiagnosticValue(selected.apiKey),
@@ -1286,8 +1246,7 @@ export async function saveGlobalLlmServiceConfig(
 ): Promise<GlobalLlmSaveResponse> {
   const startedAt = now();
   const config = request.config;
-  const invalidEnvRefs = config ? validateGlobalLlmEnvRefs(config) : null;
-  if (!config || invalidEnvRefs) {
+  if (!config) {
     return createSaveResponse({
       target: "llm",
       actorId: "global",
@@ -1296,7 +1255,7 @@ export async function saveGlobalLlmServiceConfig(
       errorCode: "INVALID_CONFIG",
       errorDetails: {
         issuePaths: ["llm"],
-        issueCodes: [invalidEnvRefs ? "invalid" : "required"],
+        issueCodes: ["required"],
       },
       diagnostics: {},
     }) as GlobalLlmSaveResponse;
@@ -1312,7 +1271,7 @@ export async function saveGlobalLlmServiceConfig(
       ok: true,
       diagnostics: {
         ...llmSaveDiagnostics(config),
-        credentialRef:
+        credential:
           config.provider === "google" && config.google.useVertexAi
             ? credentialDiagnosticValue(config.google.credentialsFile)
             : credentialDiagnosticValue(selectedLlmConfig(config).apiKey),
@@ -1339,7 +1298,7 @@ export async function saveGlobalLlmServiceConfig(
           config.provider === "google" && config.google.useVertexAi
             ? "vertex-ai"
             : hostFromUrl(selectedLlmConfig(config).baseUrl),
-        credentialRef:
+        credential:
           config.provider === "google" && config.google.useVertexAi
             ? credentialDiagnosticValue(config.google.credentialsFile)
             : credentialDiagnosticValue(selectedLlmConfig(config).apiKey),
@@ -1357,8 +1316,7 @@ export async function saveGlobalEmbeddingServiceConfig(
   const fallbackIndex = (
     await ensureEmaServer()
   ).dbService.longTermMemoryDB.getVectorIndexStatus();
-  const invalidEnvRefs = config ? validateGlobalEmbeddingEnvRefs(config) : null;
-  if (!config || invalidEnvRefs) {
+  if (!config) {
     return {
       ...(createSaveResponse({
         target: "embedding",
@@ -1368,7 +1326,7 @@ export async function saveGlobalEmbeddingServiceConfig(
         errorCode: "INVALID_CONFIG",
         errorDetails: {
           issuePaths: ["embedding"],
-          issueCodes: [invalidEnvRefs ? "invalid" : "required"],
+          issueCodes: ["required"],
         },
         diagnostics: {},
       }) as Omit<

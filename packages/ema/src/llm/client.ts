@@ -30,10 +30,12 @@ export class LLMClient {
         }
         if (
           this.config.google.useVertexAi &&
-          (!this.config.google.project || !this.config.google.location)
+          (!this.config.google.project ||
+            !this.config.google.location ||
+            !this.config.google.credentialsFile)
         ) {
           throw new Error(
-            "Google Vertex AI project and location are required.",
+            "Google Vertex AI project, location, and credentials JSON are required.",
           );
         }
         this.client = new GoogleClient(this.config.google, this.retryConfig);

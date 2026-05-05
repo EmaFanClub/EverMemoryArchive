@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
+  type TextareaHTMLAttributes,
 } from "react";
 import { Check, ChevronDown, LoaderCircle, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -74,6 +75,25 @@ const embeddingModelOptions: Record<
   openai: ["text-embedding-3-large"],
 };
 
+const apiKeyPlaceholders: Record<SetupDraft["llm"]["provider"], string> = {
+  google: "AIzaSyA7fK...D5eJ",
+  openai: "sk-u1Kv9xP...ZTyU",
+  anthropic: "sk-ant-9xW...G0hJ",
+};
+
+const vertexCredentialsJsonPlaceholder = String.raw`{
+  "type": "service_account",
+  "project_id": "your-project-id",
+  "private_key_id": "your-private-key-id",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----\n",
+  "client_email": "your-service-account@your-project-id.iam.gserviceaccount.com",
+  "client_id": "123456789012345678901",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project-id.iam.gserviceaccount.com"
+}`;
+
 const finalReviewSteps: Array<{
   id: FinalReviewStepId;
   title: string;
@@ -133,6 +153,47 @@ function Field({
         </span>
       ) : null}
     </label>
+  );
+}
+
+function ScrollablePlaceholderTextarea({
+  value,
+  placeholder,
+  rows = 5,
+  onChange,
+  ...textareaProps
+}: {
+  value: string;
+  placeholder: string;
+  rows?: number;
+  onChange: (value: string) => void;
+} & Omit<
+  TextareaHTMLAttributes<HTMLTextAreaElement>,
+  "value" | "placeholder" | "rows" | "onChange"
+>) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  return (
+    <div className={styles.scrollableTextareaShell}>
+      <textarea
+        ref={textareaRef}
+        value={value}
+        rows={rows}
+        {...textareaProps}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {!value ? (
+        <pre
+          className={styles.scrollableTextareaPlaceholder}
+          aria-hidden="true"
+          onMouseDown={() => {
+            window.requestAnimationFrame(() => textareaRef.current?.focus());
+          }}
+        >
+          {placeholder}
+        </pre>
+      ) : null}
+    </div>
   );
 }
 
@@ -1085,56 +1146,50 @@ export default function SetupPage() {
                     <>
                       <Field
                         label="项目"
-                        hint="填写环境变量名"
-                        error={getVisibleFieldError("llm.projectEnvKey")}
+                        hint="填写 Google Cloud 项目 ID"
+                        error={getVisibleFieldError("llm.project")}
                       >
                         <input
-                          value={draft.llm.projectEnvKey}
-                          placeholder={
-                            llmDefaults[draft.llm.provider].projectEnvKey
-                          }
+                          value={draft.llm.project}
+                          placeholder="my-gcp-project"
                           required
                           aria-required="true"
-                          {...getFieldControlProps("llm.projectEnvKey")}
+                          {...getFieldControlProps("llm.project")}
                           onChange={(event) =>
-                            updateLlm({ projectEnvKey: event.target.value })
+                            updateLlm({ project: event.target.value })
                           }
                         />
                       </Field>
                       <Field
                         label="区域"
-                        hint="填写环境变量名"
-                        error={getVisibleFieldError("llm.locationEnvKey")}
+                        hint="填写 Vertex AI 区域"
+                        error={getVisibleFieldError("llm.location")}
                       >
                         <input
-                          value={draft.llm.locationEnvKey}
-                          placeholder={
-                            llmDefaults[draft.llm.provider].locationEnvKey
-                          }
+                          value={draft.llm.location}
+                          placeholder="global"
                           required
                           aria-required="true"
-                          {...getFieldControlProps("llm.locationEnvKey")}
+                          {...getFieldControlProps("llm.location")}
                           onChange={(event) =>
-                            updateLlm({ locationEnvKey: event.target.value })
+                            updateLlm({ location: event.target.value })
                           }
                         />
                       </Field>
                       <Field
-                        label="凭据"
-                        hint="填写环境变量名"
-                        error={getVisibleFieldError("llm.credentialsEnvKey")}
+                        label="凭据 JSON"
+                        error={getVisibleFieldError("llm.credentialsFile")}
                       >
-                        <input
-                          value={draft.llm.credentialsEnvKey}
-                          placeholder={
-                            llmDefaults[draft.llm.provider].credentialsEnvKey
-                          }
+                        <ScrollablePlaceholderTextarea
+                          value={draft.llm.credentialsFile}
+                          placeholder={vertexCredentialsJsonPlaceholder}
+                          rows={5}
                           required
                           aria-required="true"
-                          {...getFieldControlProps("llm.credentialsEnvKey")}
-                          onChange={(event) =>
+                          {...getFieldControlProps("llm.credentialsFile")}
+                          onChange={(value) =>
                             updateLlm({
-                              credentialsEnvKey: event.target.value,
+                              credentialsFile: value,
                             })
                           }
                         />
@@ -1159,17 +1214,17 @@ export default function SetupPage() {
                       </Field>
                       <Field
                         label="ApiKey"
-                        hint="填写环境变量名"
-                        error={getVisibleFieldError("llm.envKey")}
+                        error={getVisibleFieldError("llm.apiKey")}
                       >
                         <input
-                          value={draft.llm.envKey}
-                          placeholder={llmDefaults[draft.llm.provider].envKey}
+                          value={draft.llm.apiKey}
+                          placeholder={apiKeyPlaceholders[draft.llm.provider]}
+                          autoComplete="off"
                           required
                           aria-required="true"
-                          {...getFieldControlProps("llm.envKey")}
+                          {...getFieldControlProps("llm.apiKey")}
                           onChange={(event) =>
-                            updateLlm({ envKey: event.target.value })
+                            updateLlm({ apiKey: event.target.value })
                           }
                         />
                       </Field>
@@ -1263,59 +1318,50 @@ export default function SetupPage() {
                 <>
                   <Field
                     label="项目"
-                    hint="填写环境变量名"
-                    error={getVisibleFieldError("embedding.projectEnvKey")}
+                    hint="填写 Google Cloud 项目 ID"
+                    error={getVisibleFieldError("embedding.project")}
                   >
                     <input
-                      value={draft.embedding.projectEnvKey}
-                      placeholder={
-                        embeddingDefaults[draft.embedding.provider]
-                          .projectEnvKey
-                      }
+                      value={draft.embedding.project}
+                      placeholder="my-gcp-project"
                       required
                       aria-required="true"
-                      {...getFieldControlProps("embedding.projectEnvKey")}
+                      {...getFieldControlProps("embedding.project")}
                       onChange={(event) =>
-                        updateEmbedding({ projectEnvKey: event.target.value })
+                        updateEmbedding({ project: event.target.value })
                       }
                     />
                   </Field>
                   <Field
                     label="区域"
-                    hint="填写环境变量名"
-                    error={getVisibleFieldError("embedding.locationEnvKey")}
+                    hint="填写 Vertex AI 区域"
+                    error={getVisibleFieldError("embedding.location")}
                   >
                     <input
-                      value={draft.embedding.locationEnvKey}
-                      placeholder={
-                        embeddingDefaults[draft.embedding.provider]
-                          .locationEnvKey
-                      }
+                      value={draft.embedding.location}
+                      placeholder="global"
                       required
                       aria-required="true"
-                      {...getFieldControlProps("embedding.locationEnvKey")}
+                      {...getFieldControlProps("embedding.location")}
                       onChange={(event) =>
-                        updateEmbedding({ locationEnvKey: event.target.value })
+                        updateEmbedding({ location: event.target.value })
                       }
                     />
                   </Field>
                   <Field
-                    label="凭据"
-                    hint="填写环境变量名"
-                    error={getVisibleFieldError("embedding.credentialsEnvKey")}
+                    label="凭据 JSON"
+                    error={getVisibleFieldError("embedding.credentialsFile")}
                   >
-                    <input
-                      value={draft.embedding.credentialsEnvKey}
-                      placeholder={
-                        embeddingDefaults[draft.embedding.provider]
-                          .credentialsEnvKey
-                      }
+                    <ScrollablePlaceholderTextarea
+                      value={draft.embedding.credentialsFile}
+                      placeholder={vertexCredentialsJsonPlaceholder}
+                      rows={5}
                       required
                       aria-required="true"
-                      {...getFieldControlProps("embedding.credentialsEnvKey")}
-                      onChange={(event) =>
+                      {...getFieldControlProps("embedding.credentialsFile")}
+                      onChange={(value) =>
                         updateEmbedding({
-                          credentialsEnvKey: event.target.value,
+                          credentialsFile: value,
                         })
                       }
                     />
@@ -1342,19 +1388,17 @@ export default function SetupPage() {
                   </Field>
                   <Field
                     label="ApiKey"
-                    hint="填写环境变量名"
-                    error={getVisibleFieldError("embedding.envKey")}
+                    error={getVisibleFieldError("embedding.apiKey")}
                   >
                     <input
-                      value={draft.embedding.envKey}
-                      placeholder={
-                        embeddingDefaults[draft.embedding.provider].envKey
-                      }
+                      value={draft.embedding.apiKey}
+                      placeholder={apiKeyPlaceholders[draft.embedding.provider]}
+                      autoComplete="off"
                       required
                       aria-required="true"
-                      {...getFieldControlProps("embedding.envKey")}
+                      {...getFieldControlProps("embedding.apiKey")}
                       onChange={(event) =>
-                        updateEmbedding({ envKey: event.target.value })
+                        updateEmbedding({ apiKey: event.target.value })
                       }
                     />
                   </Field>

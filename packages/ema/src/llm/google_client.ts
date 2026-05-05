@@ -50,24 +50,44 @@ export interface GoogleVertexAIConfig {
   credentialsFile: string;
 }
 
+type GoogleCredentials = NonNullable<
+  NonNullable<GoogleGenAIOptions["googleAuthOptions"]>["credentials"]
+>;
+
+function parseGoogleCredentialsJson(value: string): GoogleCredentials {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error("Google Vertex AI credentials JSON is required.");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error("Google Vertex AI credentials must be valid JSON.");
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Google Vertex AI credentials must be a JSON object.");
+  }
+
+  return parsed as GoogleCredentials;
+}
+
 /** Builds Vertex AI options from database-backed Google config. */
 export function buildGoogleVertexAIOptions(
   config: GoogleVertexAIConfig,
 ): GoogleGenAIOptions {
-  const credentialsFile = config.credentialsFile.trim();
+  const credentials = parseGoogleCredentialsJson(config.credentialsFile);
   return {
     apiVersion: VERTEX_AI_API_VERSION,
     vertexai: true,
     project: config.project,
     location: config.location,
-    googleAuthOptions: credentialsFile
-      ? {
-          keyFile: credentialsFile,
-          scopes: [GOOGLE_VERTEX_AI_SCOPE],
-        }
-      : {
-          scopes: [GOOGLE_VERTEX_AI_SCOPE],
-        },
+    googleAuthOptions: {
+      credentials,
+      scopes: [GOOGLE_VERTEX_AI_SCOPE],
+    },
   };
 }
 

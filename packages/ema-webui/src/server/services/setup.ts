@@ -189,9 +189,7 @@ export async function runSetupServiceCheck(
         endpoint: config.useVertexAi
           ? "vertex-ai"
           : hostFromUrl(config.baseUrl),
-        credentialRef: config.useVertexAi
-          ? config.credentialsEnvKey
-          : config.envKey,
+        credential: config.useVertexAi ? "credentials-json" : "api-key",
       },
     });
   }
@@ -222,9 +220,7 @@ export async function runSetupServiceCheck(
       provider: config.provider,
       model: config.model,
       endpoint: config.useVertexAi ? "vertex-ai" : hostFromUrl(config.baseUrl),
-      credentialRef: config.useVertexAi
-        ? config.credentialsEnvKey
-        : config.envKey,
+      credential: config.useVertexAi ? "credentials-json" : "api-key",
     },
   });
 }
@@ -327,15 +323,23 @@ function buildEmbeddingConfigForCheck(config: SetupDraft["embedding"]): {
 
 export async function buildSetupStatus(): Promise<SetupStatusResponse> {
   const server = await ensureEmaServer();
-  const status = await server.controller.setup.getStatus();
+  const [status, globalConfig] = await Promise.all([
+    server.controller.setup.getStatus(),
+    server.dbService.globalConfigDB.getGlobalConfig(),
+  ]);
+  const reason = getSetupInitializationReason(
+    Boolean(status.owner),
+    globalConfig,
+  );
+  const complete = reason === null;
   return {
     apiVersion: API_VERSION,
-    needsInitialization: !status.complete,
-    reason: status.complete ? null : "CONFIG_MISSING",
+    needsInitialization: !complete,
+    reason,
     setupState: {
-      status: status.complete ? "complete" : "required",
+      status: complete ? "complete" : "required",
       configPath: "database:global_config",
-      detectedConfig: status.hasGlobalConfig,
+      detectedConfig: Boolean(globalConfig),
     },
     recommendedSteps: setupSteps,
     capabilities: {
@@ -357,25 +361,84 @@ export async function buildSetupStatus(): Promise<SetupStatusResponse> {
   };
 }
 
+function getSetupInitializationReason(
+  hasOwner: boolean,
+  config: GlobalConfigRecord | null,
+): SetupStatusResponse["reason"] {
+  if (!hasOwner || !config) {
+    return "CONFIG_MISSING";
+  }
+
+  const llm = setupLlmFromGlobalConfig(config.defaultLlm);
+  const embedding = setupEmbeddingFromGlobalConfig(config.defaultEmbedding);
+  if (
+    isStoredProviderConfigStale(llm) ||
+    isStoredProviderConfigStale(embedding)
+  ) {
+    return "CONFIG_STALE";
+  }
+  if (!isLLMConfigComplete(llm) || !isEmbeddingConfigComplete(embedding)) {
+    return "CONFIG_INCOMPLETE";
+  }
+  return null;
+}
+
+function setupLlmFromGlobalConfig(config: LLMConfig): SetupDraft["llm"] {
+  return config.provider === "openai"
+    ? { ...initialDraft.llm, provider: "openai", ...config.openai }
+    : { ...initialDraft.llm, provider: "google", ...config.google };
+}
+
+function setupEmbeddingFromGlobalConfig(
+  config: EmbeddingConfig,
+): SetupDraft["embedding"] {
+  return config.provider === "openai"
+    ? { ...initialDraft.embedding, provider: "openai", ...config.openai }
+    : { ...initialDraft.embedding, provider: "google", ...config.google };
+}
+
+function isStoredProviderConfigStale(config: {
+  apiKey: string;
+  useVertexAi: boolean;
+  project: string;
+  location: string;
+  credentialsFile: string;
+}) {
+  if (!config.useVertexAi) {
+    return looksLikeEnvReference(config.apiKey);
+  }
+  const credentials = config.credentialsFile.trim();
+  return (
+    looksLikeEnvReference(config.project) ||
+    looksLikeEnvReference(config.location) ||
+    (credentials.length > 0 && !isJsonObject(credentials))
+  );
+}
+
+function looksLikeEnvReference(value: string) {
+  const trimmed = value.trim();
+  return (
+    /^[A-Z][A-Z0-9_]*$/.test(trimmed) &&
+    (trimmed.endsWith("_API_KEY") ||
+      trimmed.endsWith("_CREDENTIALS") ||
+      trimmed.endsWith("_PROJECT") ||
+      trimmed.endsWith("_LOCATION"))
+  );
+}
+
+function isJsonObject(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return Boolean(
+      parsed && typeof parsed === "object" && !Array.isArray(parsed),
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function buildDryRunResponse(draft: SetupDraft): SetupDryRunResponse {
   const issues = validateSetupDraft(draft);
-  const envKeys = Array.from(
-    new Set(
-      [
-        draft.llm.useVertexAi ? draft.llm.projectEnvKey : draft.llm.envKey,
-        draft.llm.useVertexAi ? draft.llm.locationEnvKey : null,
-        draft.llm.useVertexAi ? draft.llm.credentialsEnvKey : null,
-        draft.embedding.useVertexAi
-          ? draft.embedding.projectEnvKey
-          : draft.embedding.envKey,
-        draft.embedding.useVertexAi ? draft.embedding.locationEnvKey : null,
-        draft.embedding.useVertexAi ? draft.embedding.credentialsEnvKey : null,
-      ]
-        .filter((value): value is string => Boolean(value))
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  );
 
   return {
     apiVersion: API_VERSION,
@@ -387,7 +450,6 @@ export function buildDryRunResponse(draft: SetupDraft): SetupDryRunResponse {
     },
     plan: {
       configPath: "database:global_config",
-      envKeys,
       operations: [
         {
           id: "write-config",
@@ -503,7 +565,7 @@ function buildLlmConfig(draft: SetupDraft): LLMConfig {
       mode: draft.llm.mode,
       model: draft.llm.provider === "openai" ? draft.llm.model.trim() : "",
       baseUrl: draft.llm.provider === "openai" ? draft.llm.baseUrl.trim() : "",
-      apiKey: draft.llm.provider === "openai" ? draft.llm.envKey.trim() : "",
+      apiKey: draft.llm.provider === "openai" ? draft.llm.apiKey.trim() : "",
     },
     google: {
       model: draft.llm.provider === "google" ? draft.llm.model.trim() : "",
@@ -513,20 +575,20 @@ function buildLlmConfig(draft: SetupDraft): LLMConfig {
           : "",
       apiKey:
         draft.llm.provider === "google" && !draft.llm.useVertexAi
-          ? draft.llm.envKey.trim()
+          ? draft.llm.apiKey.trim()
           : "",
       useVertexAi: draft.llm.provider === "google" && draft.llm.useVertexAi,
       project:
         draft.llm.provider === "google" && draft.llm.useVertexAi
-          ? draft.llm.projectEnvKey.trim()
+          ? draft.llm.project.trim()
           : "",
       location:
         draft.llm.provider === "google" && draft.llm.useVertexAi
-          ? draft.llm.locationEnvKey.trim()
+          ? draft.llm.location.trim()
           : "",
       credentialsFile:
         draft.llm.provider === "google" && draft.llm.useVertexAi
-          ? draft.llm.credentialsEnvKey.trim()
+          ? draft.llm.credentialsFile.trim()
           : "",
     },
   };
@@ -546,7 +608,7 @@ function buildEmbeddingConfig(draft: SetupDraft): EmbeddingConfig {
           : "",
       apiKey:
         draft.embedding.provider === "openai"
-          ? draft.embedding.envKey.trim()
+          ? draft.embedding.apiKey.trim()
           : "",
     },
     google: {
@@ -560,21 +622,21 @@ function buildEmbeddingConfig(draft: SetupDraft): EmbeddingConfig {
           : "",
       apiKey:
         draft.embedding.provider === "google" && !draft.embedding.useVertexAi
-          ? draft.embedding.envKey.trim()
+          ? draft.embedding.apiKey.trim()
           : "",
       useVertexAi:
         draft.embedding.provider === "google" && draft.embedding.useVertexAi,
       project:
         draft.embedding.provider === "google" && draft.embedding.useVertexAi
-          ? draft.embedding.projectEnvKey.trim()
+          ? draft.embedding.project.trim()
           : "",
       location:
         draft.embedding.provider === "google" && draft.embedding.useVertexAi
-          ? draft.embedding.locationEnvKey.trim()
+          ? draft.embedding.location.trim()
           : "",
       credentialsFile:
         draft.embedding.provider === "google" && draft.embedding.useVertexAi
-          ? draft.embedding.credentialsEnvKey.trim()
+          ? draft.embedding.credentialsFile.trim()
           : "",
     },
   };

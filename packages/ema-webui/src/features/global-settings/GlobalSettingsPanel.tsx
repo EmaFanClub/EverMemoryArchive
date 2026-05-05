@@ -84,26 +84,44 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
 };
+const API_KEY_PLACEHOLDERS: Record<LLMProvider, string> = {
+  google: "AIzaSyA7fK...D5eJ",
+  openai: "sk-u1Kv9xP...ZTyU",
+  anthropic: "sk-ant-9xW...G0hJ",
+};
+const VERTEX_CREDENTIALS_JSON_LIMIT = 16_384;
+const VERTEX_CREDENTIALS_JSON_PLACEHOLDER = String.raw`{
+  "type": "service_account",
+  "project_id": "your-project-id",
+  "private_key_id": "your-private-key-id",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----\n",
+  "client_email": "your-service-account@your-project-id.iam.gserviceaccount.com",
+  "client_id": "123456789012345678901",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project-id.iam.gserviceaccount.com"
+}`;
 
 function fieldsFromSetupDefaults(defaults: {
   mode?: ActorOpenAiMode;
   model: string;
   baseUrl: string;
-  envKey: string;
+  apiKey: string;
   useVertexAi: boolean;
-  projectEnvKey: string;
-  locationEnvKey: string;
-  credentialsEnvKey: string;
+  project: string;
+  location: string;
+  credentialsFile: string;
 }): ServiceProviderFields {
   return {
     mode: defaults.mode ?? "responses",
     model: defaults.model,
     baseUrl: defaults.baseUrl,
-    apiKey: defaults.envKey,
+    apiKey: defaults.apiKey,
     useVertexAi: defaults.useVertexAi,
-    project: defaults.projectEnvKey,
-    location: defaults.locationEnvKey,
-    credentialsFile: defaults.credentialsEnvKey,
+    project: defaults.project,
+    location: defaults.location,
+    credentialsFile: defaults.credentialsFile,
   };
 }
 
@@ -323,8 +341,15 @@ function isHttpUrlValue(value: string) {
   }
 }
 
-function isEnvKeyValue(value: string) {
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
+function isJsonObjectValue(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return Boolean(
+      parsed && typeof parsed === "object" && !Array.isArray(parsed),
+    );
+  } catch {
+    return false;
+  }
 }
 
 function validateServiceDraft(draft: ServiceDraft, kind: "llm" | "embedding") {
@@ -349,22 +374,34 @@ function validateServiceDraft(draft: ServiceDraft, kind: "llm" | "embedding") {
     const fields = [
       ["项目", draft.google.project],
       ["区域", draft.google.location],
-      ["凭据", draft.google.credentialsFile],
+      ["凭据 JSON", draft.google.credentialsFile],
     ] as const;
     const missing = fields
       .filter(([, value]) => !value.trim())
       .map(([label]) => label);
-    return missing.length > 0
-      ? localDashboardFeedback(
-          `${missing.join("、")}未填写`,
-          "Vertex AI 需要项目、区域和凭据。",
-        )
-      : fields.some(([, value]) => !isEnvKeyValue(value.trim()))
-        ? localDashboardFeedback(
-            "环境变量名格式错误",
-            "环境变量名只能包含字母、数字和下划线，且不能以数字开头。",
-          )
-        : null;
+    if (missing.length > 0) {
+      return localDashboardFeedback(
+        `${missing.join("、")}未填写`,
+        "Vertex AI 需要项目、区域和凭据 JSON。",
+      );
+    }
+    if (
+      draft.google.project.trim().length > 128 ||
+      draft.google.location.trim().length > 128 ||
+      draft.google.credentialsFile.trim().length > VERTEX_CREDENTIALS_JSON_LIMIT
+    ) {
+      return localDashboardFeedback(
+        "Vertex AI 配置过长",
+        `项目和区域不能超过 128 个字符，凭据 JSON 不能超过 ${VERTEX_CREDENTIALS_JSON_LIMIT} 个字符。`,
+      );
+    }
+    if (!isJsonObjectValue(draft.google.credentialsFile.trim())) {
+      return localDashboardFeedback(
+        "凭据 JSON 格式错误",
+        "Vertex AI 凭据需要是有效的 JSON 对象。",
+      );
+    }
+    return null;
   }
 
   if (!active.baseUrl.trim() || !isHttpUrlValue(active.baseUrl.trim())) {
@@ -374,13 +411,10 @@ function validateServiceDraft(draft: ServiceDraft, kind: "llm" | "embedding") {
     );
   }
   if (!active.apiKey.trim()) {
-    return localDashboardFeedback("环境变量名未填写", "环境变量名是必填项。");
+    return localDashboardFeedback("ApiKey未填写", "ApiKey 是必填项。");
   }
-  if (!isEnvKeyValue(active.apiKey.trim())) {
-    return localDashboardFeedback(
-      "环境变量名格式错误",
-      "环境变量名只能包含字母、数字和下划线，且不能以数字开头。",
-    );
+  if (active.apiKey.trim().length > 512) {
+    return localDashboardFeedback("ApiKey过长", "ApiKey 不能超过 512 个字符。");
   }
   return null;
 }
@@ -1268,27 +1302,28 @@ function ServiceDetail({
                   <>
                     <ServiceField
                       title="项目"
-                      hint="填写环境变量名"
+                      hint="填写 Google Cloud 项目 ID"
                       value={draft.google.project}
-                      placeholder="GOOGLE_CLOUD_PROJECT"
+                      placeholder="my-gcp-project"
                       onChange={(project) =>
                         updateProviderFields("google", { project })
                       }
                     />
                     <ServiceField
                       title="区域"
-                      hint="填写环境变量名"
+                      hint="填写 Vertex AI 区域"
                       value={draft.google.location}
-                      placeholder="GOOGLE_CLOUD_LOCATION"
+                      placeholder="global"
                       onChange={(location) =>
                         updateProviderFields("google", { location })
                       }
                     />
                     <ServiceField
-                      title="凭据"
-                      hint="填写环境变量名"
+                      title="凭据 JSON"
                       value={draft.google.credentialsFile}
-                      placeholder="GOOGLE_APPLICATION_CREDENTIALS"
+                      placeholder={VERTEX_CREDENTIALS_JSON_PLACEHOLDER}
+                      multiline
+                      rows={5}
                       onChange={(credentialsFile) =>
                         updateProviderFields("google", { credentialsFile })
                       }
@@ -1310,15 +1345,8 @@ function ServiceDetail({
                     />
                     <ServiceField
                       title="ApiKey"
-                      hint="填写环境变量名"
                       value={activeFields.apiKey}
-                      placeholder={
-                        draft.provider === "google"
-                          ? "GEMINI_API_KEY"
-                          : draft.provider === "openai"
-                            ? "OPENAI_API_KEY"
-                            : "ANTHROPIC_API_KEY"
-                      }
+                      placeholder={API_KEY_PLACEHOLDERS[draft.provider]}
                       onChange={(apiKey) => updateActiveFields({ apiKey })}
                     />
                   </>
@@ -1355,23 +1383,54 @@ function ServiceField({
   value,
   placeholder,
   hint,
+  multiline = false,
+  rows = 4,
   onChange,
 }: {
   title: string;
   value: string;
   placeholder: string;
   hint?: string;
+  multiline?: boolean;
+  rows?: number;
   onChange: (value: string) => void;
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   return (
     <label className={styles.llmSettingsField}>
       <span className={styles.llmSettingsControlTitle}>{title}</span>
-      <input
-        value={value}
-        placeholder={placeholder}
-        autoComplete="off"
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
+      {multiline ? (
+        <div className={styles.scrollableTextareaShell}>
+          <textarea
+            ref={textareaRef}
+            value={value}
+            rows={rows}
+            autoComplete="off"
+            onChange={(event) => onChange(event.currentTarget.value)}
+          />
+          {!value ? (
+            <pre
+              className={styles.scrollableTextareaPlaceholder}
+              aria-hidden="true"
+              onMouseDown={() => {
+                window.requestAnimationFrame(() =>
+                  textareaRef.current?.focus(),
+                );
+              }}
+            >
+              {placeholder}
+            </pre>
+          ) : null}
+        </div>
+      ) : (
+        <input
+          value={value}
+          placeholder={placeholder}
+          autoComplete="off"
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+      )}
       {hint ? <span className={styles.settingsFieldHint}>{hint}</span> : null}
     </label>
   );

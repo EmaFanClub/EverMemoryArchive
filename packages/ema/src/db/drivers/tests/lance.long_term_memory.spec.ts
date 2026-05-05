@@ -1,4 +1,4 @@
-import { expect, test, describe, beforeEach, afterEach, vi } from "vitest";
+import { expect, test, describe, beforeEach, afterEach } from "vitest";
 import {
   CompositeLongTermMemoryDB,
   createMongo,
@@ -59,7 +59,7 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
     openai: {
       model: "text-embedding-3-small",
       baseUrl: "https://api.openai.com/v1",
-      apiKey: "EMA_TEST_OPENAI_KEY",
+      apiKey: "sk-test",
     },
     google: {
       model: "",
@@ -106,7 +106,6 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
   });
 
   beforeEach(async () => {
-    vi.stubEnv("EMA_TEST_OPENAI_KEY", "sk-test");
     // Create in-memory MongoDB instance for testing
     mongo = await createMongo("", "test", "memory");
     await mongo.connect();
@@ -118,7 +117,6 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
   });
 
   afterEach(async () => {
-    vi.unstubAllEnvs();
     await mongo.close();
     await lance.close();
   });

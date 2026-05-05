@@ -30,21 +30,21 @@ export interface SetupDraft {
     mode: OpenAIMode;
     model: string;
     baseUrl: string;
-    envKey: string;
+    apiKey: string;
     useVertexAi: boolean;
-    projectEnvKey: string;
-    locationEnvKey: string;
-    credentialsEnvKey: string;
+    project: string;
+    location: string;
+    credentialsFile: string;
   };
   embedding: {
     provider: EmbeddingProvider;
     model: string;
     baseUrl: string;
-    envKey: string;
+    apiKey: string;
     useVertexAi: boolean;
-    projectEnvKey: string;
-    locationEnvKey: string;
-    credentialsEnvKey: string;
+    project: string;
+    location: string;
+    credentialsFile: string;
   };
   owner: {
     name: string;
@@ -104,7 +104,6 @@ export interface SetupDryRunResponse {
   };
   plan: {
     configPath: string;
-    envKeys: string[];
     operations: Array<{
       id: string;
       title: string;
@@ -134,7 +133,7 @@ export interface SetupCommitResponse {
 export interface SetupStatusResponse {
   apiVersion: "v1beta1";
   needsInitialization: boolean;
-  reason: "CONFIG_MISSING" | null;
+  reason: "CONFIG_MISSING" | "CONFIG_INCOMPLETE" | "CONFIG_STALE" | null;
   setupState: {
     status: "required" | "complete";
     configPath: string;
@@ -180,33 +179,33 @@ export const llmDefaults: Record<LLMProvider, SetupDraft["llm"]> = {
     mode: "responses",
     model: "gemini-3.1-pro-preview",
     baseUrl: "https://generativelanguage.googleapis.com",
-    envKey: "GEMINI_API_KEY",
+    apiKey: "",
     useVertexAi: false,
-    projectEnvKey: "GOOGLE_CLOUD_PROJECT",
-    locationEnvKey: "GOOGLE_CLOUD_LOCATION",
-    credentialsEnvKey: "GOOGLE_APPLICATION_CREDENTIALS",
+    project: "",
+    location: "",
+    credentialsFile: "",
   },
   openai: {
     provider: "openai",
     mode: "chat",
     model: "",
     baseUrl: "https://api.openai.com/v1",
-    envKey: "OPENAI_API_KEY",
+    apiKey: "",
     useVertexAi: false,
-    projectEnvKey: "",
-    locationEnvKey: "",
-    credentialsEnvKey: "",
+    project: "",
+    location: "",
+    credentialsFile: "",
   },
   anthropic: {
     provider: "anthropic",
     mode: "chat",
     model: "",
     baseUrl: "https://api.anthropic.com",
-    envKey: "ANTHROPIC_API_KEY",
+    apiKey: "",
     useVertexAi: false,
-    projectEnvKey: "",
-    locationEnvKey: "",
-    credentialsEnvKey: "",
+    project: "",
+    location: "",
+    credentialsFile: "",
   },
 };
 
@@ -218,21 +217,21 @@ export const embeddingDefaults: Record<
     provider: "google",
     model: "gemini-embedding-001",
     baseUrl: "https://generativelanguage.googleapis.com",
-    envKey: "GEMINI_API_KEY",
+    apiKey: "",
     useVertexAi: false,
-    projectEnvKey: "GOOGLE_CLOUD_PROJECT",
-    locationEnvKey: "GOOGLE_CLOUD_LOCATION",
-    credentialsEnvKey: "GOOGLE_APPLICATION_CREDENTIALS",
+    project: "",
+    location: "",
+    credentialsFile: "",
   },
   openai: {
     provider: "openai",
     model: "text-embedding-3-large",
     baseUrl: "https://api.openai.com/v1",
-    envKey: "OPENAI_API_KEY",
+    apiKey: "",
     useVertexAi: false,
-    projectEnvKey: "",
-    locationEnvKey: "",
-    credentialsEnvKey: "",
+    project: "",
+    location: "",
+    credentialsFile: "",
   },
 };
 
@@ -247,8 +246,9 @@ export const initialDraft: SetupDraft = {
 
 export const hasRequiredValue = (value: string) => value.trim().length > 0;
 
+export const VERTEX_CREDENTIALS_JSON_LIMIT = 16_384;
+
 const qqPattern = /^[1-9]\d{4,11}$/;
-const envKeyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function isHttpUrl(value: string) {
   try {
@@ -259,8 +259,24 @@ function isHttpUrl(value: string) {
   }
 }
 
-function isEnvKey(value: string) {
-  return envKeyPattern.test(value);
+function isJsonObject(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return Boolean(
+      parsed && typeof parsed === "object" && !Array.isArray(parsed),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isCredentialsJsonValid(value: string) {
+  const trimmed = value.trim();
+  return (
+    hasRequiredValue(value) &&
+    trimmed.length <= VERTEX_CREDENTIALS_JSON_LIMIT &&
+    isJsonObject(trimmed)
+  );
 }
 
 export function isLLMConfigSupported(llm: SetupDraft["llm"]) {
@@ -281,15 +297,11 @@ export function isLLMConfigComplete(llm: SetupDraft["llm"]) {
 
   if (llm.provider === "google" && llm.useVertexAi) {
     return (
-      hasRequiredValue(llm.projectEnvKey) &&
-      llm.projectEnvKey.trim().length <= 128 &&
-      isEnvKey(llm.projectEnvKey.trim()) &&
-      hasRequiredValue(llm.locationEnvKey) &&
-      llm.locationEnvKey.trim().length <= 128 &&
-      isEnvKey(llm.locationEnvKey.trim()) &&
-      hasRequiredValue(llm.credentialsEnvKey) &&
-      llm.credentialsEnvKey.trim().length <= 128 &&
-      isEnvKey(llm.credentialsEnvKey.trim())
+      hasRequiredValue(llm.project) &&
+      llm.project.trim().length <= 128 &&
+      hasRequiredValue(llm.location) &&
+      llm.location.trim().length <= 128 &&
+      isCredentialsJsonValid(llm.credentialsFile)
     );
   }
 
@@ -297,9 +309,8 @@ export function isLLMConfigComplete(llm: SetupDraft["llm"]) {
     hasRequiredValue(llm.baseUrl) &&
     llm.baseUrl.trim().length <= 512 &&
     isHttpUrl(llm.baseUrl.trim()) &&
-    hasRequiredValue(llm.envKey) &&
-    llm.envKey.trim().length <= 128 &&
-    isEnvKey(llm.envKey.trim())
+    hasRequiredValue(llm.apiKey) &&
+    llm.apiKey.trim().length <= 512
   );
 }
 
@@ -313,15 +324,11 @@ export function isEmbeddingConfigComplete(embedding: SetupDraft["embedding"]) {
 
   if (embedding.provider === "google" && embedding.useVertexAi) {
     return (
-      hasRequiredValue(embedding.projectEnvKey) &&
-      embedding.projectEnvKey.trim().length <= 128 &&
-      isEnvKey(embedding.projectEnvKey.trim()) &&
-      hasRequiredValue(embedding.locationEnvKey) &&
-      embedding.locationEnvKey.trim().length <= 128 &&
-      isEnvKey(embedding.locationEnvKey.trim()) &&
-      hasRequiredValue(embedding.credentialsEnvKey) &&
-      embedding.credentialsEnvKey.trim().length <= 128 &&
-      isEnvKey(embedding.credentialsEnvKey.trim())
+      hasRequiredValue(embedding.project) &&
+      embedding.project.trim().length <= 128 &&
+      hasRequiredValue(embedding.location) &&
+      embedding.location.trim().length <= 128 &&
+      isCredentialsJsonValid(embedding.credentialsFile)
     );
   }
 
@@ -329,9 +336,8 @@ export function isEmbeddingConfigComplete(embedding: SetupDraft["embedding"]) {
     hasRequiredValue(embedding.baseUrl) &&
     embedding.baseUrl.trim().length <= 512 &&
     isHttpUrl(embedding.baseUrl.trim()) &&
-    hasRequiredValue(embedding.envKey) &&
-    embedding.envKey.trim().length <= 128 &&
-    isEnvKey(embedding.envKey.trim())
+    hasRequiredValue(embedding.apiKey) &&
+    embedding.apiKey.trim().length <= 512
   );
 }
 
@@ -386,45 +392,42 @@ export function validateSetupDraft(draft: SetupDraft): SetupValidationIssue[] {
       });
     }
     if (draft.llm.provider === "google" && draft.llm.useVertexAi) {
-      if (!hasRequiredValue(draft.llm.projectEnvKey)) {
+      if (!hasRequiredValue(draft.llm.project)) {
         issues.push({
-          path: "llm.projectEnvKey",
+          path: "llm.project",
           code: "required",
         });
-      } else if (
-        draft.llm.projectEnvKey.trim().length > 128 ||
-        !isEnvKey(draft.llm.projectEnvKey.trim())
-      ) {
+      } else if (draft.llm.project.trim().length > 128) {
         issues.push({
-          path: "llm.projectEnvKey",
+          path: "llm.project",
           code: "invalid",
         });
       }
-      if (!hasRequiredValue(draft.llm.locationEnvKey)) {
+      if (!hasRequiredValue(draft.llm.location)) {
         issues.push({
-          path: "llm.locationEnvKey",
+          path: "llm.location",
           code: "required",
         });
-      } else if (
-        draft.llm.locationEnvKey.trim().length > 128 ||
-        !isEnvKey(draft.llm.locationEnvKey.trim())
-      ) {
+      } else if (draft.llm.location.trim().length > 128) {
         issues.push({
-          path: "llm.locationEnvKey",
+          path: "llm.location",
           code: "invalid",
         });
       }
-      if (!hasRequiredValue(draft.llm.credentialsEnvKey)) {
+      if (!hasRequiredValue(draft.llm.credentialsFile)) {
         issues.push({
-          path: "llm.credentialsEnvKey",
+          path: "llm.credentialsFile",
           code: "required",
         });
       } else if (
-        draft.llm.credentialsEnvKey.trim().length > 128 ||
-        !isEnvKey(draft.llm.credentialsEnvKey.trim())
+        (hasRequiredValue(draft.llm.credentialsFile) &&
+          draft.llm.credentialsFile.trim().length >
+            VERTEX_CREDENTIALS_JSON_LIMIT) ||
+        (hasRequiredValue(draft.llm.credentialsFile) &&
+          !isJsonObject(draft.llm.credentialsFile.trim()))
       ) {
         issues.push({
-          path: "llm.credentialsEnvKey",
+          path: "llm.credentialsFile",
           code: "invalid",
         });
       }
@@ -443,17 +446,14 @@ export function validateSetupDraft(draft: SetupDraft): SetupValidationIssue[] {
           code: "invalid",
         });
       }
-      if (!hasRequiredValue(draft.llm.envKey)) {
+      if (!hasRequiredValue(draft.llm.apiKey)) {
         issues.push({
-          path: "llm.envKey",
+          path: "llm.apiKey",
           code: "required",
         });
-      } else if (
-        draft.llm.envKey.trim().length > 128 ||
-        !isEnvKey(draft.llm.envKey.trim())
-      ) {
+      } else if (draft.llm.apiKey.trim().length > 512) {
         issues.push({
-          path: "llm.envKey",
+          path: "llm.apiKey",
           code: "invalid",
         });
       }
@@ -473,45 +473,42 @@ export function validateSetupDraft(draft: SetupDraft): SetupValidationIssue[] {
       });
     }
     if (draft.embedding.provider === "google" && draft.embedding.useVertexAi) {
-      if (!hasRequiredValue(draft.embedding.projectEnvKey)) {
+      if (!hasRequiredValue(draft.embedding.project)) {
         issues.push({
-          path: "embedding.projectEnvKey",
+          path: "embedding.project",
           code: "required",
         });
-      } else if (
-        draft.embedding.projectEnvKey.trim().length > 128 ||
-        !isEnvKey(draft.embedding.projectEnvKey.trim())
-      ) {
+      } else if (draft.embedding.project.trim().length > 128) {
         issues.push({
-          path: "embedding.projectEnvKey",
+          path: "embedding.project",
           code: "invalid",
         });
       }
-      if (!hasRequiredValue(draft.embedding.locationEnvKey)) {
+      if (!hasRequiredValue(draft.embedding.location)) {
         issues.push({
-          path: "embedding.locationEnvKey",
+          path: "embedding.location",
           code: "required",
         });
-      } else if (
-        draft.embedding.locationEnvKey.trim().length > 128 ||
-        !isEnvKey(draft.embedding.locationEnvKey.trim())
-      ) {
+      } else if (draft.embedding.location.trim().length > 128) {
         issues.push({
-          path: "embedding.locationEnvKey",
+          path: "embedding.location",
           code: "invalid",
         });
       }
-      if (!hasRequiredValue(draft.embedding.credentialsEnvKey)) {
+      if (!hasRequiredValue(draft.embedding.credentialsFile)) {
         issues.push({
-          path: "embedding.credentialsEnvKey",
+          path: "embedding.credentialsFile",
           code: "required",
         });
       } else if (
-        draft.embedding.credentialsEnvKey.trim().length > 128 ||
-        !isEnvKey(draft.embedding.credentialsEnvKey.trim())
+        (hasRequiredValue(draft.embedding.credentialsFile) &&
+          draft.embedding.credentialsFile.trim().length >
+            VERTEX_CREDENTIALS_JSON_LIMIT) ||
+        (hasRequiredValue(draft.embedding.credentialsFile) &&
+          !isJsonObject(draft.embedding.credentialsFile.trim()))
       ) {
         issues.push({
-          path: "embedding.credentialsEnvKey",
+          path: "embedding.credentialsFile",
           code: "invalid",
         });
       }
@@ -530,17 +527,14 @@ export function validateSetupDraft(draft: SetupDraft): SetupValidationIssue[] {
           code: "invalid",
         });
       }
-      if (!hasRequiredValue(draft.embedding.envKey)) {
+      if (!hasRequiredValue(draft.embedding.apiKey)) {
         issues.push({
-          path: "embedding.envKey",
+          path: "embedding.apiKey",
           code: "required",
         });
-      } else if (
-        draft.embedding.envKey.trim().length > 128 ||
-        !isEnvKey(draft.embedding.envKey.trim())
-      ) {
+      } else if (draft.embedding.apiKey.trim().length > 512) {
         issues.push({
-          path: "embedding.envKey",
+          path: "embedding.apiKey",
           code: "invalid",
         });
       }

@@ -33,9 +33,13 @@ export class EmbeddingClient {
       }
       if (
         this.config.google.useVertexAi &&
-        (!this.config.google.project || !this.config.google.location)
+        (!this.config.google.project ||
+          !this.config.google.location ||
+          !this.config.google.credentialsFile)
       ) {
-        throw new Error("Google Vertex AI project and location are required.");
+        throw new Error(
+          "Google Vertex AI project, location, and credentials JSON are required.",
+        );
       }
       if (!this.config.google.useVertexAi && !this.config.google.apiKey) {
         throw new Error("Google API key is required.");

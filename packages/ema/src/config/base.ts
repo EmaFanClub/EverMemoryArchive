@@ -60,6 +60,7 @@ export interface GoogleLLMConfig {
   readonly useVertexAi: boolean;
   readonly project: string;
   readonly location: string;
+  /** Raw Vertex AI credentials JSON. Field name is kept for stored config compatibility. */
   readonly credentialsFile: string;
 }
 
@@ -85,6 +86,7 @@ export interface GoogleEmbeddingConfig {
   readonly useVertexAi: boolean;
   readonly project: string;
   readonly location: string;
+  /** Raw Vertex AI credentials JSON. Field name is kept for stored config compatibility. */
   readonly credentialsFile: string;
 }
 

@@ -76,6 +76,6 @@ rm -rf .ema/docker-mongodb .ema/docker-local .data/next-js-cache
 
 ## Provider Secrets
 
-Model provider secrets are still regular environment variables such as `GEMINI_API_KEY` or `OPENAI_API_KEY`.
+Setup and dashboard settings store model provider credentials directly. Enter the actual API key for API-key based providers, or the raw service-account JSON for Vertex AI.
 
-For local Docker runs, export them in your shell or add them to your own Compose override file. In setup and dashboard settings, EMA stores the environment variable names, not the secret values.
+Older installs that stored environment variable names such as `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_APPLICATION_CREDENTIALS` must revisit setup and save direct credentials before using the runtime.

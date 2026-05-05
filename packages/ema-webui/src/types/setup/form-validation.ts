@@ -1,41 +1,44 @@
-import type { SetupDraft, SetupStepId } from "./v1beta1";
+import {
+  VERTEX_CREDENTIALS_JSON_LIMIT,
+  type SetupDraft,
+  type SetupStepId,
+} from "./v1beta1";
 import { fieldLabels } from "./feedback";
 
 export type SetupFieldPath =
   | "llm.model"
   | "llm.baseUrl"
-  | "llm.envKey"
-  | "llm.projectEnvKey"
-  | "llm.locationEnvKey"
-  | "llm.credentialsEnvKey"
+  | "llm.apiKey"
+  | "llm.project"
+  | "llm.location"
+  | "llm.credentialsFile"
   | "embedding.model"
   | "embedding.baseUrl"
-  | "embedding.envKey"
-  | "embedding.projectEnvKey"
-  | "embedding.locationEnvKey"
-  | "embedding.credentialsEnvKey"
+  | "embedding.apiKey"
+  | "embedding.project"
+  | "embedding.location"
+  | "embedding.credentialsFile"
   | "owner.name"
   | "owner.qq";
 
 export const fieldLimits: Partial<Record<SetupFieldPath, number>> = {
   "llm.model": 128,
   "llm.baseUrl": 512,
-  "llm.envKey": 128,
-  "llm.projectEnvKey": 128,
-  "llm.locationEnvKey": 128,
-  "llm.credentialsEnvKey": 128,
+  "llm.apiKey": 512,
+  "llm.project": 128,
+  "llm.location": 128,
+  "llm.credentialsFile": VERTEX_CREDENTIALS_JSON_LIMIT,
   "embedding.model": 128,
   "embedding.baseUrl": 512,
-  "embedding.envKey": 128,
-  "embedding.projectEnvKey": 128,
-  "embedding.locationEnvKey": 128,
-  "embedding.credentialsEnvKey": 128,
+  "embedding.apiKey": 512,
+  "embedding.project": 128,
+  "embedding.location": 128,
+  "embedding.credentialsFile": VERTEX_CREDENTIALS_JSON_LIMIT,
   "owner.name": 48,
   "owner.qq": 12,
 };
 
 const qqPattern = /^[1-9]\d{4,11}$/;
-const envKeyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function isHttpUrl(value: string) {
   try {
@@ -69,9 +72,14 @@ function validateHttpUrl(value: string, path: SetupFieldPath) {
   return null;
 }
 
-function validateEnvKey(value: string, path: SetupFieldPath) {
-  if (!envKeyPattern.test(value.trim())) {
-    return `${fieldName(path)}只能包含字母、数字、下划线，且不能以数字开头。`;
+function validateJsonObject(value: string, path: SetupFieldPath) {
+  try {
+    const parsed = JSON.parse(value.trim());
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return `${fieldName(path)}需要是有效的 JSON 对象。`;
+    }
+  } catch {
+    return `${fieldName(path)}需要是有效的 JSON 对象。`;
   }
   return null;
 }
@@ -82,26 +90,26 @@ export function getFieldValue(path: SetupFieldPath, draft: SetupDraft) {
       return draft.llm.model;
     case "llm.baseUrl":
       return draft.llm.baseUrl;
-    case "llm.envKey":
-      return draft.llm.envKey;
-    case "llm.projectEnvKey":
-      return draft.llm.projectEnvKey;
-    case "llm.locationEnvKey":
-      return draft.llm.locationEnvKey;
-    case "llm.credentialsEnvKey":
-      return draft.llm.credentialsEnvKey;
+    case "llm.apiKey":
+      return draft.llm.apiKey;
+    case "llm.project":
+      return draft.llm.project;
+    case "llm.location":
+      return draft.llm.location;
+    case "llm.credentialsFile":
+      return draft.llm.credentialsFile;
     case "embedding.model":
       return draft.embedding.model;
     case "embedding.baseUrl":
       return draft.embedding.baseUrl;
-    case "embedding.envKey":
-      return draft.embedding.envKey;
-    case "embedding.projectEnvKey":
-      return draft.embedding.projectEnvKey;
-    case "embedding.locationEnvKey":
-      return draft.embedding.locationEnvKey;
-    case "embedding.credentialsEnvKey":
-      return draft.embedding.credentialsEnvKey;
+    case "embedding.apiKey":
+      return draft.embedding.apiKey;
+    case "embedding.project":
+      return draft.embedding.project;
+    case "embedding.location":
+      return draft.embedding.location;
+    case "embedding.credentialsFile":
+      return draft.embedding.credentialsFile;
     case "owner.name":
       return draft.owner.name;
     case "owner.qq":
@@ -122,23 +130,18 @@ export function getStepFieldPaths(
         return [];
       }
       return draft.llm.provider === "google" && draft.llm.useVertexAi
-        ? [
-            "llm.model",
-            "llm.projectEnvKey",
-            "llm.locationEnvKey",
-            "llm.credentialsEnvKey",
-          ]
-        : ["llm.model", "llm.baseUrl", "llm.envKey"];
+        ? ["llm.model", "llm.project", "llm.location", "llm.credentialsFile"]
+        : ["llm.model", "llm.baseUrl", "llm.apiKey"];
     case "embedding":
       return draft.embedding.provider === "google" &&
         draft.embedding.useVertexAi
         ? [
             "embedding.model",
-            "embedding.projectEnvKey",
-            "embedding.locationEnvKey",
-            "embedding.credentialsEnvKey",
+            "embedding.project",
+            "embedding.location",
+            "embedding.credentialsFile",
           ]
-        : ["embedding.model", "embedding.baseUrl", "embedding.envKey"];
+        : ["embedding.model", "embedding.baseUrl", "embedding.apiKey"];
     case "owner":
       return ["owner.name", "owner.qq"];
     case "review":
@@ -168,15 +171,9 @@ export function validateSetupField(path: SetupFieldPath, draft: SetupDraft) {
     case "llm.baseUrl":
     case "embedding.baseUrl":
       return validateHttpUrl(value, path);
-    case "llm.envKey":
-    case "llm.projectEnvKey":
-    case "llm.locationEnvKey":
-    case "llm.credentialsEnvKey":
-    case "embedding.envKey":
-    case "embedding.projectEnvKey":
-    case "embedding.locationEnvKey":
-    case "embedding.credentialsEnvKey":
-      return validateEnvKey(value, path);
+    case "llm.credentialsFile":
+    case "embedding.credentialsFile":
+      return validateJsonObject(value, path);
     case "owner.name":
       if (/\r|\n/.test(value)) {
         return "名称不能包含换行。";
@@ -188,7 +185,13 @@ export function validateSetupField(path: SetupFieldPath, draft: SetupDraft) {
       }
       return null;
     case "llm.model":
+    case "llm.apiKey":
+    case "llm.project":
+    case "llm.location":
     case "embedding.model":
+    case "embedding.apiKey":
+    case "embedding.project":
+    case "embedding.location":
       return null;
   }
 }
