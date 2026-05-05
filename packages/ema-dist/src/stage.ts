@@ -877,20 +877,15 @@ async function findServerEntry(appRoot: string): Promise<string> {
 
 async function copyEmaRuntimeAssets(appRoot: string): Promise<void> {
   const sourceRoot = path.join(workspaceRoot(), "packages", "ema", "src");
-  const candidates = [
-    path.join(appRoot, "packages", "ema", "src"),
-    path.join(appRoot, "node_modules", "ema", "src"),
-  ];
-  for (const candidate of candidates) {
-    await copyIfExists(
-      path.join(sourceRoot, "prompt", "templates"),
-      path.join(candidate, "prompt", "templates"),
-    );
-    await copySkillAssets(
-      path.join(sourceRoot, "skills"),
-      path.join(candidate, "skills"),
-    );
-  }
+  const runtimeRoot = path.join(appRoot, "packages", "ema", "src");
+  await copyIfExists(
+    path.join(sourceRoot, "prompt", "templates"),
+    path.join(runtimeRoot, "prompt", "templates"),
+  );
+  await copySkillAssets(
+    path.join(sourceRoot, "skills"),
+    path.join(runtimeRoot, "skills"),
+  );
 }
 
 async function copySkillAssets(

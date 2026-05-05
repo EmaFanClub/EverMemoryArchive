@@ -150,9 +150,9 @@ fn create_shortcut(app_dir: &Path) -> EmaResult<()> {
         &desktop_file,
         format!(
             "[Desktop Entry]\nType=Application\nName=EverMemoryArchive\nExec={}\nPath={}\nIcon={}\nTerminal=true\nCategories=Utility;\n",
-            launcher_path(app_dir).display(),
-            app_dir.display(),
-            app_icon_path(app_dir).display()
+            desktop_entry_exec_path(&launcher_path(app_dir)),
+            desktop_entry_path_value(app_dir),
+            desktop_entry_path_value(&app_icon_path(app_dir))
         ),
     )?;
     if home_dir().join("Desktop").is_dir() {
@@ -174,6 +174,42 @@ fn launcher_path(app_dir: &Path) -> PathBuf {
 
 fn app_icon_path(app_dir: &Path) -> PathBuf {
     app_dir.join("resources").join("ema-logo-min.jpg")
+}
+
+fn desktop_entry_exec_path(path: &Path) -> String {
+    let mut escaped = String::from("\"");
+    for ch in path.to_string_lossy().chars() {
+        match ch {
+            '"' | '`' => {
+                escaped.push('\\');
+                escaped.push(ch);
+            }
+            '\\' => escaped.push_str("\\\\\\\\"),
+            '$' => escaped.push_str("\\\\$"),
+            '%' => escaped.push_str("%%"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            other => escaped.push(other),
+        }
+    }
+    escaped.push('"');
+    escaped
+}
+
+fn desktop_entry_path_value(path: &Path) -> String {
+    let mut escaped = String::new();
+    for ch in path.to_string_lossy().chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            ' ' => escaped.push_str("\\s"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            other => escaped.push(other),
+        }
+    }
+    escaped
 }
 
 #[derive(Debug, Default)]
@@ -201,5 +237,31 @@ impl SetupOptions {
             }
         }
         Ok(options)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn desktop_entry_exec_path_quotes_and_escapes_command_path() {
+        let path =
+            Path::new("/tmp/Ever Memory/quoted\"/$dollar/`tick`/slash\\dir/percent%/ema-launcher");
+
+        assert_eq!(
+            desktop_entry_exec_path(path),
+            "\"/tmp/Ever Memory/quoted\\\"/\\\\$dollar/\\`tick\\`/slash\\\\\\\\dir/percent%%/ema-launcher\""
+        );
+    }
+
+    #[test]
+    fn desktop_entry_path_value_escapes_plain_path_value() {
+        let path = Path::new("/tmp/Ever Memory/quoted\"/slash\\tab\tline\nicon.jpg");
+
+        assert_eq!(
+            desktop_entry_path_value(path),
+            "/tmp/Ever\\sMemory/quoted\"/slash\\\\tab\\tline\\nicon.jpg"
+        );
     }
 }
