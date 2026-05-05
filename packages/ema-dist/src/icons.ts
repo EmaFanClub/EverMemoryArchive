@@ -7,6 +7,8 @@ const require = createRequire(import.meta.url);
 const sharp = require("sharp") as typeof import("sharp");
 
 const WINDOWS_ICON_SIZES = [256, 128, 64, 48, 32, 16] as const;
+const WEBUI_ICON_SIZE = 512;
+const WEBUI_APPLE_ICON_SIZE = 180;
 const APPLE_ICON_CORNER_EXPONENT = 5;
 const ICON_MASK_SUPERSAMPLE = 4;
 
@@ -27,6 +29,27 @@ export const WINDOWS_ICON_ASSET = path.join(
   "ema-dist",
   "assets",
   "ema-logo.ico",
+);
+export const WEBUI_FAVICON_ASSET = path.join(
+  workspaceRoot(),
+  "packages",
+  "ema-webui",
+  "public",
+  "favicon.ico",
+);
+export const WEBUI_ICON_ASSET = path.join(
+  workspaceRoot(),
+  "packages",
+  "ema-webui",
+  "public",
+  "icon.png",
+);
+export const WEBUI_APPLE_ICON_ASSET = path.join(
+  workspaceRoot(),
+  "packages",
+  "ema-webui",
+  "public",
+  "apple-icon.png",
 );
 
 export async function ensureWindowsIconAsset(): Promise<string> {
@@ -49,6 +72,19 @@ export async function generateWindowsIconAsset(): Promise<string> {
   return WINDOWS_ICON_ASSET;
 }
 
+export async function generateWebuiIconAssets(): Promise<string[]> {
+  await Promise.all([
+    generateWindowsIcon(APP_ICON_SOURCE, WEBUI_FAVICON_ASSET),
+    generatePngIcon(APP_ICON_SOURCE, WEBUI_ICON_ASSET, WEBUI_ICON_SIZE),
+    generatePngIcon(
+      APP_ICON_SOURCE,
+      WEBUI_APPLE_ICON_ASSET,
+      WEBUI_APPLE_ICON_SIZE,
+    ),
+  ]);
+  return [WEBUI_FAVICON_ASSET, WEBUI_ICON_ASSET, WEBUI_APPLE_ICON_ASSET];
+}
+
 export async function generateWindowsIcon(
   sourcePath: string,
   outputPath: string,
@@ -61,6 +97,24 @@ export async function generateWindowsIcon(
   );
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, buildIco(images));
+}
+
+export async function generatePngIcon(
+  sourcePath: string,
+  outputPath: string,
+  size: number,
+): Promise<void> {
+  const rgba = await renderIconImage(sourcePath, size);
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await sharp(rgba, {
+    raw: {
+      width: size,
+      height: size,
+      channels: 4,
+    },
+  })
+    .png()
+    .toFile(outputPath);
 }
 
 async function renderIconImage(
