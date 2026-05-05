@@ -36,87 +36,20 @@ Ema 当前支持 macOS、Linux 与 Windows。运行 Ema 至少需要：
 - 硬盘空间 ≥ 4GB
 - 无需 GPU
 
-安装 Ema 之前，需要提前配置 Node.js、pnpm 和 MongoDB 环境。
+推荐大多数用户从 GitHub Release 下载 `portable` 版本安装包。`portable` 版本内置 Node.js、MongoDB 和 `ema-launcher` 启动器，通常下载后即可运行；如果希望通过安装器完成安装，可以选择文件名包含 `installer` 的安装包。
 
-### 1. 安装 Node.js 和 pnpm
+### 1. 下载安装包
 
-前往 Node.js 官方网站下载安装 Node.js（推荐 v20+）。
+打开 GitHub Release 页面：
 
-- Node.js 官方下载页：https://nodejs.org/en/download/
+https://github.com/EmaFanClub/EverMemoryArchive/releases
 
-安装完成后，执行下面的命令启用 pnpm：
+进入最新版本，在 `Assets` 中下载与你系统匹配的 `portable` 安装包：
 
-```bash
-corepack enable pnpm
-```
+- 解压运行：下载 `ema-<platform>-portable-<revision>.zip` 或 `.7z`，解压后在包根目录运行 `ema-launcher`（Windows 为 `ema-launcher.exe`）。
+- 安装器运行：下载 `ema-<platform>-portable-<revision>-installer.*`，按提示完成安装。安装器后缀按平台区分：Windows 为 `.exe`，macOS 为 `.command`，Linux 为 `.run`。
 
-验证安装：
-
-```bash
-node -v
-pnpm -v
-```
-
-### 2. 下载 Ema 源码包
-
-从 GitHub 克隆 Ema 仓库：
-
-```bash
-git clone https://github.com/EmaFanClub/EverMemoryArchive.git
-cd EverMemoryArchive
-```
-
-### 3. 构建 Ema 项目
-
-安装所有依赖并构建 WebUI：
-
-```bash
-pnpm install
-pnpm --filter ema-webui build
-```
-
-### 4. 安装并启动 MongoDB
-
-Ema 使用 MongoDB 作为数据库，需要先安装并启动 MongoDB 服务。
-
-#### macOS（Apple Silicon）
-
-```bash
-curl -L https://fastdl.mongodb.org/osx/mongodb-macos-arm64-8.2.7.tgz -o mongodb.tgz
-tar -xzf mongodb.tgz
-cd mongodb-macos-aarch64--8.2.7/bin
-mkdir data
-./mongod --port 27017 --dbpath ./data
-```
-
-#### Debian 12.0
-
-```bash
-wget https://repo.mongodb.org/apt/debian/dists/bookworm/mongodb-org/8.2/main/binary-amd64/mongodb-org-server_8.2.7_amd64.deb
-sudo dpkg -i mongodb-org-server_8.2.7_amd64.deb
-sudo systemctl start mongod
-sudo systemctl enable mongod
-```
-
-#### Windows
-
-下载安装包：https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.2.7-signed.msi
-
-默认情况下，MongoDB 会运行在 `mongodb://localhost:27017/`。
-
-更多版本安装请参考 MongoDB 官方文档：https://www.mongodb.com/try/download/community
-
-### 5. 启动 WebUI
-
-打开一个新的终端，执行：
-
-```bash
-pnpm webui -- --prod --mongo mongodb://127.0.0.1:27017/
-```
-
-启动成功后，在浏览器打开 http://localhost:3000/ 即可访问 WebUI。根据页面提示完成初始化配置。
-
-### 6. 配置模型 API Key（必须）
+### 2. 配置 Ema
 
 Ema 启动后，必须至少配置一个模型 API Key。
 
@@ -127,21 +60,7 @@ Ema 启动后，必须至少配置一个模型 API Key。
 
 获取 API Key 后，在 Ema 设置页面中填写即可。
 
-### 7. 配置 Tavily 搜索引擎 API Key（可选）
-
-Ema 支持 Tavily 搜索引擎，用于联网搜索与信息检索。
-
-申请 API Key：https://www.tavily.com/
-
-然后在 Ema 设置页面中填写即可。
-
-### 8. 配置 NapCatQQ（可选）
-
-如果你希望将 Ema 接入 QQ，请安装 NapCatQQ：
-
-https://napneko.github.io/
-
-安装完成后，根据 NapCatQQ 文档完成配置，并在 Ema 中进行连接。
+Ema 也提供 `minimal` 版本、GitHub Actions 构建产物、Tavily 搜索引擎和 NapCatQQ 接入等进阶选择，详见 [安装文档](docs/installation.md)。
 
 ## Ema 技术特点
 

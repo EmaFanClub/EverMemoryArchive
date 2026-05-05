@@ -31,5 +31,6 @@ Before setup, create a `.env` file from `.env.example` and fill the provider sec
 
 ## References
 
+- [Installation](./installation.md)
 - [Core References](/core/)
 - [API Reference](/api-reference/)
