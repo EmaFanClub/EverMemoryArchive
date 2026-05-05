@@ -8,6 +8,10 @@ import {
   type LLMConfig,
 } from "ema";
 import {
+  createAccessTokenRecord,
+  hasAccessTokenConfig,
+} from "@/server/services/access-token";
+import {
   isEmbeddingConfigComplete,
   isLLMConfigComplete,
   isLLMConfigSupported,
@@ -134,6 +138,7 @@ function validationIssuesForCheck(
     ...initialDraft,
     owner: {
       name: "Owner",
+      accessToken: "AbC123xYz7890QwR",
       qq: "10000",
     },
     [target]: config,
@@ -368,6 +373,9 @@ function getSetupInitializationReason(
   if (!hasOwner || !config) {
     return "CONFIG_MISSING";
   }
+  if (!hasAccessTokenConfig(config.system)) {
+    return "CONFIG_INCOMPLETE";
+  }
 
   const llm = setupLlmFromGlobalConfig(config.defaultLlm);
   const embedding = setupEmbeddingFromGlobalConfig(config.defaultEmbedding);
@@ -459,7 +467,10 @@ export function buildDryRunResponse(draft: SetupDraft): SetupDryRunResponse {
         {
           id: "initialize-owner",
           title: "初始化个人信息",
-          status: draft.owner.name.trim() ? "ready" : "blocked",
+          status:
+            draft.owner.name.trim() && draft.owner.accessToken.trim()
+              ? "ready"
+              : "blocked",
         },
       ],
     },
@@ -530,6 +541,7 @@ function buildGlobalConfigRecord(draft: SetupDraft): GlobalConfigRecord {
     version: 1,
     system: {
       httpsProxy: "",
+      ...createAccessTokenRecord(draft.owner.accessToken),
     },
     defaultLlm: buildLlmConfig(draft),
     defaultEmbedding: buildEmbeddingConfig(draft),

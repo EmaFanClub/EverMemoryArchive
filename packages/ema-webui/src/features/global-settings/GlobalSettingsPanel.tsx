@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   Info,
+  KeyRound,
   LoaderCircle,
   Network,
   User,
@@ -19,6 +20,7 @@ import {
   getGlobalSettings,
   runGlobalEmbeddingCheck,
   runGlobalLlmCheck,
+  saveGlobalAccessToken,
   saveGlobalEmbeddingConfig,
   saveGlobalLlmConfig,
   saveOwnerQqBinding,
@@ -42,7 +44,7 @@ import {
   type LLMProvider,
 } from "@/types/setup/v1beta1";
 
-type DetailTitle = "QQ号绑定" | "默认LLM服务" | "默认Embedding服务";
+type DetailTitle = "Web UI" | "QQ号绑定" | "默认LLM服务" | "默认Embedding服务";
 type CheckStatus = "idle" | "testing" | "success" | "error";
 
 interface ServiceProviderFields {
@@ -524,6 +526,9 @@ export function GlobalSettingsPanel() {
   const [qqDraft, setQqDraft] = useState("");
   const [savedQq, setSavedQq] = useState("");
   const [qqSaving, setQqSaving] = useState(false);
+  const [webuiTokenDraft, setWebuiTokenDraft] = useState("");
+  const [webuiTokenConfigured, setWebuiTokenConfigured] = useState(false);
+  const [webuiTokenSaving, setWebuiTokenSaving] = useState(false);
   const [savedLlm, setSavedLlm] = useState<ServiceDraft>(DEFAULT_LLM_DRAFT);
   const [llmDraft, setLlmDraft] = useState<ServiceDraft>(DEFAULT_LLM_DRAFT);
   const [llmStatus, setLlmStatus] = useState<CheckStatus>("idle");
@@ -560,6 +565,8 @@ export function GlobalSettingsPanel() {
         setSettings(response);
         setQqDraft(response.identityBindings.qq.uid);
         setSavedQq(response.identityBindings.qq.uid);
+        setWebuiTokenDraft("");
+        setWebuiTokenConfigured(response.access.webui.configured);
         const nextLlm = serviceDraftFromLlmConfig(response.services.llm);
         const nextEmbedding = serviceDraftFromEmbeddingConfig(
           response.services.embedding,
@@ -611,6 +618,7 @@ export function GlobalSettingsPanel() {
   const llmDirty = !areDraftsEqual(llmDraft, savedLlm);
   const embeddingDirty = !areDraftsEqual(embeddingDraft, savedEmbedding);
   const qqDirty = qqDraft.trim() !== savedQq;
+  const webuiTokenDirty = Boolean(webuiTokenDraft.trim());
 
   function showToast(message: string, kind: ToastState["kind"]) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -658,6 +666,7 @@ export function GlobalSettingsPanel() {
   }
 
   function isCurrentDetailDirty() {
+    if (detailTitle === "Web UI") return webuiTokenDirty;
     if (detailTitle === "QQ号绑定") return qqDirty;
     if (detailTitle === "默认LLM服务") return llmDirty;
     if (detailTitle === "默认Embedding服务") return embeddingDirty;
@@ -673,6 +682,10 @@ export function GlobalSettingsPanel() {
   }
 
   function discardCurrentDetailAndClose() {
+    if (detailTitle === "Web UI") {
+      setWebuiTokenDraft("");
+      setWebuiTokenSaving(false);
+    }
     if (detailTitle === "QQ号绑定") {
       setQqDraft(savedQq);
       setQqSaving(false);
@@ -819,6 +832,25 @@ export function GlobalSettingsPanel() {
     }
   }
 
+  async function saveWebuiToken() {
+    if (!webuiTokenDirty || webuiTokenSaving) return;
+    setWebuiTokenSaving(true);
+    try {
+      const response = await saveGlobalAccessToken(webuiTokenDraft.trim());
+      if (response.ok) {
+        setWebuiTokenConfigured(response.access.webui.configured);
+        setWebuiTokenDraft("");
+        showToast("Web UI 访问 Token 已保存", "success");
+      } else {
+        showToast(response.error?.message ?? "保存失败", "error");
+      }
+    } catch (error) {
+      showToast(`保存失败：${messageFromError(error)}`, "error");
+    } finally {
+      setWebuiTokenSaving(false);
+    }
+  }
+
   return (
     <div className={styles.actorSettings}>
       <div className={styles.actorSettingsScroll}>
@@ -838,6 +870,20 @@ export function GlobalSettingsPanel() {
               </span>
             </button>
             <h3 className={styles.actorSettingsProfileName}>{userName}</h3>
+          </section>
+
+          <section className={styles.actorSettingsSection}>
+            <h3 className={styles.actorSettingsSectionTitle}>
+              <span>访问</span>
+            </h3>
+            <div className={styles.actorSettingsMenuList}>
+              <SettingsMenuButton
+                icon={<KeyRound aria-hidden="true" />}
+                title="Web UI"
+                description="配置访问token等"
+                onClick={() => openDetail("Web UI")}
+              />
+            </div>
           </section>
 
           <section className={styles.actorSettingsSection}>
@@ -900,7 +946,16 @@ export function GlobalSettingsPanel() {
               </button>
             </div>
           </div>
-          {detailTitle === "QQ号绑定" ? (
+          {detailTitle === "Web UI" ? (
+            <WebUiAccessDetail
+              value={webuiTokenDraft}
+              configured={webuiTokenConfigured}
+              dirty={webuiTokenDirty}
+              isSaving={webuiTokenSaving}
+              onChange={setWebuiTokenDraft}
+              onSave={saveWebuiToken}
+            />
+          ) : detailTitle === "QQ号绑定" ? (
             <QqBindingDetail
               value={qqDraft}
               dirty={qqDirty}
@@ -999,6 +1054,51 @@ function SettingsMenuButton({
       </span>
       <ChevronRight aria-hidden="true" />
     </button>
+  );
+}
+
+function WebUiAccessDetail({
+  value,
+  configured,
+  dirty,
+  isSaving,
+  onChange,
+  onSave,
+}: {
+  value: string;
+  configured: boolean;
+  dirty: boolean;
+  isSaving: boolean;
+  onChange: (value: string) => void;
+  onSave: () => void | Promise<void>;
+}) {
+  return (
+    <>
+      <div className={styles.llmSettingsBody}>
+        <div className={styles.llmSettingsContent}>
+          <div className={styles.settingsInfoCard} role="note">
+            <Info aria-hidden="true" />
+            <span>
+              <strong>
+                {configured ? "访问 Token 已配置" : "访问 Token 未配置"}
+              </strong>
+              <small>保存新的 Token 后，当前浏览器会自动更新登录凭据。</small>
+            </span>
+          </div>
+          <label className={styles.llmSettingsField}>
+            <span className={styles.llmSettingsControlTitle}>访问 Token</span>
+            <input
+              value={value}
+              placeholder="输入新的访问 Token"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => onChange(event.currentTarget.value)}
+            />
+          </label>
+        </div>
+      </div>
+      <SettingsFooter dirty={dirty} isSaving={isSaving} onSave={onSave} />
+    </>
   );
 }
 

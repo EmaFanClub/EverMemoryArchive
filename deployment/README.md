@@ -40,6 +40,9 @@ docker compose -f deployment/local.yml up --build
 - `app`: Node.js 22 WebUI app on port `3000`.
 
 Open [http://localhost:3000](http://localhost:3000) after the app starts.
+Setup generates a 16-character default WebUI access token that can be edited.
+After setup, `/dashboard` and API routes require logging in at `/login`; the
+browser keeps the token in a 24-hour HttpOnly cookie.
 
 ## MongoDB
 

@@ -278,6 +278,11 @@ export interface GlobalEmbeddingConfig {
 export interface GlobalSettingsResponse {
   apiVersion: "v1beta1";
   user: DashboardUserProfile;
+  access: {
+    webui: {
+      configured: boolean;
+    };
+  };
   identityBindings: {
     qq: {
       uid: string;
@@ -384,6 +389,27 @@ export interface OwnerQqBindingSaveResponse {
     uid: string;
     configured: boolean;
     updatedAt: string;
+  };
+  error?: {
+    code: "INVALID_CONFIG" | "DATABASE_WRITE_FAILED";
+    retryable: boolean;
+    message: string;
+  };
+}
+
+export interface GlobalAccessTokenSaveRequest {
+  requestId?: string;
+  token: string;
+}
+
+export interface GlobalAccessTokenSaveResponse {
+  apiVersion: "v1beta1";
+  ok: boolean;
+  access: {
+    webui: {
+      configured: boolean;
+      updatedAt: string;
+    };
   };
   error?: {
     code: "INVALID_CONFIG" | "DATABASE_WRITE_FAILED";
