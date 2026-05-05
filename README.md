@@ -29,7 +29,7 @@ Ema 当前支持 macOS、Linux 与 Windows。运行 Ema 至少需要：
 - 硬盘空间 ≥ 4GB
 - 无需 GPU
 
-推荐大多数用户从 GitHub Release 下载 `portable` 版本安装包。`portable` 版本内置 Node.js、MongoDB 和启动脚本，通常下载后即可运行；如果希望通过安装器完成安装，可以选择文件名包含 `installer` 的安装包。
+推荐大多数用户从 GitHub Release 下载 `portable` 版本安装包。`portable` 版本内置 Node.js、MongoDB 和 `ema-launcher` 启动器，通常下载后即可运行；如果希望通过安装器完成安装，可以选择文件名包含 `installer` 的安装包。
 
 ### 1. 下载安装包
 
@@ -39,8 +39,8 @@ https://github.com/EmaFanClub/EverMemoryArchive/releases
 
 进入最新版本，在 `Assets` 中下载与你系统匹配的 `portable` 安装包：
 
-- 解压运行：下载 `ema-<platform>-portable-<revision>.zip` 或 `.7z`，解压后运行 `start.sh`、`start.cmd` 或对应平台的启动脚本。
-- 安装器运行：下载 `ema-<platform>-portable-<revision>-installer.*`，按提示完成安装。当前构建产物的安装器通常为 Windows `.bat`、macOS `.command`、Linux `.run`。
+- 解压运行：下载 `ema-<platform>-portable-<revision>.zip` 或 `.7z`，解压后在包根目录运行 `ema-launcher`（Windows 为 `ema-launcher.exe`）。
+- 安装器运行：下载 `ema-<platform>-portable-<revision>-installer.*`，按提示完成安装。安装器后缀按平台区分：Windows 为 `.exe`，macOS 为 `.command`，Linux 为 `.run`。
 
 ### 2. 配置 Ema
 
