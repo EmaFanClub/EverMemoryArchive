@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { ensureWindowsIconAsset } from "./icons";
 import { execFile } from "./shell";
 import { workspaceRoot } from "./paths";
 import type { Platform, PlatformId } from "./platforms";
@@ -40,6 +41,9 @@ export async function buildRustBinary(
 ): Promise<string> {
   const crateRoot = rustCrateRoot();
   const target = rustTarget(platform);
+  if (platform.os === "win32") {
+    await ensureWindowsIconAsset();
+  }
   await execFile(
     "cargo",
     ["build", "--release", "--locked", "--bin", binary, "--target", target],

@@ -22,9 +22,19 @@ Application runtime files are staged under:
 
 ```text
 dist/$platform/EverMemoryArchive/app/server.js
-dist/$platform/EverMemoryArchive/app/server.js.map
-dist/$platform/EverMemoryArchive/app/assets/
+dist/$platform/EverMemoryArchive/app/.next/
+dist/$platform/EverMemoryArchive/app/public/
+dist/$platform/EverMemoryArchive/app/node_modules/  # native .node packages only
+dist/$platform/EverMemoryArchive/server-relpath.txt
 ```
+
+`app/server.js` is Vite's CommonJS bundle of Next.js' generated standalone
+`packages/ema-webui/server.js`. Staging also bundles the generated
+`.next/server/**/chunks/**/*.js` files in-place with Vite so the packaged app
+does not depend on pnpm's standalone `node_modules` link tree for JavaScript.
+Only Next runtime data files, static assets, `public`, EMA prompt/skill assets,
+and target-platform native `.node` packages remain as copied files beside the
+bundled JavaScript.
 
 `build` writes CI-ready artifacts to `dist/$platform/`:
 
@@ -99,6 +109,10 @@ from Chrome-launcher-style paths, Windows App Paths, or `PATH`. If that fails,
 it uses `default-browser` to identify the user's default browser before falling
 back to the system URL handler. During installation the user is asked whether to
 set `EMA_OPEN_MODE=browser` instead. `EMA_OPEN_MODE=none` starts only the server.
+The staged package copies `.github/assets/ema-logo-min.jpg` into
+`resources/ema-logo-min.jpg`; Windows setup and launcher builds generate and
+embed an ignored `packages/ema-dist/assets/ema-logo.ico` version of that logo,
+and Linux desktop entries reference the staged jpg.
 
 Installer artifacts are Rust `setup` executables. `createSelfInstaller` compiles
 `setup` with `EMA_DIST_SETUP_PAYLOAD_DIR` pointing at the staged package; the

@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
-import { builtinModules } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { build as viteBuild } from "vite";
+import type { Plugin } from "vite";
 import {
   minimalStageRoot,
   portableStageRoot,
@@ -14,6 +15,7 @@ import type { PackageKind, Platform } from "./platforms";
 import installTextTemplate from "./templates/INSTALL.txt?raw";
 import { renderTemplate } from "./templates";
 import { buildRustBinary } from "./rust";
+import { APP_ICON_SOURCE } from "./icons";
 
 interface StageOptions {
   readonly platform: Platform;
@@ -22,15 +24,20 @@ interface StageOptions {
 }
 
 interface AppStageResult {
-  readonly root: string;
   readonly serverRelativePath: string;
 }
+
+const NODE_BUILTINS = new Set([
+  ...builtinModules,
+  ...builtinModules.map((moduleName) => `node:${moduleName}`),
+]);
+const APP_ICON_RELATIVE_PATH = path.join("resources", "ema-logo-min.jpg");
 
 export async function stagePackage(options: StageOptions): Promise<string> {
   const root = stageRoot(options.platform, options.kind);
   await fs.rm(root, { recursive: true, force: true });
   await fs.mkdir(root, { recursive: true });
-  const app = await copyStandaloneApp(root, options.platform);
+  const app = await copyNextStandaloneApp(root, options.platform);
   await copyIfExists(
     path.join(workspaceRoot(), "README.md"),
     path.join(root, "README.md"),
@@ -39,6 +46,7 @@ export async function stagePackage(options: StageOptions): Promise<string> {
     path.join(workspaceRoot(), "LICENSE"),
     path.join(root, "LICENSE"),
   );
+  await copyAppIcon(root);
   await writeLaunchers(root, options.platform, options.kind);
   await writePackageManifest(root, options, app.serverRelativePath);
   return root;
@@ -64,7 +72,7 @@ export async function refreshMinimalStageFromPortable(
   return target;
 }
 
-async function copyStandaloneApp(
+async function copyNextStandaloneApp(
   root: string,
   platform: Platform,
 ): Promise<AppStageResult> {
@@ -81,39 +89,38 @@ async function copyStandaloneApp(
   }
 
   const appRoot = path.join(root, "app");
-  const runtimeRoot = path.join(appRoot, APP_RUNTIME_ASSETS_DIR);
   await fs.mkdir(appRoot, { recursive: true });
   await writeCommonJsPackageManifest(appRoot);
-  await fs.cp(standaloneRoot, runtimeRoot, {
-    recursive: true,
-    force: true,
-    preserveTimestamps: true,
-    verbatimSymlinks: true,
-  });
 
-  const serverPath = await findServerEntry(runtimeRoot);
+  const serverPath = await findServerEntry(standaloneRoot);
   const serverDir = path.dirname(serverPath);
-  await copyIfExists(staticRoot, path.join(serverDir, ".next", "static"));
-  await copyIfExists(publicRoot, path.join(serverDir, "public"));
-  await copyEmaRuntimeAssets(runtimeRoot);
-  await prunePlatformNativeDependencies(runtimeRoot, platform);
-  await ensurePlatformNativeDependencies(runtimeRoot, platform);
-  const flattenedServerPath = path.join(appRoot, "server.js");
-  await writeFlattenedServerEntry({
-    outputPath: flattenedServerPath,
-    runtimeRoot,
+  const bundledServerPath = path.join(appRoot, "server.js");
+
+  await copyIfExists(
+    path.join(serverDir, ".next"),
+    path.join(appRoot, ".next"),
+  );
+  await copyIfExists(staticRoot, path.join(appRoot, ".next", "static"));
+  await copyIfExists(publicRoot, path.join(appRoot, "public"));
+  await bundleNextServerEntry({
+    outputPath: bundledServerPath,
     serverPath,
   });
-  await fs.rm(serverPath, { force: true });
+  await bundleNextServerChunks({
+    appRoot,
+    serverDir,
+  });
+  await copyPlatformNativeDependencies(standaloneRoot, appRoot, platform);
+  await copyEmaRuntimeAssets(appRoot);
 
   const serverRelativePath = toPosixPath(
-    path.relative(root, flattenedServerPath),
+    path.relative(root, bundledServerPath),
   );
   await fs.writeFile(
     path.join(root, "server-relpath.txt"),
     `${serverRelativePath}\n`,
   );
-  return { root: appRoot, serverRelativePath };
+  return { serverRelativePath };
 }
 
 async function writeCommonJsPackageManifest(appRoot: string): Promise<void> {
@@ -121,6 +128,540 @@ async function writeCommonJsPackageManifest(appRoot: string): Promise<void> {
     path.join(appRoot, "package.json"),
     `${JSON.stringify({ type: "commonjs" }, null, 2)}\n`,
   );
+}
+
+async function copyAppIcon(root: string): Promise<void> {
+  const destination = path.join(root, APP_ICON_RELATIVE_PATH);
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.copyFile(APP_ICON_SOURCE, destination);
+}
+
+async function bundleNextServerEntry(options: {
+  readonly outputPath: string;
+  readonly serverPath: string;
+}): Promise<void> {
+  const serverDir = path.dirname(options.serverPath);
+  await viteBuild({
+    configFile: false,
+    logLevel: "warn",
+    plugins: nextServerBundlePlugins(serverDir),
+    define: {
+      "process.env.NODE_ENV": JSON.stringify("production"),
+    },
+    resolve: nextServerBundleResolve(),
+    ssr: {
+      noExternal: true,
+    },
+    build: {
+      emptyOutDir: false,
+      minify: false,
+      outDir: path.dirname(options.outputPath),
+      ssr: true,
+      target: "node18",
+      commonjsOptions: nextServerCommonJsOptions(),
+      lib: {
+        entry: options.serverPath,
+        formats: ["cjs"],
+        fileName: () => path.basename(options.outputPath),
+      },
+      rollupOptions: {
+        external: isNextServerBundleExternal,
+        output: {
+          entryFileNames: path.basename(options.outputPath),
+          inlineDynamicImports: true,
+        },
+      },
+    },
+  });
+}
+
+async function bundleNextServerChunks(options: {
+  readonly appRoot: string;
+  readonly serverDir: string;
+}): Promise<void> {
+  const serverRoot = path.join(options.serverDir, ".next", "server");
+  const chunkEntries = await findNextServerChunkEntries(
+    options.serverDir,
+    serverRoot,
+  );
+  if (Object.keys(chunkEntries).length === 0) {
+    return;
+  }
+
+  await viteBuild({
+    configFile: false,
+    logLevel: "warn",
+    plugins: nextServerBundlePlugins(options.serverDir),
+    define: {
+      "process.env.NODE_ENV": JSON.stringify("production"),
+    },
+    resolve: nextServerBundleResolve(),
+    ssr: {
+      noExternal: true,
+    },
+    build: {
+      emptyOutDir: false,
+      minify: false,
+      outDir: options.appRoot,
+      ssr: true,
+      target: "node18",
+      commonjsOptions: nextServerCommonJsOptions(),
+      rollupOptions: {
+        input: chunkEntries,
+        external: isNextServerBundleExternal,
+        output: {
+          format: "cjs",
+          entryFileNames: "[name].js",
+          chunkFileNames: ".next/server/_bundled/[name]-[hash].js",
+          sanitizeFileName,
+        },
+      },
+    },
+  });
+}
+
+function nextServerBundlePlugins(serverDir: string): Plugin[] {
+  return [
+    patchNextServerRequireHook(),
+    patchNextServerRequirePage(),
+    patchEmaRuntimeSourceUrls(),
+    inlineNextServerCommonJsModules(serverDir),
+    stubRelativeCommonJsExternals(),
+    resolveStandaloneCommonJsPackages(serverDir),
+  ];
+}
+
+function nextServerBundleResolve(): {
+  readonly conditions: string[];
+  readonly mainFields: string[];
+} {
+  return {
+    conditions: ["node", "require", "default"],
+    mainFields: ["main"],
+  };
+}
+
+function nextServerCommonJsOptions(): {
+  readonly include: RegExp[];
+  readonly ignoreDynamicRequires: true;
+  readonly transformMixedEsModules: true;
+} {
+  return {
+    include: [
+      /[\\/]\.ema-dist-next-server-commonjs[\\/]/,
+      /server\.js$/,
+      /[\\/]\.next[\\/]server[\\/].*\.js$/,
+      /node_modules/,
+    ],
+    ignoreDynamicRequires: true,
+    transformMixedEsModules: true,
+  };
+}
+
+function patchEmaRuntimeSourceUrls(): Plugin {
+  return {
+    name: "ema-dist-patch-ema-runtime-source-urls",
+    transform(code, id) {
+      if (!isNextServerChunk(id) || !code.includes('P("packages/ema/src/')) {
+        return null;
+      }
+
+      return {
+        code: code.replace(
+          /`file:\/\/\$\{[^}]+\.P\("packages\/ema\/src\/([^"]+)"\)\}`/g,
+          (_, relativePath: string) => {
+            return [
+              '`file://${process.cwd().startsWith("/") ? "" : "/"}${process.cwd().replace(/\\\\/g, "/")}/packages/ema/src/',
+              relativePath,
+              "`",
+            ].join("");
+          },
+        ),
+        map: null,
+      };
+    },
+  };
+}
+
+function isNextServerChunk(id: string): boolean {
+  return toPosixPath(id.split("?", 1)[0]).includes("/.next/server/");
+}
+
+function patchNextServerRequirePage(): Plugin {
+  return {
+    name: "ema-dist-patch-next-server-require-page",
+    transform(code, id) {
+      if (!isNextServerRequirePage(id)) {
+        return null;
+      }
+
+      const dynamicPageRequire =
+        "const mod = process.env.NEXT_MINIMAL ? __non_webpack_require__(pagePath) : require(/* turbopackIgnore: true */ pagePath);";
+      if (!code.includes(dynamicPageRequire)) {
+        return null;
+      }
+
+      return {
+        code: code.replace(
+          dynamicPageRequire,
+          "const mod = module.require(pagePath);",
+        ),
+        map: null,
+      };
+    },
+  };
+}
+
+function isNextServerRequirePage(id: string): boolean {
+  return toPosixPath(id.split("?", 1)[0]).endsWith(
+    "next/dist/server/require.js",
+  );
+}
+
+function patchNextServerRequireHook(): Plugin {
+  return {
+    name: "ema-dist-patch-next-server-require-hook",
+    transform(code, id) {
+      if (!isNextServerRequireHook(id)) {
+        return null;
+      }
+
+      const defaultOverrides = [
+        "const defaultOverrides = {",
+        "    'styled-jsx': path.dirname(resolve('styled-jsx/package.json')),",
+        "    'styled-jsx/style': resolve('styled-jsx/style'),",
+        "    'styled-jsx/style.js': resolve('styled-jsx/style')",
+        "};",
+      ].join("\n");
+
+      if (!code.includes(defaultOverrides)) {
+        return null;
+      }
+
+      return {
+        code: code.replace(defaultOverrides, "const defaultOverrides = {};"),
+        map: null,
+      };
+    },
+  };
+}
+
+function isNextServerRequireHook(id: string): boolean {
+  return toPosixPath(id.split("?", 1)[0]).endsWith(
+    "next/dist/server/require-hook.js",
+  );
+}
+
+const NEXT_SERVER_COMMONJS_DIR = ".ema-dist-next-server-commonjs";
+
+interface NextVendoredCommonJsModule {
+  readonly layer: "react-rsc" | "react-ssr";
+  readonly exportName: string;
+}
+
+const NEXT_VENDORED_COMMONJS_MODULES = new Map<
+  string,
+  NextVendoredCommonJsModule
+>([
+  [
+    "react-server-dom-webpack/client",
+    {
+      layer: "react-ssr",
+      exportName: "ReactServerDOMWebpackClient",
+    },
+  ],
+  [
+    "react-server-dom-webpack/client.node",
+    {
+      layer: "react-ssr",
+      exportName: "ReactServerDOMWebpackClient",
+    },
+  ],
+  [
+    "react-server-dom-webpack/server",
+    {
+      layer: "react-rsc",
+      exportName: "ReactServerDOMWebpackServer",
+    },
+  ],
+  [
+    "react-server-dom-webpack/server.node",
+    {
+      layer: "react-rsc",
+      exportName: "ReactServerDOMWebpackServer",
+    },
+  ],
+  [
+    "react-server-dom-webpack/static",
+    {
+      layer: "react-rsc",
+      exportName: "ReactServerDOMWebpackStatic",
+    },
+  ],
+  [
+    "react-server-dom-webpack/static.node",
+    {
+      layer: "react-rsc",
+      exportName: "ReactServerDOMWebpackStatic",
+    },
+  ],
+  [
+    "react-server-dom-turbopack/client",
+    {
+      layer: "react-ssr",
+      exportName: "ReactServerDOMTurbopackClient",
+    },
+  ],
+  [
+    "react-server-dom-turbopack/client.node",
+    {
+      layer: "react-ssr",
+      exportName: "ReactServerDOMTurbopackClient",
+    },
+  ],
+  [
+    "react-server-dom-turbopack/server",
+    {
+      layer: "react-rsc",
+      exportName: "ReactServerDOMTurbopackServer",
+    },
+  ],
+  [
+    "react-server-dom-turbopack/server.node",
+    {
+      layer: "react-rsc",
+      exportName: "ReactServerDOMTurbopackServer",
+    },
+  ],
+  [
+    "react-server-dom-turbopack/static",
+    {
+      layer: "react-rsc",
+      exportName: "ReactServerDOMTurbopackStatic",
+    },
+  ],
+  [
+    "react-server-dom-turbopack/static.node",
+    {
+      layer: "react-rsc",
+      exportName: "ReactServerDOMTurbopackStatic",
+    },
+  ],
+]);
+
+function inlineNextServerCommonJsModules(serverDir: string): Plugin {
+  const moduleRoot = path.join(serverDir, NEXT_SERVER_COMMONJS_DIR);
+  const moduleIds = new Map<string, string>();
+  for (const moduleName of [
+    "critters",
+    "@opentelemetry/api",
+    ...NEXT_VENDORED_COMMONJS_MODULES.keys(),
+  ]) {
+    moduleIds.set(
+      moduleName,
+      path.join(moduleRoot, `${encodeURIComponent(moduleName)}.cjs`),
+    );
+  }
+
+  return {
+    name: "ema-dist-inline-next-server-commonjs-modules",
+    enforce: "pre",
+    resolveId(id) {
+      return moduleIds.get(id) ?? null;
+    },
+    load(id) {
+      if (!id.startsWith(`${moduleRoot}${path.sep}`)) {
+        return null;
+      }
+
+      const moduleName = decodeURIComponent(path.basename(id, ".cjs"));
+      if (moduleName === "critters") {
+        return crittersStubCommonJsModule();
+      }
+      if (moduleName === "@opentelemetry/api") {
+        return nextCompiledOpenTelemetryCommonJsModule();
+      }
+
+      const vendoredModule = NEXT_VENDORED_COMMONJS_MODULES.get(moduleName);
+      if (!vendoredModule) {
+        return null;
+      }
+      return nextVendoredCommonJsModule(vendoredModule);
+    },
+  };
+}
+
+function nextCompiledOpenTelemetryCommonJsModule(): string {
+  return [
+    '"use strict";',
+    'module.exports = require("next/dist/compiled/@opentelemetry/api");',
+  ].join("\n");
+}
+
+function nextVendoredCommonJsModule(
+  module: NextVendoredCommonJsModule,
+): string {
+  return [
+    '"use strict";',
+    'const moduleCompiled = require("next/dist/server/route-modules/app-page/module.compiled");',
+    `module.exports = moduleCompiled.vendored[${JSON.stringify(module.layer)}][${JSON.stringify(module.exportName)}];`,
+  ].join("\n");
+}
+
+function crittersStubCommonJsModule(): string {
+  return [
+    '"use strict";',
+    "class Critters {",
+    "  async process(html) {",
+    "    return html;",
+    "  }",
+    "}",
+    "module.exports = Critters;",
+    "module.exports.default = Critters;",
+  ].join("\n");
+}
+
+const EMPTY_COMMONJS_EXTERNAL_PREFIX = "\0ema-dist-empty-commonjs:";
+
+function stubRelativeCommonJsExternals(): Plugin {
+  return {
+    name: "ema-dist-stub-relative-commonjs-externals",
+    enforce: "pre",
+    resolveId(id) {
+      if (
+        isProductionOnlyRelativeModule(id) ||
+        (id.startsWith("\0.") && id.endsWith("?commonjs-external"))
+      ) {
+        return `${EMPTY_COMMONJS_EXTERNAL_PREFIX}${id}`;
+      }
+      return null;
+    },
+    load(id) {
+      if (id.startsWith(EMPTY_COMMONJS_EXTERNAL_PREFIX)) {
+        return "export default {};";
+      }
+      return null;
+    },
+  };
+}
+
+function isProductionOnlyRelativeModule(id: string): boolean {
+  return (
+    id.startsWith("./dev/") ||
+    id.includes("/dev/") ||
+    id.includes("setup-dev-bundler") ||
+    id.includes("hot-reloader") ||
+    id.includes("dev-overlay") ||
+    id.includes("next-devtools")
+  );
+}
+
+function resolveStandaloneCommonJsPackages(serverDir: string): Plugin {
+  const baseRequire = createRequire(path.join(serverDir, "server.js"));
+  return {
+    name: "ema-dist-resolve-standalone-commonjs-packages",
+    enforce: "pre",
+    resolveId(id, importer) {
+      if (!isBareModuleSpecifier(id)) {
+        return null;
+      }
+      const importerPath = absoluteImporterPath(importer);
+      const resolvers = importerPath
+        ? [createRequire(importerPath), baseRequire]
+        : [baseRequire];
+      for (const resolver of resolvers) {
+        try {
+          return resolver.resolve(id);
+        } catch {
+          // Try the next resolver.
+        }
+      }
+      return null;
+    },
+  };
+}
+
+function absoluteImporterPath(importer: string | undefined): string | null {
+  if (!importer) {
+    return null;
+  }
+  const withoutQuery = importer.split("?", 1)[0];
+  if (!path.isAbsolute(withoutQuery)) {
+    return null;
+  }
+  return withoutQuery;
+}
+
+function isBareModuleSpecifier(id: string): boolean {
+  return (
+    !id.startsWith(".") &&
+    !id.startsWith("/") &&
+    !id.startsWith("\0") &&
+    !id.includes("?") &&
+    !id.startsWith("data:") &&
+    !NODE_BUILTINS.has(id) &&
+    !isNativeRuntimeModule(id)
+  );
+}
+
+function isNextServerBundleExternal(id: string): boolean {
+  return (
+    NODE_BUILTINS.has(id) ||
+    id.endsWith(".map") ||
+    id.endsWith(".node") ||
+    isNativeRuntimeModule(id)
+  );
+}
+
+function isNativeRuntimeModule(id: string): boolean {
+  return (
+    NATIVE_RUNTIME_PACKAGE_NAMES.has(id) ||
+    id.startsWith("@lancedb/lancedb-") ||
+    id.startsWith("@img/sharp-")
+  );
+}
+
+function sanitizeFileName(fileName: string): string {
+  return fileName.replace(/\0/g, "_");
+}
+
+async function findNextServerChunkEntries(
+  serverDir: string,
+  root: string,
+): Promise<Record<string, string>> {
+  const entries: Record<string, string> = {};
+  await collectNextServerChunkEntries(serverDir, root, entries);
+  return entries;
+}
+
+async function collectNextServerChunkEntries(
+  serverDir: string,
+  root: string,
+  entries: Record<string, string>,
+): Promise<void> {
+  const dirEntries = await fs.readdir(root, { withFileTypes: true });
+  for (const entry of dirEntries) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      await collectNextServerChunkEntries(serverDir, entryPath, entries);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".js")) {
+      continue;
+    }
+    if (!entryPath.split(path.sep).includes("chunks")) {
+      continue;
+    }
+    const relativeEntryPath = toPosixPath(path.relative(serverDir, entryPath));
+    if (isNextServerEdgeChunk(relativeEntryPath)) {
+      continue;
+    }
+    entries[relativeEntryPath.slice(0, -3)] = entryPath;
+  }
+}
+
+function isNextServerEdgeChunk(relativeEntryPath: string): boolean {
+  return relativeEntryPath.startsWith(".next/server/edge/chunks/");
 }
 
 const LANCEDB_NATIVE_PACKAGES = [
@@ -161,68 +702,91 @@ const SHARP_NATIVE_PACKAGES = [
   "@img/sharp-win32-x64",
 ] as const;
 
-const PLATFORM_NATIVE_PACKAGES = [
+const NATIVE_RUNTIME_PACKAGE_NAMES = new Set<string>([
   ...LANCEDB_NATIVE_PACKAGES,
   ...SHARP_NATIVE_PACKAGES,
-] as const;
+]);
 
-const APP_RUNTIME_ASSETS_DIR = path.join("assets", "runtime");
-
-async function prunePlatformNativeDependencies(
+async function copyPlatformNativeDependencies(
+  standaloneRoot: string,
   appRoot: string,
   platform: Platform,
 ): Promise<void> {
-  const pnpmRoot = path.join(appRoot, "node_modules", ".pnpm");
-  if (!(await exists(pnpmRoot))) {
+  const pnpmRoot = path.join(standaloneRoot, "node_modules", ".pnpm");
+  const packageNames = platformNativePackages(platform);
+  if (packageNames.length === 0) {
     return;
   }
 
-  const keep = new Set(platformNativePackages(platform));
-  const remove = PLATFORM_NATIVE_PACKAGES.filter((packageName) => {
-    return !keep.has(packageName);
-  });
-
-  await removePnpmPackageStores(pnpmRoot, remove);
-  await removePnpmPackageLinks(pnpmRoot, remove);
-}
-
-async function ensurePlatformNativeDependencies(
-  appRoot: string,
-  platform: Platform,
-): Promise<void> {
-  const pnpmRoot = path.join(appRoot, "node_modules", ".pnpm");
   if (!(await exists(pnpmRoot))) {
-    return;
+    throw new Error(
+      [
+        `Missing native runtime package(s) for ${platform.id}: ${packageNames.join(", ")}.`,
+        "Install optional dependencies for the target platform before running ema-dist build.",
+      ].join("\n"),
+    );
   }
 
   const missing = [];
-  for (const packageName of platformNativePackages(platform)) {
-    if (!(await pnpmPackageStoreExists(pnpmRoot, packageName))) {
+  for (const packageName of packageNames) {
+    const packageRoot = await pnpmPackageRoot(pnpmRoot, packageName);
+    if (!packageRoot) {
       missing.push(packageName);
+      continue;
     }
+    await copyNativePackage(
+      packageRoot,
+      path.join(appRoot, "node_modules"),
+      packageName,
+    );
   }
 
-  if (missing.length === 0) {
-    return;
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        `Missing native runtime package(s) for ${platform.id}: ${missing.join(", ")}.`,
+        "Install optional dependencies for the target platform before running ema-dist build.",
+      ].join("\n"),
+    );
   }
-
-  throw new Error(
-    [
-      `Missing native runtime package(s) for ${platform.id}: ${missing.join(", ")}.`,
-      "Install optional dependencies for the target platform before running ema-dist build.",
-    ].join("\n"),
-  );
 }
 
-async function pnpmPackageStoreExists(
+async function pnpmPackageRoot(
   pnpmRoot: string,
   packageName: string,
-): Promise<boolean> {
+): Promise<string | null> {
   const prefix = pnpmPackageStorePrefix(packageName);
   const entries = await fs.readdir(pnpmRoot, { withFileTypes: true });
-  return entries.some(
+  const store = entries.find(
     (entry) => entry.isDirectory() && entry.name.startsWith(prefix),
   );
+  if (!store) {
+    return null;
+  }
+  const packageRoot = packageLinkPath(
+    path.join(pnpmRoot, store.name, "node_modules"),
+    packageName,
+  );
+  if (!(await exists(packageRoot))) {
+    return null;
+  }
+  return packageRoot;
+}
+
+async function copyNativePackage(
+  packageRoot: string,
+  destinationNodeModulesRoot: string,
+  packageName: string,
+): Promise<void> {
+  const destination = packageLinkPath(destinationNodeModulesRoot, packageName);
+  await fs.rm(destination, { recursive: true, force: true });
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.cp(await fs.realpath(packageRoot), destination, {
+    dereference: true,
+    force: true,
+    preserveTimestamps: true,
+    recursive: true,
+  });
 }
 
 function platformNativePackages(platform: Platform): string[] {
@@ -276,51 +840,6 @@ function platformSharpPackages(platform: Platform): string[] {
   return [];
 }
 
-async function removePnpmPackageStores(
-  pnpmRoot: string,
-  packageNames: readonly string[],
-): Promise<void> {
-  const entries = await fs.readdir(pnpmRoot, { withFileTypes: true });
-  const prefixes = packageNames.map((packageName) => {
-    return pnpmPackageStorePrefix(packageName);
-  });
-
-  await Promise.all(
-    entries
-      .filter((entry) =>
-        prefixes.some((prefix) => entry.name.startsWith(prefix)),
-      )
-      .map((entry) => {
-        return fs.rm(path.join(pnpmRoot, entry.name), {
-          recursive: true,
-          force: true,
-        });
-      }),
-  );
-}
-
-async function removePnpmPackageLinks(
-  pnpmRoot: string,
-  packageNames: readonly string[],
-): Promise<void> {
-  const entries = await fs.readdir(pnpmRoot, { withFileTypes: true });
-  const nodeModulesRoots = [
-    path.join(pnpmRoot, "node_modules"),
-    ...entries.map((entry) => path.join(pnpmRoot, entry.name, "node_modules")),
-  ];
-
-  await Promise.all(
-    nodeModulesRoots.flatMap((nodeModulesRoot) => {
-      return packageNames.map((packageName) => {
-        return fs.rm(packageLinkPath(nodeModulesRoot, packageName), {
-          recursive: true,
-          force: true,
-        });
-      });
-    }),
-  );
-}
-
 function pnpmPackageStorePrefix(packageName: string): string {
   return `${packageName.split("/").join("+")}@`;
 }
@@ -356,115 +875,17 @@ async function findServerEntry(appRoot: string): Promise<string> {
   return found;
 }
 
-async function writeFlattenedServerEntry(options: {
-  readonly outputPath: string;
-  readonly runtimeRoot: string;
-  readonly serverPath: string;
-}): Promise<void> {
-  const source = await fs.readFile(options.serverPath, "utf8");
-  const relativeRuntimeRoot = toPosixPath(
-    path.relative(path.dirname(options.outputPath), options.runtimeRoot),
-  );
-  const relativeServerDir = toPosixPath(
-    path.relative(options.runtimeRoot, path.dirname(options.serverPath)),
-  );
-  const runtimeRootLiteral = JSON.stringify(relativeRuntimeRoot);
-  const serverDirLiteral = JSON.stringify(relativeServerDir);
-
-  let output = replaceRequired(
-    source,
-    "const path = require('path')",
-    [
-      "const path = require('path')",
-      "const fs = require('fs')",
-      "const Module = require('module')",
-      "",
-      `const runtimeRoot = path.join(__dirname, ${runtimeRootLiteral})`,
-      `const runtimeServerDir = path.join(runtimeRoot, ${serverDirLiteral})`,
-      "",
-      "function addModulePath(modulePath) {",
-      "  if (!fs.existsSync(modulePath)) return",
-      "  if (!module.paths.includes(modulePath)) module.paths.unshift(modulePath)",
-      "  if (!Module.globalPaths.includes(modulePath)) Module.globalPaths.unshift(modulePath)",
-      "}",
-      "",
-      "function addPnpmPackageStorePaths(pnpmRoot) {",
-      "  if (!fs.existsSync(pnpmRoot)) return",
-      "  for (const entry of fs.readdirSync(pnpmRoot, { withFileTypes: true })) {",
-      "    if (!entry.isDirectory()) continue",
-      "    if (entry.name === 'node_modules') continue",
-      "    addModulePath(path.join(pnpmRoot, entry.name, 'node_modules'))",
-      "  }",
-      "}",
-      "",
-      "addModulePath(path.join(runtimeRoot, 'node_modules'))",
-      "addModulePath(path.join(runtimeRoot, 'node_modules', '.pnpm', 'node_modules'))",
-      "addPnpmPackageStorePaths(path.join(runtimeRoot, 'node_modules', '.pnpm'))",
-      "",
-    ].join("\n"),
-    options.serverPath,
-  );
-
-  output = replaceRequired(
-    output,
-    "const dir = path.join(__dirname)",
-    "const dir = runtimeServerDir",
-    options.serverPath,
-  );
-  output = replaceRequired(
-    output,
-    "process.chdir(__dirname)",
-    "process.chdir(dir)",
-    options.serverPath,
-  );
-
-  const withSourceMap = `${output.trimEnd()}\n//# sourceMappingURL=server.js.map\n`;
-  await fs.writeFile(options.outputPath, withSourceMap);
-  await fs.writeFile(
-    `${options.outputPath}.map`,
-    `${JSON.stringify(
-      {
-        version: 3,
-        file: path.basename(options.outputPath),
-        sources: [path.basename(options.outputPath)],
-        sourcesContent: [withSourceMap],
-        names: [],
-        mappings: "",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-}
-
-function replaceRequired(
-  source: string,
-  search: string,
-  replacement: string,
-  filePath: string,
-): string {
-  if (!source.includes(search)) {
-    throw new Error(`Could not rewrite standalone server entry ${filePath}.`);
-  }
-  return source.replace(search, replacement);
-}
-
 async function copyEmaRuntimeAssets(appRoot: string): Promise<void> {
   const sourceRoot = path.join(workspaceRoot(), "packages", "ema", "src");
-  const candidates = [
-    path.join(appRoot, "packages", "ema", "src"),
-    path.join(appRoot, "node_modules", "ema", "src"),
-  ];
-  for (const candidate of candidates) {
-    await copyIfExists(
-      path.join(sourceRoot, "prompt", "templates"),
-      path.join(candidate, "prompt", "templates"),
-    );
-    await copySkillAssets(
-      path.join(sourceRoot, "skills"),
-      path.join(candidate, "skills"),
-    );
-  }
+  const runtimeRoot = path.join(appRoot, "packages", "ema", "src");
+  await copyIfExists(
+    path.join(sourceRoot, "prompt", "templates"),
+    path.join(runtimeRoot, "prompt", "templates"),
+  );
+  await copySkillAssets(
+    path.join(sourceRoot, "skills"),
+    path.join(runtimeRoot, "skills"),
+  );
 }
 
 async function copySkillAssets(
@@ -546,10 +967,7 @@ async function writeLauncherRuntime(root: string): Promise<void> {
 }
 
 function nodeBuiltins(): string[] {
-  return [
-    ...builtinModules,
-    ...builtinModules.map((moduleName) => `node:${moduleName}`),
-  ];
+  return Array.from(NODE_BUILTINS);
 }
 
 async function writePackageManifest(
