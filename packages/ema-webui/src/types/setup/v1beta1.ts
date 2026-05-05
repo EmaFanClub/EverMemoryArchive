@@ -133,7 +133,7 @@ export interface SetupCommitResponse {
 export interface SetupStatusResponse {
   apiVersion: "v1beta1";
   needsInitialization: boolean;
-  reason: "CONFIG_MISSING" | null;
+  reason: "CONFIG_MISSING" | "CONFIG_INCOMPLETE" | "CONFIG_STALE" | null;
   setupState: {
     status: "required" | "complete";
     configPath: string;

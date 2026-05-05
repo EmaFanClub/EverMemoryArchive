@@ -323,15 +323,23 @@ function buildEmbeddingConfigForCheck(config: SetupDraft["embedding"]): {
 
 export async function buildSetupStatus(): Promise<SetupStatusResponse> {
   const server = await ensureEmaServer();
-  const status = await server.controller.setup.getStatus();
+  const [status, globalConfig] = await Promise.all([
+    server.controller.setup.getStatus(),
+    server.dbService.globalConfigDB.getGlobalConfig(),
+  ]);
+  const reason = getSetupInitializationReason(
+    Boolean(status.owner),
+    globalConfig,
+  );
+  const complete = reason === null;
   return {
     apiVersion: API_VERSION,
-    needsInitialization: !status.complete,
-    reason: status.complete ? null : "CONFIG_MISSING",
+    needsInitialization: !complete,
+    reason,
     setupState: {
-      status: status.complete ? "complete" : "required",
+      status: complete ? "complete" : "required",
       configPath: "database:global_config",
-      detectedConfig: status.hasGlobalConfig,
+      detectedConfig: Boolean(globalConfig),
     },
     recommendedSteps: setupSteps,
     capabilities: {
@@ -351,6 +359,82 @@ export async function buildSetupStatus(): Promise<SetupStatusResponse> {
       ],
     },
   };
+}
+
+function getSetupInitializationReason(
+  hasOwner: boolean,
+  config: GlobalConfigRecord | null,
+): SetupStatusResponse["reason"] {
+  if (!hasOwner || !config) {
+    return "CONFIG_MISSING";
+  }
+
+  const llm = setupLlmFromGlobalConfig(config.defaultLlm);
+  const embedding = setupEmbeddingFromGlobalConfig(config.defaultEmbedding);
+  if (
+    isStoredProviderConfigStale(llm) ||
+    isStoredProviderConfigStale(embedding)
+  ) {
+    return "CONFIG_STALE";
+  }
+  if (!isLLMConfigComplete(llm) || !isEmbeddingConfigComplete(embedding)) {
+    return "CONFIG_INCOMPLETE";
+  }
+  return null;
+}
+
+function setupLlmFromGlobalConfig(config: LLMConfig): SetupDraft["llm"] {
+  return config.provider === "openai"
+    ? { ...initialDraft.llm, provider: "openai", ...config.openai }
+    : { ...initialDraft.llm, provider: "google", ...config.google };
+}
+
+function setupEmbeddingFromGlobalConfig(
+  config: EmbeddingConfig,
+): SetupDraft["embedding"] {
+  return config.provider === "openai"
+    ? { ...initialDraft.embedding, provider: "openai", ...config.openai }
+    : { ...initialDraft.embedding, provider: "google", ...config.google };
+}
+
+function isStoredProviderConfigStale(config: {
+  apiKey: string;
+  useVertexAi: boolean;
+  project: string;
+  location: string;
+  credentialsFile: string;
+}) {
+  if (!config.useVertexAi) {
+    return looksLikeEnvReference(config.apiKey);
+  }
+  const credentials = config.credentialsFile.trim();
+  return (
+    looksLikeEnvReference(config.project) ||
+    looksLikeEnvReference(config.location) ||
+    (credentials.length > 0 && !isJsonObject(credentials))
+  );
+}
+
+function looksLikeEnvReference(value: string) {
+  const trimmed = value.trim();
+  return (
+    /^[A-Z][A-Z0-9_]*$/.test(trimmed) &&
+    (trimmed.endsWith("_API_KEY") ||
+      trimmed.endsWith("_CREDENTIALS") ||
+      trimmed.endsWith("_PROJECT") ||
+      trimmed.endsWith("_LOCATION"))
+  );
+}
+
+function isJsonObject(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return Boolean(
+      parsed && typeof parsed === "object" && !Array.isArray(parsed),
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function buildDryRunResponse(draft: SetupDraft): SetupDryRunResponse {
