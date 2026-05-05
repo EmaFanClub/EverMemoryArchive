@@ -393,9 +393,46 @@
 
 .field textarea {
   border-radius: 14px;
-  padding-block: 10px;
-  resize: vertical;
-  line-height: 1.55;
+  padding: 14px 16px;
+  font-family: inherit;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  overflow: auto;
+  resize: none;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 62%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+.scrollableTextareaShell {
+  position: relative;
+  min-width: 0;
+}
+
+.scrollableTextareaShell textarea {
+  display: block;
+}
+
+.scrollableTextareaPlaceholder {
+  position: absolute;
+  z-index: 1;
+  inset: 1px;
+  margin: 0;
+  overflow: auto;
+  border-radius: 13px;
+  padding: 14px 16px;
+  color: var(--text-subtle);
+  cursor: text;
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 430;
+  letter-spacing: -0.006em;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 62%, transparent)
+    transparent;
+  scrollbar-width: thin;
+  white-space: pre-wrap;
 }
 
 .field input:focus,
@@ -406,6 +443,12 @@
   box-shadow:
     0 0 0 4px var(--accent-soft),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.field textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 26%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .field input[aria-invalid="true"],
@@ -435,6 +478,36 @@
 .field input::placeholder,
 .field textarea::placeholder {
   color: var(--text-subtle);
+}
+
+.field textarea::-webkit-scrollbar {
+  width: 7px;
+}
+
+.field textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.field textarea::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 62%, transparent);
+}
+
+.scrollableTextareaPlaceholder::-webkit-scrollbar {
+  width: 7px;
+}
+
+.scrollableTextareaPlaceholder::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollableTextareaPlaceholder::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 62%, transparent);
 }
 
 .fieldHint {

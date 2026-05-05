@@ -234,16 +234,16 @@ export class GlobalConfig {
         mode: config.openai.mode,
         model: config.openai.model.trim(),
         baseUrl: config.openai.baseUrl.trim(),
-        apiKey: this.resolveEnvValue(config.openai.apiKey),
+        apiKey: this.trimConfigValue(config.openai.apiKey),
       },
       google: {
         model: config.google.model.trim(),
         baseUrl: config.google.baseUrl.trim(),
-        apiKey: this.resolveEnvValue(config.google.apiKey),
+        apiKey: this.trimConfigValue(config.google.apiKey),
         useVertexAi: config.google.useVertexAi,
-        project: this.resolveEnvValue(config.google.project),
-        location: this.resolveEnvValue(config.google.location),
-        credentialsFile: this.resolveEnvValue(config.google.credentialsFile),
+        project: this.trimConfigValue(config.google.project),
+        location: this.trimConfigValue(config.google.location),
+        credentialsFile: this.trimConfigValue(config.google.credentialsFile),
       },
     };
   }
@@ -260,16 +260,16 @@ export class GlobalConfig {
       openai: {
         model: config.openai.model.trim(),
         baseUrl: config.openai.baseUrl.trim(),
-        apiKey: this.resolveEnvValue(config.openai.apiKey),
+        apiKey: this.trimConfigValue(config.openai.apiKey),
       },
       google: {
         model: config.google.model.trim(),
         baseUrl: config.google.baseUrl.trim(),
-        apiKey: this.resolveEnvValue(config.google.apiKey),
+        apiKey: this.trimConfigValue(config.google.apiKey),
         useVertexAi: config.google.useVertexAi,
-        project: this.resolveEnvValue(config.google.project),
-        location: this.resolveEnvValue(config.google.location),
-        credentialsFile: this.resolveEnvValue(config.google.credentialsFile),
+        project: this.trimConfigValue(config.google.project),
+        location: this.trimConfigValue(config.google.location),
+        credentialsFile: this.trimConfigValue(config.google.credentialsFile),
       },
     };
   }
@@ -317,9 +317,8 @@ export class GlobalConfig {
     });
   }
 
-  private static resolveEnvValue(name: string): string {
-    const key = name.trim();
-    return key ? (process.env[key]?.trim() ?? "") : "";
+  private static trimConfigValue(value: string): string {
+    return value.trim();
   }
 }
 

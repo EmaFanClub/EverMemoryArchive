@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
+  buildGoogleVertexAIOptions,
   GenAI,
   GOOGLE_AI_API_VERSION,
+  GOOGLE_VERTEX_AI_SCOPE,
   GoogleClient,
   VERTEX_AI_API_VERSION,
 } from "../google_client";
@@ -116,5 +118,35 @@ describe("GenAI", () => {
     expect(apiClient.isVertexAI()).toBe(false);
     expect(apiClient.getApiVersion()).toBe(GOOGLE_AI_API_VERSION);
     expect(apiClient.getRequestUrl()).toContain(`/${GOOGLE_AI_API_VERSION}`);
+  });
+
+  test("uses provided Vertex AI credentials JSON without key file fallback", () => {
+    const options = buildGoogleVertexAIOptions({
+      project: "test-project",
+      location: "global",
+      credentialsFile:
+        '{"type":"service_account","client_email":"svc@example.com"}',
+    });
+
+    const googleAuthOptions = options.googleAuthOptions!;
+    expect(googleAuthOptions).toEqual({
+      credentials: {
+        type: "service_account",
+        client_email: "svc@example.com",
+      },
+      scopes: [GOOGLE_VERTEX_AI_SCOPE],
+    });
+    expect(googleAuthOptions).not.toHaveProperty("keyFile");
+    expect(googleAuthOptions).not.toHaveProperty("keyFilename");
+  });
+
+  test("requires Vertex AI credentials JSON", () => {
+    expect(() =>
+      buildGoogleVertexAIOptions({
+        project: "test-project",
+        location: "global",
+        credentialsFile: "",
+      }),
+    ).toThrow("Google Vertex AI credentials JSON is required.");
   });
 });

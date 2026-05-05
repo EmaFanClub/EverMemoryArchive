@@ -422,8 +422,10 @@ function validateEmbeddingConfig(config: EmbeddingConfig): string | null {
     return "Embedding config is incomplete.";
   }
   if (config.google.useVertexAi) {
-    return !config.google.project.trim() || !config.google.location.trim()
-      ? "Google Vertex AI project and location are required."
+    return !config.google.project.trim() ||
+      !config.google.location.trim() ||
+      !config.google.credentialsFile.trim()
+      ? "Google Vertex AI project, location, and credentials JSON are required."
       : null;
   }
   return !config.google.baseUrl.trim() || !config.google.apiKey.trim()

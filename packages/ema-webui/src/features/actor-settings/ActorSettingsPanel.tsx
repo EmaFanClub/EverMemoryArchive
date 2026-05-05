@@ -392,8 +392,8 @@ function formatOpenAiEndpointMode(mode: LlmOpenAiEndpointMode) {
   return mode === "responses" ? "Responses API" : "Chat Completions";
 }
 
-function formatConfigLiteral(value: string) {
-  return value.trim() || "未配置";
+function formatSecretStatus(value: string) {
+  return value.trim() ? "已配置" : "未配置";
 }
 
 function messageFromError(error: unknown) {
@@ -411,7 +411,7 @@ function buildGlobalLlmSummaryRows(config?: ActorLlmConfig | null) {
       ["接口协议", formatOpenAiEndpointMode(config.openai.mode)],
       ["模型", config.openai.model],
       ["接口地址", config.openai.baseUrl],
-      ["ApiKey", formatConfigLiteral(config.openai.apiKey)],
+      ["ApiKey", formatSecretStatus(config.openai.apiKey)],
     ] as const;
   }
 
@@ -424,10 +424,10 @@ function buildGlobalLlmSummaryRows(config?: ActorLlmConfig | null) {
   if (config.google.useVertexAi) {
     rows.push(["项目", config.google.project || "未配置"]);
     rows.push(["区域", config.google.location || "未配置"]);
-    rows.push(["凭证", formatConfigLiteral(config.google.credentialsFile)]);
+    rows.push(["凭证", formatSecretStatus(config.google.credentialsFile)]);
   } else {
     rows.push(["接口地址", config.google.baseUrl]);
-    rows.push(["ApiKey", formatConfigLiteral(config.google.apiKey)]);
+    rows.push(["ApiKey", formatSecretStatus(config.google.apiKey)]);
   }
 
   return rows;

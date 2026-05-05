@@ -175,51 +175,50 @@ describe("GlobalConfig", () => {
     expect(GlobalConfig.system.httpsProxy).toBe("http://127.0.0.1:7890");
   });
 
-  test("resolves runtime provider config values without changing stored config", () => {
-    vi.stubEnv("EMA_TEST_OPENAI_KEY", "sk-resolved");
-    vi.stubEnv("EMA_TEST_VERTEX_PROJECT", "resolved-project");
-    vi.stubEnv("EMA_TEST_VERTEX_CREDENTIALS", "/tmp/vertex-key.json");
-
+  test("trims runtime provider config values without changing stored config", () => {
     const record = createTestGlobalConfigRecord();
+    const llmCredentialsJson = '{"type":"service_account","project_id":"p"}';
+    const embeddingCredentialsJson =
+      '{"type":"service_account","project_id":"embedding-p"}';
     const llm = {
       ...record.defaultLlm,
       provider: "openai" as const,
       openai: {
         ...record.defaultLlm.openai,
-        apiKey: "EMA_TEST_OPENAI_KEY",
+        apiKey: " sk-direct ",
       },
       google: {
         ...record.defaultLlm.google,
-        project: "EMA_TEST_VERTEX_PROJECT",
-        location: "us-central1",
-        credentialsFile: "EMA_TEST_VERTEX_CREDENTIALS",
+        project: " direct-project ",
+        location: " us-central1 ",
+        credentialsFile: ` ${llmCredentialsJson} `,
       },
     };
     const embedding = {
       ...record.defaultEmbedding,
       google: {
         ...record.defaultEmbedding.google,
-        project: "MISSING_VERTEX_PROJECT",
-        credentialsFile: "GOOGLE_APPLICATION_CREDENTIALS",
+        project: " direct-embedding-project ",
+        credentialsFile: ` ${embeddingCredentialsJson} `,
       },
     };
 
     expect(GlobalConfig.resolveRuntimeLlmConfig(llm).openai.apiKey).toBe(
-      "sk-resolved",
+      "sk-direct",
     );
     expect(GlobalConfig.resolveRuntimeLlmConfig(llm).google.project).toBe(
-      "resolved-project",
+      "direct-project",
     );
     expect(
       GlobalConfig.resolveRuntimeLlmConfig(llm).google.credentialsFile,
-    ).toBe("/tmp/vertex-key.json");
+    ).toBe(llmCredentialsJson);
     expect(
       GlobalConfig.resolveRuntimeEmbeddingConfig(embedding).google.project,
-    ).toBe("");
+    ).toBe("direct-embedding-project");
     expect(
       GlobalConfig.resolveRuntimeEmbeddingConfig(embedding).google
         .credentialsFile,
-    ).toBe("");
-    expect(llm.openai.apiKey).toBe("EMA_TEST_OPENAI_KEY");
+    ).toBe(embeddingCredentialsJson);
+    expect(llm.openai.apiKey).toBe(" sk-direct ");
   });
 });
