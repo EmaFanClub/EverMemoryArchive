@@ -45,6 +45,7 @@ export const fieldLabels: Record<string, string> = {
   "embedding.location": "Embedding Vertex AI 区域",
   "embedding.credentialsFile": "Embedding Vertex AI 凭据 JSON",
   "owner.name": "名称",
+  "owner.accessToken": "访问 Token",
   "owner.qq": "QQ 号",
 };
 

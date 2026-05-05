@@ -121,6 +121,7 @@ export interface GlobalConfigRecord {
   readonly version: 1;
   readonly system: {
     readonly httpsProxy: string;
+    readonly accessToken?: string;
   };
   readonly defaultLlm: LLMConfig;
   readonly defaultEmbedding: EmbeddingConfig;

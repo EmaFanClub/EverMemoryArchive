@@ -22,6 +22,7 @@ import type {
   ActorWebSearchConfig,
   ActorWebSearchSaveResponse,
   DashboardOverviewResponse,
+  GlobalAccessTokenSaveResponse,
   GlobalEmbeddingCheckResponse,
   GlobalEmbeddingServiceConfig,
   GlobalLlmConfig,
@@ -249,6 +250,17 @@ export function saveOwnerQqBinding(uid: string) {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ uid }),
+    },
+  );
+}
+
+export function saveGlobalAccessToken(token: string) {
+  return fetchJson<GlobalAccessTokenSaveResponse>(
+    "/api/v1beta1/settings/global/access-token",
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
     },
   );
 }

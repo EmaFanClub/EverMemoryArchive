@@ -179,6 +179,9 @@ export class Server {
     if (record) {
       GlobalConfig.applyRecord(record);
       this.logger.info("Global config loaded from database");
+      this.logger.info("WebUI access token configured", {
+        token: record.system.accessToken?.trim() ?? "",
+      });
       return true;
     }
     this.logger.warn("Global config missing");

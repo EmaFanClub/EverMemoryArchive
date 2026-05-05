@@ -23,6 +23,10 @@ import {
   toWebQqTransportStatus,
   toWebSearchConfig,
 } from "@/server/ema-adapter/settings";
+import {
+  createAccessTokenRecord,
+  hasAccessTokenConfig,
+} from "@/server/services/access-token";
 import { ensureEmaServer } from "@/server/ema-server";
 import type {
   ActorActivityUpdateRequest,
@@ -62,6 +66,8 @@ import type {
   CreateActorRequest,
   CreateActorResponse,
   DashboardOverviewResponse,
+  GlobalAccessTokenSaveRequest,
+  GlobalAccessTokenSaveResponse,
   GlobalEmbeddingCheckRequest,
   GlobalEmbeddingCheckResponse,
   GlobalEmbeddingSaveRequest,
@@ -175,6 +181,11 @@ export async function buildGlobalSettingsResponse(): Promise<GlobalSettingsRespo
   return {
     apiVersion: API_VERSION,
     user: toDashboardUserProfile(setupStatus.owner),
+    access: {
+      webui: {
+        configured: Boolean(record && hasAccessTokenConfig(record.system)),
+      },
+    },
     identityBindings: {
       qq: {
         uid: qqUid,
@@ -193,6 +204,70 @@ export async function buildGlobalSettingsResponse(): Promise<GlobalSettingsRespo
       ),
     },
   };
+}
+
+export async function saveGlobalAccessTokenService(
+  request: GlobalAccessTokenSaveRequest,
+): Promise<GlobalAccessTokenSaveResponse> {
+  const token = typeof request.token === "string" ? request.token.trim() : "";
+  if (!token) {
+    return {
+      apiVersion: API_VERSION,
+      ok: false,
+      access: {
+        webui: {
+          configured: false,
+          updatedAt: now(),
+        },
+      },
+      error: {
+        code: "INVALID_CONFIG",
+        retryable: false,
+        message: "访问 Token 不能为空。",
+      },
+    };
+  }
+
+  try {
+    const server = await ensureEmaServer();
+    const record = await server.dbService.globalConfigDB.getGlobalConfig();
+    if (!record) {
+      throw new Error("Global config not found.");
+    }
+    await server.dbService.globalConfigDB.upsertGlobalConfig({
+      ...record,
+      system: {
+        ...record.system,
+        ...createAccessTokenRecord(token),
+      },
+    });
+    return {
+      apiVersion: API_VERSION,
+      ok: true,
+      access: {
+        webui: {
+          configured: true,
+          updatedAt: now(),
+        },
+      },
+    };
+  } catch (error) {
+    return {
+      apiVersion: API_VERSION,
+      ok: false,
+      access: {
+        webui: {
+          configured: false,
+          updatedAt: now(),
+        },
+      },
+      error: {
+        code: "DATABASE_WRITE_FAILED",
+        retryable: true,
+        message: messageFromError(error),
+      },
+    };
+  }
 }
 
 export async function saveOwnerQqBindingService(

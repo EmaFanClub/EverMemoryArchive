@@ -132,6 +132,7 @@ const GlobalConfigRecordSchema = z
     system: z
       .object({
         httpsProxy: z.string(),
+        accessToken: z.string().default(""),
       })
       .strict(),
     defaultLlm: RuntimeLLMSchema,

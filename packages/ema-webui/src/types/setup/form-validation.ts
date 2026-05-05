@@ -19,6 +19,7 @@ export type SetupFieldPath =
   | "embedding.location"
   | "embedding.credentialsFile"
   | "owner.name"
+  | "owner.accessToken"
   | "owner.qq";
 
 export const fieldLimits: Partial<Record<SetupFieldPath, number>> = {
@@ -112,6 +113,8 @@ export function getFieldValue(path: SetupFieldPath, draft: SetupDraft) {
       return draft.embedding.credentialsFile;
     case "owner.name":
       return draft.owner.name;
+    case "owner.accessToken":
+      return draft.owner.accessToken;
     case "owner.qq":
       return draft.owner.qq;
   }
@@ -143,7 +146,7 @@ export function getStepFieldPaths(
           ]
         : ["embedding.model", "embedding.baseUrl", "embedding.apiKey"];
     case "owner":
-      return ["owner.name", "owner.qq"];
+      return ["owner.name", "owner.accessToken", "owner.qq"];
     case "review":
       return [];
   }
@@ -177,6 +180,11 @@ export function validateSetupField(path: SetupFieldPath, draft: SetupDraft) {
     case "owner.name":
       if (/\r|\n/.test(value)) {
         return "名称不能包含换行。";
+      }
+      return null;
+    case "owner.accessToken":
+      if (!value.trim()) {
+        return "访问 Token 不能为空。";
       }
       return null;
     case "owner.qq":

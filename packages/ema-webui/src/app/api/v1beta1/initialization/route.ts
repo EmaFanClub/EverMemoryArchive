@@ -1,4 +1,5 @@
 import { buildSetupStatus, commitSetupDraft } from "@/server/services/setup";
+import { createAccessTokenCookie } from "@/server/services/access-token";
 import type { SetupCommitRequest } from "@/types/setup/v1beta1";
 
 export const runtime = "nodejs";
@@ -27,5 +28,12 @@ export async function PUT(request: Request) {
   }
 
   const result = await commitSetupDraft(body.draft);
-  return Response.json(result, { status: result.ok ? 200 : 400 });
+  const response = Response.json(result, { status: result.ok ? 200 : 400 });
+  if (result.ok) {
+    response.headers.append(
+      "Set-Cookie",
+      createAccessTokenCookie(body.draft.owner.accessToken, request.url),
+    );
+  }
+  return response;
 }

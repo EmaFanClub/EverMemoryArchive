@@ -94,6 +94,10 @@ const vertexCredentialsJsonPlaceholder = String.raw`{
   "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project-id.iam.gserviceaccount.com"
 }`;
 
+const accessTokenChars =
+  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const DEFAULT_ACCESS_TOKEN_LENGTH = 16;
+
 const finalReviewSteps: Array<{
   id: FinalReviewStepId;
   title: string;
@@ -110,6 +114,28 @@ const finalStepOrder: Record<FinalReviewStepId, number> = {
 };
 
 const DASHBOARD_FIRST_LOGIN_STORAGE_KEY = "ema-webui-dashboard-first-login-v1";
+
+function createInitialSetupDraft(): SetupDraft {
+  return {
+    ...initialDraft,
+    owner: {
+      ...initialDraft.owner,
+      accessToken: generateAccessToken(),
+    },
+  };
+}
+
+function generateAccessToken() {
+  const bytes = new Uint8Array(DEFAULT_ACCESS_TOKEN_LENGTH);
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => accessTokenChars[byte % 62]).join("");
+  }
+  return Array.from(
+    { length: DEFAULT_ACCESS_TOKEN_LENGTH },
+    () => accessTokenChars[Math.floor(Math.random() * 62)],
+  ).join("");
+}
 
 function trimTerminalPunctuation(value: string | null) {
   return value?.replace(/[。.!！?？]+$/u, "") ?? null;
@@ -373,7 +399,9 @@ export default function SetupPage() {
   const stepErrorRef = useRef<HTMLDivElement | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [stepMotion, setStepMotion] = useState<StepMotion>("forward");
-  const [draft, setDraft] = useState<SetupDraft>(initialDraft);
+  const [draft, setDraft] = useState<SetupDraft>(() =>
+    createInitialSetupDraft(),
+  );
   const [touchedFields, setTouchedFields] = useState<
     Partial<Record<SetupFieldPath, boolean>>
   >({});
@@ -968,7 +996,7 @@ export default function SetupPage() {
               type="button"
               className={styles.textButton}
               onClick={() => {
-                setDraft(initialDraft);
+                setDraft(createInitialSetupDraft());
                 resetLlmTest();
                 resetEmbeddingTest();
                 setTouchedFields({});
@@ -1434,6 +1462,25 @@ export default function SetupPage() {
                 aria-required="true"
                 {...getFieldControlProps("owner.name")}
                 onChange={(event) => updateOwner({ name: event.target.value })}
+              />
+            </Field>
+            <Field
+              label="访问 Token"
+              error={getVisibleFieldError("owner.accessToken")}
+            >
+              <input
+                value={draft.owner.accessToken}
+                placeholder="输入访问 Token"
+                autoComplete="off"
+                spellCheck={false}
+                required
+                aria-required="true"
+                {...getFieldControlProps("owner.accessToken")}
+                onChange={(event) =>
+                  updateOwner({
+                    accessToken: event.target.value,
+                  })
+                }
               />
             </Field>
             <Field

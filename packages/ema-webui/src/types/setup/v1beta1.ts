@@ -48,6 +48,7 @@ export interface SetupDraft {
   };
   owner: {
     name: string;
+    accessToken: string;
     qq: string;
   };
 }
@@ -240,6 +241,7 @@ export const initialDraft: SetupDraft = {
   embedding: embeddingDefaults.google,
   owner: {
     name: "",
+    accessToken: "",
     qq: "",
   },
 };
@@ -354,6 +356,7 @@ export function isOwnerComplete(draft: SetupDraft) {
     hasRequiredValue(draft.owner.name) &&
     draft.owner.name.trim().length <= 48 &&
     !/\r|\n/.test(draft.owner.name) &&
+    hasRequiredValue(draft.owner.accessToken) &&
     (!hasRequiredValue(draft.owner.qq) || qqPattern.test(draft.owner.qq.trim()))
   );
 }
@@ -553,6 +556,13 @@ export function validateSetupDraft(draft: SetupDraft): SetupValidationIssue[] {
     issues.push({
       path: "owner.name",
       code: "invalid",
+    });
+  }
+
+  if (!hasRequiredValue(draft.owner.accessToken)) {
+    issues.push({
+      path: "owner.accessToken",
+      code: "required",
     });
   }
 
