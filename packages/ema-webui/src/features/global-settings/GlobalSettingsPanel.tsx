@@ -573,8 +573,12 @@ export function GlobalSettingsPanel() {
         );
         setSavedLlm(nextLlm);
         setLlmDraft(nextLlm);
+        setLlmStatus("idle");
+        setLlmFeedback(null);
         setSavedEmbedding(nextEmbedding);
         setEmbeddingDraft(nextEmbedding);
+        setEmbeddingStatus("idle");
+        setEmbeddingFeedback(null);
         setEmbeddingRestartRequired(response.services.embeddingRestartRequired);
         setEmbeddingIndex(response.services.embeddingIndex);
       })
@@ -671,6 +675,20 @@ export function GlobalSettingsPanel() {
     if (detailTitle === "默认LLM服务") return llmDirty;
     if (detailTitle === "默认Embedding服务") return embeddingDirty;
     return false;
+  }
+
+  function updateLlmDraft(nextDraft: ServiceDraft) {
+    setLlmDraft(nextDraft);
+    setLlmStatus("idle");
+    setLlmFeedback(null);
+    setLlmSaving(false);
+  }
+
+  function updateEmbeddingDraft(nextDraft: ServiceDraft) {
+    setEmbeddingDraft(nextDraft);
+    setEmbeddingStatus("idle");
+    setEmbeddingFeedback(null);
+    setEmbeddingSaving(false);
   }
 
   function requestCloseDetail() {
@@ -971,11 +989,8 @@ export function GlobalSettingsPanel() {
               status={llmStatus}
               feedback={llmFeedback}
               isSaving={llmSaving}
-              onDraftChange={(next) => {
-                setLlmDraft(next);
-                setLlmStatus("idle");
-                setLlmFeedback(null);
-              }}
+              onDraftChange={updateLlmDraft}
+              onTestConnection={testLlm}
               onSave={saveLlm}
             />
           ) : (
@@ -988,11 +1003,8 @@ export function GlobalSettingsPanel() {
               isSaving={embeddingSaving}
               embeddingIndex={embeddingIndex}
               embeddingRestartRequired={embeddingRestartRequired}
-              onDraftChange={(next) => {
-                setEmbeddingDraft(next);
-                setEmbeddingStatus("idle");
-                setEmbeddingFeedback(null);
-              }}
+              onDraftChange={updateEmbeddingDraft}
+              onTestConnection={testEmbedding}
               onSave={saveEmbedding}
             />
           )}
@@ -1145,6 +1157,7 @@ function ServiceDetail({
   embeddingIndex,
   embeddingRestartRequired = false,
   onDraftChange,
+  onTestConnection,
   onSave,
 }: {
   kind: "llm" | "embedding";
@@ -1156,6 +1169,7 @@ function ServiceDetail({
   embeddingIndex?: GlobalEmbeddingIndexStatus;
   embeddingRestartRequired?: boolean;
   onDraftChange: (draft: ServiceDraft) => void;
+  onTestConnection: () => void | Promise<unknown>;
   onSave: () => void | Promise<void>;
 }) {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
@@ -1455,6 +1469,39 @@ function ServiceDetail({
             )}
           </section>
 
+          {!llmComingSoon ? (
+            <button
+              type="button"
+              className={`${styles.llmTestButton} ${
+                status === "success" ? styles.llmTestButtonSuccess : ""
+              } ${status === "error" ? styles.llmTestButtonError : ""}`}
+              disabled={isTesting}
+              onClick={() => {
+                void onTestConnection();
+              }}
+            >
+              {isTesting ? (
+                <LoaderCircle aria-hidden="true" />
+              ) : status === "success" ? (
+                <Check aria-hidden="true" />
+              ) : status === "error" ? (
+                <X aria-hidden="true" />
+              ) : null}
+              <span>
+                {isTesting
+                  ? "正在测试连接"
+                  : status === "success"
+                    ? "Succeed"
+                    : status === "error"
+                      ? feedback?.code === "CLIENT_VALIDATION" ||
+                        feedback?.code === "UNSUPPORTED"
+                        ? (feedback.summary ?? "配置错误")
+                        : "Failed"
+                      : "测试连接状态"}
+              </span>
+            </button>
+          ) : null}
+
           {status === "error" && feedback ? (
             <div className={styles.llmErrorDetails} role="alert">
               <div className={styles.llmErrorDetailsHeader}>
@@ -1472,6 +1519,7 @@ function ServiceDetail({
         dirty={dirty}
         isSaving={isSaving}
         isChecking={isTesting}
+        disabled={llmComingSoon}
         onSave={onSave}
       />
     </>
@@ -1540,29 +1588,30 @@ function SettingsFooter({
   dirty,
   isSaving,
   isChecking = false,
+  disabled = false,
   onSave,
 }: {
   dirty: boolean;
   isSaving: boolean;
   isChecking?: boolean;
+  disabled?: boolean;
   onSave: () => void | Promise<void>;
 }) {
-  const busy = isSaving || isChecking;
   return (
     <div className={styles.llmSettingsFooter}>
       <div className={styles.llmSettingsFooterInner}>
         <button
           type="button"
           className={`${styles.llmSaveButton} ${
-            busy ? styles.llmSaveButtonSaving : ""
+            isSaving ? styles.llmSaveButtonSaving : ""
           }`}
-          disabled={!dirty || busy}
+          disabled={!dirty || isChecking || disabled || isSaving}
           onClick={() => {
             void onSave();
           }}
         >
-          {busy ? <LoaderCircle aria-hidden="true" /> : null}
-          <span>{isChecking ? "检查中" : isSaving ? "保存中" : "保存"}</span>
+          {isSaving ? <LoaderCircle aria-hidden="true" /> : null}
+          <span>{isSaving ? "保存中" : "保存"}</span>
         </button>
       </div>
     </div>

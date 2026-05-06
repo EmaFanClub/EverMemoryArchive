@@ -124,7 +124,17 @@ export class SettingsController {
     }
   }
 
-  async saveLlmConfig(actorId: number, config: LLMConfig): Promise<LLMConfig> {
+  async saveLlmConfig(
+    actorId: number,
+    config: LLMConfig | null,
+  ): Promise<LLMConfig | null> {
+    if (config === null) {
+      await this.requireActor(actorId);
+      await this.server.dbService.actorDB.clearActorLlmConfig(actorId);
+      await this.server.controller.actor.publishUpdated(actorId);
+      return null;
+    }
+
     const invalidMessage = validateLlmSaveConfig(config);
     if (invalidMessage) {
       throw new Error(invalidMessage);

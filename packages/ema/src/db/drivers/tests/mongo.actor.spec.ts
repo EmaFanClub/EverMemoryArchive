@@ -75,6 +75,38 @@ describe("MongoActorDB with in-memory MongoDB", () => {
     expect(typeof retrievedActor?.updatedAt).toBe("number");
   });
 
+  test("should clear actor LLM config", async () => {
+    const actorData: ActorEntity = {
+      roleId: 1,
+      enabled: true,
+      llmConfig: {
+        provider: "openai",
+        openai: {
+          mode: "responses",
+          model: "gpt-5-mini",
+          baseUrl: "https://api.openai.com/v1",
+          apiKey: "sk-test",
+        },
+        google: {
+          model: "",
+          baseUrl: "",
+          apiKey: "",
+          useVertexAi: false,
+          project: "",
+          location: "",
+          credentialsFile: "",
+        },
+      },
+    };
+
+    const id = await db.upsertActor(actorData);
+
+    await expect(db.clearActorLlmConfig(id)).resolves.toBe(true);
+    await expect(db.getActor(id)).resolves.toEqual(
+      expect.not.objectContaining({ llmConfig: expect.anything() }),
+    );
+  });
+
   test("should delete an actor", async () => {
     const actorData: ActorEntity = {
       roleId: 1,

@@ -225,6 +225,13 @@ export interface ActorDB {
   upsertActor(entity: ActorEntity): Promise<number>;
 
   /**
+   * clears the actor-specific LLM config so runtime falls back to global defaults
+   * @param id - The unique identifier for the actor
+   * @returns Promise resolving to true if updated, false if not found
+   */
+  clearActorLlmConfig(id: number): Promise<boolean>;
+
+  /**
    * deletes an actor from the database
    * @param id - The unique identifier for the actor to delete
    * @returns Promise resolving to true if deleted, false if not found

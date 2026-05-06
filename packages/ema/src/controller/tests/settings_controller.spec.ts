@@ -56,6 +56,15 @@ function createFixture() {
       actors.set(actor.id, { ...actor });
       return actor.id;
     }),
+    clearActorLlmConfig: vi.fn(async (actorId: number) => {
+      const actor = actors.get(actorId);
+      if (!actor) {
+        return false;
+      }
+      const { llmConfig: _llmConfig, ...nextActor } = actor;
+      actors.set(actorId, nextActor);
+      return true;
+    }),
   };
   const globalConfigDB = {
     getGlobalConfig: vi.fn(async () => globalConfig),
@@ -108,6 +117,22 @@ describe("SettingsController", () => {
 
     expect(probe).not.toHaveBeenCalled();
     expect(fixture.actors.get(1)?.llmConfig).toEqual(validLlmConfig);
+    expect(fixture.publishUpdated).toHaveBeenCalledWith(1);
+  });
+
+  test("clears actor LLM config to use global defaults", async () => {
+    const fixture = createFixture();
+    fixture.actors.set(1, {
+      id: 1,
+      roleId: 1,
+      enabled: false,
+      llmConfig: validLlmConfig,
+    });
+
+    await expect(fixture.controller.saveLlmConfig(1, null)).resolves.toBeNull();
+
+    expect(fixture.actorDB.clearActorLlmConfig).toHaveBeenCalledWith(1);
+    expect(fixture.actors.get(1)?.llmConfig).toBeUndefined();
     expect(fixture.publishUpdated).toHaveBeenCalledWith(1);
   });
 

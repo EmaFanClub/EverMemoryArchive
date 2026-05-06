@@ -65,6 +65,24 @@ export class MongoActorDB implements ActorDB {
   }
 
   /**
+   * Clears actor-specific LLM configuration so runtime falls back to global defaults.
+   * @param id - The unique identifier for the actor to update
+   * @returns Promise resolving to true if updated, false if not found
+   */
+  async clearActorLlmConfig(id: number): Promise<boolean> {
+    const db = this.mongo.getDb();
+    const collection = db.collection<ActorEntity>(this.$cn);
+    const result = await collection.updateOne(
+      { id },
+      {
+        $unset: { llmConfig: "" },
+        $set: { updatedAt: Date.now() },
+      },
+    );
+    return result.matchedCount > 0;
+  }
+
+  /**
    * Deletes an actor from the database
    * @param id - The unique identifier for the actor to delete
    * @returns Promise resolving to true if deleted, false if not found
