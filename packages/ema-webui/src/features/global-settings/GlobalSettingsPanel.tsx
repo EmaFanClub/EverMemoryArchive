@@ -681,14 +681,12 @@ export function GlobalSettingsPanel() {
     setLlmDraft(nextDraft);
     setLlmStatus("idle");
     setLlmFeedback(null);
-    setLlmSaving(false);
   }
 
   function updateEmbeddingDraft(nextDraft: ServiceDraft) {
     setEmbeddingDraft(nextDraft);
     setEmbeddingStatus("idle");
     setEmbeddingFeedback(null);
-    setEmbeddingSaving(false);
   }
 
   function requestCloseDetail() {
