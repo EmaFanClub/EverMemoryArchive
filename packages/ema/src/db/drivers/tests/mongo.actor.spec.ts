@@ -102,9 +102,8 @@ describe("MongoActorDB with in-memory MongoDB", () => {
     const id = await db.upsertActor(actorData);
 
     await expect(db.clearActorLlmConfig(id)).resolves.toBe(true);
-    await expect(db.getActor(id)).resolves.toEqual(
-      expect.not.objectContaining({ llmConfig: expect.anything() }),
-    );
+    const retrievedActor = await db.getActor(id);
+    expect(retrievedActor?.llmConfig).toBeUndefined();
   });
 
   test("should delete an actor", async () => {
