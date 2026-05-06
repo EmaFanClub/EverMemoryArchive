@@ -180,7 +180,10 @@ export function runActorLlmCheck(
   );
 }
 
-export function saveActorLlmConfig(actorId: string, config: ActorLlmConfig) {
+export function saveActorLlmConfig(
+  actorId: string,
+  config: ActorLlmConfig | null,
+) {
   return fetchJson<ActorLlmSaveResponse>(
     `/api/v1beta1/actors/${encodeURIComponent(actorId)}/settings/llm`,
     {

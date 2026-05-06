@@ -1058,7 +1058,16 @@ function classifyEmbeddingProbeError(
   return networkLike ? "EMBEDDING_NETWORK_ERROR" : "EMBEDDING_PROVIDER_ERROR";
 }
 
-function llmSaveDiagnostics(config: ActorLlmConfig): ActorSettingsDiagnostics {
+function llmSaveDiagnostics(
+  config: ActorLlmConfig | null,
+): ActorSettingsDiagnostics {
+  if (config === null) {
+    return {
+      useGlobal: true,
+      storage: "ema-global-config",
+    };
+  }
+
   const selected = selectedLlmConfig(config);
   return {
     provider: config.provider,
@@ -1269,8 +1278,7 @@ export async function saveActorLlmServiceConfig(
   request: ActorLlmSaveRequest,
 ): Promise<ActorLlmSaveResponse> {
   const startedAt = now();
-  const config = request.config;
-  if (!config) {
+  if (!Object.prototype.hasOwnProperty.call(request, "config")) {
     return createSaveResponse({
       target: "llm",
       actorId,
@@ -1284,6 +1292,8 @@ export async function saveActorLlmServiceConfig(
       diagnostics: {},
     }) as ActorLlmSaveResponse;
   }
+
+  const config = request.config;
 
   try {
     const server = await ensureEmaServer();

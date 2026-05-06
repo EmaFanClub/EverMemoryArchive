@@ -201,6 +201,11 @@ const DEFAULT_LLM_SETTINGS: LlmSettingsDraft = {
   model: "",
   openAiEndpointMode: "chat",
 };
+const LLM_PROVIDER_DEFAULT_MODELS: Record<LlmProvider, string> = {
+  google: "gemini-3.1-pro-preview",
+  openai: "gpt-5.4",
+  anthropic: "",
+};
 const DEFAULT_WEB_SEARCH_SETTINGS: WebSearchSettingsDraft = {
   enabled: false,
   tavilyApiKey: "",
@@ -219,28 +224,97 @@ const DEFAULT_CONVERSATION_SETTINGS: ConversationSettingsDraft = {
   allowProactive: true,
 };
 
-function llmDraftFromConfig(config?: ActorLlmConfig): LlmSettingsDraft {
+function defaultLlmBaseUrl(provider: LlmProvider) {
+  return (
+    LLM_PROVIDER_OPTIONS.find((option) => option.id === provider)
+      ?.baseUrlPlaceholder ?? ""
+  );
+}
+
+function llmProviderDefaults(
+  provider: LlmProvider,
+  globalLlmConfig?: ActorLlmConfig | null,
+) {
+  const globalProviderConfig =
+    provider === "openai" ? globalLlmConfig?.openai : globalLlmConfig?.google;
+
+  return {
+    apiKey: globalProviderConfig?.apiKey.trim() || "",
+    model:
+      globalProviderConfig?.model.trim() ||
+      LLM_PROVIDER_DEFAULT_MODELS[provider],
+    baseUrl:
+      globalProviderConfig?.baseUrl.trim() || defaultLlmBaseUrl(provider),
+    openAiEndpointMode:
+      provider === "openai" ? (globalLlmConfig?.openai.mode ?? "chat") : "chat",
+  };
+}
+
+function withVisibleLlmDefaults(
+  draft: LlmSettingsDraft,
+  globalLlmConfig?: ActorLlmConfig | null,
+): LlmSettingsDraft {
+  if (draft.useGlobal) {
+    return DEFAULT_LLM_SETTINGS;
+  }
+
+  const defaults = llmProviderDefaults(draft.provider, globalLlmConfig);
+
+  return {
+    ...draft,
+    apiKey: draft.apiKey.trim() ? draft.apiKey : defaults.apiKey,
+    model: draft.model.trim() ? draft.model : defaults.model,
+    baseUrl: draft.baseUrl.trim() ? draft.baseUrl : defaults.baseUrl,
+  };
+}
+
+function defaultCustomLlmDraft(
+  provider: LlmProvider,
+  globalLlmConfig?: ActorLlmConfig | null,
+): LlmSettingsDraft {
+  const defaults = llmProviderDefaults(provider, globalLlmConfig);
+
+  return {
+    useGlobal: false,
+    provider,
+    apiKey: defaults.apiKey,
+    baseUrl: defaults.baseUrl,
+    model: defaults.model,
+    openAiEndpointMode: defaults.openAiEndpointMode,
+  };
+}
+
+function llmDraftFromConfig(
+  config?: ActorLlmConfig,
+  globalLlmConfig?: ActorLlmConfig | null,
+): LlmSettingsDraft {
   if (!config) {
     return DEFAULT_LLM_SETTINGS;
   }
   if (config.provider === "openai") {
-    return {
-      useGlobal: false,
-      provider: "openai",
-      apiKey: config.openai.apiKey,
-      baseUrl: config.openai.baseUrl,
-      model: config.openai.model,
-      openAiEndpointMode: config.openai.mode,
-    };
+    return withVisibleLlmDefaults(
+      {
+        useGlobal: false,
+        provider: "openai",
+        apiKey: config.openai.apiKey,
+        baseUrl: config.openai.baseUrl,
+        model: config.openai.model,
+        openAiEndpointMode: config.openai.mode,
+      },
+      globalLlmConfig,
+    );
   }
-  return {
-    useGlobal: false,
-    provider: "google",
-    apiKey: config.google.apiKey,
-    baseUrl: config.google.baseUrl,
-    model: config.google.model,
-    openAiEndpointMode: "chat",
-  };
+  return withVisibleLlmDefaults(
+    {
+      useGlobal: false,
+      provider: "google",
+      apiKey: config.google.apiKey,
+      baseUrl: config.google.baseUrl,
+      model: config.google.model,
+      openAiEndpointMode: "chat",
+    },
+    globalLlmConfig,
+  );
 }
 
 function webSearchDraftFromConfig(
@@ -588,6 +662,17 @@ function buildActorLlmConfigFromDraft(
       credentialsFile: "",
     },
   };
+}
+
+function buildActorLlmSaveConfigFromDraft(
+  settings: LlmSettingsDraft,
+  globalLlmConfig?: ActorLlmConfig | null,
+): ActorLlmConfig | null {
+  if (settings.useGlobal) {
+    return null;
+  }
+
+  return buildActorLlmConfigFromDraft(settings, globalLlmConfig);
 }
 
 function validateWebSearchDraftBeforeSave(settings: WebSearchSettingsDraft) {
@@ -1037,7 +1122,10 @@ export function ActorSettingsPanel({
   }, [actorId, actor.settings]);
 
   useEffect(() => {
-    const nextLlmSettings = llmDraftFromConfig(actorSettings?.llm);
+    const nextLlmSettings = llmDraftFromConfig(
+      actorSettings?.llm,
+      globalLlmConfig,
+    );
     const nextWebSearchSettings = webSearchDraftFromConfig(
       actorSettings?.webSearch,
     );
@@ -1059,7 +1147,7 @@ export function ActorSettingsPanel({
     setQqTransportStatus(
       deriveQqConnectionState(nextQqSettings).transportStatus,
     );
-  }, [actor.id, actorSettings]);
+  }, [actor.id, actorSettings, globalLlmConfig]);
 
   const handleQqConnectionStateChange = useCallback(
     (state: { transportStatus: ActorQQTransportStatus }) => {
@@ -1320,14 +1408,7 @@ export function ActorSettingsPanel({
   }
 
   function updateLlmProvider(provider: LlmProvider) {
-    updateLlmDraft({
-      ...llmDraft,
-      provider,
-      apiKey: "",
-      baseUrl: "",
-      model: "",
-      openAiEndpointMode: "chat",
-    });
+    updateLlmDraft(defaultCustomLlmDraft(provider, globalLlmConfig));
   }
 
   function discardWebSearchChangesAndClose() {
@@ -1473,7 +1554,7 @@ export function ActorSettingsPanel({
     try {
       const response = await saveActorLlmConfig(
         actorId,
-        buildActorLlmConfigFromDraft(saveDraft, globalLlmConfig),
+        buildActorLlmSaveConfigFromDraft(saveDraft, globalLlmConfig),
       );
       if (saveRunId !== llmSaveRunRef.current) {
         return;
@@ -2662,7 +2743,16 @@ function ActorLlmSettingsDetail({
             }`}
             role="switch"
             aria-checked={draft.useGlobal}
-            onClick={() => updateDraft({ useGlobal: !draft.useGlobal })}
+            onClick={() =>
+              onDraftChange(
+                draft.useGlobal
+                  ? defaultCustomLlmDraft(
+                      globalLlmConfig?.provider ?? draft.provider,
+                      globalLlmConfig,
+                    )
+                  : DEFAULT_LLM_SETTINGS,
+              )
+            }
           >
             <span className={styles.llmSettingsItemText}>
               <span className={styles.llmSettingsItemTitle}>使用全局配置</span>

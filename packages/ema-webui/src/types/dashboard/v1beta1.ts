@@ -214,7 +214,7 @@ export interface ActorLlmCheckResponse {
 
 export interface ActorLlmSaveRequest {
   requestId?: string;
-  config: ActorLlmConfig;
+  config: ActorLlmConfig | null;
 }
 
 export interface ActorLlmSaveResponse {
