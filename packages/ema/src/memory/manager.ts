@@ -460,11 +460,12 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   async getPendingConversationWindowState(
     conversationId: number,
     triggeredAt: number,
+    count: number = this.bufferWindowSize,
   ): Promise<{ count: number; lastPendingId: number | null }> {
     const records = await this.getBufferedConversationWindowEntities(
       conversationId,
       triggeredAt,
-      this.bufferWindowSize,
+      count,
     );
     const pendingRecords = records.filter(
       (item) => typeof item.activityProcessedAt !== "number",

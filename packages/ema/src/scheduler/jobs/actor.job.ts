@@ -4,6 +4,7 @@ import { buildUserMessageFromActorInput } from "../../actor/utils";
 import { Agent, type AgentState, type RunFinishedEvent } from "../../agent";
 import { LLMClient } from "../../llm";
 import { formatLogTimestamp, Logger } from "../../shared/logger";
+import { formatTimestamp } from "../../shared/utils";
 import { GlobalConfig } from "../../config/index";
 import {
   EMA_MEMORY_ROLLUP_PROMPT,
@@ -36,8 +37,29 @@ interface BackgroundTaskLogData {
   actorId: number;
   task: ActorBackgroundTaskName;
   triggeredAt: number;
+  mode?: "training";
+  logicalTime?: string;
   conversationId?: number;
   addition?: Record<string, unknown>;
+}
+
+export interface ActorBackgroundMemoryPolicy {
+  bufferWindowSize: number;
+  diaryUpdateEvery: number;
+}
+
+export interface ActorBackgroundRunOptions {
+  mode?: "runtime" | "training";
+  logger?: Logger;
+  logStartedAt?: number;
+  memoryPolicy?: ActorBackgroundMemoryPolicy;
+}
+
+interface ActorBackgroundRunContext {
+  mode: "runtime" | "training";
+  logger?: Logger;
+  logStartedAt?: number;
+  memoryPolicy?: ActorBackgroundMemoryPolicy;
 }
 
 interface ChatTaskData {
@@ -158,27 +180,43 @@ export async function runActorBackgroundJob(
   server: Server,
   job: ActorBackgroundJobData,
   triggeredAt: number = Date.now(),
+  options: ActorBackgroundRunOptions = {},
 ): Promise<void> {
-  const logData = buildBackgroundTaskLogData(job.task, {
-    actorId: job.actorId,
-    conversationId: job.conversationId,
-    triggeredAt,
-    addition: job.addition,
-  });
+  const context = normalizeBackgroundRunContext(options);
+  const logData = buildBackgroundTaskLogData(
+    job.task,
+    {
+      actorId: job.actorId,
+      conversationId: job.conversationId,
+      triggeredAt,
+      addition: job.addition,
+    },
+    context,
+  );
   const dispatchStartedAt = performance.now();
-  logBackgroundTaskRequested(server, logData);
-  if (!(await canRunScheduledActorJob(server, job.actorId))) {
-    logBackgroundTaskSkipped(server, logData, "actor_disabled_or_missing");
+  logBackgroundTaskRequested(server, logData, context);
+  if (!(await canRunScheduledActorJob(server, job.actorId, context))) {
+    logBackgroundTaskSkipped(
+      server,
+      logData,
+      "actor_disabled_or_missing",
+      undefined,
+      context,
+    );
     return;
   }
   try {
     switch (job.task) {
       case "activity":
-        await runActivityTask(server, {
-          actorId: job.actorId,
-          prompt: job.prompt,
-          triggeredAt,
-        });
+        await runActivityTask(
+          server,
+          {
+            actorId: job.actorId,
+            prompt: job.prompt,
+            triggeredAt,
+          },
+          context,
+        );
         return;
       case "conversation_rollup":
         if (typeof job.conversationId !== "number") {
@@ -186,36 +224,52 @@ export async function runActorBackgroundJob(
             "conversationId is required for actor background task 'conversation_rollup'.",
           );
         }
-        await runConversationRollupTask(server, {
-          actorId: job.actorId,
-          conversationId: job.conversationId,
-          prompt: job.prompt,
-          triggeredAt,
-        });
+        await runConversationRollupTask(
+          server,
+          {
+            actorId: job.actorId,
+            conversationId: job.conversationId,
+            prompt: job.prompt,
+            triggeredAt,
+          },
+          context,
+        );
         return;
       case "memory_rollup":
-        await runMemoryRollupTask(server, {
-          actorId: job.actorId,
-          prompt: job.prompt,
-          triggeredAt,
-          thresholdTriggered: isThresholdTriggered(job.addition),
-        });
+        await runMemoryRollupTask(
+          server,
+          {
+            actorId: job.actorId,
+            prompt: job.prompt,
+            triggeredAt,
+            thresholdTriggered: isThresholdTriggered(job.addition),
+          },
+          context,
+        );
         return;
       case "wake":
-        await runWakeTask(server, {
-          actorId: job.actorId,
-          prompt: job.prompt,
-          triggeredAt,
-        });
+        await runWakeTask(
+          server,
+          {
+            actorId: job.actorId,
+            prompt: job.prompt,
+            triggeredAt,
+          },
+          context,
+        );
         return;
       case "sleep":
-        await runSleepTask(server, {
-          actorId: job.actorId,
-          prompt: job.prompt,
-          triggeredAt,
-          source: job.addition?.source === "timer" ? "timer" : "schedule",
-          addition: stripInternalSleepSource(job.addition),
-        });
+        await runSleepTask(
+          server,
+          {
+            actorId: job.actorId,
+            prompt: job.prompt,
+            triggeredAt,
+            source: job.addition?.source === "timer" ? "timer" : "schedule",
+            addition: stripInternalSleepSource(job.addition),
+          },
+          context,
+        );
         return;
       default: {
         const unreachable: never = job.task;
@@ -224,17 +278,41 @@ export async function runActorBackgroundJob(
     }
   } catch (error) {
     if (!isBackgroundTaskErrorLogged(error)) {
-      logBackgroundTaskFailed(server, logData, dispatchStartedAt, error);
+      logBackgroundTaskFailed(
+        server,
+        logData,
+        dispatchStartedAt,
+        error,
+        undefined,
+        context,
+      );
     }
     throw error;
   }
 }
 
+function normalizeBackgroundRunContext(
+  options: ActorBackgroundRunOptions,
+): ActorBackgroundRunContext {
+  return {
+    mode: options.mode ?? "runtime",
+    ...(options.logger ? { logger: options.logger } : {}),
+    ...(typeof options.logStartedAt === "number"
+      ? { logStartedAt: options.logStartedAt }
+      : {}),
+    ...(options.memoryPolicy ? { memoryPolicy: options.memoryPolicy } : {}),
+  };
+}
+
 async function canRunScheduledActorJob(
   server: Server,
   actorId: number,
+  context: ActorBackgroundRunContext = { mode: "runtime" },
 ): Promise<boolean> {
   const actor = await server.dbService.actorDB.getActor(actorId);
+  if (context.mode === "training") {
+    return Boolean(actor);
+  }
   return actor?.enabled === true;
 }
 
@@ -305,15 +383,29 @@ async function runChatTask(server: Server, job: ChatTaskData): Promise<void> {
 async function runConversationRollupTask(
   server: Server,
   job: ConversationRollupTaskData,
+  context: ActorBackgroundRunContext,
 ): Promise<void> {
-  const logData = buildBackgroundTaskLogData("conversation_rollup", job);
+  const logData = buildBackgroundTaskLogData(
+    "conversation_rollup",
+    job,
+    context,
+  );
   if (!server.memoryManager.tryEnterConversationActivity(job.conversationId)) {
-    logBackgroundTaskSkipped(server, logData, "already_running", {
-      ...(job.followUp ? { followUp: true } : {}),
-    });
+    logBackgroundTaskSkipped(
+      server,
+      logData,
+      "already_running",
+      {
+        ...(job.followUp ? { followUp: true } : {}),
+      },
+      context,
+    );
     return;
   }
-  const threshold = server.memoryManager.diaryUpdateEvery;
+  const threshold =
+    context.memoryPolicy?.diaryUpdateEvery ??
+    server.memoryManager.diaryUpdateEvery;
+  const bufferWindowSize = context.memoryPolicy?.bufferWindowSize;
   let pendingBefore: PendingWindowState = {
     count: 0,
     lastPendingId: null,
@@ -329,15 +421,21 @@ async function runConversationRollupTask(
         await server.memoryManager.getPendingConversationWindowState(
           job.conversationId,
           job.triggeredAt,
+          bufferWindowSize,
         );
       if (pendingBefore.count >= threshold) {
         ranOnce = true;
-        startedAt = logBackgroundTaskStarted(server, logData, {
-          pendingCount: pendingBefore.count,
-          threshold,
-          ...(job.followUp ? { followUp: true } : {}),
-        });
-        runResult = await runConversationRollupTaskOnce(server, job);
+        startedAt = logBackgroundTaskStarted(
+          server,
+          logData,
+          {
+            pendingCount: pendingBefore.count,
+            threshold,
+            ...(job.followUp ? { followUp: true } : {}),
+          },
+          context,
+        );
+        runResult = await runConversationRollupTaskOnce(server, job, context);
         didConsumePending = runResult.processedMessageCount > 0;
       }
     } finally {
@@ -348,6 +446,7 @@ async function runConversationRollupTask(
       await server.memoryManager.getPendingConversationWindowState(
         job.conversationId,
         latestAt,
+        bufferWindowSize,
       );
     const followUpScheduled = shouldScheduleFollowUp(
       pendingBefore,
@@ -357,35 +456,58 @@ async function runConversationRollupTask(
       didConsumePending,
     );
     if (startedAt === null) {
-      logBackgroundTaskSkipped(server, logData, "threshold_not_reached", {
-        pendingBefore: pendingBefore.count,
-        pendingAfter: pendingAfter.count,
-        threshold,
-        followUpScheduled,
-        ...(job.followUp ? { followUp: true } : {}),
-      });
+      logBackgroundTaskSkipped(
+        server,
+        logData,
+        "threshold_not_reached",
+        {
+          pendingBefore: pendingBefore.count,
+          pendingAfter: pendingAfter.count,
+          threshold,
+          followUpScheduled,
+          ...(job.followUp ? { followUp: true } : {}),
+        },
+        context,
+      );
     } else {
-      logBackgroundTaskCompleted(server, logData, startedAt, {
-        activityAdded: runResult?.activityAdded === true,
-        processedMessageCount: runResult?.processedMessageCount ?? 0,
-        pendingBefore: pendingBefore.count,
-        pendingAfter: pendingAfter.count,
-        followUpScheduled,
-        ...(job.followUp ? { followUp: true } : {}),
-      });
+      logBackgroundTaskCompleted(
+        server,
+        logData,
+        startedAt,
+        {
+          activityAdded: runResult?.activityAdded === true,
+          processedMessageCount: runResult?.processedMessageCount ?? 0,
+          pendingBefore: pendingBefore.count,
+          pendingAfter: pendingAfter.count,
+          followUpScheduled,
+          ...(job.followUp ? { followUp: true } : {}),
+        },
+        context,
+      );
       completed = true;
     }
     if (!followUpScheduled) {
       return;
     }
-    await runConversationRollupTask(server, {
-      ...job,
-      triggeredAt: latestAt,
-      followUp: true,
-    });
+    await runConversationRollupTask(
+      server,
+      {
+        ...job,
+        triggeredAt: latestAt,
+        followUp: true,
+      },
+      context,
+    );
   } catch (error) {
     if (startedAt !== null && !completed) {
-      logBackgroundTaskFailed(server, logData, startedAt, error);
+      logBackgroundTaskFailed(
+        server,
+        logData,
+        startedAt,
+        error,
+        undefined,
+        context,
+      );
     }
     throw error;
   }
@@ -400,11 +522,13 @@ async function runConversationRollupTask(
 async function runConversationRollupTaskOnce(
   server: Server,
   job: ConversationRollupTaskData,
+  context: ActorBackgroundRunContext,
 ): Promise<ConversationRollupRunResult> {
   const bufferSnapshot =
     await server.memoryManager.getBufferedConversationWindowSnapshot(
       job.conversationId,
       job.triggeredAt,
+      context.memoryPolicy?.bufferWindowSize,
     );
   const activitySnapshot = await server.memoryManager.getActivityWindow(
     job.actorId,
@@ -416,6 +540,7 @@ async function runConversationRollupTaskOnce(
     job.triggeredAt,
     "conversation_rollup",
     job.conversationId,
+    context,
   );
   const agentState: AgentState = {
     systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
@@ -460,6 +585,7 @@ async function runConversationRollupTaskOnce(
       job.actorId,
       job.triggeredAt,
       agentState,
+      context,
     );
   }
   return {
@@ -476,26 +602,45 @@ async function runConversationRollupTaskOnce(
 async function runMemoryRollupTask(
   server: Server,
   job: MemoryRollupTaskData,
+  context: ActorBackgroundRunContext,
 ): Promise<void> {
-  const logData = buildBackgroundTaskLogData("memory_rollup", job);
+  const logData = buildBackgroundTaskLogData("memory_rollup", job, context);
   if (!job.thresholdTriggered) {
     let startedAt: number | null = null;
     try {
       const memoryUpdated = await enqueueActorMemoryRollup(job.actorId, () => {
-        startedAt = logBackgroundTaskStarted(server, logData, {
+        startedAt = logBackgroundTaskStarted(
+          server,
+          logData,
+          {
+            thresholdTriggered: false,
+            ...(job.followUp ? { followUp: true } : {}),
+          },
+          context,
+        );
+        return runMemoryRollupTaskOnce(server, job, context);
+      });
+      logBackgroundTaskCompleted(
+        server,
+        logData,
+        startedAt,
+        {
+          memoryUpdated,
           thresholdTriggered: false,
           ...(job.followUp ? { followUp: true } : {}),
-        });
-        return runMemoryRollupTaskOnce(server, job);
-      });
-      logBackgroundTaskCompleted(server, logData, startedAt, {
-        memoryUpdated,
-        thresholdTriggered: false,
-        ...(job.followUp ? { followUp: true } : {}),
-      });
+        },
+        context,
+      );
     } catch (error) {
       if (startedAt !== null) {
-        logBackgroundTaskFailed(server, logData, startedAt, error);
+        logBackgroundTaskFailed(
+          server,
+          logData,
+          startedAt,
+          error,
+          undefined,
+          context,
+        );
       }
       throw error;
     }
@@ -503,10 +648,16 @@ async function runMemoryRollupTask(
   }
 
   if (!server.memoryManager.tryEnterActivityToDayRollup(job.actorId)) {
-    logBackgroundTaskSkipped(server, logData, "already_running", {
-      thresholdTriggered: true,
-      ...(job.followUp ? { followUp: true } : {}),
-    });
+    logBackgroundTaskSkipped(
+      server,
+      logData,
+      "already_running",
+      {
+        thresholdTriggered: true,
+        ...(job.followUp ? { followUp: true } : {}),
+      },
+      context,
+    );
     return;
   }
   const threshold = server.memoryManager.activityRollupEvery;
@@ -535,20 +686,29 @@ async function runMemoryRollupTask(
               didConsumePending: false,
             };
           }
-          startedAt = logBackgroundTaskStarted(server, logData, {
-            pendingCount: before.count,
-            threshold,
-            thresholdTriggered: true,
-            ...(job.followUp ? { followUp: true } : {}),
-          });
+          startedAt = logBackgroundTaskStarted(
+            server,
+            logData,
+            {
+              pendingCount: before.count,
+              threshold,
+              thresholdTriggered: true,
+              ...(job.followUp ? { followUp: true } : {}),
+            },
+            context,
+          );
           return {
             pendingBefore: before,
             ranOnce: true,
-            didConsumePending: await runMemoryRollupTaskOnce(server, {
-              ...job,
-              triggeredAt: startedAtForWindow,
-              thresholdTriggered: true,
-            }),
+            didConsumePending: await runMemoryRollupTaskOnce(
+              server,
+              {
+                ...job,
+                triggeredAt: startedAtForWindow,
+                thresholdTriggered: true,
+              },
+              context,
+            ),
           };
         }));
     } finally {
@@ -568,37 +728,60 @@ async function runMemoryRollupTask(
       didConsumePending,
     );
     if (startedAt === null) {
-      logBackgroundTaskSkipped(server, logData, "threshold_not_reached", {
-        pendingBefore: pendingBefore.count,
-        pendingAfter: pendingAfter.count,
-        threshold,
-        followUpScheduled,
-        thresholdTriggered: true,
-        ...(job.followUp ? { followUp: true } : {}),
-      });
+      logBackgroundTaskSkipped(
+        server,
+        logData,
+        "threshold_not_reached",
+        {
+          pendingBefore: pendingBefore.count,
+          pendingAfter: pendingAfter.count,
+          threshold,
+          followUpScheduled,
+          thresholdTriggered: true,
+          ...(job.followUp ? { followUp: true } : {}),
+        },
+        context,
+      );
     } else {
-      logBackgroundTaskCompleted(server, logData, startedAt, {
-        memoryUpdated: didConsumePending,
-        pendingBefore: pendingBefore.count,
-        pendingAfter: pendingAfter.count,
-        followUpScheduled,
-        thresholdTriggered: true,
-        ...(job.followUp ? { followUp: true } : {}),
-      });
+      logBackgroundTaskCompleted(
+        server,
+        logData,
+        startedAt,
+        {
+          memoryUpdated: didConsumePending,
+          pendingBefore: pendingBefore.count,
+          pendingAfter: pendingAfter.count,
+          followUpScheduled,
+          thresholdTriggered: true,
+          ...(job.followUp ? { followUp: true } : {}),
+        },
+        context,
+      );
       completed = true;
     }
     if (!followUpScheduled) {
       return;
     }
-    await runMemoryRollupTask(server, {
-      ...job,
-      triggeredAt: latestAt,
-      thresholdTriggered: true,
-      followUp: true,
-    });
+    await runMemoryRollupTask(
+      server,
+      {
+        ...job,
+        triggeredAt: latestAt,
+        thresholdTriggered: true,
+        followUp: true,
+      },
+      context,
+    );
   } catch (error) {
     if (startedAt !== null && !completed) {
-      logBackgroundTaskFailed(server, logData, startedAt, error);
+      logBackgroundTaskFailed(
+        server,
+        logData,
+        startedAt,
+        error,
+        undefined,
+        context,
+      );
     }
     throw error;
   }
@@ -612,16 +795,28 @@ async function runMemoryRollupTask(
 async function runActivityTask(
   server: Server,
   job: ActivityTaskData,
+  context: ActorBackgroundRunContext,
 ): Promise<void> {
-  const logData = buildBackgroundTaskLogData("activity", job);
+  const logData = buildBackgroundTaskLogData("activity", job, context);
   const actor = await server.actorRegistry.ensure(job.actorId);
   if (!actor.canRunActiveTasks()) {
-    logBackgroundTaskSkipped(server, logData, "actor_not_awake", {
-      status: actor.getStatus(),
-    });
+    logBackgroundTaskSkipped(
+      server,
+      logData,
+      "actor_not_awake",
+      {
+        status: actor.getStatus(),
+      },
+      context,
+    );
     return;
   }
-  const startedAt = logBackgroundTaskStarted(server, logData);
+  const startedAt = logBackgroundTaskStarted(
+    server,
+    logData,
+    undefined,
+    context,
+  );
   try {
     const activitySnapshot = await server.memoryManager.getActivityWindow(
       job.actorId,
@@ -632,6 +827,8 @@ async function runActivityTask(
       job.actorId,
       job.triggeredAt,
       "activity",
+      undefined,
+      context,
     );
     const agentState: AgentState = {
       systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
@@ -671,12 +868,26 @@ async function runActivityTask(
       job.actorId,
       job.triggeredAt,
       agentState,
+      context,
     );
-    logBackgroundTaskCompleted(server, logData, startedAt, {
-      activityAdded: agentState.toolContext?.data?.activityAdded === true,
-    });
+    logBackgroundTaskCompleted(
+      server,
+      logData,
+      startedAt,
+      {
+        activityAdded: agentState.toolContext?.data?.activityAdded === true,
+      },
+      context,
+    );
   } catch (error) {
-    logBackgroundTaskFailed(server, logData, startedAt, error);
+    logBackgroundTaskFailed(
+      server,
+      logData,
+      startedAt,
+      error,
+      undefined,
+      context,
+    );
     throw error;
   }
 }
@@ -686,16 +897,31 @@ async function runActivityTask(
  * @param server - Server instance for shared resources.
  * @param job - Wake task data.
  */
-async function runWakeTask(server: Server, job: WakeTaskData): Promise<void> {
-  const logData = buildBackgroundTaskLogData("wake", job);
+async function runWakeTask(
+  server: Server,
+  job: WakeTaskData,
+  context: ActorBackgroundRunContext,
+): Promise<void> {
+  const logData = buildBackgroundTaskLogData("wake", job, context);
   const actor = await server.actorRegistry.ensure(job.actorId);
   if (!actor.beginWake()) {
-    logBackgroundTaskSkipped(server, logData, "actor_not_sleeping", {
-      status: actor.getStatus(),
-    });
+    logBackgroundTaskSkipped(
+      server,
+      logData,
+      "actor_not_sleeping",
+      {
+        status: actor.getStatus(),
+      },
+      context,
+    );
     return;
   }
-  const startedAt = logBackgroundTaskStarted(server, logData);
+  const startedAt = logBackgroundTaskStarted(
+    server,
+    logData,
+    undefined,
+    context,
+  );
   try {
     const activitySnapshot = await server.memoryManager.getActivityWindow(
       job.actorId,
@@ -706,6 +932,8 @@ async function runWakeTask(server: Server, job: WakeTaskData): Promise<void> {
       job.actorId,
       job.triggeredAt,
       "wake",
+      undefined,
+      context,
     );
     const agentState: AgentState = {
       systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
@@ -733,12 +961,25 @@ async function runWakeTask(server: Server, job: WakeTaskData): Promise<void> {
     };
     await runBackgroundAgentWithState(agent, agentState);
     actor.completeWake();
-    logBackgroundTaskCompleted(server, logData, startedAt, {
-      status: actor.getStatus(),
-    });
+    logBackgroundTaskCompleted(
+      server,
+      logData,
+      startedAt,
+      {
+        status: actor.getStatus(),
+      },
+      context,
+    );
   } catch (error) {
     actor.failWake();
-    logBackgroundTaskFailed(server, logData, startedAt, error);
+    logBackgroundTaskFailed(
+      server,
+      logData,
+      startedAt,
+      error,
+      undefined,
+      context,
+    );
     throw error;
   }
 }
@@ -748,43 +989,79 @@ async function runWakeTask(server: Server, job: WakeTaskData): Promise<void> {
  * @param server - Server instance for shared resources.
  * @param job - Sleep task data.
  */
-async function runSleepTask(server: Server, job: SleepTaskData): Promise<void> {
-  const logData = buildBackgroundTaskLogData("sleep", job);
+async function runSleepTask(
+  server: Server,
+  job: SleepTaskData,
+  context: ActorBackgroundRunContext,
+): Promise<void> {
+  const logData = buildBackgroundTaskLogData("sleep", job, context);
   const actor = await server.actorRegistry.ensure(job.actorId);
   if (job.source === "schedule") {
     if (!actor.startSleepTimer()) {
-      logBackgroundTaskSkipped(server, logData, "actor_not_awake", {
-        source: job.source,
-        status: actor.getStatus(),
-      });
+      logBackgroundTaskSkipped(
+        server,
+        logData,
+        "actor_not_awake",
+        {
+          source: job.source,
+          status: actor.getStatus(),
+        },
+        context,
+      );
       return;
     }
-    const startedAt = logBackgroundTaskStarted(server, logData, {
-      source: job.source,
-    });
-    logBackgroundTaskCompleted(server, logData, startedAt, {
-      source: job.source,
-      result: "sleep_timer_started",
-    });
+    const startedAt = logBackgroundTaskStarted(
+      server,
+      logData,
+      {
+        source: job.source,
+      },
+      context,
+    );
+    logBackgroundTaskCompleted(
+      server,
+      logData,
+      startedAt,
+      {
+        source: job.source,
+        result: "sleep_timer_started",
+      },
+      context,
+    );
     return;
   }
   if (!actor.beginSleep()) {
-    logBackgroundTaskSkipped(server, logData, "actor_not_awake", {
-      source: job.source,
-      status: actor.getStatus(),
-    });
+    logBackgroundTaskSkipped(
+      server,
+      logData,
+      "actor_not_awake",
+      {
+        source: job.source,
+        status: actor.getStatus(),
+      },
+      context,
+    );
     return;
   }
-  const startedAt = logBackgroundTaskStarted(server, logData, {
-    source: job.source,
-  });
+  const startedAt = logBackgroundTaskStarted(
+    server,
+    logData,
+    {
+      source: job.source,
+    },
+    context,
+  );
   try {
-    await runMemoryRollupTask(server, {
-      actorId: job.actorId,
-      prompt: EMA_MEMORY_ROLLUP_PROMPT,
-      triggeredAt: job.triggeredAt,
-      thresholdTriggered: false,
-    });
+    await runMemoryRollupTask(
+      server,
+      {
+        actorId: job.actorId,
+        prompt: EMA_MEMORY_ROLLUP_PROMPT,
+        triggeredAt: job.triggeredAt,
+        thresholdTriggered: false,
+      },
+      context,
+    );
     const activitySnapshot = await server.memoryManager.getActivityWindow(
       job.actorId,
       job.triggeredAt,
@@ -794,6 +1071,8 @@ async function runSleepTask(server: Server, job: SleepTaskData): Promise<void> {
       job.actorId,
       job.triggeredAt,
       "sleep",
+      undefined,
+      context,
     );
     const agentState: AgentState = {
       systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
@@ -821,13 +1100,26 @@ async function runSleepTask(server: Server, job: SleepTaskData): Promise<void> {
     };
     await runBackgroundAgentWithState(agent, agentState);
     actor.completeSleep();
-    logBackgroundTaskCompleted(server, logData, startedAt, {
-      source: job.source,
-      status: actor.getStatus(),
-    });
+    logBackgroundTaskCompleted(
+      server,
+      logData,
+      startedAt,
+      {
+        source: job.source,
+        status: actor.getStatus(),
+      },
+      context,
+    );
   } catch (error) {
     actor.failSleep();
-    logBackgroundTaskFailed(server, logData, startedAt, error);
+    logBackgroundTaskFailed(
+      server,
+      logData,
+      startedAt,
+      error,
+      undefined,
+      context,
+    );
     throw error;
   }
 }
@@ -872,11 +1164,18 @@ function buildBackgroundTaskLogData(
     conversationId?: number;
     addition?: Record<string, unknown>;
   },
+  context: ActorBackgroundRunContext = { mode: "runtime" },
 ): BackgroundTaskLogData {
   return {
     actorId: job.actorId,
     task,
     triggeredAt: job.triggeredAt,
+    ...(context.mode === "training"
+      ? {
+          mode: "training" as const,
+          logicalTime: formatTimestamp("YYYY-MM-DD HH:mm:ss", job.triggeredAt),
+        }
+      : {}),
     ...(typeof job.conversationId === "number"
       ? { conversationId: job.conversationId }
       : {}),
@@ -887,16 +1186,21 @@ function buildBackgroundTaskLogData(
 function logBackgroundTaskRequested(
   server: Server,
   data: BackgroundTaskLogData,
+  context: ActorBackgroundRunContext = { mode: "runtime" },
 ): void {
-  server.logger?.info("Actor background task requested", data);
+  backgroundLogger(server, context)?.info(
+    "Actor background task requested",
+    data,
+  );
 }
 
 function logBackgroundTaskStarted(
   server: Server,
   data: BackgroundTaskLogData,
   extra?: Record<string, unknown>,
+  context: ActorBackgroundRunContext = { mode: "runtime" },
 ): number {
-  server.logger?.info("Actor background task started", {
+  backgroundLogger(server, context)?.info("Actor background task started", {
     ...data,
     ...extra,
   });
@@ -908,8 +1212,9 @@ function logBackgroundTaskSkipped(
   data: BackgroundTaskLogData,
   reason: string,
   extra?: Record<string, unknown>,
+  context: ActorBackgroundRunContext = { mode: "runtime" },
 ): void {
-  server.logger?.info("Actor background task skipped", {
+  backgroundLogger(server, context)?.info("Actor background task skipped", {
     ...data,
     reason,
     ...extra,
@@ -921,8 +1226,9 @@ function logBackgroundTaskCompleted(
   data: BackgroundTaskLogData,
   startedAt: number | null,
   extra?: Record<string, unknown>,
+  context: ActorBackgroundRunContext = { mode: "runtime" },
 ): void {
-  server.logger?.info("Actor background task completed", {
+  backgroundLogger(server, context)?.info("Actor background task completed", {
     ...data,
     ...buildDurationData(startedAt),
     ...extra,
@@ -935,14 +1241,22 @@ function logBackgroundTaskFailed(
   startedAt: number | null,
   error: unknown,
   extra?: Record<string, unknown>,
+  context: ActorBackgroundRunContext = { mode: "runtime" },
 ): void {
   markBackgroundTaskErrorLogged(error);
-  server.logger?.error("Actor background task failed", {
+  backgroundLogger(server, context)?.error("Actor background task failed", {
     ...data,
     ...buildDurationData(startedAt),
     ...extra,
     error,
   });
+}
+
+function backgroundLogger(
+  server: Server,
+  context: ActorBackgroundRunContext,
+): Logger | undefined {
+  return context.logger ?? server.logger;
 }
 
 function buildDurationData(startedAt: number | null): Record<string, unknown> {
@@ -993,6 +1307,7 @@ async function runThresholdMemoryRollupWhenNeeded(
   actorId: number,
   triggeredAt: number,
   agentState: AgentState,
+  context: ActorBackgroundRunContext,
 ): Promise<void> {
   if (agentState.toolContext?.data?.activityAdded !== true) {
     return;
@@ -1006,12 +1321,16 @@ async function runThresholdMemoryRollupWhenNeeded(
   if (pendingCount < server.memoryManager.activityRollupEvery) {
     return;
   }
-  await runMemoryRollupTask(server, {
-    actorId,
-    prompt: EMA_MEMORY_ROLLUP_PROMPT,
-    triggeredAt,
-    thresholdTriggered: true,
-  });
+  await runMemoryRollupTask(
+    server,
+    {
+      actorId,
+      prompt: EMA_MEMORY_ROLLUP_PROMPT,
+      triggeredAt,
+      thresholdTriggered: true,
+    },
+    context,
+  );
 }
 
 /**
@@ -1023,6 +1342,7 @@ async function runThresholdMemoryRollupWhenNeeded(
 async function runMemoryRollupTaskOnce(
   server: Server,
   job: MemoryRollupTaskData,
+  context: ActorBackgroundRunContext,
 ): Promise<boolean> {
   const activitySnapshot = await server.memoryManager.getActivityWindow(
     job.actorId,
@@ -1033,6 +1353,8 @@ async function runMemoryRollupTaskOnce(
     job.actorId,
     job.triggeredAt,
     "memory_rollup",
+    undefined,
+    context,
   );
   const agentState: AgentState = {
     systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
@@ -1133,9 +1455,18 @@ async function createBackgroundAgent(
   triggeredAt: number,
   task: ActorBackgroundJobData["task"],
   conversationId?: number,
+  context: ActorBackgroundRunContext = { mode: "runtime" },
 ): Promise<Agent> {
-  const startedAt = formatLogTimestamp(triggeredAt);
+  const logTimestamp =
+    context.mode === "training"
+      ? formatLogTimestamp(context.logStartedAt ?? Date.now())
+      : formatLogTimestamp(triggeredAt);
+  const startedAt = logTimestamp;
   const date = startedAt.slice(0, 10);
+  const filePath =
+    context.mode === "training"
+      ? `actors/actor_${actorId}/training/${task}/${startedAt}.jsonl`
+      : `actors/actor_${actorId}/${task}/${date}/${startedAt}.jsonl`;
   return new Agent(
     GlobalConfig.agent,
     new LLMClient(await server.dbService.getActorLLMConfig(actorId)),
@@ -1144,6 +1475,13 @@ async function createBackgroundAgent(
       context: {
         actorId,
         task,
+        ...(context.mode === "training"
+          ? {
+              mode: "training",
+              triggeredAt,
+              logicalTime: formatTimestamp("YYYY-MM-DD HH:mm:ss", triggeredAt),
+            }
+          : {}),
         ...(typeof conversationId === "number" ? { conversationId } : {}),
       },
       outputs: [
@@ -1151,7 +1489,7 @@ async function createBackgroundAgent(
         {
           type: "file",
           level: "debug",
-          filePath: `actors/actor_${actorId}/${task}/${date}/${startedAt}.jsonl`,
+          filePath,
         },
       ],
     }),

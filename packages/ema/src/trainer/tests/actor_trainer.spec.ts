@@ -4,7 +4,7 @@ import * as lancedb from "@lancedb/lancedb";
 import { ActorTrainer } from "../actor_trainer";
 import type { Server } from "../../server";
 import { MemFs } from "../../shared/fs";
-import { createMongo, type Mongo } from "../../db";
+import { createMongo, DBService, type Mongo } from "../../db";
 import { parseTimestamp } from "../../shared/utils";
 
 describe("ActorTrainer", () => {
@@ -134,5 +134,97 @@ describe("ActorTrainer", () => {
     expect(timestamp).toBe(
       parseTimestamp("YYYY-MM-DD HH:mm:ss", "2024-01-02 23:59:00"),
     );
+  });
+
+  test("rejects training when the actor already has conversation messages", async () => {
+    server.dbService = DBService.createSync(new MemFs(), mongo, lance);
+    const roleId = await server.dbService.roleDB.upsertRole({
+      name: "亚托莉",
+      prompt: "role book",
+    });
+    const actorId = await server.dbService.actorDB.upsertActor({
+      roleId,
+      enabled: false,
+    });
+    const conversation = await server.dbService.createConversation(
+      actorId,
+      "web-chat-1",
+      "Default",
+      "",
+      true,
+    );
+    await server.dbService.conversationMessageDB.addConversationMessage({
+      actorId,
+      conversationId: conversation.id!,
+      channelMessageId: "web:1",
+      buffered: true,
+      createdAt: parseTimestamp("YYYY-MM-DD HH:mm:ss", "2024-01-01 10:00:00"),
+      message: {
+        kind: "user",
+        uid: "夏生",
+        name: "夏生",
+        contents: [{ type: "text", text: "hello" }],
+      },
+    });
+    const trainer = new ActorTrainer(server, new MemFs());
+
+    await expect(
+      trainer.train({
+        actorId,
+        characterName: "亚托莉",
+        dataset: {
+          description: "dataset",
+          inputs: [
+            {
+              name: "亚托莉",
+              time: "2024-01-01 10:00:00",
+              content: "hello",
+            },
+          ],
+        },
+        bufferWindowSize: 30,
+        diaryUpdateEvery: 20,
+        checkpointDir: ".ema/trainer",
+      }),
+    ).rejects.toThrow("Actor has existing conversation messages");
+  });
+
+  test("rejects training when a train conversation already exists", async () => {
+    server.dbService = DBService.createSync(new MemFs(), mongo, lance);
+    const roleId = await server.dbService.roleDB.upsertRole({
+      name: "亚托莉",
+      prompt: "role book",
+    });
+    const actorId = await server.dbService.actorDB.upsertActor({
+      roleId,
+      enabled: false,
+    });
+    await server.dbService.createConversation(
+      actorId,
+      "train-group-1-existing",
+      "train-group-1-existing",
+      "dataset",
+    );
+    const trainer = new ActorTrainer(server, new MemFs());
+
+    await expect(
+      trainer.train({
+        actorId,
+        characterName: "亚托莉",
+        dataset: {
+          description: "dataset",
+          inputs: [
+            {
+              name: "亚托莉",
+              time: "2024-01-01 10:00:00",
+              content: "hello",
+            },
+          ],
+        },
+        bufferWindowSize: 30,
+        diaryUpdateEvery: 20,
+        checkpointDir: ".ema/trainer",
+      }),
+    ).rejects.toThrow("Actor already has a training conversation");
   });
 });

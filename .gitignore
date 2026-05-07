@@ -46,6 +46,7 @@ Thumbs.db
 /docs/.vitepress/dist/
 
 # Local scratch files
+AGENTS.md
 tmp/
 temp/
 

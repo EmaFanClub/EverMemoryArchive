@@ -6,7 +6,10 @@ import {
   EMA_CONVERSATION_ACTIVITY_PROMPT,
   EMA_MEMORY_ROLLUP_PROMPT,
 } from "../memory/prompts";
-import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
+import {
+  runActorBackgroundJob,
+  type ActorBackgroundRunOptions,
+} from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import { formatTimestamp, parseTimestamp } from "../shared/utils";
 import type {
@@ -23,6 +26,7 @@ import {
 } from "./checkpoint";
 import { buildSession } from "../channel";
 import { Logger } from "../shared/logger";
+import type { ActorEntity } from "../db";
 
 const TRAINING_TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
 
@@ -64,8 +68,19 @@ export class ActorTrainer {
     if (!actor) {
       throw new Error(`Actor with ID ${req.actorId} not found.`);
     }
+    await this.validateActorCanTrain(actor);
 
     const trainingSession = this.buildTrainingSession(req.actorId);
+    const logger = this.createTrainingLogger(req.actorId);
+    const backgroundRunOptions = (): ActorBackgroundRunOptions => ({
+      mode: "training",
+      logger,
+      logStartedAt: Date.now(),
+      memoryPolicy: {
+        bufferWindowSize: req.bufferWindowSize,
+        diaryUpdateEvery: req.diaryUpdateEvery,
+      },
+    });
     const characterUid = req.characterName.trim();
     const saveEverySteps = req.saveEverySteps ?? 1;
     const checkpointRoot = resolveCheckpointRoot(
@@ -100,7 +115,7 @@ export class ActorTrainer {
     const actorId = req.actorId;
     const conversationId = conversation.id;
 
-    this.logger.info("Training started", {
+    logger.info("Training started", {
       actorId: req.actorId,
       session: trainingSession,
       inputCount: normalizedInputs.length,
@@ -117,7 +132,7 @@ export class ActorTrainer {
         const currentDayKey = normalizedInputs[nextInputIndex].dayKey;
         let lastMessageTimestamp = normalizedInputs[nextInputIndex].timestamp;
 
-        this.logger.info("Training day started", {
+        logger.info("Training day started", {
           day: currentDayKey,
           fromIndex: nextInputIndex + 1,
         });
@@ -153,6 +168,7 @@ export class ActorTrainer {
             await this.server.memoryManager.getPendingConversationWindowState(
               conversationId,
               input.timestamp,
+              req.bufferWindowSize,
             )
           ).count;
           if (pendingConversationCount >= req.diaryUpdateEvery) {
@@ -165,6 +181,7 @@ export class ActorTrainer {
                 prompt: EMA_CONVERSATION_ACTIVITY_PROMPT,
               },
               input.timestamp,
+              backgroundRunOptions(),
             );
             ({ checkpointId, stepCount } = await this.advanceStep(
               "conversation-activity",
@@ -177,6 +194,7 @@ export class ActorTrainer {
               checkpointRoot,
               input.timestamp,
               ["activity", "day", "month", "year"],
+              logger,
             ));
           }
         }
@@ -185,6 +203,7 @@ export class ActorTrainer {
           await this.server.memoryManager.getPendingConversationWindowState(
             conversationId,
             lastMessageTimestamp,
+            req.bufferWindowSize,
           )
         ).count;
         if (pendingConversationCount > 0) {
@@ -197,6 +216,7 @@ export class ActorTrainer {
               prompt: EMA_CONVERSATION_ACTIVITY_PROMPT,
             },
             lastMessageTimestamp,
+            backgroundRunOptions(),
           );
           ({ checkpointId, stepCount } = await this.advanceStep(
             "conversation-activity",
@@ -209,6 +229,7 @@ export class ActorTrainer {
             checkpointRoot,
             lastMessageTimestamp,
             ["activity", "day", "month", "year"],
+            logger,
           ));
         }
 
@@ -225,6 +246,7 @@ export class ActorTrainer {
             },
           },
           memoryRollupTimestamp,
+          backgroundRunOptions(),
         );
         ({ checkpointId, stepCount } = await this.advanceStep(
           "memory-rollup",
@@ -237,6 +259,7 @@ export class ActorTrainer {
           checkpointRoot,
           memoryRollupTimestamp,
           ["activity", "day", "month", "year"],
+          logger,
         ));
       }
       checkpointId += 1;
@@ -247,8 +270,11 @@ export class ActorTrainer {
         actorId,
         conversationId,
         checkpointRoot,
+        undefined,
+        undefined,
+        logger,
       );
-      this.logger.info("Training completed", {
+      logger.info("Training completed", {
         actorId: req.actorId,
         conversationId,
         checkpointCount: checkpointId,
@@ -265,7 +291,7 @@ export class ActorTrainer {
         checkpointCount: checkpointId,
       };
     } catch (error) {
-      this.logger.error("Training failed", {
+      logger.error("Training failed", {
         actorId: req.actorId,
         messageCount,
         session: trainingSession,
@@ -281,6 +307,8 @@ export class ActorTrainer {
           conversationId,
           checkpointRoot,
           (error as Error).message,
+          undefined,
+          logger,
         );
       } catch {
         // Ignore secondary checkpoint failures and surface the original error.
@@ -311,6 +339,72 @@ export class ActorTrainer {
     ) {
       throw new Error("saveEverySteps must be a positive integer.");
     }
+  }
+
+  private async validateActorCanTrain(actor: ActorEntity): Promise<void> {
+    if (typeof actor.id !== "number") {
+      throw new Error("Actor ID is missing.");
+    }
+    if (actor.enabled) {
+      throw new Error("Actor must be disabled before training.");
+    }
+    const conversations =
+      await this.server.dbService.conversationDB.listConversations({
+        actorId: actor.id,
+      });
+    if (conversations.some((item) => item.session.startsWith("train-"))) {
+      throw new Error("Actor already has a training conversation.");
+    }
+    for (const conversation of conversations) {
+      if (typeof conversation.id !== "number") {
+        continue;
+      }
+      const messageCount =
+        await this.server.dbService.conversationMessageDB.countConversationMessages(
+          conversation.id,
+        );
+      if (messageCount > 0) {
+        throw new Error("Actor has existing conversation messages.");
+      }
+    }
+    const shortTermMemories =
+      await this.server.dbService.shortTermMemoryDB.listShortTermMemories({
+        actorId: actor.id,
+        limit: 1,
+      });
+    if (shortTermMemories.length > 0) {
+      throw new Error("Actor has existing short-term memories.");
+    }
+    const longTermMemories =
+      await this.server.dbService.longTermMemoryDB.listLongTermMemories({
+        actorId: actor.id,
+      });
+    if (longTermMemories.length > 0) {
+      throw new Error("Actor has existing long-term memories.");
+    }
+    const personality =
+      await this.server.dbService.personalityDB.getPersonality(actor.id);
+    if (personality?.memory?.trim()) {
+      throw new Error("Actor has existing personality memory.");
+    }
+  }
+
+  private createTrainingLogger(actorId: number): Logger {
+    return Logger.create({
+      name: "trainer",
+      context: {
+        actorId,
+        mode: "training",
+      },
+      outputs: [
+        { type: "console", level: "info" },
+        {
+          type: "file",
+          level: "debug",
+          filePath: `actors/actor_${actorId}/training/trainer.jsonl`,
+        },
+      ],
+    });
   }
 
   private normalizeInputs(
@@ -413,6 +507,7 @@ export class ActorTrainer {
     checkpointRoot: string,
     error?: string,
     stepCount?: number,
+    logger: Logger = this.logger,
   ): Promise<void> {
     const snapshot = await buildTrainingCheckpointSnapshot(
       this.server,
@@ -424,7 +519,7 @@ export class ActorTrainer {
       snapshot,
       ...(error ? { error } : {}),
     });
-    this.logger.info("Training checkpoint saved", {
+    logger.info("Training checkpoint saved", {
       target,
       id,
       step: stepCount,
@@ -444,11 +539,12 @@ export class ActorTrainer {
     checkpointRoot: string,
     triggeredAt: number,
     updateKinds: ShortTermMemory["kind"][],
+    logger: Logger = this.logger,
   ): Promise<{ checkpointId: number; stepCount: number }> {
     const nextStepCount = stepCount + 1;
     const kinds = updateKinds.join(",");
     const gameTime = formatTimestamp(TRAINING_TIME_FORMAT, triggeredAt);
-    this.logger.info("Training step advanced", {
+    logger.info("Training step advanced", {
       step: nextStepCount,
       messageCount,
       update: updateType,
@@ -471,6 +567,7 @@ export class ActorTrainer {
       checkpointRoot,
       undefined,
       nextStepCount,
+      logger,
     );
     return {
       checkpointId: nextCheckpointId,

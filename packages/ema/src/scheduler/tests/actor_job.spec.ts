@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+const loggerCreateConfigs = vi.hoisted(() => [] as unknown[]);
+
 vi.mock("../../llm", () => ({
   LLMClient: class LLMClient {},
 }));
@@ -8,7 +10,8 @@ vi.mock("../../shared/logger", () => ({
   formatLogTimestamp: (timestamp: number = 0) =>
     new Date(timestamp).toISOString().replace("T", "_").replace(/[:.Z]/g, "-"),
   Logger: class Logger {
-    static create() {
+    static create(config: unknown) {
+      loggerCreateConfigs.push(config);
       return {
         debug() {},
         info() {},
@@ -44,10 +47,12 @@ type FakeMemoryManager = {
   getPendingConversationWindowState: (
     conversationId: number,
     triggeredAt: number,
+    count?: number,
   ) => Promise<{ count: number; lastPendingId: number | null }>;
   getBufferedConversationWindowSnapshot: (
     conversationId: number,
     triggeredAt: number,
+    count?: number,
   ) => Promise<{ messages: []; msgIds: number[] }>;
   markConversationMessagesActivityProcessed: (
     conversationId: number,
@@ -116,11 +121,11 @@ function createFakeServer(
   const runningConversationActivities = new Set<number>();
   const runningActivityToDayRollups = new Set<number>();
 
-  const getConversationWindow = (triggeredAt: number) =>
+  const getConversationWindow = (triggeredAt: number, count = 30) =>
     bufferedMessages
       .filter((item) => item.createdAt <= triggeredAt)
       .sort((a, b) => a.createdAt - b.createdAt)
-      .slice(-30);
+      .slice(-count);
 
   const getActivityWindow = (triggeredAt: number) =>
     activities
@@ -186,8 +191,9 @@ function createFakeServer(
       async getPendingConversationWindowState(
         _conversationId: number,
         triggeredAt: number,
+        count?: number,
       ) {
-        const pending = getConversationWindow(triggeredAt).filter(
+        const pending = getConversationWindow(triggeredAt, count).filter(
           (item) => typeof item.activityProcessedAt !== "number",
         );
         return {
@@ -198,8 +204,9 @@ function createFakeServer(
       async getBufferedConversationWindowSnapshot(
         _conversationId: number,
         triggeredAt: number,
+        count?: number,
       ) {
-        const snapshot = getConversationWindow(triggeredAt);
+        const snapshot = getConversationWindow(triggeredAt, count);
         return {
           messages: [],
           msgIds: snapshot.map((item) => item.msgId),
@@ -337,6 +344,7 @@ function expectInfoLog(
 
 beforeEach(async () => {
   await loadTestGlobalConfig();
+  loggerCreateConfigs.length = 0;
 });
 
 afterEach(() => {
@@ -362,6 +370,104 @@ const memoryRollupJob = (
 });
 
 describe("actor background job lifecycle logs", () => {
+  test("training conversation rollup uses training logs and memory policy", async () => {
+    const bufferedMessages = createBufferedMessages(1, 10, 1000);
+    const server = createFakeServer(bufferedMessages);
+    const trainingLogger: FakeLogger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const realStartedAt = Date.UTC(2026, 4, 7, 4, 5, 6, 7);
+
+    server.dbService.actorDB.getActor = vi.fn(async () => ({
+      enabled: false,
+    }));
+    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
+      async (state) => {
+        if (state.toolContext?.data) {
+          state.toolContext.data.activityAdded = true;
+        }
+      },
+    );
+
+    await runActorBackgroundJob(server as any, conversationRollupJob(), 2000, {
+      mode: "training",
+      logger: trainingLogger as any,
+      logStartedAt: realStartedAt,
+      memoryPolicy: {
+        bufferWindowSize: 5,
+        diaryUpdateEvery: 5,
+      },
+    });
+
+    expect(server.logger.info).not.toHaveBeenCalled();
+    expect(trainingLogger.info).toHaveBeenCalledWith(
+      "Actor background task started",
+      expect.objectContaining({
+        actorId: 1,
+        task: "conversation_rollup",
+        mode: "training",
+        logicalTime: "1970-01-01 08:00:02",
+        pendingCount: 5,
+        threshold: 5,
+      }),
+    );
+    expect(
+      bufferedMessages.filter(
+        (item) => typeof item.activityProcessedAt === "number",
+      ),
+    ).toHaveLength(5);
+    expect(loggerCreateConfigs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "agent.task",
+          outputs: expect.arrayContaining([
+            expect.objectContaining({
+              filePath:
+                "actors/actor_1/training/conversation_rollup/2026-05-07_04-05-06-007-.jsonl",
+            }),
+          ]),
+        }),
+      ]),
+    );
+  });
+
+  test("runtime conversation rollup keeps the existing task log path", async () => {
+    const bufferedMessages = createBufferedMessages(1, 20, 1000);
+    const server = createFakeServer(bufferedMessages);
+    const logicalTriggeredAt = Date.UTC(2024, 6, 1, 2, 45, 0, 0);
+
+    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
+      async (state) => {
+        if (state.toolContext?.data) {
+          state.toolContext.data.activityAdded = true;
+        }
+      },
+    );
+
+    await runActorBackgroundJob(
+      server as any,
+      conversationRollupJob(),
+      logicalTriggeredAt,
+    );
+
+    expect(loggerCreateConfigs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "agent.task",
+          outputs: expect.arrayContaining([
+            expect.objectContaining({
+              filePath:
+                "actors/actor_1/conversation_rollup/2024-07-01/2024-07-01_02-45-00-000-.jsonl",
+            }),
+          ]),
+        }),
+      ]),
+    );
+  });
+
   test("conversation rollup logs request, start, and completion", async () => {
     const bufferedMessages = createBufferedMessages(1, 20, 1000);
     const server = createFakeServer(bufferedMessages);
