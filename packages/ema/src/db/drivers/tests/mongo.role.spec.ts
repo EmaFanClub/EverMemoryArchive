@@ -35,6 +35,18 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     expect(retrievedRole).toEqual(roleData);
   });
 
+  test("should create a role with an empty prompt", async () => {
+    const roleData: RoleEntity = {
+      name: "Test Role",
+      prompt: "",
+    };
+
+    const id = await db.upsertRole(roleData);
+    expect(id).toBe(1);
+    const retrievedRole = await db.getRole(id);
+    expect(retrievedRole).toEqual(roleData);
+  });
+
   test("should update an existing role", async () => {
     const roleData: RoleEntity = {
       name: "Test Role",

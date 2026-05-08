@@ -1593,6 +1593,334 @@
   stroke-width: 2.4;
 }
 
+.actorTrainingCard {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  gap: 10px;
+  align-items: start;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: 16px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--accent-soft) 36%, var(--surface-raised));
+  color: var(--text);
+  outline: 0;
+  text-align: left;
+  animation: panelEnter 260ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorTrainingCard:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent-soft) 46%, var(--surface-raised));
+  transform: translateY(-1px);
+}
+
+.actorTrainingCard:focus-visible {
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.actorTrainingCardIcon {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: color-mix(in srgb, var(--accent) 82%, white);
+}
+
+.actorTrainingCardIcon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.2;
+}
+
+.actorTrainingCardIcon[data-running="true"] svg {
+  animation: spin 900ms linear infinite;
+}
+
+.actorTrainingCardBody {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.actorTrainingCardTitle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 790;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+.actorTrainingCardTitle strong {
+  color: color-mix(in srgb, var(--accent) 80%, white);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 780;
+  letter-spacing: -0.012em;
+}
+
+.actorTrainingCardMeta,
+.actorTrainingCardEta {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
+  font-size: 0.7rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actorTrainingProgressTrack,
+.actorTrainingDialogProgress {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-active) 74%, transparent);
+}
+
+.actorTrainingProgressTrack span,
+.actorTrainingDialogProgress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 78%, white 4%);
+  transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.actorTrainingOverlay {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(3, 5, 12, 0.68);
+  animation: panelEnter 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.actorTrainingDialog {
+  display: grid;
+  grid-template-rows: auto auto auto auto 220px;
+  gap: 16px;
+  width: min(100%, 920px);
+  max-height: min(88vh, 780px);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 58%, transparent);
+  border-radius: 20px;
+  padding: 22px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, black 2%);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
+}
+
+.actorTrainingDialogHeader {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.actorTrainingDialogIcon {
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: color-mix(in srgb, var(--accent) 82%, white);
+}
+
+.actorTrainingDialogIcon svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.2;
+}
+
+.actorTrainingDialogHeader h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 820;
+  letter-spacing: -0.026em;
+  line-height: 1.1;
+}
+
+.actorTrainingDialogHeader p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 520;
+  letter-spacing: -0.006em;
+  line-height: 1;
+}
+
+.actorTrainingDialogClose {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  outline: 0;
+  transition:
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorTrainingDialogClose:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.actorTrainingDialogClose:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.actorTrainingDialogClose svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.4;
+}
+
+.actorTrainingDialogStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.actorTrainingDialogStats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--surface-inset) 72%, transparent);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 680;
+  letter-spacing: -0.008em;
+  line-height: 1;
+}
+
+.actorTrainingDialogStats svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.2;
+}
+
+.actorTrainingDialogMeta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.actorTrainingDialogMeta div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 24%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--surface-inset) 56%, transparent);
+}
+
+.actorTrainingDialogMeta dt {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  font-weight: 640;
+  letter-spacing: -0.004em;
+  line-height: 1;
+}
+
+.actorTrainingDialogMeta dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 560;
+  letter-spacing: -0.008em;
+  line-height: 1.28;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actorTrainingTerminal {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  height: 220px;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 34%, transparent);
+  border-radius: 14px;
+  padding: 12px;
+  background: color-mix(in srgb, #05070b 78%, var(--surface-inset));
+  color: color-mix(in srgb, #a6f3cf 80%, var(--text-muted));
+  font-family: var(--font-mono);
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 58%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+.actorTrainingTerminal::-webkit-scrollbar {
+  width: 7px;
+}
+
+.actorTrainingTerminal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.actorTrainingTerminal::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 58%, transparent);
+}
+
+.actorTrainingTerminal div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.actorTrainingTerminal span {
+  color: color-mix(in srgb, #6aa987 72%, var(--text-subtle));
+}
+
+.actorTrainingTerminal code {
+  overflow-wrap: anywhere;
+  color: inherit;
+  font-family: inherit;
+}
+
 .actorSettingsFieldGroup {
   display: grid;
   min-width: 0;
@@ -1830,6 +2158,12 @@
 
 .actorActivitySwitchItem:disabled .actorSettingsMenuIcon svg {
   animation: spin 900ms linear infinite;
+}
+
+.actorActivitySwitchItem[data-learning="true"]:disabled
+  .actorSettingsMenuIcon
+  svg {
+  animation: none;
 }
 
 .actorSettingsSwitch {

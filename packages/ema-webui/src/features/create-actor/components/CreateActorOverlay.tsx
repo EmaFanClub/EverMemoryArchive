@@ -5,14 +5,19 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ChangeEvent as ReactChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import {
+  BookOpen,
   Camera,
   Check,
   ChevronDown,
+  Database,
   FilePlus2,
+  GraduationCap,
   LoaderCircle,
   Moon,
   Sparkles,
@@ -24,8 +29,6 @@ import {
 import {
   CREATE_ACTOR_PERSONALITY_TRAITS,
   CREATE_ACTOR_SLEEP_AXIS_MINUTES,
-  CREATE_ACTOR_SLEEP_DEFAULT_END,
-  CREATE_ACTOR_SLEEP_DEFAULT_START,
   CREATE_ACTOR_SLEEP_MAX_GAP_MINUTES,
   CREATE_ACTOR_SLEEP_MIN_GAP_MINUTES,
   CREATE_ACTOR_SLEEP_STEP_MINUTES,
@@ -47,8 +50,21 @@ import {
   formatSleepDuration,
   snapAxisMinutes,
 } from "../helpers";
+import {
+  createInitialCreateActorDrafts,
+  patchCreateActorDraft,
+  type CreateActorDraft,
+} from "../create-actor-drafts";
+import {
+  parseCreateActorTrainingDataset,
+  type CreateActorTrainingDataset,
+  type CreateActorTrainingDatasetStats,
+} from "../training-dataset";
 import { createActor } from "@/transport/dashboard";
-import type { ActorSummary } from "@/types/dashboard/v1beta1";
+import type {
+  ActorSummary,
+  ActorTrainingUiState,
+} from "@/types/dashboard/v1beta1";
 import styles from "./create-actor.module.css";
 
 type CreateActorSoulPresetTab = "role" | "personality";
@@ -108,13 +124,87 @@ const CREATE_ACTOR_ROLE_PRESETS = [
 
 type CreateActorRolePresetId = (typeof CREATE_ACTOR_ROLE_PRESETS)[number]["id"];
 type CreateActorRolePreset = (typeof CREATE_ACTOR_ROLE_PRESETS)[number];
+type CreateActorFlowMode = "blank" | "training";
+
+interface CreateActorStepMeta {
+  id: CreateActorStepId;
+  title: string;
+  description: string;
+  subtitle: string;
+}
+
+const CREATE_ACTOR_DEFAULT_STEPS: CreateActorStepMeta[] = [
+  {
+    id: 1,
+    title: "记忆碎片",
+    description: "从白纸开始，或把已有的痕迹带到这里，让一切有个起点。",
+    subtitle: "我好像听见了很遥远的声音，在哪里……",
+  },
+  {
+    id: 2,
+    title: "写进档案",
+    description: "留下名字与模样，让这份记忆不再只是模糊的影子。",
+    subtitle: "我……是谁？",
+  },
+  {
+    id: 3,
+    title: "赋予灵魂",
+    description: "写下那些重要之物，它会慢慢沉淀。",
+    subtitle: "我能感觉到这是很重要的东西……嗯，很重要",
+  },
+  {
+    id: 4,
+    title: "赋予生命",
+    description: "斗转星移，昼夜交替，让陪伴拥有自己的呼吸。",
+    subtitle: "我好像做了一个很奇妙的梦……",
+  },
+  {
+    id: 5,
+    title: "期待相遇",
+    description: "待档案合上，新的邂逅就会开始。",
+    subtitle: "我有预感，我将度过一段难忘的时光",
+  },
+];
+
+const CREATE_ACTOR_TRAINING_STEPS: CreateActorStepMeta[] = [
+  {
+    id: 1,
+    title: "记忆碎片",
+    description: "从白纸开始，或把已有的痕迹带到这里，让一切有个起点。",
+    subtitle: "我好像听见了很遥远的声音，在哪里……",
+  },
+  {
+    id: 2,
+    title: "上传记录",
+    description: "放入一份回放数据，先确认它的时间、角色和消息结构。",
+    subtitle: "这些记录里，好像藏着很长的一段故事",
+  },
+  {
+    id: 3,
+    title: "确认对象",
+    description: "选择要学习的人物，并写下学习开始前的初始角色书。",
+    subtitle: "这一次，我要学习谁的记忆呢？",
+  },
+  {
+    id: 4,
+    title: "赋予生命",
+    description: "斗转星移，昼夜交替，让陪伴拥有自己的呼吸。",
+    subtitle: "我好像做了一个很奇妙的梦……",
+  },
+  {
+    id: 5,
+    title: "学习摘要",
+    description: "确认学习对象、数据范围和作息，随后开始建立记忆。",
+    subtitle: "我准备好了，把这些记录交给我吧",
+  },
+];
 
 export function CreateActorOverlay({
   onClose,
   onCreated,
 }: {
   onClose: () => void;
-  onCreated?: (actor: ActorSummary) => void;
+  onCreated?: (actor: ActorSummary, training?: ActorTrainingUiState) => void;
 }) {
   const [currentStep, setCurrentStep] = useState<CreateActorStepId>(1);
   const [stepMotion, setStepMotion] = useState<"forward" | "backward">(
@@ -131,22 +221,8 @@ export function CreateActorOverlay({
   );
 
   const [source, setSource] = useState<CreateActorSourceId>("blank");
-  const [actorName, setActorName] = useState("");
-  const [roleBook, setRoleBook] = useState("");
-  const [mbtiAxes, setMbtiAxes] = useState<Record<MbtiAxis, string>>({
-    EI: "E",
-    SN: "N",
-    TF: "T",
-    JP: "J",
-  });
-  const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState(createInitialCreateActorDrafts);
   const [createdAt] = useState(() => new Date());
-  const [sleepStart, setSleepStart] = useState<number>(
-    CREATE_ACTOR_SLEEP_DEFAULT_START,
-  );
-  const [sleepEnd, setSleepEnd] = useState<number>(
-    CREATE_ACTOR_SLEEP_DEFAULT_END,
-  );
 
   const [submitting, setSubmitting] = useState(false);
   const [justSucceeded, setJustSucceeded] = useState(false);
@@ -169,43 +245,26 @@ export function CreateActorOverlay({
     return () => clearInterval(interval);
   }, []);
 
-  const steps: Array<{
-    id: CreateActorStepId;
-    title: string;
-    description: string;
-    subtitle: string;
-  }> = [
-    {
-      id: 1,
-      title: "记忆碎片",
-      description: "从白纸开始，或把已有的痕迹带到这里，让一切有个起点。",
-      subtitle: "我好像听见了很遥远的声音，在哪里……",
-    },
-    {
-      id: 2,
-      title: "写进档案",
-      description: "留下名字与模样，让这份记忆不再只是模糊的影子。",
-      subtitle: "我……是谁？",
-    },
-    {
-      id: 3,
-      title: "赋予灵魂",
-      description: "写下那些重要之物，它会慢慢沉淀。",
-      subtitle: "我能感觉到这是很重要的东西……嗯，很重要",
-    },
-    {
-      id: 4,
-      title: "赋予生命",
-      description: "斗转星移，昼夜交替，让陪伴拥有自己的呼吸。",
-      subtitle: "我好像做了一个很奇妙的梦……",
-    },
-    {
-      id: 5,
-      title: "期待相遇",
-      description: "待档案合上，新的邂逅就会开始。",
-      subtitle: "我有预感，我将度过一段难忘的时光",
-    },
-  ];
+  const flowMode: CreateActorFlowMode =
+    source === "history" ? "training" : "blank";
+  const isTrainingFlow = flowMode === "training";
+  const activeDraft = drafts[source];
+  const {
+    actorName,
+    roleBook,
+    trainingDataset,
+    trainingDatasetStats,
+    trainingDatasetFileName,
+    trainingDatasetFileSize,
+    trainingDatasetError,
+    mbtiAxes,
+    selectedTraits,
+    sleepStart,
+    sleepEnd,
+  } = activeDraft;
+  const steps = isTrainingFlow
+    ? CREATE_ACTOR_TRAINING_STEPS
+    : CREATE_ACTOR_DEFAULT_STEPS;
   const step = steps[currentStep - 1];
   const coreProgressAngle = `${
     ((currentStep - 1) * 360) / (steps.length - 1)
@@ -239,11 +298,115 @@ export function CreateActorOverlay({
   }
 
   const trimmedName = actorName.trim();
+  const trainingCharacterNames =
+    trainingDatasetStats?.characters.map((item) => item.name) ?? [];
   const canContinue = (() => {
     if (submitting || justSucceeded) return false;
-    if (currentStep === 2) return trimmedName.length > 0;
+    if (isTrainingFlow && currentStep === 2) {
+      return Boolean(trainingDataset && trainingDatasetStats);
+    }
+    if (currentStep === 2) {
+      return trimmedName.length > 0;
+    }
+    if (isTrainingFlow && currentStep === 3) {
+      return (
+        Boolean(trainingDataset && trainingDatasetStats) &&
+        trimmedName.length > 0 &&
+        trainingCharacterNames.includes(trimmedName)
+      );
+    }
     return true;
   })();
+
+  function patchDraft(
+    draftSource: CreateActorSourceId,
+    patch:
+      | Partial<CreateActorDraft>
+      | ((draft: CreateActorDraft) => Partial<CreateActorDraft>),
+  ) {
+    setDrafts((current) => patchCreateActorDraft(current, draftSource, patch));
+  }
+
+  function patchActiveDraft(
+    patch:
+      | Partial<CreateActorDraft>
+      | ((draft: CreateActorDraft) => Partial<CreateActorDraft>),
+  ) {
+    patchDraft(source, patch);
+  }
+
+  function handleSourceSelect(id: CreateActorSourceId) {
+    setSource(id);
+    if (id === "history") {
+      setDrafts((current) => {
+        const historyDraft = current.history;
+        const characterNames =
+          historyDraft.trainingDatasetStats?.characters.map(
+            (item) => item.name,
+          ) ?? [];
+        if (
+          !historyDraft.trainingDatasetStats ||
+          characterNames.includes(historyDraft.actorName.trim())
+        ) {
+          return current;
+        }
+        return patchCreateActorDraft(current, "history", {
+          actorName: historyDraft.trainingDatasetStats.primaryCharacterName,
+        });
+      });
+    }
+  }
+
+  async function handleTrainingDatasetFile(file: File | null) {
+    if (!file) {
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      patchDraft("history", {
+        trainingDataset: null,
+        trainingDatasetStats: null,
+        trainingDatasetFileName: file.name,
+        trainingDatasetFileSize: file.size,
+        trainingDatasetError: "请上传 JSON 格式的回放数据。",
+      });
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      const result = parseCreateActorTrainingDataset(parsed);
+      if (!result.ok) {
+        patchDraft("history", {
+          trainingDataset: null,
+          trainingDatasetStats: null,
+          trainingDatasetFileName: file.name,
+          trainingDatasetFileSize: file.size,
+          trainingDatasetError: result.message,
+        });
+        showCreateActorToast("回放数据格式不正确", "error");
+        return;
+      }
+
+      patchDraft("history", {
+        actorName: result.stats.primaryCharacterName,
+        trainingDataset: result.dataset,
+        trainingDatasetStats: result.stats,
+        trainingDatasetFileName: file.name,
+        trainingDatasetFileSize: file.size,
+        trainingDatasetError: null,
+      });
+      showCreateActorToast("回放数据已载入", "success");
+    } catch {
+      patchDraft("history", {
+        trainingDataset: null,
+        trainingDatasetStats: null,
+        trainingDatasetFileName: file.name,
+        trainingDatasetFileSize: file.size,
+        trainingDatasetError: "JSON 解析失败，请检查文件内容。",
+      });
+      showCreateActorToast("回放数据格式不正确", "error");
+    }
+  }
 
   function goToStep(stepId: CreateActorStepId) {
     if (stepId === currentStep) {
@@ -291,9 +454,21 @@ export function CreateActorOverlay({
       });
       setSubmitting(false);
       setJustSucceeded(true);
-      showCreateActorToast("档案已合上，等待相遇", "success");
+      const training =
+        isTrainingFlow && trainingDataset && trainingDatasetStats
+          ? buildInitialTrainingState({
+              characterName: trimmedName,
+              dataset: trainingDataset,
+              stats: trainingDatasetStats,
+              fileName: trainingDatasetFileName,
+            })
+          : undefined;
+      showCreateActorToast(
+        training ? "档案已建立，开始学习" : "档案已合上，等待相遇",
+        "success",
+      );
       closingTimerRef.current = setTimeout(() => {
-        onCreated?.(response.actor);
+        onCreated?.(response.actor, training);
         if (!onCreated) {
           onClose();
         }
@@ -323,41 +498,76 @@ export function CreateActorOverlay({
         return (
           <CreateActorStepSource
             selected={source}
-            onSelect={(id) => setSource(id)}
+            onSelect={handleSourceSelect}
           />
         );
       case 2:
+        if (isTrainingFlow) {
+          return (
+            <CreateActorStepTrainingDataset
+              fileName={trainingDatasetFileName}
+              fileSize={trainingDatasetFileSize}
+              stats={trainingDatasetStats}
+              error={trainingDatasetError}
+              onFileSelect={(file) => {
+                void handleTrainingDatasetFile(file);
+              }}
+            />
+          );
+        }
         return (
           <CreateActorStepIdentity
             name={actorName}
-            onNameChange={setActorName}
+            onNameChange={(value) => patchActiveDraft({ actorName: value })}
             onAvatarClick={handleAvatarClick}
           />
         );
       case 3:
+        if (isTrainingFlow) {
+          return (
+            <CreateActorStepTrainingProfile
+              roleBook={roleBook}
+              onRoleBookChange={(value) =>
+                patchActiveDraft({ roleBook: value })
+              }
+              selectedName={actorName}
+              characterStats={trainingDatasetStats?.characters ?? []}
+              onNameSelect={(value) => patchActiveDraft({ actorName: value })}
+              onAvatarClick={handleAvatarClick}
+            />
+          );
+        }
         return (
           <CreateActorStepSoul
             value={roleBook}
-            onChange={setRoleBook}
+            onChange={(value) => patchActiveDraft({ roleBook: value })}
             mbtiAxes={mbtiAxes}
             onMbtiAxisChange={(axis, option) =>
-              setMbtiAxes((current) => ({ ...current, [axis]: option }))
+              patchActiveDraft((draft) => ({
+                mbtiAxes: { ...draft.mbtiAxes, [axis]: option },
+              }))
             }
             selectedTraits={selectedTraits}
             onToggleTrait={(id) =>
-              setSelectedTraits((current) => {
-                if (current.includes(id)) {
-                  return current.filter((trait) => trait !== id);
+              patchActiveDraft((draft) => {
+                if (draft.selectedTraits.includes(id)) {
+                  return {
+                    selectedTraits: draft.selectedTraits.filter(
+                      (trait) => trait !== id,
+                    ),
+                  };
                 }
-                if (current.length >= 3) {
-                  return current;
+                if (draft.selectedTraits.length >= 3) {
+                  return {};
                 }
-                return [...current, id];
+                return { selectedTraits: [...draft.selectedTraits, id] };
               })
             }
             onApplyRolePreset={(preset) => {
-              setActorName(preset.label);
-              setRoleBook(preset.roleBook);
+              patchActiveDraft({
+                actorName: preset.label,
+                roleBook: preset.roleBook,
+              });
               showCreateActorToast("已应用角色预设", "success");
             }}
             onApplyPersonalityPreset={() =>
@@ -372,12 +582,24 @@ export function CreateActorOverlay({
             sleepEnd={sleepEnd}
             nowAxisMin={nowAxisMin}
             onChange={(start, end) => {
-              setSleepStart(start);
-              setSleepEnd(end);
+              patchActiveDraft({ sleepStart: start, sleepEnd: end });
             }}
           />
         );
       case 5:
+        if (isTrainingFlow) {
+          return (
+            <CreateActorStepTrainingArchive
+              name={trimmedName}
+              roleBook={roleBook}
+              sleepStart={sleepStart}
+              sleepEnd={sleepEnd}
+              stats={trainingDatasetStats}
+              description={trainingDataset?.description ?? ""}
+              fileName={trainingDatasetFileName}
+            />
+          );
+        }
         return (
           <CreateActorStepArchive
             name={trimmedName}
@@ -548,7 +770,11 @@ export function CreateActorOverlay({
                 <span>创建成功</span>
               </>
             ) : currentStep === 5 ? (
-              "完成"
+              isTrainingFlow ? (
+                "创建并学习"
+              ) : (
+                "完成"
+              )
             ) : (
               "继续"
             )}
@@ -559,6 +785,74 @@ export function CreateActorOverlay({
       </section>
     </div>
   );
+}
+
+function buildInitialTrainingState({
+  characterName,
+  dataset,
+  stats,
+  fileName,
+}: {
+  characterName: string;
+  dataset: CreateActorTrainingDataset;
+  stats: CreateActorTrainingDatasetStats;
+  fileName: string;
+}): ActorTrainingUiState {
+  const startedAt = Date.now();
+  return {
+    status: "running",
+    characterName,
+    description: dataset.description,
+    ...(fileName ? { sourceFileName: fileName } : {}),
+    totalMessages: stats.totalMessages,
+    processedMessages: 0,
+    dayCount: stats.dayCount,
+    startTime: stats.startTime,
+    endTime: stats.endTime,
+    progress: 0,
+    startedAt,
+    updatedAt: startedAt,
+    estimatedRemainingMs: estimateMockTrainingDuration(stats.totalMessages),
+    logs: [
+      "学习任务已创建",
+      `读取回放数据：${stats.totalMessages} 条消息`,
+      `学习对象：${characterName}`,
+    ],
+  };
+}
+
+function estimateMockTrainingDuration(totalMessages: number) {
+  return Math.min(8 * 60 * 1000, Math.max(90 * 1000, totalMessages * 800));
+}
+
+function formatDatasetFileSize(size: number) {
+  if (size <= 0) {
+    return "";
+  }
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatTrainingDatasetTime(value: string) {
+  const [date = "", time = ""] = value.split(" ");
+  const [year = "", month = "", day = ""] = date.split("-");
+  if (!year || !month || !day || !time) {
+    return value;
+  }
+  return `${year}年${month}月${day}日 ${time}`;
+}
+
+function formatTrainingDatasetTimeRange(
+  stats: CreateActorTrainingDatasetStats,
+) {
+  return `${formatTrainingDatasetTime(stats.startTime)} ~ ${formatTrainingDatasetTime(
+    stats.endTime,
+  )}`;
 }
 
 function CreateActorStepSource({
@@ -668,6 +962,257 @@ function CreateActorStepIdentity({
   );
 }
 
+function CreateActorStepTrainingDataset({
+  fileName,
+  fileSize,
+  stats,
+  error,
+  onFileSelect,
+}: {
+  fileName: string;
+  fileSize: number;
+  stats: CreateActorTrainingDatasetStats | null;
+  error: string | null;
+  onFileSelect: (file: File | null) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const fileSizeLabel = formatDatasetFileSize(fileSize);
+
+  function handleFileChange(event: ReactChangeEvent<HTMLInputElement>) {
+    onFileSelect(event.currentTarget.files?.[0] ?? null);
+    event.currentTarget.value = "";
+  }
+
+  return (
+    <div className={styles.createActorTrainingDataset}>
+      <input
+        ref={inputRef}
+        className={styles.createActorTrainingFileInput}
+        type="file"
+        accept="application/json,.json"
+        onChange={handleFileChange}
+      />
+      <button
+        type="button"
+        className={styles.createActorTrainingUpload}
+        onClick={() => inputRef.current?.click()}
+      >
+        <span className={styles.createActorTrainingUploadIcon}>
+          <Upload aria-hidden="true" />
+        </span>
+        <span className={styles.createActorTrainingUploadText}>
+          <span>{fileName || "上传回放数据"}</span>
+          <small>{fileName ? fileSizeLabel || "JSON" : "选择 JSON 文件"}</small>
+        </span>
+      </button>
+
+      {error ? (
+        <div className={styles.createActorTrainingError} role="alert">
+          <X aria-hidden="true" />
+          <span>
+            <strong>回放数据格式错误</strong>
+            <small>{error}</small>
+          </span>
+        </div>
+      ) : null}
+
+      {stats ? (
+        <section className={styles.createActorTrainingStats}>
+          <div className={styles.createActorTrainingStatGrid}>
+            <TrainingStatCard
+              icon={<Database aria-hidden="true" />}
+              label="消息"
+              value={String(stats.totalMessages)}
+            />
+            <TrainingStatCard
+              icon={<BookOpen aria-hidden="true" />}
+              label="天数"
+              value={String(stats.dayCount)}
+            />
+            <TrainingStatCard
+              icon={<GraduationCap aria-hidden="true" />}
+              label="人物"
+              value={String(stats.characters.length)}
+            />
+          </div>
+          <div className={styles.createActorTrainingTimeRange}>
+            <span>时间范围</span>
+            <strong>{formatTrainingDatasetTimeRange(stats)}</strong>
+          </div>
+          <div className={styles.createActorTrainingCharacters}>
+            {stats.characters.map((character) => (
+              <div
+                key={character.name}
+                className={styles.createActorTrainingCharacterRow}
+              >
+                <span>{character.name}</span>
+                <div
+                  className={styles.createActorTrainingCharacterBar}
+                  aria-hidden="true"
+                >
+                  <span
+                    style={{
+                      width: `${Math.max(
+                        4,
+                        (character.messageCount / stats.totalMessages) * 100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <strong>{character.messageCount}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function TrainingStatCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className={styles.createActorTrainingStat}>
+      <span className={styles.createActorTrainingStatIcon}>{icon}</span>
+      <span className={styles.createActorTrainingStatMain}>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </span>
+    </div>
+  );
+}
+
+function CreateActorStepTrainingProfile({
+  roleBook,
+  onRoleBookChange,
+  selectedName,
+  characterStats,
+  onNameSelect,
+  onAvatarClick,
+}: {
+  roleBook: string;
+  onRoleBookChange: (value: string) => void;
+  selectedName: string;
+  characterStats: CreateActorTrainingDatasetStats["characters"];
+  onNameSelect: (value: string) => void;
+  onAvatarClick: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const selectedCharacter =
+    characterStats.find((item) => item.name === selectedName) ??
+    characterStats[0];
+  const displayName = selectedCharacter?.name ?? selectedName;
+  const initial = createActorNameInitial(displayName);
+
+  return (
+    <div className={styles.createActorSoulLayout}>
+      <div className={styles.createActorRoleBookField}>
+        <textarea
+          id="create-actor-training-role-book"
+          className={styles.createActorTextarea}
+          placeholder={CREATE_ACTOR_ROLE_BOOK_PLACEHOLDER}
+          aria-label="初始角色书"
+          value={roleBook}
+          onChange={(event) => onRoleBookChange(event.target.value)}
+          spellCheck={false}
+        />
+        <p className={styles.createActorRoleBookHint}>角色书可留空</p>
+      </div>
+      <div className={styles.createActorSoulDivider} aria-hidden="true" />
+      <aside
+        className={styles.createActorTrainingProfile}
+        aria-label="学习人物"
+      >
+        <button
+          type="button"
+          className={styles.createActorIdentityAvatar}
+          aria-label="设置角色头像"
+          onClick={onAvatarClick}
+        >
+          <span className={styles.createActorIdentityAvatarText}>
+            {initial}
+          </span>
+          <span
+            className={styles.createActorIdentityAvatarOverlay}
+            aria-hidden="true"
+          >
+            <Camera />
+          </span>
+        </button>
+
+        <div
+          className={`${styles.createActorRolePresetSelect} ${styles.createActorTrainingNameSelect}`}
+          onBlur={(event) => {
+            const nextTarget = event.relatedTarget;
+            if (
+              nextTarget instanceof Node &&
+              event.currentTarget.contains(nextTarget)
+            ) {
+              return;
+            }
+            setMenuOpen(false);
+          }}
+        >
+          <button
+            type="button"
+            className={styles.createActorRolePresetSelectButton}
+            aria-haspopup="listbox"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((current) => !current)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setMenuOpen(false);
+                event.currentTarget.blur();
+              }
+            }}
+          >
+            <span>{displayName || "选择人物"}</span>
+            <ChevronDown aria-hidden="true" />
+          </button>
+          {menuOpen ? (
+            <div
+              className={`${styles.createActorRolePresetSelectMenu} ${styles.createActorTrainingNameSelectMenu}`}
+              role="listbox"
+              aria-label="选择学习人物"
+            >
+              {characterStats.map((character) => (
+                <button
+                  key={character.name}
+                  type="button"
+                  role="option"
+                  aria-selected={character.name === displayName}
+                  className={styles.createActorRolePresetSelectOption}
+                  data-active={
+                    character.name === displayName ? "true" : undefined
+                  }
+                  onClick={() => {
+                    onNameSelect(character.name);
+                    setMenuOpen(false);
+                  }}
+                >
+                  <span>{character.name}</span>
+                  {character.name === displayName ? (
+                    <Check aria-hidden="true" />
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <p className={styles.createActorTrainingNameHint}>将作为角色名称</p>
+      </aside>
+    </div>
+  );
+}
+
 function CreateActorStepSoul({
   value,
   onChange,
@@ -701,15 +1246,18 @@ function CreateActorStepSoul({
 
   return (
     <div className={styles.createActorSoulLayout}>
-      <textarea
-        id="create-actor-role-book"
-        className={styles.createActorTextarea}
-        placeholder={CREATE_ACTOR_ROLE_BOOK_PLACEHOLDER}
-        aria-label="角色书"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
-      />
+      <div className={styles.createActorRoleBookField}>
+        <textarea
+          id="create-actor-role-book"
+          className={styles.createActorTextarea}
+          placeholder={CREATE_ACTOR_ROLE_BOOK_PLACEHOLDER}
+          aria-label="角色书"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          spellCheck={false}
+        />
+        <p className={styles.createActorRoleBookHint}>角色书可留空</p>
+      </div>
       <div className={styles.createActorSoulDivider} aria-hidden="true" />
       <aside
         className={styles.createActorSoulPresets}
@@ -1197,6 +1745,109 @@ function CreateActorStepLife({
       <p className={styles.createActorSleepHint}>
         拖动两端或整段区间调整作息，睡眠时长 6～12 小时
       </p>
+    </div>
+  );
+}
+
+function CreateActorStepTrainingArchive({
+  name,
+  roleBook,
+  sleepStart,
+  sleepEnd,
+  stats,
+  description,
+  fileName,
+}: {
+  name: string;
+  roleBook: string;
+  sleepStart: number;
+  sleepEnd: number;
+  stats: CreateActorTrainingDatasetStats | null;
+  description: string;
+  fileName: string;
+}) {
+  const displayName = name.length > 0 ? name : "未选择";
+  const initial = createActorNameInitial(name);
+  const roleBookPreview = roleBook.trim();
+
+  return (
+    <div className={styles.createActorArchive}>
+      <div className={styles.createActorArchiveCard}>
+        <div className={styles.createActorArchiveStamp} aria-hidden="true">
+          TRAIN
+        </div>
+        <div className={styles.createActorArchiveHead}>
+          <span
+            className={styles.createActorArchiveAvatar}
+            aria-hidden="true"
+            data-empty={initial.length === 0 ? "true" : undefined}
+          >
+            {initial}
+          </span>
+          <div className={styles.createActorArchiveHeadText}>
+            <span className={styles.createActorArchiveName}>{displayName}</span>
+            <span className={styles.createActorArchiveMeta}>
+              {fileName || "回放数据"} · {stats?.totalMessages ?? 0} 条消息
+            </span>
+          </div>
+        </div>
+
+        <dl className={styles.createActorArchiveList}>
+          <div className={styles.createActorArchiveRow}>
+            <dt>数据</dt>
+            <dd>
+              <span className={styles.createActorTrainingArchiveDescription}>
+                {description || "未载入回放数据"}
+              </span>
+              {stats ? (
+                <span className={styles.createActorArchiveMutedInline}>
+                  {stats.dayCount} 天 · {stats.startTime} → {stats.endTime}
+                </span>
+              ) : null}
+            </dd>
+          </div>
+          <div className={styles.createActorArchiveRow}>
+            <dt>作息</dt>
+            <dd>
+              <span className={styles.createActorArchiveClockPair}>
+                <span>
+                  <Moon aria-hidden="true" />
+                  {axisMinutesToClockLabel(sleepStart)}
+                </span>
+                <span
+                  className={styles.createActorArchiveArrow}
+                  aria-hidden="true"
+                >
+                  →
+                </span>
+                <span>
+                  <Sunrise aria-hidden="true" />
+                  {axisMinutesToClockLabel(sleepEnd)}
+                </span>
+              </span>
+              <span className={styles.createActorArchiveMutedInline}>
+                {formatSleepDuration(sleepStart, sleepEnd)}
+              </span>
+            </dd>
+          </div>
+          <div
+            className={`${styles.createActorArchiveRow} ${styles.createActorArchiveRowRoleBook}`}
+          >
+            <dt>初始角色书</dt>
+            <dd>
+              {roleBookPreview.length > 0 ? (
+                <div className={styles.createActorArchiveRoleBook}>
+                  {roleBookPreview}
+                </div>
+              ) : (
+                <span className={styles.createActorArchiveMutedInline}>
+                  将从空角色书开始学习
+                </span>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </div>
     </div>
   );
 }

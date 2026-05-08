@@ -27,6 +27,10 @@ import { ActorSettingsPanel } from "@/features/actor-settings/ActorSettingsPanel
 import { CreateActorOverlay } from "@/features/create-actor/components/CreateActorOverlay";
 import { DashboardHomePanel } from "@/features/dashboard/DashboardHomePanel";
 import { DashboardSkeleton } from "@/features/dashboard/DashboardSkeleton";
+import {
+  settleNormalizedDashboardLayout,
+  type DashboardLayoutState,
+} from "@/features/dashboard/dashboard-layout";
 import { GlobalSettingsSidePanel } from "@/features/global-settings/GlobalSettingsSidePanel";
 import {
   ACTOR_INFO_DEFAULT_WIDTH,
@@ -44,19 +48,12 @@ import type { EmaKnownEvent } from "@/types/events/v1beta1";
 import type {
   ActorRuntimeStatus,
   ActorRuntimeTransition,
+  ActorSummary,
+  ActorTrainingUiState,
   DashboardOverviewResponse,
 } from "@/types/dashboard/v1beta1";
 
 type LayoutResizeTarget = "sidebar" | "actorInfo";
-
-interface DashboardLayoutState {
-  sidebarWidth: number;
-  sidebarCollapsed: boolean;
-  chatPanelWidth: number;
-  actorInfoWidth: number;
-  actorInfoVisible: boolean;
-  homeSettingsVisible: boolean;
-}
 
 const ACTOR_LATEST_PREVIEW_EXIT_DURATION = 260;
 const DASHBOARD_LAYOUT_STORAGE_KEY = "ema-webui-dashboard-layout-v3";
@@ -66,6 +63,8 @@ const DASHBOARD_FIRST_LOGIN_STORAGE_KEY = "ema-webui-dashboard-first-login-v1";
 const CREATE_ACTOR_GUIDE_STORAGE_KEY =
   "ema-webui-create-actor-guide-dismissed-v1";
 const ACTOR_STARTUP_TIP_STORAGE_KEY = "ema-webui-actor-startup-tip-pending-v1";
+const MOCK_TRAINING_MAX_DURATION_MS = 8 * 60 * 1000;
+const MOCK_TRAINING_MIN_DURATION_MS = 90 * 1000;
 const DASHBOARD_LAYOUT_STORAGE_KEYS = [
   "ema-webui-dashboard-layout",
   "ema-webui-dashboard-layout-v2",
@@ -88,6 +87,79 @@ function userInitial(name: string) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function estimateMockTrainingDuration(totalMessages: number) {
+  return Math.min(
+    MOCK_TRAINING_MAX_DURATION_MS,
+    Math.max(MOCK_TRAINING_MIN_DURATION_MS, totalMessages * 800),
+  );
+}
+
+function buildMockTrainingLogs(
+  training: ActorTrainingUiState,
+  progress: number,
+  processedMessages: number,
+) {
+  const logs = [
+    "学习任务已创建",
+    `读取回放数据：${training.totalMessages} 条消息`,
+    `学习对象：${training.characterName}`,
+  ];
+  if (progress >= 0.08) {
+    logs.push("初始化角色书与学习会话");
+  }
+  if (progress >= 0.18) {
+    logs.push(`回放对话消息：${processedMessages}/${training.totalMessages}`);
+  }
+  if (progress >= 0.42) {
+    logs.push("生成短期记忆与活动摘要");
+  }
+  if (progress >= 0.68) {
+    logs.push("汇总长期记忆候选");
+  }
+  if (progress >= 0.9) {
+    logs.push("保存最终 checkpoint");
+  }
+  if (progress >= 1) {
+    logs.push("学习完成，角色可以启动");
+  }
+  return logs;
+}
+
+function advanceMockTrainingState(
+  current: Record<string, ActorTrainingUiState>,
+) {
+  const now = Date.now();
+  let changed = false;
+  const next: Record<string, ActorTrainingUiState> = {};
+
+  for (const [actorId, training] of Object.entries(current)) {
+    if (training.status !== "running") {
+      next[actorId] = training;
+      continue;
+    }
+
+    const duration = estimateMockTrainingDuration(training.totalMessages);
+    const progress = Math.min(1, (now - training.startedAt) / duration);
+    const processedMessages = Math.min(
+      training.totalMessages,
+      Math.max(0, Math.round(training.totalMessages * progress)),
+    );
+    next[actorId] = {
+      ...training,
+      status: progress >= 1 ? "completed" : "running",
+      progress,
+      processedMessages,
+      updatedAt: now,
+      estimatedRemainingMs:
+        progress >= 1 ? 0 : Math.max(0, Math.round(duration * (1 - progress))),
+      logs: buildMockTrainingLogs(training, progress, processedMessages),
+    };
+    changed = true;
+  }
+
+  return changed ? next : current;
 }
 
 function shouldKeepTextSelection(target: EventTarget | null) {
@@ -229,6 +301,9 @@ function DashboardContent() {
   const [actorLatestById, setActorLatestById] = useState<
     Record<string, ActorLatestPreviewState>
   >({});
+  const [actorTrainingById, setActorTrainingById] = useState<
+    Record<string, ActorTrainingUiState>
+  >({});
   const [createActorVisible, setCreateActorVisible] = useState(false);
   const [createActorGuideStorageReady, setCreateActorGuideStorageReady] =
     useState(false);
@@ -255,14 +330,17 @@ function DashboardContent() {
     homeSettingsVisible,
   } = layoutState;
 
+  const actors: ActorSummary[] = overview.actors.map((actor) =>
+    actorTrainingById[actor.id]
+      ? { ...actor, training: actorTrainingById[actor.id] }
+      : actor,
+  );
   const requestedActorId = searchParams.get("actorId");
-  const activeActorId = overview.actors.some(
-    (actor) => actor.id === requestedActorId,
-  )
+  const activeActorId = actors.some((actor) => actor.id === requestedActorId)
     ? requestedActorId
     : null;
   const activeActor =
-    overview.actors.find((actor) => actor.id === activeActorId) ?? null;
+    actors.find((actor) => actor.id === activeActorId) ?? null;
   const isCreateActorRouteActive = searchParams.get("createActor") === "1";
   const isCreateActorActive = createActorVisible || isCreateActorRouteActive;
   const isHomeActive = !requestedActorId && !isCreateActorActive;
@@ -479,7 +557,7 @@ function DashboardContent() {
     const normalizeLayout = () => {
       setLayoutState((current) =>
         current.actorInfoVisible || current.homeSettingsVisible
-          ? normalizeLayoutForViewport(current)
+          ? settleNormalizedDashboardLayout(current, normalizeLayoutForViewport)
           : current,
       );
     };
@@ -494,7 +572,7 @@ function DashboardContent() {
     // active panel state, while this effect only needs to rebind on visibility
     // and actor-level structure changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeActor]);
+  }, [activeActor?.id, actorInfoVisible, homeSettingsVisible]);
 
   useEffect(() => {
     const clearSelectionOnOutsidePointerDown = (event: PointerEvent) => {
@@ -560,6 +638,16 @@ function DashboardContent() {
     return () => {
       actorLatestPreviewTimers.forEach((timer) => clearTimeout(timer));
       actorLatestPreviewTimers.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActorTrainingById(advanceMockTrainingState);
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
     };
   }, []);
 
@@ -892,7 +980,7 @@ function DashboardContent() {
         </div>
 
         <nav className={styles.actorList} aria-label="Actor 列表">
-          {overview.actors.map((actor) => (
+          {actors.map((actor) => (
             <ActorItem
               key={actor.id}
               actor={actor}
@@ -1088,7 +1176,7 @@ function DashboardContent() {
       {isCreateActorActive ? (
         <CreateActorOverlay
           onClose={closeCreateActorOverlay}
-          onCreated={(actor) => {
+          onCreated={(actor, training) => {
             setOverview((current) => {
               if (current.actors.some((item) => item.id === actor.id)) {
                 return current;
@@ -1098,12 +1186,23 @@ function DashboardContent() {
                 actors: [...current.actors, actor],
               };
             });
+            if (training) {
+              setActorTrainingById((current) => ({
+                ...current,
+                [actor.id]: training,
+              }));
+            }
             setActorInfoActiveTab("settings");
-            setStartupTipActorId(actor.id);
-            window.localStorage.setItem(
-              ACTOR_STARTUP_TIP_STORAGE_KEY,
-              actor.id,
-            );
+            if (training) {
+              setStartupTipActorId(null);
+              window.localStorage.removeItem(ACTOR_STARTUP_TIP_STORAGE_KEY);
+            } else {
+              setStartupTipActorId(actor.id);
+              window.localStorage.setItem(
+                ACTOR_STARTUP_TIP_STORAGE_KEY,
+                actor.id,
+              );
+            }
             setLayoutState((current) => ({
               ...current,
               actorInfoVisible: true,

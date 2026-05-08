@@ -855,6 +855,307 @@
   transform: scale(1);
 }
 
+/* ----- Step 2: Training dataset ----- */
+
+.createActorTrainingDataset {
+  display: grid;
+  width: min(100%, 640px);
+  gap: 12px;
+  align-content: start;
+}
+
+.createActorTrainingFileInput {
+  display: none;
+}
+
+.createActorTrainingUpload {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 56%, transparent);
+  border-radius: 16px;
+  padding: 13px 14px;
+  background: color-mix(in srgb, var(--surface-inset) 58%, transparent);
+  color: var(--text);
+  outline: 0;
+  text-align: left;
+  transition:
+    border-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.createActorTrainingUpload:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 58%, transparent);
+  transform: translateY(-1px);
+}
+
+.createActorTrainingUpload:focus-visible {
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.createActorTrainingUploadIcon {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: color-mix(in srgb, var(--accent) 82%, white);
+}
+
+.createActorTrainingUploadIcon svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.1;
+}
+
+.createActorTrainingUploadText {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.createActorTrainingUploadText > span {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.createActorTrainingUploadText small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 430;
+  letter-spacing: -0.006em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.createActorTrainingError {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
+  border-radius: 12px;
+  padding: 10px 11px;
+  background: color-mix(in srgb, var(--danger-soft) 32%, var(--surface-raised));
+  color: color-mix(in srgb, var(--danger) 72%, var(--text-muted));
+  animation: createActorStepContentIn 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.createActorTrainingError svg {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  stroke-width: 2.3;
+}
+
+.createActorTrainingError span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.createActorTrainingError strong {
+  color: color-mix(in srgb, var(--danger) 78%, var(--text));
+  font-size: 0.78rem;
+  font-weight: 740;
+  letter-spacing: -0.014em;
+  line-height: 1.2;
+}
+
+.createActorTrainingError small {
+  color: color-mix(in srgb, var(--text-muted) 88%, transparent);
+  font-size: 0.73rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.createActorTrainingStats {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  animation: createActorStepContentIn 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.createActorTrainingStatGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.createActorTrainingStat {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 58px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 38%, transparent);
+  border-radius: 13px;
+  padding: 10px 11px;
+  background: color-mix(in srgb, var(--surface-raised) 48%, transparent);
+}
+
+.createActorTrainingStatIcon {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: color-mix(in srgb, var(--accent) 78%, white);
+}
+
+.createActorTrainingStatIcon svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.2;
+}
+
+.createActorTrainingStatMain {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.createActorTrainingStatMain > span {
+  color: var(--text-subtle);
+  font-size: 0.7rem;
+  font-weight: 620;
+  letter-spacing: -0.004em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.createActorTrainingStatMain strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 820;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.createActorTrainingTimeRange {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 28%, transparent);
+  border-radius: 12px;
+  padding: 8px 11px;
+  background: color-mix(in srgb, var(--surface-raised) 38%, transparent);
+  color: var(--text-muted);
+}
+
+.createActorTrainingTimeRange span {
+  flex: 0 0 auto;
+  color: var(--text-subtle);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: -0.004em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.createActorTrainingTimeRange strong {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.createActorTrainingCharacters {
+  display: grid;
+  gap: 7px;
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 22%, transparent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface-inset) 78%, black 4%);
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 58%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+.createActorTrainingCharacters::-webkit-scrollbar {
+  width: 7px;
+}
+
+.createActorTrainingCharacters::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.createActorTrainingCharacters::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 58%, transparent);
+}
+
+.createActorTrainingCharacterRow {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 560;
+  letter-spacing: -0.006em;
+}
+
+.createActorTrainingCharacterRow > span:first-child {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text) 72%, var(--text-subtle));
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.createActorTrainingCharacterRow strong {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.createActorTrainingCharacterBar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-active) 74%, transparent);
+}
+
+.createActorTrainingCharacterBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 72%, var(--border-strong));
+}
+
 /* ----- Step 3: Soul (role book + presets) ----- */
 
 .createActorSoulLayout {
@@ -871,6 +1172,83 @@
 .createActorSoulDivider {
   width: 1px;
   background: color-mix(in srgb, var(--border-strong) 38%, transparent);
+}
+
+.createActorTrainingProfile {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  padding: 5px 0;
+}
+
+.createActorTrainingProfile .createActorIdentityAvatar {
+  margin: 4px 0 0;
+}
+
+.createActorTrainingNameSelect {
+  width: 100%;
+}
+
+.createActorTrainingNameSelect .createActorRolePresetSelectButton {
+  width: 100%;
+  text-align: center;
+}
+
+.createActorTrainingNameSelect .createActorRolePresetSelectButton span {
+  text-align: center;
+}
+
+.createActorTrainingNameSelectMenu {
+  max-height: 178px;
+  overflow-y: auto;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 58%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+.createActorTrainingNameSelectMenu::-webkit-scrollbar {
+  width: 7px;
+}
+
+.createActorTrainingNameSelectMenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.createActorTrainingNameSelectMenu::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 58%, transparent);
+}
+
+.createActorTrainingNameHint {
+  margin: -4px 0 0;
+  color: var(--text-subtle);
+  font-size: 0.7rem;
+  font-weight: 520;
+  letter-spacing: -0.006em;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.createActorRoleBookField {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+}
+
+.createActorRoleBookHint {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 540;
+  letter-spacing: -0.006em;
+  line-height: 1.2;
 }
 
 .createActorTextarea {
@@ -1972,6 +2350,17 @@
   font-size: 0.72rem;
   font-weight: 480;
   letter-spacing: -0.002em;
+}
+
+.createActorTrainingArchiveDescription {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .createActorArchiveRowRoleBook dd {

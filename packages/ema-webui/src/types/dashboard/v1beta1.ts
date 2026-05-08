@@ -45,6 +45,25 @@ export interface ActorSettingsSnapshot {
   qq?: ActorQQConfig;
 }
 
+export type ActorTrainingStatus = "running" | "completed" | "failed";
+
+export interface ActorTrainingUiState {
+  status: ActorTrainingStatus;
+  characterName: string;
+  description: string;
+  sourceFileName?: string;
+  totalMessages: number;
+  processedMessages: number;
+  dayCount: number;
+  startTime: string;
+  endTime: string;
+  progress: number;
+  startedAt: number;
+  updatedAt: number;
+  estimatedRemainingMs: number;
+  logs: string[];
+}
+
 export interface ActorSummary {
   id: string;
   name: string;
@@ -59,6 +78,7 @@ export interface ActorSummary {
     time: number;
   };
   settings?: ActorSettingsSnapshot;
+  training?: ActorTrainingUiState;
 }
 
 export interface ActorActivityState {

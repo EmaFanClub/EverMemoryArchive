@@ -26,10 +26,10 @@ export const CREATE_ACTOR_SOURCE_OPTIONS: CreateActorSourceOption[] = [
   },
   {
     id: "history",
-    label: "学习记录",
-    description: "从剧本或聊天记录开始,让符号变为真实。",
+    label: "回放档案",
+    description: "从剧本或聊天记录开始，回放曾经发生的片段。",
     icon: "history",
-    enabled: false,
+    enabled: true,
   },
 ];
 
