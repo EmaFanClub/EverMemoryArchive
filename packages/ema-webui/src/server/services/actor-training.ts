@@ -78,9 +78,6 @@ export function getActorTrainingUiState(
   if (!training) {
     return undefined;
   }
-  if (training.status !== "running") {
-    return training;
-  }
   return training;
 }
 
