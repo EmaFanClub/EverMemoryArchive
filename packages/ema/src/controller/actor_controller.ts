@@ -19,6 +19,13 @@ export class ActorController {
     const actorId = await this.server.dbService.actorDB.upsertActor({
       roleId,
       enabled: false,
+      origin: input.origin ?? "blank",
+      ...(input.trainingStatus
+        ? {
+            trainingStatus: input.trainingStatus,
+            trainingUpdatedAt: Date.now(),
+          }
+        : {}),
       ...(input.avatarUrl?.trim() ? { avatarUrl: input.avatarUrl.trim() } : {}),
     });
     await this.server.dbService.userOwnActorDB.addActorToUser({

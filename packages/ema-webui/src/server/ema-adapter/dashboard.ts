@@ -12,6 +12,10 @@ import type {
   DashboardOverviewResponse,
   DashboardUserProfile,
 } from "@/types/dashboard/v1beta1";
+import {
+  getActorTrainingUiState,
+  getPersistedActorTrainingUiState,
+} from "@/server/services/actor-training";
 import { toWebActorId } from "./ids";
 import { toWebSettings, type CoreConversationForQq } from "./settings";
 
@@ -41,8 +45,12 @@ export function toActorSummary(
     qqConversations?: CoreConversationForQq[];
   } = {},
 ): ActorSummary {
+  const actorId = toWebActorId(details.actor.id);
+  const training =
+    getActorTrainingUiState(actorId) ??
+    getPersistedActorTrainingUiState(details);
   return {
-    id: toWebActorId(details.actor.id),
+    id: actorId,
     name: details.roleName,
     status: toWebRuntimeStatus(details.runtime.status),
     transition: toWebRuntimeTransition(details.runtime.transition),
@@ -70,6 +78,7 @@ export function toActorSummary(
           ),
         }
       : {}),
+    ...(training ? { training } : {}),
   };
 }
 

@@ -1188,7 +1188,10 @@ function logBackgroundTaskRequested(
   data: BackgroundTaskLogData,
   context: ActorBackgroundRunContext = { mode: "runtime" },
 ): void {
-  backgroundLogger(server, context)?.info(
+  logBackgroundTask(
+    context,
+    server,
+    "info",
     "Actor background task requested",
     data,
   );
@@ -1200,7 +1203,7 @@ function logBackgroundTaskStarted(
   extra?: Record<string, unknown>,
   context: ActorBackgroundRunContext = { mode: "runtime" },
 ): number {
-  backgroundLogger(server, context)?.info("Actor background task started", {
+  logBackgroundTask(context, server, "info", "Actor background task started", {
     ...data,
     ...extra,
   });
@@ -1214,7 +1217,7 @@ function logBackgroundTaskSkipped(
   extra?: Record<string, unknown>,
   context: ActorBackgroundRunContext = { mode: "runtime" },
 ): void {
-  backgroundLogger(server, context)?.info("Actor background task skipped", {
+  logBackgroundTask(context, server, "info", "Actor background task skipped", {
     ...data,
     reason,
     ...extra,
@@ -1228,11 +1231,17 @@ function logBackgroundTaskCompleted(
   extra?: Record<string, unknown>,
   context: ActorBackgroundRunContext = { mode: "runtime" },
 ): void {
-  backgroundLogger(server, context)?.info("Actor background task completed", {
-    ...data,
-    ...buildDurationData(startedAt),
-    ...extra,
-  });
+  logBackgroundTask(
+    context,
+    server,
+    "info",
+    "Actor background task completed",
+    {
+      ...data,
+      ...buildDurationData(startedAt),
+      ...extra,
+    },
+  );
 }
 
 function logBackgroundTaskFailed(
@@ -1244,7 +1253,7 @@ function logBackgroundTaskFailed(
   context: ActorBackgroundRunContext = { mode: "runtime" },
 ): void {
   markBackgroundTaskErrorLogged(error);
-  backgroundLogger(server, context)?.error("Actor background task failed", {
+  logBackgroundTask(context, server, "error", "Actor background task failed", {
     ...data,
     ...buildDurationData(startedAt),
     ...extra,
@@ -1257,6 +1266,24 @@ function backgroundLogger(
   context: ActorBackgroundRunContext,
 ): Logger | undefined {
   return context.logger ?? server.logger;
+}
+
+function logBackgroundTask(
+  context: ActorBackgroundRunContext,
+  server: Server,
+  level: "info" | "error",
+  message: string,
+  data: unknown,
+): void {
+  const logger = backgroundLogger(server, context);
+  if (!logger) {
+    return;
+  }
+  if (context.mode === "training") {
+    logger.debug(message, data);
+    return;
+  }
+  logger[level](message, data);
 }
 
 function buildDurationData(startedAt: number | null): Record<string, unknown> {
@@ -1465,7 +1492,7 @@ async function createBackgroundAgent(
   const date = startedAt.slice(0, 10);
   const filePath =
     context.mode === "training"
-      ? `actors/actor_${actorId}/training/${task}/${startedAt}.jsonl`
+      ? `actors/actor_${actorId}/train/${task}/${startedAt}.jsonl`
       : `actors/actor_${actorId}/${task}/${date}/${startedAt}.jsonl`;
   return new Agent(
     GlobalConfig.agent,
@@ -1485,7 +1512,10 @@ async function createBackgroundAgent(
         ...(typeof conversationId === "number" ? { conversationId } : {}),
       },
       outputs: [
-        { type: "console", level: "warn" },
+        {
+          type: "console",
+          level: context.mode === "training" ? "silent" : "warn",
+        },
         {
           type: "file",
           level: "debug",

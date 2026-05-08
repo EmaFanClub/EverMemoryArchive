@@ -1587,6 +1587,17 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+.actorSettingsStartupTip button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.actorSettingsStartupTip button:disabled:hover {
+  background: transparent;
+  opacity: 0.46;
+  transform: none;
+}
+
 .actorSettingsStartupTip button svg {
   width: 13px;
   height: 13px;
@@ -1623,6 +1634,10 @@
 
 .actorTrainingCard:focus-visible {
   box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.actorTrainingCard:has(.actorTrainingStartButton) {
+  cursor: default;
 }
 
 .actorTrainingCardIcon {
@@ -1682,6 +1697,42 @@
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.actorTrainingStartButton {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  border-radius: 999px;
+  padding: 0 13px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: color-mix(in srgb, var(--accent) 88%, white);
+  font-size: 0.74rem;
+  font-weight: 760;
+  line-height: 1;
+  outline: 0;
+  transition:
+    border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorTrainingStartButton:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  transform: translateY(-1px);
+}
+
+.actorTrainingStartButton:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.actorTrainingStartButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
 }
 
 .actorTrainingProgressTrack,
@@ -1903,16 +1954,10 @@
 }
 
 .actorTrainingTerminal div {
-  display: grid;
-  grid-template-columns: 80px minmax(0, 1fr);
-  gap: 10px;
+  display: block;
   min-width: 0;
   font-size: 0.74rem;
   line-height: 1.45;
-}
-
-.actorTrainingTerminal span {
-  color: color-mix(in srgb, #6aa987 72%, var(--text-subtle));
 }
 
 .actorTrainingTerminal code {
@@ -2033,12 +2078,14 @@
 }
 
 .actorSettingsMenuItem:disabled {
-  cursor: default;
-  opacity: 0.86;
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--surface-inset) 76%, black 8%);
+  color: color-mix(in srgb, var(--text-muted) 74%, transparent);
+  opacity: 0.7;
 }
 
 .actorSettingsMenuItem:disabled:hover {
-  background: color-mix(in srgb, var(--surface-raised) 86%, white 2%);
+  background: color-mix(in srgb, var(--surface-inset) 76%, black 8%);
   transform: none;
 }
 
@@ -2058,6 +2105,12 @@
   transform: translateX(2px);
 }
 
+.actorSettingsMenuItem:disabled > svg,
+.actorSettingsMenuItem:disabled:hover > svg {
+  color: color-mix(in srgb, var(--text-subtle) 78%, transparent);
+  transform: none;
+}
+
 .actorSettingsMenuIcon {
   display: inline-grid;
   width: 30px;
@@ -2074,6 +2127,17 @@
 .actorSettingsMenuItem:hover .actorSettingsMenuIcon {
   background: color-mix(in srgb, var(--surface-active) 82%, transparent);
   color: color-mix(in srgb, var(--text) 86%, var(--accent));
+}
+
+.actorSettingsMenuItem:disabled .actorSettingsMenuTitle,
+.actorSettingsMenuItem:disabled .actorSettingsMenuDescription {
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+.actorSettingsMenuItem:disabled .actorSettingsMenuIcon,
+.actorSettingsMenuItem:disabled:hover .actorSettingsMenuIcon {
+  background: color-mix(in srgb, var(--surface-hover) 42%, transparent);
+  color: color-mix(in srgb, var(--text-subtle) 78%, transparent);
 }
 
 .actorSettingsMenuIcon svg {
@@ -2156,14 +2220,8 @@
   transition: transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.actorActivitySwitchItem:disabled .actorSettingsMenuIcon svg {
+.actorActivitySwitchItem:disabled .actorActivityIcon_preparing {
   animation: spin 900ms linear infinite;
-}
-
-.actorActivitySwitchItem[data-learning="true"]:disabled
-  .actorSettingsMenuIcon
-  svg {
-  animation: none;
 }
 
 .actorSettingsSwitch {

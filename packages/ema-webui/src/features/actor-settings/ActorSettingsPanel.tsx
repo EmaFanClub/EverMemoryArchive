@@ -57,6 +57,7 @@ import {
   saveActorQqConfig,
   saveActorWebSearchConfig,
   syncActorQqConnectionStatus,
+  startActorTraining,
   updateActorQqEnabled,
   updateActorActivity,
 } from "@/transport/dashboard";
@@ -79,6 +80,7 @@ import type {
   ActorRuntimeTransition,
   ActorSettingsSnapshot,
   ActorSummary,
+  ActorTrainingUiState,
   ActorWebSearchConfig,
 } from "@/types/dashboard/v1beta1";
 
@@ -407,14 +409,12 @@ function formatTrainingRemaining(ms: number) {
   if (minutes <= 0) {
     return `${seconds} 秒`;
   }
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours} 小时 ${remainingMinutes} 分`;
+  }
   return `${minutes} 分 ${String(seconds).padStart(2, "0")} 秒`;
-}
-
-function formatTrainingLogTime(time: number) {
-  const date = new Date(time);
-  return `${String(date.getHours()).padStart(2, "0")}:${String(
-    date.getMinutes(),
-  ).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
 }
 
 function areLlmSettingsEqual(left: LlmSettingsDraft, right: LlmSettingsDraft) {
@@ -859,6 +859,7 @@ export function ActorSettingsPanel({
   showStartupTip = false,
   onStartupTipDismiss,
   onActorRuntimeChange,
+  onActorTrainingChange,
 }: {
   actor: ActorSummary;
   showStartupTip?: boolean;
@@ -867,6 +868,10 @@ export function ActorSettingsPanel({
     actorId: string,
     status: ActorRuntimeStatus,
     transition: ActorRuntimeTransition,
+  ) => void;
+  onActorTrainingChange: (
+    actorId: string,
+    training: ActorTrainingUiState,
   ) => void;
 }) {
   const actorId = actor.id;
@@ -880,6 +885,7 @@ export function ActorSettingsPanel({
   const [activityDisableDialogVisible, setActivityDisableDialogVisible] =
     useState(false);
   const [trainingDetailVisible, setTrainingDetailVisible] = useState(false);
+  const [trainingStarting, setTrainingStarting] = useState(false);
   const [detailTitle, setDetailTitle] = useState<string | null>(null);
   const [detailClosing, setDetailClosing] = useState(false);
   const [loadedSettings, setLoadedSettings] = useState<{
@@ -1065,26 +1071,28 @@ export function ActorSettingsPanel({
     savedConversationSettings,
   );
   const training = actor.training;
+  const trainingPending = training?.status === "pending";
   const trainingRunning = training?.status === "running";
+  const settingsLocked = trainingRunning;
   const activityTransitioning =
     activitySwitching || activityTransition !== null;
-  const activityActionDisabled = activityTransitioning || trainingRunning;
+  const activityActionDisabled =
+    activityTransitioning || trainingPending || trainingRunning;
   const activityEnabled =
     activityStatus !== "offline" ||
     activityTransition === "booting" ||
     activityTransition === "shutting_down";
-  const activityDescription = trainingRunning
-    ? "学习完成后即可启动"
-    : activityTransition
-      ? activityTransitionDescription[activityTransition]
-      : activityStatusDescription[activityStatus];
-  const activityButtonLabel = trainingRunning
-    ? "学习中"
-    : activityTransition
-      ? activityTransitionLabel[activityTransition]
-      : activityStatus === "offline"
-        ? "启动"
-        : "停用";
+  const activityDescription =
+    trainingPending || trainingRunning
+      ? "学习完成后即可启动"
+      : activityTransition
+        ? activityTransitionDescription[activityTransition]
+        : activityStatusDescription[activityStatus];
+  const activityButtonLabel = activityTransition
+    ? activityTransitionLabel[activityTransition]
+    : activityStatus === "offline"
+      ? "启动"
+      : "停用";
   const detailHeading =
     detailTitle === "当前会话信息" ? detailTitle : `${detailTitle} 设置`;
 
@@ -1372,6 +1380,9 @@ export function ActorSettingsPanel({
   }
 
   function openDetail(title: string) {
+    if (settingsLocked) {
+      return;
+    }
     if (closeTimerRef.current !== null) {
       clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
@@ -1379,6 +1390,24 @@ export function ActorSettingsPanel({
 
     setDetailTitle(title);
     setDetailClosing(false);
+  }
+
+  async function handleStartTraining() {
+    if (!trainingPending || trainingStarting) {
+      return;
+    }
+    setTrainingStarting(true);
+    try {
+      const response = await startActorTraining(actorId);
+      if (response.actor.training) {
+        onActorTrainingChange(actorId, response.actor.training);
+      }
+      setTrainingDetailVisible(true);
+    } catch {
+      showSettingsToast("开始学习失败", "error");
+    } finally {
+      setTrainingStarting(false);
+    }
   }
 
   function closeDetail() {
@@ -2045,6 +2074,7 @@ export function ActorSettingsPanel({
                   <button
                     type="button"
                     aria-label="关闭提示"
+                    disabled={settingsLocked}
                     onClick={onStartupTipDismiss}
                   >
                     <X aria-hidden="true" />
@@ -2059,7 +2089,6 @@ export function ActorSettingsPanel({
               aria-checked={activityEnabled}
               aria-label={activityButtonLabel}
               disabled={activityActionDisabled}
-              data-learning={trainingRunning ? "true" : undefined}
               onClick={() => {
                 if (activityActionDisabled) {
                   return;
@@ -2098,15 +2127,24 @@ export function ActorSettingsPanel({
             </button>
 
             {training ? (
-              <ActorTrainingProgressCard
-                training={training}
-                onOpen={() => setTrainingDetailVisible(true)}
-              />
+              training.status === "pending" ? (
+                <ActorTrainingStartCard
+                  training={training}
+                  starting={trainingStarting}
+                  onStart={() => void handleStartTraining()}
+                />
+              ) : (
+                <ActorTrainingProgressCard
+                  training={training}
+                  onOpen={() => setTrainingDetailVisible(true)}
+                />
+              )
             ) : null}
 
             <button
               type="button"
               className={styles.actorSettingsMenuItem}
+              disabled={settingsLocked}
               onClick={() => openDetail("当前会话信息")}
             >
               <span className={styles.actorSettingsMenuIcon}>
@@ -2178,6 +2216,7 @@ export function ActorSettingsPanel({
                         ? styles.actorSettingsMenuButton
                         : ""
                     }`}
+                    disabled={settingsLocked}
                     onClick={() => {
                       if (item.type === "menu") {
                         openDetail(item.label);
@@ -2348,6 +2387,39 @@ export function ActorSettingsPanel({
   );
 }
 
+function ActorTrainingStartCard({
+  training,
+  starting,
+  onStart,
+}: {
+  training: NonNullable<ActorSummary["training"]>;
+  starting: boolean;
+  onStart: () => void;
+}) {
+  return (
+    <div className={styles.actorTrainingCard}>
+      <span className={styles.actorTrainingCardIcon} aria-hidden="true">
+        <GraduationCap />
+      </span>
+      <span className={styles.actorTrainingCardBody}>
+        <span className={styles.actorTrainingCardTitle}>
+          等待学习
+          <strong>{training.totalMessages} 条</strong>
+        </span>
+        <span className={styles.actorTrainingCardMeta}>开始前请先配置 LLM</span>
+        <button
+          type="button"
+          className={styles.actorTrainingStartButton}
+          disabled={starting}
+          onClick={onStart}
+        >
+          {starting ? "开始中" : "开始学习"}
+        </button>
+      </span>
+    </div>
+  );
+}
+
 function ActorTrainingProgressCard({
   training,
   onOpen,
@@ -2357,6 +2429,11 @@ function ActorTrainingProgressCard({
 }) {
   const progressLabel = formatTrainingPercent(training.progress);
   const running = training.status === "running";
+  const failed = training.status === "failed";
+  const remainingLabel =
+    running && training.estimatedRemainingMs === null
+      ? "计算中"
+      : formatTrainingRemaining(training.estimatedRemainingMs ?? 0);
 
   return (
     <button type="button" className={styles.actorTrainingCard} onClick={onOpen}>
@@ -2369,7 +2446,7 @@ function ActorTrainingProgressCard({
       </span>
       <span className={styles.actorTrainingCardBody}>
         <span className={styles.actorTrainingCardTitle}>
-          {running ? "学习中" : "学习完成"}
+          {failed ? "学习失败" : running ? "学习中" : "学习完成"}
           <strong>{progressLabel}</strong>
         </span>
         <span className={styles.actorTrainingCardMeta}>
@@ -2380,11 +2457,11 @@ function ActorTrainingProgressCard({
           <span style={{ width: progressLabel }} />
         </span>
         <span className={styles.actorTrainingCardEta}>
-          {running
-            ? `预计剩余 ${formatTrainingRemaining(
-                training.estimatedRemainingMs,
-              )}`
-            : "可以启动角色"}
+          {failed
+            ? "请检查学习日志"
+            : running
+              ? `预计剩余 ${remainingLabel}`
+              : "可以启动角色"}
         </span>
       </span>
     </button>
@@ -2400,6 +2477,7 @@ function ActorTrainingDetailOverlay({
 }) {
   const progressLabel = formatTrainingPercent(training.progress);
   const running = training.status === "running";
+  const failed = training.status === "failed";
 
   if (typeof document === "undefined") {
     return null;
@@ -2417,7 +2495,7 @@ function ActorTrainingDetailOverlay({
             <Terminal />
           </span>
           <div>
-            <h3>{running ? "学习进行中" : "学习完成"}</h3>
+            <h3>{failed ? "学习失败" : running ? "学习进行中" : "学习完成"}</h3>
             <p>{training.characterName}</p>
           </div>
           <button
@@ -2437,9 +2515,13 @@ function ActorTrainingDetailOverlay({
           </span>
           <span>
             <Clock3 aria-hidden="true" />
-            {running
-              ? formatTrainingRemaining(training.estimatedRemainingMs)
-              : "已完成"}
+            {failed
+              ? "失败"
+              : running
+                ? training.estimatedRemainingMs === null
+                  ? "计算中"
+                  : formatTrainingRemaining(training.estimatedRemainingMs)
+                : "已完成"}
           </span>
           <span>{progressLabel}</span>
         </section>
@@ -2472,9 +2554,6 @@ function ActorTrainingDetailOverlay({
         <div className={styles.actorTrainingTerminal}>
           {training.logs.map((line, index) => (
             <div key={`${index}-${line}`}>
-              <span>
-                [{formatTrainingLogTime(training.startedAt + index * 900)}]
-              </span>
               <code>{line}</code>
             </div>
           ))}

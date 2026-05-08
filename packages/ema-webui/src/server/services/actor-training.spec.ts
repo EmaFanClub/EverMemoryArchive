@@ -1,0 +1,193 @@
+import { describe, expect, test, vi } from "vitest";
+import path from "node:path";
+
+vi.mock("server-only", () => ({}));
+
+import { createBootstrapConfig, GlobalConfig } from "ema";
+import type { ActorDetails, Server } from "ema";
+import {
+  buildActorTrainingRequest,
+  estimateTrainingRemainingMs,
+  getPersistedActorTrainingUiState,
+  markInterruptedActorTrainingAsFailed,
+} from "./actor-training";
+
+describe("actor training service helpers", () => {
+  test("builds an ActorTrainer request from the create actor training payload", async () => {
+    const dataRoot = path.join(process.cwd(), ".ema-webui-training-test");
+    GlobalConfig.resetForTests();
+    await GlobalConfig.load(undefined, {
+      bootstrap: createBootstrapConfig({
+        mode: "dev",
+        mongoKind: "memory",
+        dataRoot,
+      }),
+    });
+
+    const request = buildActorTrainingRequest({
+      actorId: 12,
+      roleBook: "初始角色书",
+      training: {
+        characterName: "亚托莉",
+        sourceFileName: "atori.json",
+        dataset: {
+          description: "ATRI route",
+          inputs: [
+            {
+              name: "夏生",
+              time: "2024-01-01 10:00:00",
+              content: "早上好。",
+            },
+            {
+              name: "亚托莉",
+              time: "2024-01-01 10:01:00",
+              content: "早上好。",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(request).toEqual({
+      actorId: 12,
+      characterName: "亚托莉",
+      dataset: {
+        description: "ATRI route",
+        initialRoleBook: "初始角色书",
+        inputs: [
+          {
+            name: "夏生",
+            time: "2024-01-01 10:00:00",
+            content: "早上好。",
+          },
+          {
+            name: "亚托莉",
+            time: "2024-01-01 10:01:00",
+            content: "早上好。",
+          },
+        ],
+      },
+      bufferWindowSize: 30,
+      diaryUpdateEvery: 20,
+      checkpointDir: path.join(
+        dataRoot,
+        "logs",
+        "actors",
+        "actor_12",
+        "train",
+        "checkpoints",
+      ),
+      saveEverySteps: 1,
+    });
+  });
+
+  test("does not estimate remaining time before a replay batch completes", () => {
+    expect(
+      estimateTrainingRemainingMs({
+        startedAt: 1_000,
+        now: 2_000,
+        processedMessages: 0,
+        totalMessages: 2_000,
+      }),
+    ).toBeNull();
+  });
+
+  test("estimates remaining time after a completed replay batch", () => {
+    expect(
+      estimateTrainingRemainingMs({
+        startedAt: 1_000,
+        now: 2_000,
+        processedMessages: 20,
+        totalMessages: 2_000,
+      }),
+    ).toBe(99_000);
+  });
+
+  test("builds a failed UI state from persisted interrupted training", () => {
+    const state = getPersistedActorTrainingUiState(
+      createActorDetails({
+        origin: "training",
+        trainingStatus: "failed",
+        trainingErrorMessage: "训练未正常结束，建议删除角色。",
+        trainingUpdatedAt: 1_700_000_000_000,
+      }),
+    );
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        characterName: "测试角色",
+        description: "训练未正常结束，建议删除角色。",
+        errorMessage: "训练未正常结束，建议删除角色。",
+        totalMessages: 0,
+        processedMessages: 0,
+        estimatedRemainingMs: 0,
+      }),
+    );
+    expect(state?.logs[0]).toContain("ERROR");
+    expect(state?.logs[0]).toContain("训练未正常结束，建议删除角色。");
+  });
+
+  test("marks only running training actors as failed after interruption", async () => {
+    const upsertActor = vi.fn(async () => 1);
+    const server = {
+      dbService: {
+        actorDB: {
+          upsertActor,
+        },
+      },
+    } as unknown as Server;
+    const interrupted = createActorDetails({
+      id: 1,
+      origin: "training",
+      trainingStatus: "running",
+    });
+    const pending = createActorDetails({
+      id: 2,
+      origin: "training",
+      trainingStatus: "pending",
+    });
+    const blank = createActorDetails({
+      id: 3,
+      origin: "blank",
+    });
+
+    await markInterruptedActorTrainingAsFailed(server, [
+      interrupted,
+      pending,
+      blank,
+    ]);
+
+    expect(interrupted.actor.trainingStatus).toBe("failed");
+    expect(interrupted.actor.trainingErrorMessage).toBe(
+      "训练未正常结束，建议删除角色。",
+    );
+    expect(typeof interrupted.actor.trainingUpdatedAt).toBe("number");
+    expect(pending.actor.trainingStatus).toBe("pending");
+    expect(blank.actor.trainingStatus).toBeUndefined();
+    expect(upsertActor).toHaveBeenCalledTimes(1);
+    expect(upsertActor).toHaveBeenCalledWith(interrupted.actor);
+  });
+});
+
+function createActorDetails(
+  actor: Partial<ActorDetails["actor"]>,
+): ActorDetails {
+  return {
+    actor: {
+      id: 1,
+      roleId: 1,
+      enabled: false,
+      ...actor,
+    },
+    roleName: "测试角色",
+    rolePrompt: "",
+    runtime: {
+      actorId: actor.id ?? 1,
+      enabled: false,
+      status: "offline",
+      transition: null,
+      updatedAt: 1_700_000_000_000,
+    },
+  };
+}

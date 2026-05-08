@@ -27,6 +27,11 @@ import {
   createAccessTokenRecord,
   hasAccessTokenConfig,
 } from "@/server/services/access-token";
+import {
+  markInterruptedActorTrainingAsFailed,
+  prepareActorTraining,
+  startPreparedActorTraining,
+} from "@/server/services/actor-training";
 import { ensureEmaServer } from "@/server/ema-server";
 import type {
   ActorActivityUpdateRequest,
@@ -57,6 +62,7 @@ import type {
   ActorQQSaveRequest,
   ActorQQSaveResponse,
   ActorSettingsResponse,
+  ActorTrainingStartResponse,
   ActorSettingsSnapshot,
   ActorSettingsCheckErrorCode,
   ActorSettingsDiagnostics,
@@ -135,7 +141,10 @@ export async function buildDashboardOverview(): Promise<DashboardOverviewRespons
   const server = await ensureEmaServer();
   const setupStatus = await server.controller.setup.getStatus();
   const ownerUserId = setupStatus.owner?.id ?? DEFAULT_OWNER_USER_ID;
-  const detailsList = await server.controller.actor.listForUser(ownerUserId);
+  const detailsList = await markInterruptedActorTrainingAsFailed(
+    server,
+    await server.controller.actor.listForUser(ownerUserId),
+  );
   const actors = await Promise.all(
     detailsList.map(async (details) => {
       const [settings, qqConversations] = await Promise.all([
@@ -368,7 +377,10 @@ export async function buildActorListResponse(): Promise<ActorListResponse> {
   const server = await ensureEmaServer();
   const setupStatus = await server.controller.setup.getStatus();
   const ownerUserId = setupStatus.owner?.id ?? DEFAULT_OWNER_USER_ID;
-  const detailsList = await server.controller.actor.listForUser(ownerUserId);
+  const detailsList = await markInterruptedActorTrainingAsFailed(
+    server,
+    await server.controller.actor.listForUser(ownerUserId),
+  );
   return {
     apiVersion: API_VERSION,
     generatedAt: now(),
@@ -844,8 +856,36 @@ export async function createActorService(
     name: request.name,
     avatarUrl: request.avatarUrl,
     roleBook: request.roleBook,
+    origin: request.training ? "training" : "blank",
+    ...(request.training ? { trainingStatus: "pending" as const } : {}),
     sleepSchedule: request.sleepSchedule,
   });
+  if (request.training) {
+    prepareActorTraining({
+      actorId: details.actor.id,
+      roleBook: request.roleBook,
+      training: request.training,
+    });
+  }
+  return {
+    apiVersion: API_VERSION,
+    actor: toActorSummary(details),
+  };
+}
+
+export async function startActorTrainingService(
+  actorId: string,
+): Promise<ActorTrainingStartResponse> {
+  const server = await ensureEmaServer();
+  const coreActorId = toCoreActorId(actorId);
+  await startPreparedActorTraining({
+    server,
+    actorId: coreActorId,
+  });
+  const details = await server.controller.actor.get(coreActorId);
+  if (!details) {
+    throw new Error("Actor not found.");
+  }
   return {
     apiVersion: API_VERSION,
     actor: toActorSummary(details),

@@ -48,7 +48,31 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
     const retrievedActor = await db.getActor(1);
     expect(retrievedActor).toEqual(
-      expect.objectContaining({ id: 1, roleId: 1, enabled: true }),
+      expect.objectContaining({
+        id: 1,
+        roleId: 1,
+        enabled: true,
+        origin: "blank",
+      }),
+    );
+  });
+
+  test("should preserve actor origin and training lifecycle fields", async () => {
+    await db.upsertActor({
+      roleId: 1,
+      enabled: false,
+      origin: "training",
+      trainingStatus: "running",
+      trainingUpdatedAt: 1_700_000_000_000,
+    });
+
+    const retrievedActor = await db.getActor(1);
+    expect(retrievedActor).toEqual(
+      expect.objectContaining({
+        origin: "training",
+        trainingStatus: "running",
+        trainingUpdatedAt: 1_700_000_000_000,
+      }),
     );
   });
 

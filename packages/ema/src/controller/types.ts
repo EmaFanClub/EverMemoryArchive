@@ -54,6 +54,8 @@ export interface CreateActorInput {
   name: string;
   avatarUrl?: string;
   roleBook: string;
+  origin?: "blank" | "imported" | "training";
+  trainingStatus?: "pending" | "running" | "completed" | "failed";
   sleepSchedule: {
     startMinutes: number;
     endMinutes: number;

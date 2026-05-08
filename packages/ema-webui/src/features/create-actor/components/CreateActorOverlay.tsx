@@ -57,7 +57,6 @@ import {
 } from "../create-actor-drafts";
 import {
   parseCreateActorTrainingDataset,
-  type CreateActorTrainingDataset,
   type CreateActorTrainingDatasetStats,
 } from "../training-dataset";
 import { createActor } from "@/transport/dashboard";
@@ -451,18 +450,21 @@ export function CreateActorOverlay({
           startMinutes: sleepStart,
           endMinutes: sleepEnd,
         },
+        ...(isTrainingFlow && trainingDataset
+          ? {
+              training: {
+                characterName: trimmedName,
+                ...(trainingDatasetFileName
+                  ? { sourceFileName: trainingDatasetFileName }
+                  : {}),
+                dataset: trainingDataset,
+              },
+            }
+          : {}),
       });
       setSubmitting(false);
       setJustSucceeded(true);
-      const training =
-        isTrainingFlow && trainingDataset && trainingDatasetStats
-          ? buildInitialTrainingState({
-              characterName: trimmedName,
-              dataset: trainingDataset,
-              stats: trainingDatasetStats,
-              fileName: trainingDatasetFileName,
-            })
-          : undefined;
+      const training = response.actor.training;
       showCreateActorToast(
         training ? "档案已建立，开始学习" : "档案已合上，等待相遇",
         "success",
@@ -785,44 +787,6 @@ export function CreateActorOverlay({
       </section>
     </div>
   );
-}
-
-function buildInitialTrainingState({
-  characterName,
-  dataset,
-  stats,
-  fileName,
-}: {
-  characterName: string;
-  dataset: CreateActorTrainingDataset;
-  stats: CreateActorTrainingDatasetStats;
-  fileName: string;
-}): ActorTrainingUiState {
-  const startedAt = Date.now();
-  return {
-    status: "running",
-    characterName,
-    description: dataset.description,
-    ...(fileName ? { sourceFileName: fileName } : {}),
-    totalMessages: stats.totalMessages,
-    processedMessages: 0,
-    dayCount: stats.dayCount,
-    startTime: stats.startTime,
-    endTime: stats.endTime,
-    progress: 0,
-    startedAt,
-    updatedAt: startedAt,
-    estimatedRemainingMs: estimateMockTrainingDuration(stats.totalMessages),
-    logs: [
-      "学习任务已创建",
-      `读取回放数据：${stats.totalMessages} 条消息`,
-      `学习对象：${characterName}`,
-    ],
-  };
-}
-
-function estimateMockTrainingDuration(totalMessages: number) {
-  return Math.min(8 * 60 * 1000, Math.max(90 * 1000, totalMessages * 800));
 }
 
 function formatDatasetFileSize(size: number) {

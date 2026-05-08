@@ -10,14 +10,13 @@ import type {
 /**
  * Resolves the checkpoint root directory for a training run.
  * @param checkpointDir - Caller-provided checkpoint directory.
- * @param trainingSession - Generated training session identifier.
  * @returns Resolved checkpoint root directory.
  */
 export function resolveCheckpointRoot(
   checkpointDir: string,
-  trainingSession: string,
+  _trainingSession: string,
 ): string {
-  return path.join(checkpointDir.trim(), trainingSession);
+  return checkpointDir.trim();
 }
 
 /**

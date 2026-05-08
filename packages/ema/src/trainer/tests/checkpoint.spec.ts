@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import * as lancedb from "@lancedb/lancedb";
 
-import { buildTrainingCheckpointSnapshot } from "../checkpoint";
+import {
+  buildTrainingCheckpointSnapshot,
+  resolveCheckpointRoot,
+} from "../checkpoint";
 import { MemoryManager } from "../../memory/manager";
 import type { Server } from "../../server";
 import { createMongo, DBService, type Mongo } from "../../db";
@@ -84,5 +87,16 @@ describe("buildTrainingCheckpointSnapshot", () => {
       },
     ]);
     expect(snapshot.shortTermMemory.year).toEqual([]);
+  });
+});
+
+describe("resolveCheckpointRoot", () => {
+  test("uses the caller-provided checkpoint directory directly", () => {
+    expect(
+      resolveCheckpointRoot(
+        ".ema/logs/actors/actor_1/train/checkpoints",
+        "train-group-1-123",
+      ),
+    ).toBe(".ema/logs/actors/actor_1/train/checkpoints");
   });
 });

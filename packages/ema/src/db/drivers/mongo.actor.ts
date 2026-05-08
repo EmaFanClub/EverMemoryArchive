@@ -106,5 +106,6 @@ function normalizeActorEntity(entity: ActorEntity): ActorEntity {
   return {
     ...entity,
     enabled: entity.enabled ?? true,
+    origin: entity.origin ?? "blank",
   };
 }

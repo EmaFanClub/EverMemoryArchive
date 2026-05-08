@@ -63,8 +63,6 @@ const DASHBOARD_FIRST_LOGIN_STORAGE_KEY = "ema-webui-dashboard-first-login-v1";
 const CREATE_ACTOR_GUIDE_STORAGE_KEY =
   "ema-webui-create-actor-guide-dismissed-v1";
 const ACTOR_STARTUP_TIP_STORAGE_KEY = "ema-webui-actor-startup-tip-pending-v1";
-const MOCK_TRAINING_MAX_DURATION_MS = 8 * 60 * 1000;
-const MOCK_TRAINING_MIN_DURATION_MS = 90 * 1000;
 const DASHBOARD_LAYOUT_STORAGE_KEYS = [
   "ema-webui-dashboard-layout",
   "ema-webui-dashboard-layout-v2",
@@ -87,79 +85,6 @@ function userInitial(name: string) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function estimateMockTrainingDuration(totalMessages: number) {
-  return Math.min(
-    MOCK_TRAINING_MAX_DURATION_MS,
-    Math.max(MOCK_TRAINING_MIN_DURATION_MS, totalMessages * 800),
-  );
-}
-
-function buildMockTrainingLogs(
-  training: ActorTrainingUiState,
-  progress: number,
-  processedMessages: number,
-) {
-  const logs = [
-    "学习任务已创建",
-    `读取回放数据：${training.totalMessages} 条消息`,
-    `学习对象：${training.characterName}`,
-  ];
-  if (progress >= 0.08) {
-    logs.push("初始化角色书与学习会话");
-  }
-  if (progress >= 0.18) {
-    logs.push(`回放对话消息：${processedMessages}/${training.totalMessages}`);
-  }
-  if (progress >= 0.42) {
-    logs.push("生成短期记忆与活动摘要");
-  }
-  if (progress >= 0.68) {
-    logs.push("汇总长期记忆候选");
-  }
-  if (progress >= 0.9) {
-    logs.push("保存最终 checkpoint");
-  }
-  if (progress >= 1) {
-    logs.push("学习完成，角色可以启动");
-  }
-  return logs;
-}
-
-function advanceMockTrainingState(
-  current: Record<string, ActorTrainingUiState>,
-) {
-  const now = Date.now();
-  let changed = false;
-  const next: Record<string, ActorTrainingUiState> = {};
-
-  for (const [actorId, training] of Object.entries(current)) {
-    if (training.status !== "running") {
-      next[actorId] = training;
-      continue;
-    }
-
-    const duration = estimateMockTrainingDuration(training.totalMessages);
-    const progress = Math.min(1, (now - training.startedAt) / duration);
-    const processedMessages = Math.min(
-      training.totalMessages,
-      Math.max(0, Math.round(training.totalMessages * progress)),
-    );
-    next[actorId] = {
-      ...training,
-      status: progress >= 1 ? "completed" : "running",
-      progress,
-      processedMessages,
-      updatedAt: now,
-      estimatedRemainingMs:
-        progress >= 1 ? 0 : Math.max(0, Math.round(duration * (1 - progress))),
-      logs: buildMockTrainingLogs(training, progress, processedMessages),
-    };
-    changed = true;
-  }
-
-  return changed ? next : current;
 }
 
 function shouldKeepTextSelection(target: EventTarget | null) {
@@ -642,18 +567,14 @@ function DashboardContent() {
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setActorTrainingById(advanceMockTrainingState);
-    }, 1000);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, []);
-
-  useEffect(() => {
     const subscription = subscribeEmaEvents(null, (event: EmaKnownEvent) => {
       if (event.type === "actor.created") {
+        if (event.data.actor.training) {
+          setActorTrainingById((current) => ({
+            ...current,
+            [event.data.actor.id]: event.data.actor.training!,
+          }));
+        }
         setOverview((current) => {
           if (
             current.actors.some((actor) => actor.id === event.data.actor.id)
@@ -669,6 +590,12 @@ function DashboardContent() {
       }
 
       if (event.type === "actor.updated") {
+        if (event.data.actor.training) {
+          setActorTrainingById((current) => ({
+            ...current,
+            [event.data.actor.id]: event.data.actor.training!,
+          }));
+        }
         setOverview((current) => ({
           ...current,
           actors: current.actors.map((actor) =>
@@ -1146,6 +1073,12 @@ function DashboardContent() {
                     setStartupTipActorId(null);
                   }}
                   onActorRuntimeChange={updateActorRuntimeState}
+                  onActorTrainingChange={(actorId, training) => {
+                    setActorTrainingById((current) => ({
+                      ...current,
+                      [actorId]: training,
+                    }));
+                  }}
                 />
               )}
             />

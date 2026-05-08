@@ -377,20 +377,34 @@ export function createBootstrapConfig(
 }
 
 export function getWorkspaceRoot(): string {
-  let current = path.resolve(
+  const configuredRoot = process.env.EMA_WORKSPACE_ROOT?.trim();
+  if (configuredRoot) {
+    return path.resolve(configuredRoot);
+  }
+
+  const sourceRoot = findWorkspaceRootFrom(
     path.dirname(fileURLToPath(import.meta.url)),
     "..",
     "..",
     "..",
     "..",
   );
+  if (sourceRoot) {
+    return sourceRoot;
+  }
+
+  return findWorkspaceRootFrom(process.cwd()) ?? process.cwd();
+}
+
+function findWorkspaceRootFrom(...segments: string[]): string | null {
+  let current = path.resolve(...segments);
   for (;;) {
     if (fs.existsSync(path.join(current, "pnpm-workspace.yaml"))) {
       return current;
     }
     const parent = path.dirname(current);
     if (parent === current) {
-      return process.cwd();
+      return null;
     }
     current = parent;
   }

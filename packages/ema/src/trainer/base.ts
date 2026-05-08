@@ -147,3 +147,77 @@ export interface ActorTrainingResult {
    */
   checkpointCount: number;
 }
+
+export type ActorTrainingEvent =
+  | {
+      type: "started";
+      actorId: number;
+      session: string;
+      totalMessages: number;
+      bufferWindowSize: number;
+      diaryUpdateEvery: number;
+    }
+  | {
+      type: "dayStarted";
+      actorId: number;
+      day: string;
+      fromIndex: number;
+    }
+  | {
+      type: "dayCompleted";
+      actorId: number;
+      day: string;
+    }
+  | {
+      type: "messageReplayed";
+      actorId: number;
+      messageCount: number;
+      totalMessages: number;
+      day: string;
+      speakerName: string;
+      actorTurn: boolean;
+      gameTime: string;
+    }
+  | {
+      type: "memoryUpdateStarted";
+      actorId: number;
+      task: "conversation_rollup" | "activity_rollup";
+      messageCount: number;
+      totalMessages: number;
+      gameTime: string;
+    }
+  | {
+      type: "stepAdvanced";
+      actorId: number;
+      step: number;
+      messageCount: number;
+      update: string;
+      kinds: ShortTermMemoryEntity["kind"][];
+      gameTime: string;
+    }
+  | {
+      type: "checkpointSaved";
+      actorId: number;
+      target: number | "final";
+      id: number;
+      messageCount: number;
+      step?: number;
+      error?: string;
+    }
+  | {
+      type: "completed";
+      actorId: number;
+      conversationId: number;
+      checkpointCount: number;
+      messageCount: number;
+      session: string;
+    }
+  | {
+      type: "failed";
+      actorId: number;
+      messageCount: number;
+      session: string;
+      error: string;
+    };
+
+export type ActorTrainingObserver = (event: ActorTrainingEvent) => void;

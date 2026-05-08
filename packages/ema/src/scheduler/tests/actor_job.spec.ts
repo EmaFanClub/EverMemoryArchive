@@ -403,7 +403,8 @@ describe("actor background job lifecycle logs", () => {
     });
 
     expect(server.logger.info).not.toHaveBeenCalled();
-    expect(trainingLogger.info).toHaveBeenCalledWith(
+    expect(trainingLogger.info).not.toHaveBeenCalled();
+    expect(trainingLogger.debug).toHaveBeenCalledWith(
       "Actor background task started",
       expect.objectContaining({
         actorId: 1,
@@ -426,7 +427,7 @@ describe("actor background job lifecycle logs", () => {
           outputs: expect.arrayContaining([
             expect.objectContaining({
               filePath:
-                "actors/actor_1/training/conversation_rollup/2026-05-07_04-05-06-007-.jsonl",
+                "actors/actor_1/train/conversation_rollup/2026-05-07_04-05-06-007-.jsonl",
             }),
           ]),
         }),

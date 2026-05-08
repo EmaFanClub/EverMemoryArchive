@@ -13,6 +13,7 @@ import {
 import type { Server } from "../server";
 import { formatTimestamp, parseTimestamp } from "../shared/utils";
 import type {
+  ActorTrainingObserver,
   ActorTrainingRequest,
   ActorTrainingResult,
   ActorTrainingMessage,
@@ -55,6 +56,7 @@ export class ActorTrainer {
         { type: "file", level: "debug" },
       ],
     }),
+    private readonly observer?: ActorTrainingObserver,
   ) {}
 
   /**
@@ -122,6 +124,14 @@ export class ActorTrainer {
       activityEvery: req.diaryUpdateEvery,
       bufferWindowSize: req.bufferWindowSize,
     });
+    this.observer?.({
+      type: "started",
+      actorId: req.actorId,
+      session: trainingSession,
+      totalMessages: normalizedInputs.length,
+      bufferWindowSize: req.bufferWindowSize,
+      diaryUpdateEvery: req.diaryUpdateEvery,
+    });
 
     let checkpointId = 0;
     let stepCount = 0;
@@ -132,7 +142,13 @@ export class ActorTrainer {
         const currentDayKey = normalizedInputs[nextInputIndex].dayKey;
         let lastMessageTimestamp = normalizedInputs[nextInputIndex].timestamp;
 
-        logger.info("Training day started", {
+        logger.debug("Training day started", {
+          day: currentDayKey,
+          fromIndex: nextInputIndex + 1,
+        });
+        this.observer?.({
+          type: "dayStarted",
+          actorId,
           day: currentDayKey,
           fromIndex: nextInputIndex + 1,
         });
@@ -163,6 +179,16 @@ export class ActorTrainer {
           messageCount = message.msgId;
           lastMessageTimestamp = input.timestamp;
           nextInputIndex += 1;
+          this.observer?.({
+            type: "messageReplayed",
+            actorId,
+            messageCount,
+            totalMessages: normalizedInputs.length,
+            day: input.dayKey,
+            speakerName: input.speaker.name,
+            actorTurn: input.speaker.uid === characterUid,
+            gameTime: formatTimestamp(TRAINING_TIME_FORMAT, input.timestamp),
+          });
 
           const pendingConversationCount = (
             await this.server.memoryManager.getPendingConversationWindowState(
@@ -172,6 +198,14 @@ export class ActorTrainer {
             )
           ).count;
           if (pendingConversationCount >= req.diaryUpdateEvery) {
+            this.observer?.({
+              type: "memoryUpdateStarted",
+              actorId,
+              task: "conversation_rollup",
+              messageCount,
+              totalMessages: normalizedInputs.length,
+              gameTime: formatTimestamp(TRAINING_TIME_FORMAT, input.timestamp),
+            });
             await runActorBackgroundJob(
               this.server,
               {
@@ -207,6 +241,17 @@ export class ActorTrainer {
           )
         ).count;
         if (pendingConversationCount > 0) {
+          this.observer?.({
+            type: "memoryUpdateStarted",
+            actorId,
+            task: "conversation_rollup",
+            messageCount,
+            totalMessages: normalizedInputs.length,
+            gameTime: formatTimestamp(
+              TRAINING_TIME_FORMAT,
+              lastMessageTimestamp,
+            ),
+          });
           await runActorBackgroundJob(
             this.server,
             {
@@ -235,6 +280,17 @@ export class ActorTrainer {
 
         const memoryRollupTimestamp =
           this.buildMemoryRollupTimestamp(currentDayKey);
+        this.observer?.({
+          type: "memoryUpdateStarted",
+          actorId,
+          task: "activity_rollup",
+          messageCount,
+          totalMessages: normalizedInputs.length,
+          gameTime: formatTimestamp(
+            TRAINING_TIME_FORMAT,
+            memoryRollupTimestamp,
+          ),
+        });
         await runActorBackgroundJob(
           this.server,
           {
@@ -261,6 +317,11 @@ export class ActorTrainer {
           ["activity", "day", "month", "year"],
           logger,
         ));
+        this.observer?.({
+          type: "dayCompleted",
+          actorId,
+          day: currentDayKey,
+        });
       }
       checkpointId += 1;
       await this.saveCheckpoint(
@@ -281,6 +342,14 @@ export class ActorTrainer {
         messageCount,
         session: trainingSession,
       });
+      this.observer?.({
+        type: "completed",
+        actorId: req.actorId,
+        conversationId,
+        checkpointCount: checkpointId,
+        messageCount,
+        session: trainingSession,
+      });
 
       return {
         actorId: req.actorId,
@@ -291,11 +360,20 @@ export class ActorTrainer {
         checkpointCount: checkpointId,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       logger.error("Training failed", {
         actorId: req.actorId,
         messageCount,
         session: trainingSession,
         error,
+      });
+      this.observer?.({
+        type: "failed",
+        actorId: req.actorId,
+        messageCount,
+        session: trainingSession,
+        error: errorMessage,
       });
       try {
         checkpointId += 1;
@@ -306,7 +384,7 @@ export class ActorTrainer {
           actorId,
           conversationId,
           checkpointRoot,
-          (error as Error).message,
+          errorMessage,
           undefined,
           logger,
         );
@@ -401,7 +479,7 @@ export class ActorTrainer {
         {
           type: "file",
           level: "debug",
-          filePath: `actors/actor_${actorId}/training/trainer.jsonl`,
+          filePath: `actors/actor_${actorId}/train/trainer.jsonl`,
         },
       ],
     });
@@ -519,11 +597,20 @@ export class ActorTrainer {
       snapshot,
       ...(error ? { error } : {}),
     });
-    logger.info("Training checkpoint saved", {
+    logger.debug("Training checkpoint saved", {
       target,
       id,
       step: stepCount,
       messageCount,
+      ...(error ? { error } : {}),
+    });
+    this.observer?.({
+      type: "checkpointSaved",
+      actorId,
+      target,
+      id,
+      messageCount,
+      ...(typeof stepCount === "number" ? { step: stepCount } : {}),
       ...(error ? { error } : {}),
     });
   }
@@ -544,11 +631,20 @@ export class ActorTrainer {
     const nextStepCount = stepCount + 1;
     const kinds = updateKinds.join(",");
     const gameTime = formatTimestamp(TRAINING_TIME_FORMAT, triggeredAt);
-    logger.info("Training step advanced", {
+    logger.debug("Training step advanced", {
       step: nextStepCount,
       messageCount,
       update: updateType,
       kinds,
+      gameTime,
+    });
+    this.observer?.({
+      type: "stepAdvanced",
+      actorId,
+      step: nextStepCount,
+      messageCount,
+      update: updateType,
+      kinds: updateKinds,
       gameTime,
     });
     if (nextStepCount % saveEverySteps !== 0) {

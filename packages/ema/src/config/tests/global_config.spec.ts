@@ -44,6 +44,24 @@ describe("GlobalConfig", () => {
     });
   });
 
+  test("uses configured workspace root for relative data root paths", () => {
+    const workspaceRoot = path.join(process.cwd(), "custom-workspace-root");
+    vi.stubEnv("EMA_WORKSPACE_ROOT", workspaceRoot);
+
+    const bootstrap = createBootstrapConfig(
+      {
+        mode: "dev",
+        mongoKind: "memory",
+        dataRoot: ".ema-test",
+      },
+      emptyEnv,
+    );
+
+    expect(bootstrap.paths.dataRoot).toBe(
+      path.join(workspaceRoot, ".ema-test"),
+    );
+  });
+
   test("defaults to production mode and requires mongo", () => {
     expect(() => createBootstrapConfig({}, emptyEnv)).toThrow(
       GlobalConfigError,

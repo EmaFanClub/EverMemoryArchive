@@ -31,6 +31,7 @@ export async function POST(request: Request) {
         startMinutes: 0,
         endMinutes: 8 * 60,
       },
+      ...(body.training ? { training: body.training } : {}),
     });
     return Response.json(result, { status: 200 });
   } catch (error) {

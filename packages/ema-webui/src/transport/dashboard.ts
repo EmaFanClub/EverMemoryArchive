@@ -19,6 +19,7 @@ import type {
   ActorQQConversationPatchRequest,
   ActorQQSaveResponse,
   ActorSettingsResponse,
+  ActorTrainingStartResponse,
   ActorWebSearchConfig,
   ActorWebSearchSaveResponse,
   DashboardOverviewResponse,
@@ -119,6 +120,15 @@ export function updateActorActivity(actorId: string, enabled: boolean) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled }),
+    },
+  );
+}
+
+export function startActorTraining(actorId: string) {
+  return fetchJson<ActorTrainingStartResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/training`,
+    {
+      method: "POST",
     },
   );
 }
