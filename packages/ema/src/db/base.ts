@@ -938,6 +938,10 @@ export interface ListLongTermMemoriesRequest {
    */
   actorId?: number;
   /**
+   * Max number of memories to return
+   */
+  limit?: number;
+  /**
    * Filter long term memories created before the given date and time
    */
   createdBefore?: DbDate;

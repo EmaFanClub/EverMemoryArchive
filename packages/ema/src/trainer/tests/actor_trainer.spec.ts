@@ -303,4 +303,78 @@ describe("ActorTrainer", () => {
       }),
     ).rejects.toThrow("Actor already has a training conversation");
   });
+
+  test("checks existing actor messages with one actor-scoped query", async () => {
+    const countConversationMessages = vi.fn(async () => 0);
+    const listConversationMessages = vi.fn(async () => [
+      {
+        id: 1,
+        actorId: 1,
+        conversationId: 10,
+      },
+    ]);
+    const trainer = new ActorTrainer({
+      dbService: {
+        conversationDB: {
+          listConversations: vi.fn(async () => [
+            { id: 10, actorId: 1, session: "web-chat-1" },
+            { id: 11, actorId: 1, session: "qq-chat-1" },
+          ]),
+        },
+        conversationMessageDB: {
+          countConversationMessages,
+          listConversationMessages,
+        },
+        shortTermMemoryDB: {
+          listShortTermMemories: vi.fn(async () => []),
+        },
+        longTermMemoryDB: {
+          listLongTermMemories: vi.fn(async () => []),
+        },
+        personalityDB: {
+          getPersonality: vi.fn(async () => null),
+        },
+      },
+    } as unknown as Server);
+
+    await expect(
+      (trainer as any).validateActorCanTrain({ id: 1, enabled: false }),
+    ).rejects.toThrow("Actor has existing conversation messages");
+
+    expect(listConversationMessages).toHaveBeenCalledWith({
+      actorId: 1,
+      limit: 1,
+    });
+    expect(countConversationMessages).not.toHaveBeenCalled();
+  });
+
+  test("checks existing long-term memories with a limited query", async () => {
+    const listLongTermMemories = vi.fn(async () => []);
+    const trainer = new ActorTrainer({
+      dbService: {
+        conversationDB: {
+          listConversations: vi.fn(async () => []),
+        },
+        conversationMessageDB: {
+          listConversationMessages: vi.fn(async () => []),
+        },
+        shortTermMemoryDB: {
+          listShortTermMemories: vi.fn(async () => []),
+        },
+        longTermMemoryDB: {
+          listLongTermMemories,
+        },
+        personalityDB: {
+          getPersonality: vi.fn(async () => null),
+        },
+      },
+    } as unknown as Server);
+
+    await (trainer as any).validateActorCanTrain({ id: 1, enabled: false });
+
+    expect(listLongTermMemories).toHaveBeenCalledWith({
+      actorId: 1,
+      limit: 1,
+    });
+  });
 });

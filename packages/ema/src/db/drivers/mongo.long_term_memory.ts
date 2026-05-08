@@ -61,7 +61,11 @@ export class MongoLongTermMemoryDB implements LongTermMemoryStore {
       }
     }
 
-    return (await collection.find(filter).toArray()).map(omitMongoId);
+    let cursor = collection.find(filter);
+    if (req.limit !== undefined) {
+      cursor = cursor.limit(req.limit);
+    }
+    return (await cursor.toArray()).map(omitMongoId);
   }
 
   /**

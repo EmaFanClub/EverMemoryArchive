@@ -47,6 +47,17 @@ describe("MongoRoleDB with in-memory MongoDB", () => {
     expect(retrievedRole).toEqual(roleData);
   });
 
+  test("should reject roles with a non-string prompt", async () => {
+    const roleData = {
+      name: "Test Role",
+      prompt: undefined,
+    } as unknown as RoleEntity;
+
+    await expect(db.upsertRole(roleData)).rejects.toThrow(
+      "prompt must be a string",
+    );
+  });
+
   test("should update an existing role", async () => {
     const roleData: RoleEntity = {
       name: "Test Role",

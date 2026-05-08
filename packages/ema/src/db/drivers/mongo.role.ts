@@ -63,6 +63,9 @@ export class MongoRoleDB implements RoleDB {
     if (!entity.name) {
       throw new Error("name is required");
     }
+    if (typeof entity.prompt !== "string") {
+      throw new Error("prompt must be a string");
+    }
 
     entity.updatedAt = Date.now();
     return upsertEntity(this.mongo, this.$cn, entity);

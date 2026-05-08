@@ -117,6 +117,31 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
     expect(memories).toContainEqual(mem2);
   });
 
+  test("should limit listed memories", async () => {
+    const mem1: LongTermMemoryEntity = {
+      actorId: 1,
+      index0: "category1",
+      index1: "subcategory1",
+      memory: "Test statement 1",
+      createdAt: Date.now(),
+      messages: [1],
+    };
+    const mem2: LongTermMemoryEntity = {
+      actorId: 1,
+      index0: "category2",
+      index1: "subcategory2",
+      memory: "Test statement 2",
+      createdAt: Date.now(),
+      messages: [2],
+    };
+
+    await db.appendLongTermMemory(mem1);
+    await db.appendLongTermMemory(mem2);
+
+    const memories = await db.listLongTermMemories({ actorId: 1, limit: 1 });
+    expect(memories).toHaveLength(1);
+  });
+
   test("should list memories filtered by createdBefore", async () => {
     const now = Date.now();
     const mem1: LongTermMemoryEntity = {

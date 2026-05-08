@@ -12,10 +12,7 @@ import type {
  * @param checkpointDir - Caller-provided checkpoint directory.
  * @returns Resolved checkpoint root directory.
  */
-export function resolveCheckpointRoot(
-  checkpointDir: string,
-  _trainingSession: string,
-): string {
+export function resolveCheckpointRoot(checkpointDir: string): string {
   return checkpointDir.trim();
 }
 

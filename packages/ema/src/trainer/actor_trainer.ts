@@ -85,10 +85,7 @@ export class ActorTrainer {
     });
     const characterUid = req.characterName.trim();
     const saveEverySteps = req.saveEverySteps ?? 1;
-    const checkpointRoot = resolveCheckpointRoot(
-      req.checkpointDir,
-      trainingSession,
-    );
+    const checkpointRoot = resolveCheckpointRoot(req.checkpointDir);
     const conversation = await this.server.dbService.createConversation(
       req.actorId,
       trainingSession,
@@ -433,17 +430,15 @@ export class ActorTrainer {
     if (conversations.some((item) => item.session.startsWith("train-"))) {
       throw new Error("Actor already has a training conversation.");
     }
-    for (const conversation of conversations) {
-      if (typeof conversation.id !== "number") {
-        continue;
-      }
-      const messageCount =
-        await this.server.dbService.conversationMessageDB.countConversationMessages(
-          conversation.id,
-        );
-      if (messageCount > 0) {
-        throw new Error("Actor has existing conversation messages.");
-      }
+    const existingMessages =
+      await this.server.dbService.conversationMessageDB.listConversationMessages(
+        {
+          actorId: actor.id,
+          limit: 1,
+        },
+      );
+    if (existingMessages.length > 0) {
+      throw new Error("Actor has existing conversation messages.");
     }
     const shortTermMemories =
       await this.server.dbService.shortTermMemoryDB.listShortTermMemories({
@@ -456,6 +451,7 @@ export class ActorTrainer {
     const longTermMemories =
       await this.server.dbService.longTermMemoryDB.listLongTermMemories({
         actorId: actor.id,
+        limit: 1,
       });
     if (longTermMemories.length > 0) {
       throw new Error("Actor has existing long-term memories.");

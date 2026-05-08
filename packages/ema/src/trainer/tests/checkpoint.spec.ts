@@ -93,10 +93,7 @@ describe("buildTrainingCheckpointSnapshot", () => {
 describe("resolveCheckpointRoot", () => {
   test("uses the caller-provided checkpoint directory directly", () => {
     expect(
-      resolveCheckpointRoot(
-        ".ema/logs/actors/actor_1/train/checkpoints",
-        "train-group-1-123",
-      ),
+      resolveCheckpointRoot(".ema/logs/actors/actor_1/train/checkpoints"),
     ).toBe(".ema/logs/actors/actor_1/train/checkpoints");
   });
 });
