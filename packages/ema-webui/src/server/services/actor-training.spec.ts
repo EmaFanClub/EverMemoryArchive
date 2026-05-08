@@ -2,6 +2,17 @@ import { describe, expect, test, vi } from "vitest";
 import path from "node:path";
 
 vi.mock("server-only", () => ({}));
+vi.mock("ema", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ema")>();
+  return {
+    ...actual,
+    ActorTrainer: class {
+      train() {
+        return new Promise(() => {});
+      }
+    },
+  };
+});
 
 import { createBootstrapConfig, GlobalConfig } from "ema";
 import type { ActorDetails, Server } from "ema";
@@ -10,6 +21,7 @@ import {
   estimateTrainingRemainingMs,
   getPersistedActorTrainingUiState,
   markInterruptedActorTrainingAsFailed,
+  startActorTraining,
 } from "./actor-training";
 
 describe("actor training service helpers", () => {
@@ -167,6 +179,47 @@ describe("actor training service helpers", () => {
     expect(blank.actor.trainingStatus).toBeUndefined();
     expect(upsertActor).toHaveBeenCalledTimes(1);
     expect(upsertActor).toHaveBeenCalledWith(interrupted.actor);
+  });
+
+  test("does not mark running actors as failed while training state exists in memory", async () => {
+    const upsertActor = vi.fn(async () => 1);
+    const server = {
+      dbService: {
+        actorDB: {
+          upsertActor,
+        },
+      },
+    } as unknown as Server;
+    const active = createActorDetails({
+      id: 4,
+      origin: "training",
+      trainingStatus: "running",
+    });
+
+    startActorTraining({
+      server,
+      actorId: active.actor.id,
+      roleBook: "",
+      training: {
+        characterName: "测试角色",
+        dataset: {
+          description: "测试数据",
+          inputs: [
+            {
+              name: "测试角色",
+              time: "2024-01-01 10:00:00",
+              content: "早上好。",
+            },
+          ],
+        },
+      },
+    });
+
+    await markInterruptedActorTrainingAsFailed(server, [active]);
+
+    expect(active.actor.trainingStatus).toBe("running");
+    expect(active.actor.trainingErrorMessage).toBeUndefined();
+    expect(upsertActor).not.toHaveBeenCalled();
   });
 });
 

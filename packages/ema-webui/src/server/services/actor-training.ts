@@ -127,6 +127,12 @@ export async function markInterruptedActorTrainingAsFailed(
       ) {
         return;
       }
+      const activeTraining = actorTrainingById.get(
+        toWebActorId(details.actor.id),
+      );
+      if (activeTraining) {
+        return;
+      }
       details.actor.trainingStatus = "failed";
       details.actor.trainingErrorMessage = INTERRUPTED_TRAINING_MESSAGE;
       details.actor.trainingUpdatedAt = now;

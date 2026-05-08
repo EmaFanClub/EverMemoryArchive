@@ -466,7 +466,7 @@ export function CreateActorOverlay({
       setJustSucceeded(true);
       const training = response.actor.training;
       showCreateActorToast(
-        training ? "档案已建立，开始学习" : "档案已合上，等待相遇",
+        training ? "档案已建立，等待学习" : "档案已合上，等待相遇",
         "success",
       );
       closingTimerRef.current = setTimeout(() => {
