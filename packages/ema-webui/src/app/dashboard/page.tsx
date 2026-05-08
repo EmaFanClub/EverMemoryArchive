@@ -1074,10 +1074,15 @@ function DashboardContent() {
                   }}
                   onActorRuntimeChange={updateActorRuntimeState}
                   onActorTrainingChange={(actorId, training) => {
-                    setActorTrainingById((current) => ({
-                      ...current,
-                      [actorId]: training,
-                    }));
+                    setActorTrainingById((current) => {
+                      const next = { ...current };
+                      if (training) {
+                        next[actorId] = training;
+                      } else {
+                        delete next[actorId];
+                      }
+                      return next;
+                    });
                   }}
                 />
               )}

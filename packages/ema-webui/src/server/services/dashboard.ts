@@ -30,6 +30,7 @@ import {
 import {
   markInterruptedActorTrainingAsFailed,
   prepareActorTraining,
+  removeActorTrainingUiState,
   startPreparedActorTraining,
 } from "@/server/services/actor-training";
 import { ensureEmaServer } from "@/server/ema-server";
@@ -62,6 +63,7 @@ import type {
   ActorQQSaveRequest,
   ActorQQSaveResponse,
   ActorSettingsResponse,
+  ActorTrainingClearResponse,
   ActorTrainingStartResponse,
   ActorSettingsSnapshot,
   ActorSettingsCheckErrorCode,
@@ -889,6 +891,17 @@ export async function startActorTrainingService(
   return {
     apiVersion: API_VERSION,
     actor: toActorSummary(details),
+  };
+}
+
+export async function clearActorTrainingService(
+  actorId: string,
+): Promise<ActorTrainingClearResponse> {
+  removeActorTrainingUiState(actorId, { status: "completed" });
+  return {
+    apiVersion: API_VERSION,
+    ok: true,
+    actorId,
   };
 }
 

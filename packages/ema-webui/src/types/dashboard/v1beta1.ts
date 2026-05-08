@@ -197,6 +197,12 @@ export interface ActorTrainingStartResponse {
   actor: ActorSummary;
 }
 
+export interface ActorTrainingClearResponse {
+  apiVersion: "v1beta1";
+  ok: boolean;
+  actorId: string;
+}
+
 export interface CreateActorTrainingMessage {
   name: string;
   time: string;

@@ -45,6 +45,7 @@ import {
 
 import styles from "@/app/dashboard/page.module.css";
 import {
+  clearActorTraining,
   createActorQqConversation,
   deleteActorQqConversation,
   getActorConversation,
@@ -871,7 +872,7 @@ export function ActorSettingsPanel({
   ) => void;
   onActorTrainingChange: (
     actorId: string,
-    training: ActorTrainingUiState,
+    training: ActorTrainingUiState | null,
   ) => void;
 }) {
   const actorId = actor.id;
@@ -1408,6 +1409,17 @@ export function ActorSettingsPanel({
     } finally {
       setTrainingStarting(false);
     }
+  }
+
+  function handleCloseTrainingDetail() {
+    setTrainingDetailVisible(false);
+    if (training?.status !== "completed") {
+      return;
+    }
+    onActorTrainingChange(actorId, null);
+    void clearActorTraining(actorId).catch(() => {
+      // The local completed card is already dismissed; server cleanup is best-effort.
+    });
   }
 
   function closeDetail() {
@@ -2360,7 +2372,7 @@ export function ActorSettingsPanel({
       {trainingDetailVisible && training ? (
         <ActorTrainingDetailOverlay
           training={training}
-          onClose={() => setTrainingDetailVisible(false)}
+          onClose={handleCloseTrainingDetail}
         />
       ) : null}
 

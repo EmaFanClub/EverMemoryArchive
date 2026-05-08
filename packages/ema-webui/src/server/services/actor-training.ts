@@ -21,6 +21,7 @@ const TRAINING_SAVE_EVERY_STEPS = 1;
 const TRAINING_PROGRESS_COMPLETE_PENDING = 0.96;
 const TRAINING_PROGRESS_REPLAY_WEIGHT = 0.92;
 const INTERRUPTED_TRAINING_MESSAGE = "训练未正常结束，建议删除角色。";
+const LOST_PENDING_TRAINING_MESSAGE = "学习数据已丢失，建议删除角色。";
 
 const actorTrainingById = new Map<string, ActorTrainingUiState>();
 const pendingActorTrainingById = new Map<
@@ -121,25 +122,67 @@ export async function markInterruptedActorTrainingAsFailed(
   const now = Date.now();
   await Promise.all(
     detailsList.map(async (details) => {
+      if (details.actor.origin !== "training") {
+        return;
+      }
+      const webActorId = toWebActorId(details.actor.id);
       if (
-        details.actor.origin !== "training" ||
-        details.actor.trainingStatus !== "running"
+        details.actor.trainingStatus === "running" &&
+        !actorTrainingById.has(webActorId)
       ) {
+        await markActorTrainingDetailsAsFailed(
+          server,
+          details,
+          INTERRUPTED_TRAINING_MESSAGE,
+          now,
+        );
         return;
       }
-      const activeTraining = actorTrainingById.get(
-        toWebActorId(details.actor.id),
-      );
-      if (activeTraining) {
-        return;
+      if (
+        details.actor.trainingStatus === "pending" &&
+        !actorTrainingById.has(webActorId) &&
+        !pendingActorTrainingById.has(webActorId)
+      ) {
+        await markActorTrainingDetailsAsFailed(
+          server,
+          details,
+          LOST_PENDING_TRAINING_MESSAGE,
+          now,
+        );
       }
-      details.actor.trainingStatus = "failed";
-      details.actor.trainingErrorMessage = INTERRUPTED_TRAINING_MESSAGE;
-      details.actor.trainingUpdatedAt = now;
-      await server.dbService.actorDB.upsertActor(details.actor);
     }),
   );
   return detailsList;
+}
+
+async function markActorTrainingDetailsAsFailed(
+  server: Server,
+  details: ActorDetails,
+  message: string,
+  updatedAt: number,
+) {
+  details.actor.trainingStatus = "failed";
+  details.actor.trainingErrorMessage = message;
+  details.actor.trainingUpdatedAt = updatedAt;
+  await server.dbService.actorDB.upsertActor(details.actor);
+}
+
+export function removeActorTrainingUiState(
+  actorId: string,
+  options: { status?: ActorTrainingUiState["status"] } = {},
+): boolean {
+  const training = actorTrainingById.get(actorId);
+  if (options.status && training?.status !== options.status) {
+    return false;
+  }
+  const removedTraining = actorTrainingById.delete(actorId);
+  const removedPending = pendingActorTrainingById.delete(actorId);
+  const timer = actorTrainingPublishTimers.get(actorId);
+  if (timer) {
+    clearTimeout(timer);
+    actorTrainingPublishTimers.delete(actorId);
+  }
+  return removedTraining || removedPending || Boolean(timer);
 }
 
 export function prepareActorTraining({
@@ -225,7 +268,7 @@ export function startActorTraining({
     .then(() => {
       publishActorTrainingUpdatedNow(server, actorId);
     })
-    .catch((error: unknown) => {
+    .catch(async (error: unknown) => {
       const currentState = actorTrainingById.get(webActorId);
       if (currentState?.status === "failed") {
         publishActorTrainingUpdatedNow(server, actorId);
@@ -233,6 +276,12 @@ export function startActorTraining({
       }
       const failedAt = Date.now();
       const message = error instanceof Error ? error.message : String(error);
+      await updateActorTrainingStatus({
+        server,
+        actorId,
+        status: "failed",
+        errorMessage: message,
+      });
       const latestState = currentState ?? initialState;
       actorTrainingById.set(webActorId, {
         ...latestState,
@@ -455,8 +504,12 @@ async function updateActorTrainingStatus({
   if (!actor) {
     return;
   }
+  const actorToPersist = { ...actor };
+  if (status !== "failed") {
+    delete actorToPersist.trainingErrorMessage;
+  }
   await server.dbService.actorDB.upsertActor({
-    ...actor,
+    ...actorToPersist,
     origin: "training",
     trainingStatus: status,
     trainingUpdatedAt: Date.now(),

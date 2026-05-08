@@ -2,13 +2,14 @@ import { describe, expect, test, vi } from "vitest";
 import path from "node:path";
 
 vi.mock("server-only", () => ({}));
+const actorTrainerTrain = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
 vi.mock("ema", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ema")>();
   return {
     ...actual,
     ActorTrainer: class {
       train() {
-        return new Promise(() => {});
+        return actorTrainerTrain();
       }
     },
   };
@@ -21,6 +22,8 @@ import {
   estimateTrainingRemainingMs,
   getPersistedActorTrainingUiState,
   markInterruptedActorTrainingAsFailed,
+  prepareActorTraining,
+  removeActorTrainingUiState,
   startActorTraining,
 } from "./actor-training";
 
@@ -140,7 +143,7 @@ describe("actor training service helpers", () => {
     expect(state?.logs[0]).toContain("训练未正常结束，建议删除角色。");
   });
 
-  test("marks only running training actors as failed after interruption", async () => {
+  test("marks running training actors as failed after interruption", async () => {
     const upsertActor = vi.fn(async () => 1);
     const server = {
       dbService: {
@@ -154,31 +157,74 @@ describe("actor training service helpers", () => {
       origin: "training",
       trainingStatus: "running",
     });
-    const pending = createActorDetails({
-      id: 2,
-      origin: "training",
-      trainingStatus: "pending",
-    });
     const blank = createActorDetails({
       id: 3,
       origin: "blank",
     });
 
-    await markInterruptedActorTrainingAsFailed(server, [
-      interrupted,
-      pending,
-      blank,
-    ]);
+    await markInterruptedActorTrainingAsFailed(server, [interrupted, blank]);
 
     expect(interrupted.actor.trainingStatus).toBe("failed");
     expect(interrupted.actor.trainingErrorMessage).toBe(
       "训练未正常结束，建议删除角色。",
     );
     expect(typeof interrupted.actor.trainingUpdatedAt).toBe("number");
-    expect(pending.actor.trainingStatus).toBe("pending");
     expect(blank.actor.trainingStatus).toBeUndefined();
     expect(upsertActor).toHaveBeenCalledTimes(1);
     expect(upsertActor).toHaveBeenCalledWith(interrupted.actor);
+  });
+
+  test("marks pending training actors as failed when the payload is lost", async () => {
+    const upsertActor = vi.fn(async () => 1);
+    const server = {
+      dbService: {
+        actorDB: {
+          upsertActor,
+        },
+      },
+    } as unknown as Server;
+    const pending = createActorDetails({
+      id: 5,
+      origin: "training",
+      trainingStatus: "pending",
+    });
+
+    await markInterruptedActorTrainingAsFailed(server, [pending]);
+
+    expect(pending.actor.trainingStatus).toBe("failed");
+    expect(pending.actor.trainingErrorMessage).toBe(
+      "学习数据已丢失，建议删除角色。",
+    );
+    expect(upsertActor).toHaveBeenCalledTimes(1);
+    expect(upsertActor).toHaveBeenCalledWith(pending.actor);
+  });
+
+  test("does not mark pending actors as failed while the payload exists in memory", async () => {
+    const upsertActor = vi.fn(async () => 1);
+    const server = {
+      dbService: {
+        actorDB: {
+          upsertActor,
+        },
+      },
+    } as unknown as Server;
+    const pending = createActorDetails({
+      id: 6,
+      origin: "training",
+      trainingStatus: "pending",
+    });
+
+    prepareActorTraining({
+      actorId: pending.actor.id,
+      roleBook: "",
+      training: createTrainingPayload(),
+    });
+
+    await markInterruptedActorTrainingAsFailed(server, [pending]);
+
+    expect(pending.actor.trainingStatus).toBe("pending");
+    expect(pending.actor.trainingErrorMessage).toBeUndefined();
+    expect(upsertActor).not.toHaveBeenCalled();
   });
 
   test("does not mark running actors as failed while training state exists in memory", async () => {
@@ -200,19 +246,7 @@ describe("actor training service helpers", () => {
       server,
       actorId: active.actor.id,
       roleBook: "",
-      training: {
-        characterName: "测试角色",
-        dataset: {
-          description: "测试数据",
-          inputs: [
-            {
-              name: "测试角色",
-              time: "2024-01-01 10:00:00",
-              content: "早上好。",
-            },
-          ],
-        },
-      },
+      training: createTrainingPayload(),
     });
 
     await markInterruptedActorTrainingAsFailed(server, [active]);
@@ -221,7 +255,85 @@ describe("actor training service helpers", () => {
     expect(active.actor.trainingErrorMessage).toBeUndefined();
     expect(upsertActor).not.toHaveBeenCalled();
   });
+
+  test("persists failed status when training rejects before emitting an event", async () => {
+    actorTrainerTrain.mockRejectedValueOnce(new Error("训练启动失败"));
+    const upsertActor = vi.fn(async () => 1);
+    const server = {
+      dbService: {
+        actorDB: {
+          async getActor() {
+            return {
+              id: 7,
+              roleId: 1,
+              enabled: false,
+              origin: "training",
+              trainingStatus: "running",
+            };
+          },
+          upsertActor,
+        },
+      },
+      controller: {
+        actor: {
+          async get() {
+            return null;
+          },
+        },
+      },
+      bus: {
+        publish: vi.fn(),
+        createEvent: vi.fn((event) => event),
+      },
+    } as unknown as Server;
+
+    startActorTraining({
+      server,
+      actorId: 7,
+      roleBook: "",
+      training: createTrainingPayload(),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(upsertActor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 7,
+        trainingStatus: "failed",
+        trainingErrorMessage: "训练启动失败",
+      }),
+    );
+  });
+
+  test("removes in-memory training state and pending payload", () => {
+    prepareActorTraining({
+      actorId: 8,
+      roleBook: "",
+      training: createTrainingPayload(),
+    });
+
+    expect(removeActorTrainingUiState("8", { status: "completed" })).toBe(
+      false,
+    );
+    expect(removeActorTrainingUiState("8")).toBe(true);
+    expect(removeActorTrainingUiState("8")).toBe(false);
+  });
 });
+
+function createTrainingPayload() {
+  return {
+    characterName: "测试角色",
+    dataset: {
+      description: "测试数据",
+      inputs: [
+        {
+          name: "测试角色",
+          time: "2024-01-01 10:00:00",
+          content: "早上好。",
+        },
+      ],
+    },
+  };
+}
 
 function createActorDetails(
   actor: Partial<ActorDetails["actor"]>,

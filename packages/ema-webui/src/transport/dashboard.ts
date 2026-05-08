@@ -19,6 +19,7 @@ import type {
   ActorQQConversationPatchRequest,
   ActorQQSaveResponse,
   ActorSettingsResponse,
+  ActorTrainingClearResponse,
   ActorTrainingStartResponse,
   ActorWebSearchConfig,
   ActorWebSearchSaveResponse,
@@ -129,6 +130,15 @@ export function startActorTraining(actorId: string) {
     `/api/v1beta1/actors/${encodeURIComponent(actorId)}/training`,
     {
       method: "POST",
+    },
+  );
+}
+
+export function clearActorTraining(actorId: string) {
+  return fetchJson<ActorTrainingClearResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/training`,
+    {
+      method: "DELETE",
     },
   );
 }
