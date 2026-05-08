@@ -30,6 +30,7 @@ import {
 } from "../jobs/actor.job";
 import type { ShortTermMemoryRecord } from "../../memory/base";
 import { loadTestGlobalConfig } from "../../config/tests/helpers";
+import { formatTimestamp } from "../../shared/utils";
 
 type BufferedMessageRecord = {
   msgId: number;
@@ -410,7 +411,7 @@ describe("actor background job lifecycle logs", () => {
         actorId: 1,
         task: "conversation_rollup",
         mode: "training",
-        logicalTime: "1970-01-01 08:00:02",
+        logicalTime: formatTimestamp("YYYY-MM-DD HH:mm:ss", 2000),
         pendingCount: 5,
         threshold: 5,
       }),
