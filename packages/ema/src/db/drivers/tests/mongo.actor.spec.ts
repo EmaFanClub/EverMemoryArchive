@@ -153,6 +153,26 @@ describe("MongoActorDB with in-memory MongoDB", () => {
     expect(typeof deletedActor?.deletedAt).toBe("number");
   });
 
+  test("should use the provided deletedAt when deleting an actor", async () => {
+    const actorData: ActorEntity = {
+      roleId: 1,
+      enabled: true,
+    };
+    const deletedAt = Date.now() - 1000;
+
+    await db.upsertActor(actorData);
+    const deleted = await db.deleteActor(1, deletedAt);
+
+    expect(deleted).toBe(true);
+    const deletedActor = await db.getActor(1, { includeDeleted: true });
+    expect(deletedActor).toEqual(
+      expect.objectContaining({
+        deletedAt,
+        updatedAt: deletedAt,
+      }),
+    );
+  });
+
   test("should return false when deleting non-existent actor", async () => {
     const deleted = await db.deleteActor(999);
     expect(deleted).toBe(false);

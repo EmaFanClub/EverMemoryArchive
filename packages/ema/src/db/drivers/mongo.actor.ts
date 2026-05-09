@@ -93,12 +93,15 @@ export class MongoActorDB implements ActorDB {
   /**
    * Marks an actor as deleted
    * @param id - The unique identifier for the actor to delete
+   * @param deletedAt - Deletion timestamp to persist
    * @returns Promise resolving to true if deleted, false if not found
    */
-  async deleteActor(id: number): Promise<boolean> {
+  async deleteActor(
+    id: number,
+    deletedAt: number = Date.now(),
+  ): Promise<boolean> {
     const db = this.mongo.getDb();
     const collection = db.collection<ActorEntity>(this.$cn);
-    const now = Date.now();
     const result = await collection.updateOne(
       {
         id,
@@ -106,9 +109,9 @@ export class MongoActorDB implements ActorDB {
       },
       {
         $set: {
-          deletedAt: now,
+          deletedAt,
           enabled: false,
-          updatedAt: now,
+          updatedAt: deletedAt,
         },
       },
     );

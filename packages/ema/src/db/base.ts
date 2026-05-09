@@ -261,9 +261,10 @@ export interface ActorDB {
   /**
    * marks an actor as deleted
    * @param id - The unique identifier for the actor to delete
+   * @param deletedAt - Deletion timestamp to persist
    * @returns Promise resolving to true if deleted, false if not found
    */
-  deleteActor(id: number): Promise<boolean>;
+  deleteActor(id: number, deletedAt?: DbDate): Promise<boolean>;
 }
 
 /**

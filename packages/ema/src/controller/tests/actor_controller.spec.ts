@@ -162,7 +162,10 @@ describe("ActorController", () => {
 
     expect(result.actorId).toBe(1);
     expect(typeof result.deletedAt).toBe("number");
-    expect(server.dbService.actorDB.deleteActor).toHaveBeenCalledWith(1);
+    expect(server.dbService.actorDB.deleteActor).toHaveBeenCalledWith(
+      1,
+      result.deletedAt,
+    );
     expect(server.bus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "actor.deleted",
