@@ -135,11 +135,15 @@ export class ActorController {
       throw new Error("Actor is transitioning.");
     }
 
-    const deleted = await this.server.dbService.actorDB.deleteActor(actorId);
+    const deletedAt = Date.now();
+    const deleteActor = this.server.dbService.actorDB.deleteActor as (
+      actorId: number,
+      deletedAt: number,
+    ) => Promise<boolean>;
+    const deleted = await deleteActor(actorId, deletedAt);
     if (!deleted) {
       throw new Error("Actor not found.");
     }
-    const deletedAt = Date.now();
 
     await Promise.all([
       this.ignoreCleanupError(actorId, "runtime", () =>
