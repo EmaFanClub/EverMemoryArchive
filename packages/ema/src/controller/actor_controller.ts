@@ -1,4 +1,9 @@
+import path from "node:path";
+import { rm } from "node:fs/promises";
+
 import { buildSession } from "../channel";
+import { GlobalConfig } from "../config";
+import type { ActorEntity } from "../db";
 import type { Server } from "../server";
 import type { ActorDetails, CreateActorInput } from "./types";
 import {
@@ -105,6 +110,42 @@ export class ActorController {
     return actors.filter((actor): actor is ActorDetails => Boolean(actor));
   }
 
+  async delete(
+    actorId: number,
+  ): Promise<{ actorId: number; deletedAt: number }> {
+    const actor = await this.server.dbService.actorDB.getActor(actorId);
+    if (!actor || typeof actor.id !== "number") {
+      throw new Error("Actor not found.");
+    }
+    if (actor.trainingStatus === "running") {
+      throw new Error("Actor is training.");
+    }
+
+    const runtime = await this.server.controller.runtime.getSnapshot(actorId);
+    if (runtime.transition !== null) {
+      throw new Error("Actor is transitioning.");
+    }
+
+    const deletedAt = Date.now();
+    const deleted = await this.server.dbService.actorDB.deleteActor(actorId);
+    if (!deleted) {
+      throw new Error("Actor not found.");
+    }
+
+    this.server.bus.publish(
+      this.server.bus.createEvent({
+        type: "actor.deleted",
+        actorId,
+        data: { actorId },
+      }),
+    );
+
+    void this.cleanupDeletedActor(actor as ActorEntity & { id: number }).catch(
+      () => undefined,
+    );
+    return { actorId, deletedAt };
+  }
+
   async publishUpdated(actorId: number): Promise<void> {
     const details = await this.get(actorId);
     if (!details) {
@@ -117,6 +158,150 @@ export class ActorController {
         data: details,
       }),
     );
+  }
+
+  private async cleanupDeletedActor(
+    actor: ActorEntity & { id: number },
+  ): Promise<void> {
+    const actorId = actor.id;
+    await Promise.all([
+      this.ignoreCleanupError(() => this.removeActorRuntime(actorId)),
+      this.ignoreCleanupError(() => this.removeActorSchedulerJobs(actorId)),
+      this.ignoreCleanupError(() => this.removeActorOwnerships(actorId)),
+      this.ignoreCleanupError(() => this.removeActorMessages(actorId)),
+      this.ignoreCleanupError(() => this.removeActorConversations(actorId)),
+      this.ignoreCleanupError(() => this.removeActorShortTermMemories(actorId)),
+      this.ignoreCleanupError(() => this.removeActorLongTermMemories(actorId)),
+      this.ignoreCleanupError(() =>
+        this.server.dbService.personalityDB.deletePersonality(actorId),
+      ),
+      this.ignoreCleanupError(() => this.removeActorRoleIfUnused(actor)),
+      this.ignoreCleanupError(() =>
+        rm(
+          path.join(GlobalConfig.system.logsDir, "actors", `actor_${actorId}`),
+          {
+            recursive: true,
+            force: true,
+          },
+        ),
+      ),
+    ]);
+  }
+
+  private async ignoreCleanupError(
+    cleanup: () => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      await cleanup();
+    } catch {
+      // Actor deletion cleanup is best-effort; residual checks can handle leftovers.
+    }
+  }
+
+  private async removeActorRuntime(actorId: number): Promise<void> {
+    await this.server.actorRegistry.unload(actorId);
+    await this.server.gateway.channelRegistry.removeActorChannels(actorId);
+  }
+
+  private async removeActorSchedulerJobs(actorId: number): Promise<void> {
+    const jobs = await this.server.scheduler.listJobs({
+      "data.actorId": actorId,
+    });
+    await Promise.allSettled(
+      jobs.map((job) => {
+        const id = job.attrs._id?.toString();
+        return id ? this.server.scheduler.cancel(id) : Promise.resolve(false);
+      }),
+    );
+  }
+
+  private async removeActorOwnerships(actorId: number): Promise<void> {
+    const relations =
+      await this.server.dbService.userOwnActorDB.listUserOwnActorRelations({
+        actorId,
+      });
+    await Promise.allSettled(
+      relations.map((relation) =>
+        this.server.dbService.userOwnActorDB.removeActorFromUser(relation),
+      ),
+    );
+  }
+
+  private async removeActorMessages(actorId: number): Promise<void> {
+    const messages =
+      await this.server.dbService.conversationMessageDB.listConversationMessages(
+        {
+          actorId,
+        },
+      );
+    await Promise.allSettled(
+      messages
+        .filter((message) => typeof message.id === "number")
+        .map((message) =>
+          this.server.dbService.conversationMessageDB.deleteConversationMessage(
+            message.id as number,
+          ),
+        ),
+    );
+  }
+
+  private async removeActorConversations(actorId: number): Promise<void> {
+    const conversations =
+      await this.server.dbService.conversationDB.listConversations({ actorId });
+    await Promise.allSettled(
+      conversations
+        .filter((conversation) => typeof conversation.id === "number")
+        .map((conversation) =>
+          this.server.dbService.conversationDB.deleteConversation(
+            conversation.id as number,
+          ),
+        ),
+    );
+  }
+
+  private async removeActorShortTermMemories(actorId: number): Promise<void> {
+    const shortTermMemories =
+      await this.server.dbService.shortTermMemoryDB.listShortTermMemories({
+        actorId,
+      });
+    await Promise.allSettled([
+      ...shortTermMemories
+        .filter((memory) => typeof memory.id === "number")
+        .map((memory) =>
+          this.server.dbService.shortTermMemoryDB.deleteShortTermMemory(
+            memory.id as number,
+          ),
+        ),
+    ]);
+  }
+
+  private async removeActorLongTermMemories(actorId: number): Promise<void> {
+    const longTermMemories =
+      await this.server.dbService.longTermMemoryDB.listLongTermMemories({
+        actorId,
+      });
+    await Promise.allSettled([
+      ...longTermMemories
+        .filter((memory) => typeof memory.id === "number")
+        .map((memory) =>
+          this.server.dbService.longTermMemoryDB.deleteLongTermMemory(
+            memory.id as number,
+          ),
+        ),
+    ]);
+  }
+
+  private async removeActorRoleIfUnused(
+    actor: ActorEntity & { id: number },
+  ): Promise<void> {
+    const activeActors = await this.server.dbService.actorDB.listActors();
+    const isRoleUsed = activeActors.some(
+      (activeActor) =>
+        activeActor.id !== actor.id && activeActor.roleId === actor.roleId,
+    );
+    if (!isRoleUsed) {
+      await this.server.dbService.roleDB.deleteRole(actor.roleId);
+    }
   }
 
   private async getLatestPreview(actorId: number, session?: string) {

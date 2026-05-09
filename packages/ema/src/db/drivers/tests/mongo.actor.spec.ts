@@ -142,6 +142,15 @@ describe("MongoActorDB with in-memory MongoDB", () => {
 
     const retrievedActor = await db.getActor(1);
     expect(retrievedActor).toBeNull();
+    const deletedActor = await db.getActor(1, { includeDeleted: true });
+    expect(deletedActor).toEqual(
+      expect.objectContaining({
+        id: 1,
+        roleId: 1,
+        enabled: false,
+      }),
+    );
+    expect(typeof deletedActor?.deletedAt).toBe("number");
   });
 
   test("should return false when deleting non-existent actor", async () => {
@@ -194,6 +203,12 @@ describe("MongoActorDB with in-memory MongoDB", () => {
       ]),
     );
     expect(actors).not.toContainEqual(expect.objectContaining({ id: 2 }));
+
+    const allActors = await db.listActors({ includeDeleted: true });
+    expect(allActors).toHaveLength(3);
+    expect(allActors).toContainEqual(
+      expect.objectContaining({ id: 2, deletedAt: expect.any(Number) }),
+    );
   });
 
   test("should return null when getting non-existent actor", async () => {

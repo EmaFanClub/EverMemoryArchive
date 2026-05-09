@@ -58,8 +58,20 @@ export class CompositeLongTermMemoryDB implements LongTermMemoryDB {
     return id;
   }
 
-  deleteLongTermMemory(id: number): Promise<boolean> {
-    return this.store.deleteLongTermMemory(id);
+  async deleteLongTermMemory(id: number): Promise<boolean> {
+    const deleted = await this.store.deleteLongTermMemory(id);
+    if (!deleted) {
+      return false;
+    }
+    try {
+      await this.vectorIndex.deleteLongTermMemory(id);
+    } catch (error) {
+      this.logger.warn("Failed to delete long term memory vector index row", {
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
   }
 
   async searchLongTermMemories(

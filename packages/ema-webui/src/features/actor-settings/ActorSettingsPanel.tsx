@@ -47,6 +47,7 @@ import styles from "@/app/dashboard/page.module.css";
 import {
   clearActorTraining,
   createActorQqConversation,
+  deleteActor,
   deleteActorQqConversation,
   getActorConversation,
   getActorSettings,
@@ -861,6 +862,7 @@ export function ActorSettingsPanel({
   onStartupTipDismiss,
   onActorRuntimeChange,
   onActorTrainingChange,
+  onActorDeleted,
 }: {
   actor: ActorSummary;
   showStartupTip?: boolean;
@@ -874,6 +876,7 @@ export function ActorSettingsPanel({
     actorId: string,
     training: ActorTrainingUiState | null,
   ) => void;
+  onActorDeleted: (actorId: string) => void;
 }) {
   const actorId = actor.id;
   const actorName = actor.name;
@@ -885,6 +888,11 @@ export function ActorSettingsPanel({
   const [activitySwitching, setActivitySwitching] = useState(false);
   const [activityDisableDialogVisible, setActivityDisableDialogVisible] =
     useState(false);
+  const [actorDeleteDialogVisible, setActorDeleteDialogVisible] =
+    useState(false);
+  const [actorDeleteConfirmationName, setActorDeleteConfirmationName] =
+    useState("");
+  const [actorDeleting, setActorDeleting] = useState(false);
   const [trainingDetailVisible, setTrainingDetailVisible] = useState(false);
   const [trainingStarting, setTrainingStarting] = useState(false);
   const [detailTitle, setDetailTitle] = useState<string | null>(null);
@@ -1077,6 +1085,12 @@ export function ActorSettingsPanel({
   const settingsLocked = trainingRunning;
   const activityTransitioning =
     activitySwitching || activityTransition !== null;
+  const actorDeleteConfirmed =
+    actorDeleteConfirmationName.trim() === actorName.trim();
+  const actorDeleteMenuDisabled =
+    actorDeleting || trainingRunning || activityTransitioning;
+  const actorDeleteConfirmDisabled =
+    actorDeleteMenuDisabled || !actorDeleteConfirmed;
   const activityActionDisabled =
     activityTransitioning || trainingPending || trainingRunning;
   const activityEnabled =
@@ -1420,6 +1434,23 @@ export function ActorSettingsPanel({
     void clearActorTraining(actorId).catch(() => {
       // The local completed card is already dismissed; server cleanup is best-effort.
     });
+  }
+
+  async function handleDeleteActor() {
+    if (actorDeleteConfirmDisabled) {
+      return;
+    }
+    setActorDeleting(true);
+    try {
+      await deleteActor(actorId);
+      setActorDeleteDialogVisible(false);
+      setActorDeleteConfirmationName("");
+      onActorDeleted(actorId);
+    } catch {
+      showSettingsToast("删除失败", "error");
+    } finally {
+      setActorDeleting(false);
+    }
   }
 
   function closeDetail() {
@@ -2202,6 +2233,52 @@ export function ActorSettingsPanel({
                 </div>
               </div>
             ) : null}
+
+            {actorDeleteDialogVisible ? (
+              <div className={styles.llmUnsavedOverlay} role="alertdialog">
+                <div className={styles.llmUnsavedDialog}>
+                  <h4>删除角色？</h4>
+                  <p>删除操作不可逆，请输入角色名以确认删除。</p>
+                  <label
+                    className={styles.llmSettingsField}
+                    aria-label="角色名"
+                  >
+                    <input
+                      type="text"
+                      placeholder={actorName}
+                      value={actorDeleteConfirmationName}
+                      disabled={actorDeleting}
+                      autoComplete="off"
+                      onChange={(event) =>
+                        setActorDeleteConfirmationName(event.target.value)
+                      }
+                    />
+                  </label>
+                  <div className={styles.llmUnsavedActions}>
+                    <button
+                      type="button"
+                      disabled={actorDeleting}
+                      onClick={() => {
+                        setActorDeleteDialogVisible(false);
+                        setActorDeleteConfirmationName("");
+                      }}
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.llmUnsavedDangerButton}
+                      disabled={actorDeleteConfirmDisabled}
+                      onClick={() => {
+                        void handleDeleteActor();
+                      }}
+                    >
+                      {actorDeleting ? "删除中" : "删除"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           {menuSections.map((section) => (
@@ -2228,7 +2305,11 @@ export function ActorSettingsPanel({
                         ? styles.actorSettingsMenuButton
                         : ""
                     }`}
-                    disabled={settingsLocked}
+                    disabled={
+                      item.label === "删除角色"
+                        ? actorDeleteMenuDisabled
+                        : settingsLocked
+                    }
                     onClick={() => {
                       if (item.type === "menu") {
                         openDetail(item.label);
@@ -2236,7 +2317,8 @@ export function ActorSettingsPanel({
                       }
 
                       if (item.label === "删除角色") {
-                        showSettingsToast("暂不支持", "error");
+                        setActorDeleteConfirmationName("");
+                        setActorDeleteDialogVisible(true);
                       }
                     }}
                   >

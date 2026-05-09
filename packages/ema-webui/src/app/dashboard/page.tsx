@@ -399,6 +399,40 @@ function DashboardContent() {
     [],
   );
 
+  const removeActorFromDashboard = useCallback(
+    (actorId: string) => {
+      const existingTimer = actorLatestPreviewTimersRef.current.get(actorId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        actorLatestPreviewTimersRef.current.delete(actorId);
+      }
+      setOverview((current) => ({
+        ...current,
+        actors: current.actors.filter((actor) => actor.id !== actorId),
+      }));
+      setActorTrainingById((current) => {
+        const next = { ...current };
+        delete next[actorId];
+        return next;
+      });
+      setActorLatestById((current) => {
+        const next = { ...current };
+        delete next[actorId];
+        return next;
+      });
+      setActorUnreadById((current) => {
+        const next = { ...current };
+        delete next[actorId];
+        return next;
+      });
+      setStartupTipActorId((current) => (current === actorId ? null : current));
+      if (activeActorId === actorId) {
+        router.replace("/dashboard", { scroll: false });
+      }
+    },
+    [activeActorId, router],
+  );
+
   useEffect(() => {
     if (firstDashboardEntryRef.current === null) {
       firstDashboardEntryRef.current =
@@ -605,6 +639,11 @@ function DashboardContent() {
         return;
       }
 
+      if (event.type === "actor.deleted") {
+        removeActorFromDashboard(event.data.actorId);
+        return;
+      }
+
       if (event.type === "actor.runtime.changed" && event.actorId) {
         updateActorRuntimeState(
           event.actorId,
@@ -630,7 +669,12 @@ function DashboardContent() {
     });
 
     return () => subscription.close();
-  }, [activeActorId, updateActorLatestPreview, updateActorRuntimeState]);
+  }, [
+    activeActorId,
+    removeActorFromDashboard,
+    updateActorLatestPreview,
+    updateActorRuntimeState,
+  ]);
 
   function getDashboardContentWidth() {
     const shell = dashboardShellRef.current;
@@ -1084,6 +1128,7 @@ function DashboardContent() {
                       return next;
                     });
                   }}
+                  onActorDeleted={removeActorFromDashboard}
                 />
               )}
             />

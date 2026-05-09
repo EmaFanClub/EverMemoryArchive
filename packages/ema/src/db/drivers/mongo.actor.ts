@@ -1,6 +1,6 @@
 import type { ActorDB, ActorEntity } from "../base";
 import type { Mongo } from "../mongo";
-import { upsertEntity, deleteEntity, omitMongoId } from "../mongo/utils";
+import { upsertEntity, omitMongoId } from "../mongo/utils";
 
 /**
  * MongoDB-based implementation of ActorDB
@@ -27,11 +27,13 @@ export class MongoActorDB implements ActorDB {
    * Lists all actors in the database
    * @returns Promise resolving to an array of actor data
    */
-  async listActors(): Promise<ActorEntity[]> {
+  async listActors(
+    options: { includeDeleted?: boolean } = {},
+  ): Promise<ActorEntity[]> {
     const db = this.mongo.getDb();
     const collection = db.collection<ActorEntity>(this.$cn);
 
-    return (await collection.find().toArray())
+    return (await collection.find(actorVisibilityFilter(options)).toArray())
       .map(omitMongoId)
       .map(normalizeActorEntity);
   }
@@ -41,11 +43,17 @@ export class MongoActorDB implements ActorDB {
    * @param id - The unique identifier for the actor
    * @returns Promise resolving to the actor data or null if not found
    */
-  async getActor(id: number): Promise<ActorEntity | null> {
+  async getActor(
+    id: number,
+    options: { includeDeleted?: boolean } = {},
+  ): Promise<ActorEntity | null> {
     const db = this.mongo.getDb();
     const collection = db.collection<ActorEntity>(this.$cn);
 
-    const actor = await collection.findOne({ id });
+    const actor = await collection.findOne({
+      id,
+      ...actorVisibilityFilter(options),
+    });
 
     if (!actor) {
       return null;
@@ -83,12 +91,28 @@ export class MongoActorDB implements ActorDB {
   }
 
   /**
-   * Deletes an actor from the database
+   * Marks an actor as deleted
    * @param id - The unique identifier for the actor to delete
    * @returns Promise resolving to true if deleted, false if not found
    */
   async deleteActor(id: number): Promise<boolean> {
-    return deleteEntity(this.mongo, this.$cn, id);
+    const db = this.mongo.getDb();
+    const collection = db.collection<ActorEntity>(this.$cn);
+    const now = Date.now();
+    const result = await collection.updateOne(
+      {
+        id,
+        ...actorVisibilityFilter(),
+      },
+      {
+        $set: {
+          deletedAt: now,
+          enabled: false,
+          updatedAt: now,
+        },
+      },
+    );
+    return result.matchedCount > 0;
   }
 
   /**
@@ -100,6 +124,14 @@ export class MongoActorDB implements ActorDB {
     const collection = db.collection<ActorEntity>(this.$cn);
     await collection.createIndex({ id: 1 }, { unique: true });
   }
+}
+
+function actorVisibilityFilter(options: { includeDeleted?: boolean } = {}) {
+  return options.includeDeleted
+    ? {}
+    : {
+        deletedAt: { $exists: false },
+      };
 }
 
 function normalizeActorEntity(entity: ActorEntity): ActorEntity {

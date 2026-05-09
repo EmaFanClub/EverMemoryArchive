@@ -211,9 +211,20 @@ export interface ActorEntity extends Entity {
    */
   trainingUpdatedAt?: DbDate;
   /**
+   * The date and time the actor was marked as deleted.
+   */
+  deletedAt?: DbDate;
+  /**
    * The date and time the actor was last updated
    */
   updatedAt?: DbDate;
+}
+
+export interface ActorReadOptions {
+  /**
+   * Include actors marked as deleted.
+   */
+  includeDeleted?: boolean;
 }
 
 /**
@@ -224,14 +235,14 @@ export interface ActorDB {
    * lists actors in the database
    * @returns Promise resolving to an array of actor data
    */
-  listActors(): Promise<ActorEntity[]>;
+  listActors(options?: ActorReadOptions): Promise<ActorEntity[]>;
 
   /**
    * gets an actor by id
    * @param id - The unique identifier for the actor
    * @returns Promise resolving to the actor data or null if not found
    */
-  getActor(id: number): Promise<ActorEntity | null>;
+  getActor(id: number, options?: ActorReadOptions): Promise<ActorEntity | null>;
 
   /**
    * inserts or updates an actor in the database
@@ -248,7 +259,7 @@ export interface ActorDB {
   clearActorLlmConfig(id: number): Promise<boolean>;
 
   /**
-   * deletes an actor from the database
+   * marks an actor as deleted
    * @param id - The unique identifier for the actor to delete
    * @returns Promise resolving to true if deleted, false if not found
    */

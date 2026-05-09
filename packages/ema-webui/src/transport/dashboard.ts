@@ -4,6 +4,7 @@ import type {
   ActorConversationPatchRequest,
   ActorConversationResponse,
   ActorConversationSaveRequest,
+  ActorDeleteResponse,
   CreateActorRequest,
   CreateActorResponse,
   ActorLlmCheckResponse,
@@ -97,6 +98,15 @@ export function createActor(request: CreateActorRequest) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
+}
+
+export function deleteActor(actorId: string) {
+  return fetchJson<ActorDeleteResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function getActorSettings(actorId: string) {

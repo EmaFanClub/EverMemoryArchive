@@ -4229,6 +4229,15 @@
   transform: translateY(-1px);
 }
 
+.llmUnsavedActions button:disabled,
+.llmUnsavedActions button:disabled:hover {
+  background: color-mix(in srgb, var(--surface-hover) 38%, transparent);
+  color: color-mix(in srgb, var(--text-subtle) 82%, transparent);
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
 .llmUnsavedActions button:active {
   transform: translateY(0) scale(0.98);
 }
@@ -4240,6 +4249,12 @@
 .llmUnsavedActions .llmUnsavedDangerButton {
   background: color-mix(in srgb, var(--danger-soft) 56%, var(--surface-hover));
   color: color-mix(in srgb, var(--danger) 88%, var(--text));
+}
+
+.llmUnsavedActions .llmUnsavedDangerButton:disabled,
+.llmUnsavedActions .llmUnsavedDangerButton:disabled:hover {
+  background: color-mix(in srgb, var(--danger-soft) 26%, var(--surface-hover));
+  color: color-mix(in srgb, var(--danger) 42%, var(--text-subtle));
 }
 
 .chatShell {

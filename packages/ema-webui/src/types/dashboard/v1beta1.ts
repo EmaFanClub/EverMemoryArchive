@@ -192,6 +192,12 @@ export interface CreateActorResponse {
   actor: ActorSummary;
 }
 
+export interface ActorDeleteResponse {
+  apiVersion: "v1beta1";
+  ok: boolean;
+  actorId: string;
+}
+
 export interface ActorTrainingStartResponse {
   apiVersion: "v1beta1";
   actor: ActorSummary;

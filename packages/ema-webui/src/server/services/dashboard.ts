@@ -42,6 +42,7 @@ import type {
   ActorConversationPatchRequest,
   ActorConversationResponse,
   ActorConversationSaveRequest,
+  ActorDeleteResponse,
   ActorListResponse,
   ActorLlmCheckRequest,
   ActorLlmCheckResponse,
@@ -872,6 +873,20 @@ export async function createActorService(
   return {
     apiVersion: API_VERSION,
     actor: toActorSummary(details),
+  };
+}
+
+export async function deleteActorService(
+  actorId: string,
+): Promise<ActorDeleteResponse> {
+  const server = await ensureEmaServer();
+  const coreActorId = toCoreActorId(actorId);
+  await server.controller.actor.delete(coreActorId);
+  removeActorTrainingUiState(actorId);
+  return {
+    apiVersion: API_VERSION,
+    ok: true,
+    actorId,
   };
 }
 
