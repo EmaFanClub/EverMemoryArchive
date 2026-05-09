@@ -303,6 +303,24 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
     }
   }
 
+  async deleteLongTermMemoriesByActorId(actorId: number): Promise<void> {
+    if (typeof actorId !== "number") {
+      throw new Error("actorId must be a number");
+    }
+    const tableNames = await this.lancedb.tableNames();
+    await Promise.all(
+      tableNames
+        .filter((tableName) => tableName.startsWith("long_term_memories_"))
+        .map(async (tableName) => {
+          const table =
+            this.active?.tableName === tableName && this.indexTable
+              ? this.indexTable
+              : await this.lancedb.openTable(tableName);
+          await table.delete(`actor_id = ${actorId}`);
+        }),
+    );
+  }
+
   private async hasActiveTableMemory(id: number): Promise<boolean> {
     if (!this.indexTable) {
       return false;

@@ -60,6 +60,9 @@ function createFixture() {
       conversations.delete(conversationId),
     ),
   };
+  const conversationMessageDB = {
+    deleteConversationMessagesByConversationId: vi.fn(async () => 2),
+  };
   const channelRegistry = {
     refreshActorChannels: vi.fn(async () => {}),
     restartActorChannel: vi.fn(async () => {}),
@@ -80,6 +83,7 @@ function createFixture() {
     dbService: {
       actorDB,
       conversationDB,
+      conversationMessageDB,
       getActorChannelConfig: vi.fn(async (actorId: number) => ({
         qq: actors.get(actorId)?.channelConfig?.qq ?? emptyQqConfig,
       })),
@@ -98,6 +102,7 @@ function createFixture() {
     conversations,
     actorDB,
     conversationDB,
+    conversationMessageDB,
     channelRegistry,
     actorController,
     actorRegistry,
@@ -268,6 +273,9 @@ describe("ChannelController", () => {
     await expect(
       fixture.controller.deleteQqConversation(1, created.id),
     ).resolves.toBe(true);
+    expect(
+      fixture.conversationMessageDB.deleteConversationMessagesByConversationId,
+    ).toHaveBeenCalledWith(created.id);
     await expect(
       fixture.controller.deleteQqConversation(1, created.id),
     ).resolves.toBe(false);

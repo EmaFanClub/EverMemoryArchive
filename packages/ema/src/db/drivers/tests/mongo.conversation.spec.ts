@@ -85,6 +85,42 @@ describe("MongoConversationDB with in-memory MongoDB", () => {
     expect(retrievedConversation).toBeNull();
   });
 
+  test("should delete conversations by actorId", async () => {
+    const conv1: ConversationEntity = {
+      name: "Conversation 1",
+      description: "None.",
+      actorId: 1,
+      session: WEB_CHAT_1,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const conv2: ConversationEntity = {
+      name: "Conversation 2",
+      description: "Current messages come from QQ group 123456.",
+      actorId: 1,
+      session: QQ_GROUP_123456,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const conv3: ConversationEntity = {
+      name: "Conversation 3",
+      description: "None.",
+      actorId: 2,
+      session: WEB_CHAT_2,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await db.upsertConversation(conv1);
+    await db.upsertConversation(conv2);
+    await db.upsertConversation(conv3);
+
+    const deleted = await db.deleteConversationsByActorId(1);
+
+    expect(deleted).toBe(2);
+    expect(await db.listConversations({})).toEqual([conv3]);
+  });
+
   test("should return false when deleting non-existent conversation", async () => {
     const deleted = await db.deleteConversation(999);
     expect(deleted).toBe(false);

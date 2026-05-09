@@ -74,6 +74,19 @@ export class CompositeLongTermMemoryDB implements LongTermMemoryDB {
     return true;
   }
 
+  async deleteLongTermMemoriesByActorId(actorId: number): Promise<number> {
+    const deleted = await this.store.deleteLongTermMemoriesByActorId(actorId);
+    try {
+      await this.vectorIndex.deleteLongTermMemoriesByActorId(actorId);
+    } catch (error) {
+      this.logger.warn("Failed to delete actor long term memory vector rows", {
+        actorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return deleted;
+  }
+
   async searchLongTermMemories(
     req: SearchLongTermMemoriesRequest,
   ): Promise<(LongTermMemoryEntity & CreatedField)[]> {

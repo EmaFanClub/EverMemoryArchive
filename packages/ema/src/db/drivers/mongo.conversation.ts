@@ -115,6 +115,16 @@ export class MongoConversationDB implements ConversationDB {
     return deleteEntity(this.mongo, this.$cn, id);
   }
 
+  async deleteConversationsByActorId(actorId: number): Promise<number> {
+    if (typeof actorId !== "number") {
+      throw new Error("actorId must be a number");
+    }
+    const db = this.mongo.getDb();
+    const collection = db.collection<ConversationEntity>(this.$cn);
+    const result = await collection.deleteMany({ actorId });
+    return result.deletedCount;
+  }
+
   /**
    * Creates indices for the conversations collection.
    * @returns Promise resolving when indices are created.

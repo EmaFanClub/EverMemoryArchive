@@ -116,6 +116,79 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     expect(retrievedMessage).toBeNull();
   });
 
+  test("should delete conversation messages by actorId", async () => {
+    const actorMessage = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "actor 1" }],
+      },
+      createdAt: Date.now(),
+    });
+    await db.addConversationMessage({
+      conversationId: 2,
+      actorId: 1,
+      message: {
+        kind: "actor",
+        name: "EMA",
+        contents: [{ type: "text", text: "actor 1 reply" }],
+      },
+      createdAt: Date.now(),
+    });
+    const otherActorMessage = await db.addConversationMessage({
+      conversationId: 3,
+      actorId: 2,
+      message: {
+        kind: "user",
+        uid: "user-2",
+        name: "bob",
+        contents: [{ type: "text", text: "actor 2" }],
+      },
+      createdAt: Date.now(),
+    });
+
+    const deleted = await db.deleteConversationMessagesByActorId(1);
+
+    expect(deleted).toBe(2);
+    expect(await db.getConversationMessage(actorMessage.id)).toBeNull();
+    expect(await db.listConversationMessages({})).toEqual([otherActorMessage]);
+  });
+
+  test("should delete conversation messages by conversationId", async () => {
+    const conversationMessage = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "conversation 1" }],
+      },
+      createdAt: Date.now(),
+    });
+    const otherConversationMessage = await db.addConversationMessage({
+      conversationId: 2,
+      actorId: 1,
+      message: {
+        kind: "actor",
+        name: "EMA",
+        contents: [{ type: "text", text: "conversation 2" }],
+      },
+      createdAt: Date.now(),
+    });
+
+    const deleted = await db.deleteConversationMessagesByConversationId(1);
+
+    expect(deleted).toBe(1);
+    expect(await db.getConversationMessage(conversationMessage.id)).toBeNull();
+    expect(await db.listConversationMessages({})).toEqual([
+      otherConversationMessage,
+    ]);
+  });
+
   test("should update channelMessageId by conversationId and msgId", async () => {
     const stored = await db.addConversationMessage({
       conversationId: 1,

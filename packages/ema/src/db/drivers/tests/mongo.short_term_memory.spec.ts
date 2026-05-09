@@ -159,4 +159,31 @@ describe("MongoShortTermMemoryDB with in-memory MongoDB", () => {
     const memories = await db.listShortTermMemories({});
     expect(memories).toEqual([]);
   });
+
+  test("should delete short-term memories by actorId", async () => {
+    await db.appendShortTermMemory({
+      kind: "day",
+      actorId: 1,
+      date: "2026-04-01",
+      memory: "actor 1 day",
+    });
+    await db.appendShortTermMemory({
+      kind: "activity",
+      actorId: 1,
+      date: "2026-04-01",
+      memory: "actor 1 activity",
+    });
+    await db.appendShortTermMemory({
+      kind: "day",
+      actorId: 2,
+      date: "2026-04-01",
+      memory: "actor 2 day",
+    });
+
+    const deleted = await db.deleteShortTermMemoriesByActorId(1);
+
+    expect(deleted).toBe(2);
+    expect(await db.listShortTermMemories({ actorId: 1 })).toEqual([]);
+    expect(await db.listShortTermMemories({ actorId: 2 })).toHaveLength(1);
+  });
 });

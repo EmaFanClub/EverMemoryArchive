@@ -245,79 +245,33 @@ export class ActorController {
   }
 
   private async removeActorOwnerships(actorId: number): Promise<void> {
-    const relations =
-      await this.server.dbService.userOwnActorDB.listUserOwnActorRelations({
-        actorId,
-      });
-    await Promise.allSettled(
-      relations.map((relation) =>
-        this.server.dbService.userOwnActorDB.removeActorFromUser(relation),
-      ),
+    await this.server.dbService.userOwnActorDB.removeActorRelationsByActorId(
+      actorId,
     );
   }
 
   private async removeActorMessages(actorId: number): Promise<void> {
-    const messages =
-      await this.server.dbService.conversationMessageDB.listConversationMessages(
-        {
-          actorId,
-        },
-      );
-    await Promise.allSettled(
-      messages
-        .filter((message) => typeof message.id === "number")
-        .map((message) =>
-          this.server.dbService.conversationMessageDB.deleteConversationMessage(
-            message.id as number,
-          ),
-        ),
+    await this.server.dbService.conversationMessageDB.deleteConversationMessagesByActorId(
+      actorId,
     );
   }
 
   private async removeActorConversations(actorId: number): Promise<void> {
-    const conversations =
-      await this.server.dbService.conversationDB.listConversations({ actorId });
-    await Promise.allSettled(
-      conversations
-        .filter((conversation) => typeof conversation.id === "number")
-        .map((conversation) =>
-          this.server.dbService.conversationDB.deleteConversation(
-            conversation.id as number,
-          ),
-        ),
+    await this.server.dbService.conversationDB.deleteConversationsByActorId(
+      actorId,
     );
   }
 
   private async removeActorShortTermMemories(actorId: number): Promise<void> {
-    const shortTermMemories =
-      await this.server.dbService.shortTermMemoryDB.listShortTermMemories({
-        actorId,
-      });
-    await Promise.allSettled([
-      ...shortTermMemories
-        .filter((memory) => typeof memory.id === "number")
-        .map((memory) =>
-          this.server.dbService.shortTermMemoryDB.deleteShortTermMemory(
-            memory.id as number,
-          ),
-        ),
-    ]);
+    await this.server.dbService.shortTermMemoryDB.deleteShortTermMemoriesByActorId(
+      actorId,
+    );
   }
 
   private async removeActorLongTermMemories(actorId: number): Promise<void> {
-    const longTermMemories =
-      await this.server.dbService.longTermMemoryDB.listLongTermMemories({
-        actorId,
-      });
-    await Promise.allSettled([
-      ...longTermMemories
-        .filter((memory) => typeof memory.id === "number")
-        .map((memory) =>
-          this.server.dbService.longTermMemoryDB.deleteLongTermMemory(
-            memory.id as number,
-          ),
-        ),
-    ]);
+    await this.server.dbService.longTermMemoryDB.deleteLongTermMemoriesByActorId(
+      actorId,
+    );
   }
 
   private async removeActorRoleIfUnused(

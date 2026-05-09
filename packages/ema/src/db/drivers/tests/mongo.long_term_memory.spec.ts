@@ -57,6 +57,40 @@ describe("MongoLongTermMemoryDB with in-memory MongoDB", () => {
     expect(memories).toEqual([]);
   });
 
+  test("should delete long term memories by actorId", async () => {
+    const mem1: LongTermMemoryEntity = {
+      actorId: 1,
+      index0: "category1",
+      index1: "subcategory1",
+      memory: "Test statement 1",
+      messages: [1],
+    };
+    const mem2: LongTermMemoryEntity = {
+      actorId: 1,
+      index0: "category2",
+      index1: "subcategory2",
+      memory: "Test statement 2",
+      messages: [2],
+    };
+    const mem3: LongTermMemoryEntity = {
+      actorId: 2,
+      index0: "category1",
+      index1: "subcategory1",
+      memory: "Test statement 3",
+      messages: [3],
+    };
+
+    await db.appendLongTermMemory(mem1);
+    await db.appendLongTermMemory(mem2);
+    await db.appendLongTermMemory(mem3);
+
+    const deleted = await db.deleteLongTermMemoriesByActorId(1);
+
+    expect(deleted).toBe(2);
+    expect(await db.listLongTermMemories({ actorId: 1 })).toEqual([]);
+    expect(await db.listLongTermMemories({ actorId: 2 })).toEqual([mem3]);
+  });
+
   test("should return false when deleting non-existent memory", async () => {
     const deleted = await db.deleteLongTermMemory(999);
     expect(deleted).toBe(false);

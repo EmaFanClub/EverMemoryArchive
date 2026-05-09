@@ -65,6 +65,18 @@ describe("MongoUserOwnActorDB with in-memory MongoDB", () => {
     expect(relations).toEqual([]);
   });
 
+  test("should remove all user relations for an actor", async () => {
+    await db.addActorToUser({ userId: 1, actorId: 1 });
+    await db.addActorToUser({ userId: 2, actorId: 2 });
+
+    const removed = await db.removeActorRelationsByActorId(1);
+
+    expect(removed).toBe(1);
+    expect(await db.listUserOwnActorRelations({})).toEqual([
+      { userId: 2, actorId: 2 },
+    ]);
+  });
+
   test("should return false when removing non-existent relation", async () => {
     const relation: UserOwnActorRelation = {
       userId: 1,

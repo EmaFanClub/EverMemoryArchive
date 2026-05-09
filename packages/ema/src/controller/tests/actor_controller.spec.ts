@@ -28,6 +28,7 @@ function createFixture() {
           { userId: 1, actorId: 1 },
         ]),
         removeActorFromUser: vi.fn(async () => true),
+        removeActorRelationsByActorId: vi.fn(async () => 1),
       },
       actorDB: {
         getActor: vi.fn(async () => ({ id: 1, roleId: 1, enabled: true })),
@@ -57,6 +58,7 @@ function createFixture() {
         ),
         listConversations: vi.fn(async () => []),
         deleteConversation: vi.fn(async () => true),
+        deleteConversationsByActorId: vi.fn(async () => 1),
       },
       conversationMessageDB: {
         listConversationMessages: vi.fn(async ({ conversationId }) =>
@@ -80,14 +82,17 @@ function createFixture() {
             : [],
         ),
         deleteConversationMessage: vi.fn(async () => true),
+        deleteConversationMessagesByActorId: vi.fn(async () => 1),
       },
       shortTermMemoryDB: {
         listShortTermMemories: vi.fn(async () => []),
         deleteShortTermMemory: vi.fn(async () => true),
+        deleteShortTermMemoriesByActorId: vi.fn(async () => 1),
       },
       longTermMemoryDB: {
         listLongTermMemories: vi.fn(async () => []),
         deleteLongTermMemory: vi.fn(async () => true),
+        deleteLongTermMemoriesByActorId: vi.fn(async () => 1),
       },
     },
     bus: {
@@ -195,30 +200,59 @@ describe("ActorController", () => {
     });
   });
 
-  test("continues deleting long-term memories when short-term memory listing fails", async () => {
+  test("continues deleting long-term memories when short-term cleanup fails", async () => {
     const { controller, server } = createFixture();
-    server.dbService.shortTermMemoryDB.listShortTermMemories.mockRejectedValueOnce(
-      new Error("short-term list failed"),
-    );
-    server.dbService.longTermMemoryDB.listLongTermMemories.mockResolvedValueOnce(
-      [
-        {
-          id: 201,
-          actorId: 1,
-          index0: "对话",
-          index1: "事实",
-          memory: "memory",
-        },
-      ],
+    server.dbService.shortTermMemoryDB.deleteShortTermMemoriesByActorId.mockRejectedValueOnce(
+      new Error("short-term cleanup failed"),
     );
 
     await controller.delete(1);
 
     await vi.waitFor(() => {
       expect(
-        server.dbService.longTermMemoryDB.deleteLongTermMemory,
-      ).toHaveBeenCalledWith(201);
+        server.dbService.longTermMemoryDB.deleteLongTermMemoriesByActorId,
+      ).toHaveBeenCalledWith(1);
     });
+  });
+
+  test("uses actor-scoped bulk cleanup without loading actor-owned rows", async () => {
+    const { controller, server } = createFixture();
+
+    await controller.delete(1);
+
+    await vi.waitFor(() => {
+      expect(
+        server.dbService.userOwnActorDB.removeActorRelationsByActorId,
+      ).toHaveBeenCalledWith(1);
+      expect(
+        server.dbService.conversationMessageDB
+          .deleteConversationMessagesByActorId,
+      ).toHaveBeenCalledWith(1);
+      expect(
+        server.dbService.conversationDB.deleteConversationsByActorId,
+      ).toHaveBeenCalledWith(1);
+      expect(
+        server.dbService.shortTermMemoryDB.deleteShortTermMemoriesByActorId,
+      ).toHaveBeenCalledWith(1);
+      expect(
+        server.dbService.longTermMemoryDB.deleteLongTermMemoriesByActorId,
+      ).toHaveBeenCalledWith(1);
+    });
+    expect(
+      server.dbService.userOwnActorDB.listUserOwnActorRelations,
+    ).not.toHaveBeenCalled();
+    expect(
+      server.dbService.conversationMessageDB.listConversationMessages,
+    ).not.toHaveBeenCalled();
+    expect(
+      server.dbService.conversationDB.listConversations,
+    ).not.toHaveBeenCalled();
+    expect(
+      server.dbService.shortTermMemoryDB.listShortTermMemories,
+    ).not.toHaveBeenCalled();
+    expect(
+      server.dbService.longTermMemoryDB.listLongTermMemories,
+    ).not.toHaveBeenCalled();
   });
 
   test("logs cleanup step failures without blocking actor deletion", async () => {

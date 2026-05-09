@@ -252,6 +252,34 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
     });
   });
 
+  test("deletes long term memory vector rows by actorId", async () => {
+    const mem11 = memory11();
+    const mem12 = memory12();
+    const mem21 = memory21();
+    for (const mem of [mem11, mem12, mem21]) {
+      mem.createdAt = Date.now();
+      mem.id = await db.appendLongTermMemory(mem);
+      await searcher.indexLongTermMemory(mem);
+    }
+
+    await searcher.deleteLongTermMemoriesByActorId(1);
+
+    await expect(
+      searcher.searchLongTermMemories({
+        actorId: 1,
+        memory: "Test statement",
+        limit: 10,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      searcher.searchLongTermMemories({
+        actorId: 2,
+        memory: "Test statement 3",
+        limit: 10,
+      }),
+    ).resolves.toContainEqual(mem21);
+  });
+
   test("marks vector index degraded when indexing partially fails", async () => {
     const partialSearcher = new LanceMemoryVectorIndex(
       mongo,

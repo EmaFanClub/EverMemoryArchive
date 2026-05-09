@@ -161,6 +161,9 @@ export class ChannelController {
     if (session?.channel !== "qq") {
       return false;
     }
+    await this.server.dbService.conversationMessageDB.deleteConversationMessagesByConversationId(
+      conversationId,
+    );
     return await this.server.dbService.conversationDB.deleteConversation(
       conversationId,
     );

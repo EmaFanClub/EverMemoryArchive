@@ -114,6 +114,16 @@ export class MongoShortTermMemoryDB implements ShortTermMemoryDB {
     return deleteEntity(this.mongo, this.$cn, id);
   }
 
+  async deleteShortTermMemoriesByActorId(actorId: number): Promise<number> {
+    if (typeof actorId !== "number") {
+      throw new Error("actorId must be a number");
+    }
+    const db = this.mongo.getDb();
+    const collection = db.collection<ShortTermMemoryEntity>(this.$cn);
+    const result = await collection.deleteMany({ actorId });
+    return result.deletedCount;
+  }
+
   /**
    * Creates indices for the short-term memories collection.
    * @returns Promise resolving when indices are created.
