@@ -15,7 +15,10 @@ import {
 export class ActorController {
   private readonly logger = Logger.create({
     name: "actor_controller",
-    outputs: [{ type: "file", level: "debug" }],
+    outputs: [
+      { type: "file", level: "debug" },
+      { type: "console", level: "warn" },
+    ],
   });
 
   constructor(private readonly server: Server) {}
