@@ -220,6 +220,38 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
     });
   });
 
+  test("deletes a long term memory vector row by id", async () => {
+    const mem11 = memory11();
+    mem11.createdAt = Date.now();
+    mem11.id = await db.appendLongTermMemory(mem11);
+    await searcher.indexLongTermMemory(mem11);
+
+    await searcher.deleteLongTermMemory(mem11.id);
+
+    await expect(
+      searcher.searchLongTermMemories({
+        actorId: 1,
+        memory: "Test statement",
+        limit: 10,
+      }),
+    ).resolves.not.toContainEqual(mem11);
+  });
+
+  test("does not change vector index counters when deleting a missing id", async () => {
+    const mem11 = memory11();
+    mem11.createdAt = Date.now();
+    mem11.id = await db.appendLongTermMemory(mem11);
+    await searcher.indexLongTermMemory(mem11);
+
+    await searcher.deleteLongTermMemory(999);
+
+    expect(searcher.getVectorIndexStatus()).toMatchObject({
+      state: "ready",
+      totalMemories: 1,
+      indexedMemories: 1,
+    });
+  });
+
   test("marks vector index degraded when indexing partially fails", async () => {
     const partialSearcher = new LanceMemoryVectorIndex(
       mongo,

@@ -278,6 +278,7 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
   }
 
   async deleteLongTermMemory(id: number): Promise<void> {
+    const deletedFromActiveTable = await this.hasActiveTableMemory(id);
     const tableNames = await this.lancedb.tableNames();
     await Promise.all(
       tableNames
@@ -290,7 +291,7 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
           await table.delete(`id = ${id}`);
         }),
     );
-    if (this.status.totalMemories !== undefined) {
+    if (deletedFromActiveTable && this.status.totalMemories !== undefined) {
       this.status = {
         ...this.status,
         totalMemories: Math.max(0, this.status.totalMemories - 1),
@@ -300,6 +301,19 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
             : this.status.indexedMemories,
       };
     }
+  }
+
+  private async hasActiveTableMemory(id: number): Promise<boolean> {
+    if (!this.indexTable) {
+      return false;
+    }
+    const rows = (await this.indexTable
+      .query()
+      .where(`id = ${id}`)
+      .select(["id"])
+      .limit(1)
+      .toArray()) as Array<{ id: number | bigint }>;
+    return rows.length > 0;
   }
 
   private async openOrCreateTable(

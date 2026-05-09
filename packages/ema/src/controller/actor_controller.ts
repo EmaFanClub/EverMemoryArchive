@@ -5,6 +5,7 @@ import { buildSession } from "../channel";
 import { GlobalConfig } from "../config";
 import type { ActorEntity } from "../db";
 import type { Server } from "../server";
+import { Logger } from "../shared/logger";
 import type { ActorDetails, CreateActorInput } from "./types";
 import {
   defaultWebConversationName,
@@ -12,6 +13,11 @@ import {
 } from "./chat_controller";
 
 export class ActorController {
+  private readonly logger = Logger.create({
+    name: "actor_controller",
+    outputs: [{ type: "file", level: "debug" }],
+  });
+
   constructor(private readonly server: Server) {}
 
   async create(input: CreateActorInput): Promise<ActorDetails> {
@@ -165,18 +171,34 @@ export class ActorController {
   ): Promise<void> {
     const actorId = actor.id;
     await Promise.all([
-      this.ignoreCleanupError(() => this.removeActorRuntime(actorId)),
-      this.ignoreCleanupError(() => this.removeActorSchedulerJobs(actorId)),
-      this.ignoreCleanupError(() => this.removeActorOwnerships(actorId)),
-      this.ignoreCleanupError(() => this.removeActorMessages(actorId)),
-      this.ignoreCleanupError(() => this.removeActorConversations(actorId)),
-      this.ignoreCleanupError(() => this.removeActorShortTermMemories(actorId)),
-      this.ignoreCleanupError(() => this.removeActorLongTermMemories(actorId)),
-      this.ignoreCleanupError(() =>
+      this.ignoreCleanupError(actorId, "runtime", () =>
+        this.removeActorRuntime(actorId),
+      ),
+      this.ignoreCleanupError(actorId, "scheduler_jobs", () =>
+        this.removeActorSchedulerJobs(actorId),
+      ),
+      this.ignoreCleanupError(actorId, "ownerships", () =>
+        this.removeActorOwnerships(actorId),
+      ),
+      this.ignoreCleanupError(actorId, "messages", () =>
+        this.removeActorMessages(actorId),
+      ),
+      this.ignoreCleanupError(actorId, "conversations", () =>
+        this.removeActorConversations(actorId),
+      ),
+      this.ignoreCleanupError(actorId, "short_term_memories", () =>
+        this.removeActorShortTermMemories(actorId),
+      ),
+      this.ignoreCleanupError(actorId, "long_term_memories", () =>
+        this.removeActorLongTermMemories(actorId),
+      ),
+      this.ignoreCleanupError(actorId, "personality", () =>
         this.server.dbService.personalityDB.deletePersonality(actorId),
       ),
-      this.ignoreCleanupError(() => this.removeActorRoleIfUnused(actor)),
-      this.ignoreCleanupError(() =>
+      this.ignoreCleanupError(actorId, "role", () =>
+        this.removeActorRoleIfUnused(actor),
+      ),
+      this.ignoreCleanupError(actorId, "logs", () =>
         rm(
           path.join(GlobalConfig.system.logsDir, "actors", `actor_${actorId}`),
           {
@@ -189,12 +211,19 @@ export class ActorController {
   }
 
   private async ignoreCleanupError(
+    actorId: number,
+    step: string,
     cleanup: () => Promise<unknown>,
   ): Promise<void> {
     try {
       await cleanup();
-    } catch {
+    } catch (error) {
       // Actor deletion cleanup is best-effort; residual checks can handle leftovers.
+      this.logger.warn("Actor deletion cleanup step failed", {
+        actorId,
+        step,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

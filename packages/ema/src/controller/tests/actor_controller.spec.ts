@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
+import { Logger } from "../../shared/logger";
 import { ActorController } from "../actor_controller";
 
 function createFixture() {
@@ -218,6 +219,27 @@ describe("ActorController", () => {
         server.dbService.longTermMemoryDB.deleteLongTermMemory,
       ).toHaveBeenCalledWith(201);
     });
+  });
+
+  test("logs cleanup step failures without blocking actor deletion", async () => {
+    const warn = vi
+      .spyOn(Logger.prototype, "warn")
+      .mockImplementation(() => {});
+    const { controller, server } = createFixture();
+    server.dbService.personalityDB.deletePersonality.mockRejectedValueOnce(
+      new Error("personality cleanup failed"),
+    );
+
+    await controller.delete(1);
+
+    await vi.waitFor(() => {
+      expect(warn).toHaveBeenCalledWith("Actor deletion cleanup step failed", {
+        actorId: 1,
+        step: "personality",
+        error: "personality cleanup failed",
+      });
+    });
+    warn.mockRestore();
   });
 
   test("rejects actor deletion while training is running", async () => {

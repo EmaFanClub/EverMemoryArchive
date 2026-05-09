@@ -13,7 +13,7 @@ export async function DELETE(
     return Response.json(result, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const status = message.includes("not found") ? 404 : 400;
+    const status = actorDeleteErrorStatus(message);
     return Response.json(
       {
         message: message || "Failed to delete actor.",
@@ -21,4 +21,20 @@ export async function DELETE(
       { status },
     );
   }
+}
+
+export function actorDeleteErrorStatus(message: string): number {
+  if (message.startsWith("Invalid actor id:")) {
+    return 400;
+  }
+  if (message.includes("not found")) {
+    return 404;
+  }
+  if (
+    message === "Actor is training." ||
+    message === "Actor is transitioning."
+  ) {
+    return 409;
+  }
+  return 500;
 }
