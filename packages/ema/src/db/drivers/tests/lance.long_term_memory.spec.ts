@@ -278,6 +278,11 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
         limit: 10,
       }),
     ).resolves.toContainEqual(mem21);
+    expect(searcher.getVectorIndexStatus()).toMatchObject({
+      state: "ready",
+      totalMemories: 1,
+      indexedMemories: 1,
+    });
   });
 
   test("marks vector index degraded when indexing partially fails", async () => {

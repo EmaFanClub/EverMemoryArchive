@@ -200,6 +200,42 @@ describe("ActorController", () => {
     });
   });
 
+  test("publishes deletion after runtime channels and scheduler jobs are cleaned", async () => {
+    const order: string[] = [];
+    const { controller, server } = createFixture();
+    server.actorRegistry.unload.mockImplementation(async () => {
+      order.push("runtime");
+    });
+    server.gateway.channelRegistry.removeActorChannels.mockImplementation(
+      async () => {
+        order.push("channels");
+      },
+    );
+    server.scheduler.listJobs.mockImplementation(async () => [
+      {
+        attrs: {
+          _id: { toString: () => "actor-job" },
+          data: { actorId: 1, task: "chat", prompt: "" },
+        },
+      },
+    ]);
+    server.scheduler.cancel.mockImplementation(async () => {
+      order.push("scheduler");
+      return true;
+    });
+    server.bus.publish.mockImplementation(() => {
+      order.push("publish");
+    });
+
+    await controller.delete(1);
+
+    expect(order.indexOf("publish")).toBeGreaterThan(order.indexOf("runtime"));
+    expect(order.indexOf("publish")).toBeGreaterThan(order.indexOf("channels"));
+    expect(order.indexOf("publish")).toBeGreaterThan(
+      order.indexOf("scheduler"),
+    );
+  });
+
   test("continues deleting long-term memories when short-term cleanup fails", async () => {
     const { controller, server } = createFixture();
     server.dbService.shortTermMemoryDB.deleteShortTermMemoriesByActorId.mockRejectedValueOnce(

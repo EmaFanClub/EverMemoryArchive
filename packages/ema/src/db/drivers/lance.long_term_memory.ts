@@ -307,6 +307,8 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
     if (typeof actorId !== "number") {
       throw new Error("actorId must be a number");
     }
+    const deletedFromActiveTable =
+      await this.countActiveTableActorMemories(actorId);
     const tableNames = await this.lancedb.tableNames();
     await Promise.all(
       tableNames
@@ -319,6 +321,19 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
           await table.delete(`actor_id = ${actorId}`);
         }),
     );
+    if (deletedFromActiveTable > 0 && this.status.totalMemories !== undefined) {
+      this.status = {
+        ...this.status,
+        totalMemories: Math.max(
+          0,
+          this.status.totalMemories - deletedFromActiveTable,
+        ),
+        indexedMemories:
+          this.status.indexedMemories !== undefined
+            ? Math.max(0, this.status.indexedMemories - deletedFromActiveTable)
+            : this.status.indexedMemories,
+      };
+    }
   }
 
   private async hasActiveTableMemory(id: number): Promise<boolean> {
@@ -332,6 +347,15 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
       .limit(1)
       .toArray()) as Array<{ id: number | bigint }>;
     return rows.length > 0;
+  }
+
+  private async countActiveTableActorMemories(
+    actorId: number,
+  ): Promise<number> {
+    if (!this.indexTable) {
+      return 0;
+    }
+    return await this.indexTable.countRows(`actor_id = ${actorId}`);
   }
 
   private async openOrCreateTable(

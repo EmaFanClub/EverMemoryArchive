@@ -138,6 +138,15 @@ export class ActorController {
     }
     const deletedAt = Date.now();
 
+    await Promise.all([
+      this.ignoreCleanupError(actorId, "runtime", () =>
+        this.removeActorRuntime(actorId),
+      ),
+      this.ignoreCleanupError(actorId, "scheduler_jobs", () =>
+        this.removeActorSchedulerJobs(actorId),
+      ),
+    ]);
+
     this.server.bus.publish(
       this.server.bus.createEvent({
         type: "actor.deleted",
@@ -146,9 +155,9 @@ export class ActorController {
       }),
     );
 
-    void this.cleanupDeletedActor(actor as ActorEntity & { id: number }).catch(
-      () => undefined,
-    );
+    void this.cleanupDeletedActorData(
+      actor as ActorEntity & { id: number },
+    ).catch(() => undefined);
     return { actorId, deletedAt };
   }
 
@@ -166,17 +175,11 @@ export class ActorController {
     );
   }
 
-  private async cleanupDeletedActor(
+  private async cleanupDeletedActorData(
     actor: ActorEntity & { id: number },
   ): Promise<void> {
     const actorId = actor.id;
     await Promise.all([
-      this.ignoreCleanupError(actorId, "runtime", () =>
-        this.removeActorRuntime(actorId),
-      ),
-      this.ignoreCleanupError(actorId, "scheduler_jobs", () =>
-        this.removeActorSchedulerJobs(actorId),
-      ),
       this.ignoreCleanupError(actorId, "ownerships", () =>
         this.removeActorOwnerships(actorId),
       ),
