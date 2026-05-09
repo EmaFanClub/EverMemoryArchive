@@ -126,11 +126,11 @@ export class ActorController {
       throw new Error("Actor is transitioning.");
     }
 
-    const deletedAt = Date.now();
     const deleted = await this.server.dbService.actorDB.deleteActor(actorId);
     if (!deleted) {
       throw new Error("Actor not found.");
     }
+    const deletedAt = Date.now();
 
     this.server.bus.publish(
       this.server.bus.createEvent({
