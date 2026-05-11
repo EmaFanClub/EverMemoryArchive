@@ -3,10 +3,6 @@ import type { Fs } from "../shared/fs";
 import { RealFs } from "../shared/fs";
 import type { BufferWriteMessage, ShortTermMemory } from "../memory/base";
 import {
-  EMA_CONVERSATION_ACTIVITY_PROMPT,
-  EMA_MEMORY_ROLLUP_PROMPT,
-} from "../memory/prompts";
-import {
   runActorBackgroundJob,
   type ActorBackgroundRunOptions,
 } from "../scheduler/jobs/actor.job";
@@ -209,7 +205,9 @@ export class ActorTrainer {
                 actorId,
                 conversationId,
                 task: "conversation_rollup",
-                prompt: EMA_CONVERSATION_ACTIVITY_PROMPT,
+                prompt: await this.server.promptStore.loadTaskPrompt(
+                  "conversation-rollup",
+                ),
               },
               input.timestamp,
               backgroundRunOptions(),
@@ -255,7 +253,9 @@ export class ActorTrainer {
               actorId,
               conversationId,
               task: "conversation_rollup",
-              prompt: EMA_CONVERSATION_ACTIVITY_PROMPT,
+              prompt: await this.server.promptStore.loadTaskPrompt(
+                "conversation-rollup",
+              ),
             },
             lastMessageTimestamp,
             backgroundRunOptions(),
@@ -293,7 +293,8 @@ export class ActorTrainer {
           {
             actorId,
             task: "memory_rollup",
-            prompt: EMA_MEMORY_ROLLUP_PROMPT,
+            prompt:
+              await this.server.promptStore.loadTaskPrompt("memory-rollup"),
             addition: {
               reason: "dayend",
             },

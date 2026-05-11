@@ -13,10 +13,8 @@ import type {
   ListShortTermMemoriesRequest,
 } from "../db";
 import { Logger } from "../shared/logger";
-import { EMA_CONVERSATION_ACTIVITY_PROMPT } from "./prompts";
 import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import { stringifyModelScheduleList } from "../scheduler/actor_scheduler";
-import { loadPromptTemplate } from "../prompt/loader";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
 import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
 import { buildPromptFromBufferMessage, isActorChatInput } from "./utils";
@@ -225,41 +223,21 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     actorId: number,
     conversationId: number,
   ): Promise<string> {
-    const template = await loadPromptTemplate(
-      "preamble.md",
-      "system.md",
-      "world.md",
-      "you.md",
-      "interaction-guidelines.md",
-      "memory.md",
-      "schedule.md",
-    );
     const [{ rolePrompt, personalityMemory }, memoryValues, scheduleText] =
       await Promise.all([
         this.getBasePromptValues(actorId),
         this.getConversationMemoryPromptValues(actorId, conversationId),
         this.buildSchedulePrompt(actorId),
       ]);
-    const chatWorkflow = await loadPromptTemplate(
-      memoryValues.sessionType === "group"
-        ? "chat-workflow-group.md"
-        : "chat-workflow-chat.md",
-    );
-    return template
-      .replaceAll("{SKILLS_METADATA}", skillsPrompt)
-      .replaceAll("{ROLE_PROMPT}", rolePrompt)
-      .replaceAll("{PERSONALITY_MEMORY}", personalityMemory)
-      .replaceAll("{CHAT_WORKFLOW}", chatWorkflow)
-      .replaceAll(
-        "{CONVERSATION_DESCRIPTION}",
-        memoryValues.conversationDescription,
-      )
-      .replaceAll("{MEMORY_YEAR}", memoryValues.yearMemory)
-      .replaceAll("{MEMORY_MONTH}", memoryValues.monthMemory)
-      .replaceAll("{MEMORY_DAY}", memoryValues.dayMemory)
-      .replaceAll("{MEMORY_ACTIVITY}", memoryValues.activityMemory)
-      .replaceAll("{SCHEDULES}", scheduleText)
-      .replaceAll("{MEMORY_BUFFER}", memoryValues.bufferText);
+    return await this.server.promptStore.loadSystemPrompt("foreground", {
+      ...this.buildSystemPromptVariables(
+        rolePrompt,
+        personalityMemory,
+        memoryValues,
+        scheduleText,
+      ),
+      SESSION_TYPE: memoryValues.sessionType,
+    });
   }
 
   /**
@@ -277,34 +255,50 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       bufferMessages?: BufferMessage[];
     },
   ): Promise<string> {
-    const template = await loadPromptTemplate(
-      "preamble.md",
-      "system.md",
-      "world.md",
-      "you.md",
-      "memory.md",
-      "schedule.md",
-    );
     const [{ rolePrompt, personalityMemory }, memoryValues, scheduleText] =
       await Promise.all([
         this.getBasePromptValues(actorId),
         this.getBackgroundMemoryPromptValues(actorId, options),
         this.buildSchedulePrompt(actorId),
       ]);
-    return template
-      .replaceAll("{SKILLS_METADATA}", skillsPrompt)
-      .replaceAll("{ROLE_PROMPT}", rolePrompt)
-      .replaceAll("{PERSONALITY_MEMORY}", personalityMemory)
-      .replaceAll(
-        "{CONVERSATION_DESCRIPTION}",
-        memoryValues.conversationDescription,
-      )
-      .replaceAll("{MEMORY_YEAR}", memoryValues.yearMemory)
-      .replaceAll("{MEMORY_MONTH}", memoryValues.monthMemory)
-      .replaceAll("{MEMORY_DAY}", memoryValues.dayMemory)
-      .replaceAll("{MEMORY_ACTIVITY}", memoryValues.activityMemory)
-      .replaceAll("{SCHEDULES}", scheduleText)
-      .replaceAll("{MEMORY_BUFFER}", memoryValues.bufferText);
+    return await this.server.promptStore.loadSystemPrompt(
+      typeof options?.conversationId === "number"
+        ? "background-conversation"
+        : "background",
+      this.buildSystemPromptVariables(
+        rolePrompt,
+        personalityMemory,
+        memoryValues,
+        scheduleText,
+      ),
+    );
+  }
+
+  private buildSystemPromptVariables(
+    rolePrompt: string,
+    personalityMemory: string,
+    memoryValues: {
+      conversationDescription: string;
+      bufferText: string;
+      yearMemory: string;
+      monthMemory: string;
+      dayMemory: string;
+      activityMemory: string;
+    },
+    scheduleText: string,
+  ) {
+    return {
+      SKILLS_METADATA: skillsPrompt,
+      ROLE_PROMPT: rolePrompt,
+      PERSONALITY_MEMORY: personalityMemory,
+      CONVERSATION_DESCRIPTION: memoryValues.conversationDescription,
+      MEMORY_YEAR: memoryValues.yearMemory,
+      MEMORY_MONTH: memoryValues.monthMemory,
+      MEMORY_DAY: memoryValues.dayMemory,
+      MEMORY_ACTIVITY: memoryValues.activityMemory,
+      SCHEDULES: scheduleText,
+      CONVERSATION_WINDOW: memoryValues.bufferText,
+    };
   }
 
   private async buildYearMemoryPrompt(actorId: number): Promise<string> {
@@ -687,7 +681,9 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         actorId,
         conversationId,
         task: "conversation_rollup",
-        prompt: EMA_CONVERSATION_ACTIVITY_PROMPT,
+        prompt: await this.server.promptStore.loadTaskPrompt(
+          "conversation-rollup",
+        ),
       },
       effectiveTriggeredAt,
     ).catch((error) => {

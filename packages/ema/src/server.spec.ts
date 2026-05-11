@@ -10,6 +10,7 @@ import { AgendaScheduler } from "./scheduler";
 import { MemoryManager } from "./memory/manager";
 import { Gateway } from "./gateway";
 import { ActorRegistry } from "./actor";
+import { PromptStore } from "./prompts/loader";
 import {
   createTestActorFixture,
   loadTestGlobalConfig,
@@ -29,6 +30,7 @@ const createServerForTest = async (
   server.dbService = DBService.createSync(fs, mongo, lance);
   server.actorRegistry = new ActorRegistry(server);
   server.gateway = new Gateway(server);
+  server.promptStore = new PromptStore();
   server.memoryManager = new MemoryManager(server);
   return server;
 };
@@ -74,6 +76,32 @@ describe("Server", () => {
       expect(prompt).toContain('"task":"chat"');
     } finally {
       await server.scheduler.stop();
+      await mongo.close();
+      await lance.close();
+    }
+  });
+
+  test("background system prompt includes conversation only when a conversation is provided", async () => {
+    const fs = new MemFs();
+    const mongo = await createMongo("", "test_prompt_background", "memory");
+    await mongo.connect();
+    const lance = await lancedb.connect("memory://ema-prompt-background");
+    const server = await createServerForTest(fs, mongo, lance);
+    try {
+      const conversation = await createTestActorFixture(server.dbService);
+      expect(conversation?.id).toBeTypeOf("number");
+
+      const detachedPrompt =
+        await server.memoryManager.buildSystemPromptForBackground(1);
+      expect(detachedPrompt).not.toContain("# 近期对话（Recent Conversation）");
+
+      const conversationPrompt =
+        await server.memoryManager.buildSystemPromptForBackground(1, {
+          conversationId: conversation!.id!,
+          bufferMessages: [],
+        });
+      expect(conversationPrompt).toContain("# 近期对话（Recent Conversation）");
+    } finally {
       await mongo.close();
       await lance.close();
     }

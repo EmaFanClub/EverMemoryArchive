@@ -52,6 +52,9 @@ function createActor(
     memoryManager: {
       hasUnprocessedActivityBeforeDay: hasUnprocessedActivityBeforeDayMock,
     },
+    promptStore: {
+      loadTaskPrompt: vi.fn(async (name: string) => `${name} prompt`),
+    },
     getActorScheduler: vi.fn().mockReturnValue({
       list: vi.fn().mockResolvedValue({
         overdue: [],

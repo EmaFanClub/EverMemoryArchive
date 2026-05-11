@@ -1,9 +1,4 @@
 import { Logger } from "../shared/logger";
-import {
-  EMA_MEMORY_ROLLUP_PROMPT,
-  EMA_SLEEP_PROMPT,
-  EMA_WAKE_PROMPT,
-} from "../memory/prompts";
 import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import { formatTimestamp, parseTimestamp } from "../shared/utils";
@@ -296,7 +291,7 @@ export class Actor {
         {
           actorId: this.actorId,
           task: "wake",
-          prompt: EMA_WAKE_PROMPT,
+          prompt: "",
         },
         Date.now(),
       );
@@ -324,7 +319,7 @@ export class Actor {
         {
           actorId: this.actorId,
           task: "memory_rollup",
-          prompt: EMA_MEMORY_ROLLUP_PROMPT,
+          prompt: await this.server.promptStore.loadTaskPrompt("memory-rollup"),
           addition: { reason: "boot_init", targetDayDate },
         },
         triggeredAt,
@@ -343,7 +338,7 @@ export class Actor {
       {
         actorId: this.actorId,
         task: "sleep",
-        prompt: EMA_SLEEP_PROMPT,
+        prompt: "",
         addition: { source: "timer" },
       },
       Date.now(),
