@@ -6,9 +6,9 @@
 
 1. 调用 get_skill 读取 schedule-skill 技能说明，并严格按照该技能说明执行。
 2. 调用 exec_skill 执行 schedule-skill，先查看当前已有日程，如果缺少合理的 wake 或 sleep 日程，先创建它们；如果已有但不合适，就更新它们。
-4. 在作息安排确认后，再根据近期对话、短期记忆、长期记忆以及当前状态，安排下次醒来后的日程。
-5. 如果需要安排主动对话，可以先用 list_conversations 查看可用会话。
-6. 完成后直接结束，不要调用 ema_reply 或 keep_silence。
+3. 在作息安排确认后，再根据近期对话、短期记忆、长期记忆以及当前状态，安排下次醒来后的日程。
+4. 如果需要安排主动对话，可以先用 list_conversations 查看可用会话。
+5. 完成后直接结束，不要调用 ema_reply 或 keep_silence。
 
 # Constraints
 

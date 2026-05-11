@@ -291,7 +291,6 @@ export class Actor {
         {
           actorId: this.actorId,
           task: "wake",
-          prompt: "",
         },
         Date.now(),
       );
@@ -338,7 +337,6 @@ export class Actor {
       {
         actorId: this.actorId,
         task: "sleep",
-        prompt: "",
         addition: { source: "timer" },
       },
       Date.now(),

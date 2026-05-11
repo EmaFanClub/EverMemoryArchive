@@ -48,31 +48,42 @@ export class PromptStore {
     relativePath: string,
     variables: PromptVariables,
   ): Promise<string> {
-    const content = await this.loadPromptFile(relativePath, variables);
+    const content = await this.loadPromptFile(relativePath, variables, []);
     return this.replaceVariables(content, variables);
   }
 
   private async loadPromptFile(
     relativePath: string,
     variables: PromptVariables,
+    includeStack: string[],
   ): Promise<string> {
     const absolutePath = this.resolveInsideRoot(relativePath);
+    if (includeStack.includes(absolutePath)) {
+      const cycle = [...includeStack, absolutePath]
+        .map((item) => path.relative(this.rootDir, item))
+        .join(" -> ");
+      throw new Error(`Prompt include cycle detected: ${cycle}`);
+    }
+    const nextIncludeStack = [...includeStack, absolutePath];
     const content = this.trimBoundaryBlankLines(
       await fs.readFile(absolutePath, "utf-8"),
     );
-    return await this.resolveIncludes(content, variables);
+    return await this.resolveIncludes(content, variables, nextIncludeStack);
   }
 
   private async resolveIncludes(
     content: string,
     variables: PromptVariables,
+    includeStack: string[],
   ): Promise<string> {
     const parts: string[] = [];
     let lastIndex = 0;
     for (const match of content.matchAll(INCLUDE_PATTERN)) {
       parts.push(content.slice(lastIndex, match.index));
       const includePath = this.replaceVariables(match[1], variables);
-      parts.push(await this.loadPromptFile(includePath, variables));
+      parts.push(
+        await this.loadPromptFile(includePath, variables, includeStack),
+      );
       lastIndex = match.index + match[0].length;
     }
     parts.push(content.slice(lastIndex));

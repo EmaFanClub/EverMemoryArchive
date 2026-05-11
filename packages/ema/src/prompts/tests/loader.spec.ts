@@ -162,4 +162,25 @@ describe("PromptStore", () => {
       new PromptStore(rootDir).loadSystemPrompt("background"),
     ).rejects.toThrow("Prompt include path escapes prompt root");
   });
+
+  test("rejects cyclic includes", async () => {
+    await fs.writeFile(
+      path.join(rootDir, "system_prompt", "background.md"),
+      "<!-- @include system_prompt/partials/a.md -->",
+    );
+    await fs.writeFile(
+      path.join(rootDir, "system_prompt", "partials", "a.md"),
+      "<!-- @include system_prompt/partials/b.md -->",
+    );
+    await fs.writeFile(
+      path.join(rootDir, "system_prompt", "partials", "b.md"),
+      "<!-- @include system_prompt/partials/a.md -->",
+    );
+
+    await expect(
+      new PromptStore(rootDir).loadSystemPrompt("background"),
+    ).rejects.toThrow(
+      "Prompt include cycle detected: system_prompt/background.md -> system_prompt/partials/a.md -> system_prompt/partials/b.md -> system_prompt/partials/a.md",
+    );
+  });
 });

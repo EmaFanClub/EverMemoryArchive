@@ -86,13 +86,11 @@ interface ActivityTaskData {
 
 interface WakeTaskData {
   actorId: number;
-  prompt: string;
   triggeredAt: number;
 }
 
 interface SleepTaskData {
   actorId: number;
-  prompt: string;
   triggeredAt: number;
   source: SleepTaskSource;
   addition?: Record<string, unknown>;
@@ -116,7 +114,7 @@ export interface ActorBackgroundJobData {
   actorId: number;
   conversationId?: number;
   task: "activity" | "conversation_rollup" | "memory_rollup" | "wake" | "sleep";
-  prompt: string;
+  prompt?: string;
   addition?: Record<string, unknown>;
 }
 
@@ -205,7 +203,7 @@ export async function runActorBackgroundJob(
           server,
           {
             actorId: job.actorId,
-            prompt: job.prompt,
+            prompt: job.prompt ?? "",
             triggeredAt,
           },
           context,
@@ -222,7 +220,7 @@ export async function runActorBackgroundJob(
           {
             actorId: job.actorId,
             conversationId: job.conversationId,
-            prompt: job.prompt,
+            prompt: job.prompt ?? "",
             triggeredAt,
           },
           context,
@@ -233,7 +231,7 @@ export async function runActorBackgroundJob(
           server,
           {
             actorId: job.actorId,
-            prompt: job.prompt,
+            prompt: job.prompt ?? "",
             triggeredAt,
             thresholdTriggered: isThresholdTriggered(job.addition),
           },
@@ -245,7 +243,6 @@ export async function runActorBackgroundJob(
           server,
           {
             actorId: job.actorId,
-            prompt: job.prompt,
             triggeredAt,
           },
           context,
@@ -256,7 +253,6 @@ export async function runActorBackgroundJob(
           server,
           {
             actorId: job.actorId,
-            prompt: job.prompt,
             triggeredAt,
             source: job.addition?.source === "timer" ? "timer" : "schedule",
             addition: stripInternalSleepSource(job.addition),
