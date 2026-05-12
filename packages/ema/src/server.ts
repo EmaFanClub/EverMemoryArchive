@@ -10,6 +10,7 @@ import { Gateway } from "./gateway";
 import { Logger } from "./shared/logger";
 import { EmaBus } from "./bus";
 import { EmaController } from "./controller";
+import { PromptStore } from "./prompts/loader";
 
 export interface ServerCreateOptions {
   readonly bootstrap?: BootstrapConfig;
@@ -50,6 +51,11 @@ export class Server {
    * Memory coordinator that persists chat/activity data and builds prompts.
    */
   memoryManager!: MemoryManager;
+
+  /**
+   * Markdown prompt loader used for system prompts and task prompts.
+   */
+  promptStore!: PromptStore;
 
   /**
    * System-level logger for server lifecycle and infrastructure events.
@@ -104,6 +110,7 @@ export class Server {
       ],
     });
     server.logger.info("Server starting");
+    server.promptStore = new PromptStore();
     server.bus = new EmaBus();
     server.controller = new EmaController(server);
 

@@ -567,11 +567,16 @@ export class ActorScheduler {
       | ActorForegroundJobData
       | ActorBackgroundJobData
       | undefined;
-    if (
-      !data ||
-      data.actorId !== this.actorId ||
-      typeof data.prompt !== "string"
-    ) {
+    if (!data || data.actorId !== this.actorId) {
+      return null;
+    }
+    const prompt =
+      typeof data.prompt === "string"
+        ? data.prompt
+        : isRoutineTask(task)
+          ? ""
+          : null;
+    if (prompt === null) {
       return null;
     }
     const addition = cloneAddition(data.addition);
@@ -590,7 +595,7 @@ export class ActorScheduler {
         interval,
         lastRunAt: formatScheduleTime(job.attrs.lastRunAt),
         conversationId,
-        prompt: data.prompt,
+        prompt,
         addition,
       };
     }
@@ -604,7 +609,7 @@ export class ActorScheduler {
       task,
       runAt,
       conversationId,
-      prompt: data.prompt,
+      prompt,
       addition,
     };
   }
@@ -626,6 +631,13 @@ function buildJobData(
       conversationId,
       task,
       prompt,
+      addition,
+    };
+  }
+  if (isRoutineTask(task)) {
+    return {
+      actorId,
+      task,
       addition,
     };
   }

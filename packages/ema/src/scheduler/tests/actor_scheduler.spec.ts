@@ -236,6 +236,32 @@ describe("ActorScheduler", () => {
       id: first.added[0].id,
       interval: "0 9 * * *",
     });
+
+    const job = await scheduler.getJob(first.added[0].id);
+    expect(job?.attrs.data).not.toHaveProperty("prompt");
+  });
+
+  test("lists routine schedules that do not store prompt payloads", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+    const now = Date.now();
+
+    await scheduler.scheduleEvery({
+      name: "actor_background",
+      runAt: now,
+      interval: "0 8 * * *",
+      data: {
+        actorId: 1,
+        task: "wake",
+      },
+    });
+
+    const listed = await actorScheduler.list(now);
+
+    expect(listed.recurring).toHaveLength(1);
+    expect(listed.recurring[0]).toMatchObject({
+      task: "wake",
+      prompt: "",
+    });
   });
 
   test("rejects invalid recurring wake interval before writing job", async () => {

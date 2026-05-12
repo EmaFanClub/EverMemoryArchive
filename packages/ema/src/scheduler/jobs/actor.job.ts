@@ -6,13 +6,6 @@ import { LLMClient } from "../../llm";
 import { formatLogTimestamp, Logger } from "../../shared/logger";
 import { formatTimestamp } from "../../shared/utils";
 import { GlobalConfig } from "../../config/index";
-import {
-  EMA_MEMORY_ROLLUP_PROMPT,
-  EMA_SCHEDULED_ACTIVITY_PROMPT,
-  EMA_SCHEDULED_CHAT_PROMPT,
-  EMA_SLEEP_PROMPT,
-  EMA_WAKE_PROMPT,
-} from "../../memory/prompts";
 import type { ShortTermMemoryRecord } from "../../memory/base";
 import type { Server } from "../../server";
 import { baseTools } from "../../tools";
@@ -93,13 +86,11 @@ interface ActivityTaskData {
 
 interface WakeTaskData {
   actorId: number;
-  prompt: string;
   triggeredAt: number;
 }
 
 interface SleepTaskData {
   actorId: number;
-  prompt: string;
   triggeredAt: number;
   source: SleepTaskSource;
   addition?: Record<string, unknown>;
@@ -123,7 +114,7 @@ export interface ActorBackgroundJobData {
   actorId: number;
   conversationId?: number;
   task: "activity" | "conversation_rollup" | "memory_rollup" | "wake" | "sleep";
-  prompt: string;
+  prompt?: string;
   addition?: Record<string, unknown>;
 }
 
@@ -212,7 +203,7 @@ export async function runActorBackgroundJob(
           server,
           {
             actorId: job.actorId,
-            prompt: job.prompt,
+            prompt: job.prompt ?? "",
             triggeredAt,
           },
           context,
@@ -229,7 +220,7 @@ export async function runActorBackgroundJob(
           {
             actorId: job.actorId,
             conversationId: job.conversationId,
-            prompt: job.prompt,
+            prompt: job.prompt ?? "",
             triggeredAt,
           },
           context,
@@ -240,7 +231,7 @@ export async function runActorBackgroundJob(
           server,
           {
             actorId: job.actorId,
-            prompt: job.prompt,
+            prompt: job.prompt ?? "",
             triggeredAt,
             thresholdTriggered: isThresholdTriggered(job.addition),
           },
@@ -252,7 +243,6 @@ export async function runActorBackgroundJob(
           server,
           {
             actorId: job.actorId,
-            prompt: job.prompt,
             triggeredAt,
           },
           context,
@@ -263,7 +253,6 @@ export async function runActorBackgroundJob(
           server,
           {
             actorId: job.actorId,
-            prompt: job.prompt,
             triggeredAt,
             source: job.addition?.source === "timer" ? "timer" : "schedule",
             addition: stripInternalSleepSource(job.addition),
@@ -363,7 +352,9 @@ async function runChatTask(server: Server, job: ChatTaskData): Promise<void> {
     inputs: [
       {
         type: "text",
-        text: EMA_SCHEDULED_CHAT_PROMPT.replaceAll("{prompt}", job.prompt),
+        text: await server.promptStore.loadTaskPrompt("scheduled-chat", {
+          SCHEDULED_PROMPT: job.prompt,
+        }),
       },
     ],
   });
@@ -844,9 +835,11 @@ async function runActivityTask(
           inputs: [
             {
               type: "text",
-              text: EMA_SCHEDULED_ACTIVITY_PROMPT.replaceAll(
-                "{prompt}",
-                job.prompt,
+              text: await server.promptStore.loadTaskPrompt(
+                "scheduled-activity",
+                {
+                  SCHEDULED_PROMPT: job.prompt,
+                },
               ),
             },
           ],
@@ -946,7 +939,12 @@ async function runWakeTask(
         buildUserMessageFromActorInput({
           kind: "system",
           time: job.triggeredAt,
-          inputs: [{ type: "text", text: EMA_WAKE_PROMPT }],
+          inputs: [
+            {
+              type: "text",
+              text: await server.promptStore.loadTaskPrompt("wake"),
+            },
+          ],
         }),
       ],
       tools: baseTools,
@@ -1056,7 +1054,7 @@ async function runSleepTask(
       server,
       {
         actorId: job.actorId,
-        prompt: EMA_MEMORY_ROLLUP_PROMPT,
+        prompt: await server.promptStore.loadTaskPrompt("memory-rollup"),
         triggeredAt: job.triggeredAt,
         thresholdTriggered: false,
       },
@@ -1085,7 +1083,12 @@ async function runSleepTask(
         buildUserMessageFromActorInput({
           kind: "system",
           time: job.triggeredAt,
-          inputs: [{ type: "text", text: EMA_SLEEP_PROMPT }],
+          inputs: [
+            {
+              type: "text",
+              text: await server.promptStore.loadTaskPrompt("sleep"),
+            },
+          ],
         }),
       ],
       tools: baseTools,
@@ -1352,7 +1355,7 @@ async function runThresholdMemoryRollupWhenNeeded(
     server,
     {
       actorId,
-      prompt: EMA_MEMORY_ROLLUP_PROMPT,
+      prompt: await server.promptStore.loadTaskPrompt("memory-rollup"),
       triggeredAt,
       thresholdTriggered: true,
     },

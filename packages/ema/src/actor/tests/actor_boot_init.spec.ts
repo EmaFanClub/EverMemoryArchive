@@ -52,6 +52,9 @@ function createActor(
     memoryManager: {
       hasUnprocessedActivityBeforeDay: hasUnprocessedActivityBeforeDayMock,
     },
+    promptStore: {
+      loadTaskPrompt: vi.fn(async (name: string) => `${name} prompt`),
+    },
     getActorScheduler: vi.fn().mockReturnValue({
       list: vi.fn().mockResolvedValue({
         overdue: [],
@@ -91,10 +94,11 @@ describe("Actor boot init", () => {
     await actor.runBootInit();
 
     const calls = runActorBackgroundJob.mock.calls as unknown as Array<
-      [unknown, { task: string }]
+      [unknown, { task: string; prompt?: string }]
     >;
     expect(runActorBackgroundJob).toHaveBeenCalledTimes(1);
     expect(calls[0]![1].task).toBe("wake");
+    expect(calls[0]![1]).not.toHaveProperty("prompt");
   });
 
   test("runs rollup before wake when waking into a day with old unprocessed activity", async () => {
@@ -262,5 +266,19 @@ describe("Actor boot init", () => {
     await actor.dispose();
 
     expect(actor.isProcessingConversation(1)).toBe(false);
+  });
+
+  test("runs sleep timer without persisting a prompt payload", async () => {
+    const { actor } = createActor([]);
+    (actor as any).status = "awake";
+
+    await (actor as any).handleSleepTimerFired();
+
+    const calls = runActorBackgroundJob.mock.calls as unknown as Array<
+      [unknown, { task: string; prompt?: string }]
+    >;
+    expect(runActorBackgroundJob).toHaveBeenCalledTimes(1);
+    expect(calls[0]![1].task).toBe("sleep");
+    expect(calls[0]![1]).not.toHaveProperty("prompt");
   });
 });

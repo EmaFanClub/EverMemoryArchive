@@ -879,8 +879,16 @@ async function copyEmaRuntimeAssets(appRoot: string): Promise<void> {
   const sourceRoot = path.join(workspaceRoot(), "packages", "ema", "src");
   const runtimeRoot = path.join(appRoot, "packages", "ema", "src");
   await copyIfExists(
-    path.join(sourceRoot, "prompt", "templates"),
-    path.join(runtimeRoot, "prompt", "templates"),
+    path.join(sourceRoot, "prompts", "system_prompt"),
+    path.join(runtimeRoot, "prompts", "system_prompt"),
+  );
+  await copyIfExists(
+    path.join(sourceRoot, "prompts", "task_prompt"),
+    path.join(runtimeRoot, "prompts", "task_prompt"),
+  );
+  await copyIfExists(
+    path.join(sourceRoot, "prompts", "README.md"),
+    path.join(runtimeRoot, "prompts", "README.md"),
   );
   await copySkillAssets(
     path.join(sourceRoot, "skills"),

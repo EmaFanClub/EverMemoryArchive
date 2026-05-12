@@ -112,6 +112,12 @@ type FakeServer = {
     };
   };
   memoryManager: FakeMemoryManager;
+  promptStore: {
+    loadTaskPrompt: (
+      name: string,
+      variables?: Record<string, unknown>,
+    ) => Promise<string>;
+  };
 };
 
 function createFakeServer(
@@ -144,6 +150,13 @@ function createFakeServer(
     actorRegistry: {
       async ensure() {
         return actor;
+      },
+    },
+    promptStore: {
+      async loadTaskPrompt(name: string, variables?: Record<string, unknown>) {
+        return variables?.SCHEDULED_PROMPT
+          ? `${name}: ${String(variables.SCHEDULED_PROMPT)}`
+          : `${name} prompt`;
       },
     },
     dbService: {
