@@ -3,7 +3,11 @@ import { performance } from "node:perf_hooks";
 import { buildUserMessageFromActorInput } from "../../actor/utils";
 import { Agent, type AgentState, type RunFinishedEvent } from "../../agent";
 import { LLMClient } from "../../llm";
-import { formatLogTimestamp, Logger } from "../../shared/logger";
+import {
+  formatLogTimestamp,
+  formatTraceTimestamp,
+  Logger,
+} from "../../shared/logger";
 import { formatTimestamp } from "../../shared/utils";
 import { GlobalConfig } from "../../config/index";
 import type { ShortTermMemoryRecord } from "../../memory/base";
@@ -15,6 +19,11 @@ const actorMemoryRollupQueue = new Map<number, Promise<unknown>>();
 
 type SleepTaskSource = "schedule" | "timer";
 type ActorBackgroundTaskName = ActorBackgroundJobData["task"];
+
+interface BackgroundAgentRun {
+  agent: Agent;
+  traceId: string;
+}
 
 interface PendingWindowState {
   count: number;
@@ -525,7 +534,7 @@ async function runConversationRollupTaskOnce(
     job.actorId,
     job.triggeredAt,
   );
-  const agent = await createBackgroundAgent(
+  const { agent, traceId } = await createBackgroundAgent(
     server,
     job.actorId,
     job.triggeredAt,
@@ -534,6 +543,7 @@ async function runConversationRollupTaskOnce(
     context,
   );
   const agentState: AgentState = {
+    traceId,
     systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
       job.actorId,
       {
@@ -813,7 +823,7 @@ async function runActivityTask(
       job.actorId,
       job.triggeredAt,
     );
-    const agent = await createBackgroundAgent(
+    const { agent, traceId } = await createBackgroundAgent(
       server,
       job.actorId,
       job.triggeredAt,
@@ -822,6 +832,7 @@ async function runActivityTask(
       context,
     );
     const agentState: AgentState = {
+      traceId,
       systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
         job.actorId,
         {
@@ -920,7 +931,7 @@ async function runWakeTask(
       job.actorId,
       job.triggeredAt,
     );
-    const agent = await createBackgroundAgent(
+    const { agent, traceId } = await createBackgroundAgent(
       server,
       job.actorId,
       job.triggeredAt,
@@ -929,6 +940,7 @@ async function runWakeTask(
       context,
     );
     const agentState: AgentState = {
+      traceId,
       systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
         job.actorId,
         {
@@ -1064,7 +1076,7 @@ async function runSleepTask(
       job.actorId,
       job.triggeredAt,
     );
-    const agent = await createBackgroundAgent(
+    const { agent, traceId } = await createBackgroundAgent(
       server,
       job.actorId,
       job.triggeredAt,
@@ -1073,6 +1085,7 @@ async function runSleepTask(
       context,
     );
     const agentState: AgentState = {
+      traceId,
       systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
         job.actorId,
         {
@@ -1378,7 +1391,7 @@ async function runMemoryRollupTaskOnce(
     job.actorId,
     job.triggeredAt,
   );
-  const agent = await createBackgroundAgent(
+  const { agent, traceId } = await createBackgroundAgent(
     server,
     job.actorId,
     job.triggeredAt,
@@ -1387,6 +1400,7 @@ async function runMemoryRollupTaskOnce(
     context,
   );
   const agentState: AgentState = {
+    traceId,
     systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
       job.actorId,
       {
@@ -1482,49 +1496,22 @@ function stripInternalSleepSource(
 async function createBackgroundAgent(
   server: Server,
   actorId: number,
-  triggeredAt: number,
+  _triggeredAt: number,
   task: ActorBackgroundJobData["task"],
-  conversationId?: number,
+  _conversationId?: number,
   context: ActorBackgroundRunContext = { mode: "runtime" },
-): Promise<Agent> {
-  const logTimestamp =
-    context.mode === "training"
-      ? formatLogTimestamp(context.logStartedAt ?? Date.now())
-      : formatLogTimestamp(triggeredAt);
-  const startedAt = logTimestamp;
+): Promise<BackgroundAgentRun> {
+  const startedAt = formatTraceTimestamp();
   const date = startedAt.slice(0, 10);
-  const filePath =
+  const traceId =
     context.mode === "training"
-      ? `actors/actor_${actorId}/train/${task}/${startedAt}.jsonl`
-      : `actors/actor_${actorId}/${task}/${date}/${startedAt}.jsonl`;
-  return new Agent(
-    GlobalConfig.agent,
-    new LLMClient(await server.dbService.getActorLLMConfig(actorId)),
-    Logger.create({
-      name: "agent.task",
-      context: {
-        actorId,
-        task,
-        ...(context.mode === "training"
-          ? {
-              mode: "training",
-              triggeredAt,
-              logicalTime: formatTimestamp("YYYY-MM-DD HH:mm:ss", triggeredAt),
-            }
-          : {}),
-        ...(typeof conversationId === "number" ? { conversationId } : {}),
-      },
-      outputs: [
-        {
-          type: "console",
-          level: context.mode === "training" ? "silent" : "warn",
-        },
-        {
-          type: "file",
-          level: "debug",
-          filePath,
-        },
-      ],
-    }),
-  );
+      ? `actors/actor_${actorId}/train/${task}/${date}/${startedAt}`
+      : `actors/actor_${actorId}/${task}/${date}/${startedAt}`;
+  return {
+    agent: new Agent(
+      GlobalConfig.agent,
+      new LLMClient(await server.dbService.getActorLLMConfig(actorId)),
+    ),
+    traceId,
+  };
 }
