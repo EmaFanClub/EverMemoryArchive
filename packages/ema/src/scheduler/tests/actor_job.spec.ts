@@ -162,22 +162,9 @@ function createFakeServer(
     dbService: {
       async getActorLLMConfig() {
         return {
-          provider: "google",
-          openai: {
-            mode: "responses",
-            model: "gpt-5.4",
-            baseUrl: "https://api.openai.com/v1",
-            apiKey: "test-key",
-          },
-          google: {
-            model: "gemini-3.1-pro-preview",
-            baseUrl: "https://generativelanguage.googleapis.com",
-            apiKey: "test-key",
-            useVertexAi: false,
-            project: "",
-            location: "",
-            credentialsFile: "",
-          },
+          model: "gemini-3.1-pro-preview",
+          baseUrl: "https://generativelanguage.googleapis.com",
+          apiKey: "test-key",
         };
       },
       actorDB: {

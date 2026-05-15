@@ -1,5 +1,6 @@
-/** Supported chat LLM providers. */
-export type LLMProvider = "openai" | "google";
+import type { LLMConfig } from "../agent_hub/base";
+
+export type { LLMConfig };
 
 /** Supported embedding providers. */
 export type EmbeddingProvider = "openai" | "google";
@@ -42,33 +43,6 @@ export interface BootstrapConfig {
   readonly mongo: MongoConfig;
   readonly paths: RuntimePaths;
   readonly devBootstrap: DevBootstrapConfig;
-}
-
-/** OpenAI-compatible chat LLM configuration. */
-export interface OpenAILLMConfig {
-  readonly mode: "chat" | "responses";
-  readonly model: string;
-  readonly baseUrl: string;
-  readonly apiKey: string;
-}
-
-/** Google chat LLM configuration. */
-export interface GoogleLLMConfig {
-  readonly model: string;
-  readonly baseUrl: string;
-  readonly apiKey: string;
-  readonly useVertexAi: boolean;
-  readonly project: string;
-  readonly location: string;
-  /** Raw Vertex AI credentials JSON. Field name is kept for stored config compatibility. */
-  readonly credentialsFile: string;
-}
-
-/** Complete chat LLM configuration used at runtime. */
-export interface LLMConfig {
-  readonly provider: LLMProvider;
-  readonly openai: OpenAILLMConfig;
-  readonly google: GoogleLLMConfig;
 }
 
 /** OpenAI embedding configuration. */
@@ -162,22 +136,9 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
 };
 
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
-  provider: "google",
-  openai: {
-    mode: "responses",
-    model: "gpt-5.4",
-    baseUrl: DEFAULT_OPENAI_BASE_URL,
-    apiKey: "",
-  },
-  google: {
-    model: "gemini-3.1-pro-preview",
-    baseUrl: DEFAULT_GOOGLE_BASE_URL,
-    apiKey: "",
-    useVertexAi: false,
-    project: "",
-    location: "",
-    credentialsFile: "",
-  },
+  model: "gemini-3.1-pro-preview",
+  baseUrl: DEFAULT_GOOGLE_BASE_URL,
+  apiKey: "",
 };
 
 export const DEFAULT_EMBEDDING_CONFIG: EmbeddingConfig = {

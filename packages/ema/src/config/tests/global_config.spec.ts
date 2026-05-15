@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import path from "node:path";
 
 import { MemFs } from "../../shared/fs";
+import { ThinkingLevel } from "../../agent_hub";
 import {
   createBootstrapConfig,
   getWorkspaceRoot,
@@ -151,23 +152,23 @@ describe("GlobalConfig", () => {
     await GlobalConfig.load(new MemFs(), {
       bootstrap: createBootstrapConfig({ mode: "dev", mongoKind: "memory" }),
     });
+    const defaultLlm = {
+      model: "gpt-5.5",
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-db",
+      thinkingLevel: ThinkingLevel.HIGH,
+    };
 
     GlobalConfig.applyRecord({
       ...createTestGlobalConfigRecord(),
       system: {
         httpsProxy: "http://127.0.0.1:7890",
       },
-      defaultLlm: {
-        ...createTestGlobalConfigRecord().defaultLlm,
-        google: {
-          ...createTestGlobalConfigRecord().defaultLlm.google,
-          apiKey: "db-gemini-key",
-        },
-      },
+      defaultLlm,
     });
 
     expect(GlobalConfig.system.httpsProxy).toBe("http://127.0.0.1:7890");
-    expect(GlobalConfig.defaultLlm.google.apiKey).toBe("db-gemini-key");
+    expect(GlobalConfig.defaultLlm).toEqual(defaultLlm);
   });
 
   test("updates runtime global config fields independently", async () => {
@@ -179,39 +180,94 @@ describe("GlobalConfig", () => {
 
     GlobalConfig.updateDefaultLlm({
       ...record.defaultLlm,
-      google: {
-        ...record.defaultLlm.google,
-        apiKey: "updated-llm-key",
-      },
+      apiKey: "updated-llm-key",
     });
     GlobalConfig.updateSystemConfig({
       httpsProxy: "http://127.0.0.1:7890",
     });
 
-    expect(GlobalConfig.defaultLlm.google.apiKey).toBe("updated-llm-key");
+    expect(GlobalConfig.defaultLlm.apiKey).toBe("updated-llm-key");
     expect(GlobalConfig.defaultEmbedding).toEqual(record.defaultEmbedding);
     expect(GlobalConfig.system.httpsProxy).toBe("http://127.0.0.1:7890");
   });
 
-  test("trims runtime provider config values without changing stored config", () => {
+  test("normalizes legacy chat LLM configs when loading global config", async () => {
+    await GlobalConfig.load(new MemFs(), {
+      bootstrap: createBootstrapConfig({ mode: "dev", mongoKind: "memory" }),
+    });
     const record = createTestGlobalConfigRecord();
-    const llmCredentialsJson = '{"type":"service_account","project_id":"p"}';
-    const embeddingCredentialsJson =
-      '{"type":"service_account","project_id":"embedding-p"}';
-    const llm = {
-      ...record.defaultLlm,
-      provider: "openai" as const,
+    const openaiLegacy = {
+      provider: "openai",
       openai: {
-        ...record.defaultLlm.openai,
-        apiKey: " sk-direct ",
+        mode: "responses",
+        model: "gpt-5.5",
+        baseUrl: " https://api.openai.com/v1 ",
+        apiKey: " sk-legacy ",
       },
       google: {
-        ...record.defaultLlm.google,
-        project: " direct-project ",
-        location: " us-central1 ",
-        credentialsFile: ` ${llmCredentialsJson} `,
+        model: "gemini-3.1-pro-preview",
+        baseUrl: "https://generativelanguage.googleapis.com",
+        apiKey: "google-key",
+        useVertexAi: false,
+        project: "",
+        location: "",
+        credentialsFile: "",
       },
     };
+    GlobalConfig.applyRecord({
+      ...record,
+      defaultLlm: openaiLegacy as never,
+    });
+
+    expect(GlobalConfig.defaultLlm).toEqual({
+      model: "gpt-5.5",
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-legacy",
+    });
+
+    const googleLegacy = {
+      ...openaiLegacy,
+      provider: "google",
+      google: {
+        ...openaiLegacy.google,
+        apiKey: " gemini-key ",
+      },
+    };
+    GlobalConfig.applyRecord({
+      ...record,
+      defaultLlm: googleLegacy as never,
+    });
+
+    expect(GlobalConfig.defaultLlm).toEqual({
+      model: "gemini-3.1-pro-preview",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      apiKey: "gemini-key",
+    });
+
+    const credentialsJson = '{"type":"service_account","project_id":"p"}';
+    GlobalConfig.applyRecord({
+      ...record,
+      defaultLlm: {
+        ...googleLegacy,
+        google: {
+          ...googleLegacy.google,
+          useVertexAi: true,
+          credentialsFile: ` ${credentialsJson} `,
+        },
+      } as never,
+    });
+
+    expect(GlobalConfig.defaultLlm).toEqual({
+      model: "gemini-3.1-pro-preview",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      apiKey: credentialsJson,
+    });
+  });
+
+  test("trims runtime embedding config values without changing stored config", () => {
+    const record = createTestGlobalConfigRecord();
+    const embeddingCredentialsJson =
+      '{"type":"service_account","project_id":"embedding-p"}';
     const embedding = {
       ...record.defaultEmbedding,
       google: {
@@ -221,21 +277,6 @@ describe("GlobalConfig", () => {
       },
     };
 
-    expect(GlobalConfig.resolveRuntimeLlmConfig(llm)).toMatchObject({
-      model: llm.openai.model,
-      baseUrl: llm.openai.baseUrl,
-      apiKey: "sk-direct",
-    });
-    expect(
-      GlobalConfig.resolveRuntimeLlmConfig({
-        ...llm,
-        provider: "google",
-        google: {
-          ...llm.google,
-          useVertexAi: true,
-        },
-      }).apiKey,
-    ).toBe(llmCredentialsJson);
     expect(
       GlobalConfig.resolveRuntimeEmbeddingConfig(embedding).google.project,
     ).toBe("direct-embedding-project");
@@ -243,6 +284,5 @@ describe("GlobalConfig", () => {
       GlobalConfig.resolveRuntimeEmbeddingConfig(embedding).google
         .credentialsFile,
     ).toBe(embeddingCredentialsJson);
-    expect(llm.openai.apiKey).toBe(" sk-direct ");
   });
 });

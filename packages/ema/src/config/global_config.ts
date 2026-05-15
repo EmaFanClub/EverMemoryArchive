@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { z } from "zod";
 
-import type { LLMConfig as AgentHubLLMConfig } from "../agent_hub";
+import { ThinkingLevel } from "../agent_hub/base";
 import type { Fs } from "../shared/fs";
 import { RealFs } from "../shared/fs";
 import {
@@ -50,7 +50,24 @@ export class GlobalConfigError extends Error {
   }
 }
 
-const RuntimeOpenAILLMSchema = z
+const RuntimeThinkingLevelSchema = z.enum([
+  ThinkingLevel.NONE,
+  ThinkingLevel.LOW,
+  ThinkingLevel.MEDIUM,
+  ThinkingLevel.HIGH,
+]);
+
+const RuntimeLLMSchema = z
+  .object({
+    model: z.string(),
+    baseUrl: z.string(),
+    apiKey: z.string(),
+    thinkingLevel: RuntimeThinkingLevelSchema.optional(),
+  })
+  .strict()
+  .transform(trimLlmConfig);
+
+const LegacyOpenAILLMSchema = z
   .object({
     mode: z.enum(["chat", "responses"]),
     model: z.string(),
@@ -59,7 +76,7 @@ const RuntimeOpenAILLMSchema = z
   })
   .strict();
 
-const RuntimeGoogleLLMSchema = z
+const LegacyGoogleLLMSchema = z
   .object({
     model: z.string(),
     baseUrl: z.string(),
@@ -71,13 +88,19 @@ const RuntimeGoogleLLMSchema = z
   })
   .strict();
 
-const RuntimeLLMSchema = z
+const LegacyRuntimeLLMSchema = z
   .object({
     provider: z.enum(["openai", "google"]),
-    openai: RuntimeOpenAILLMSchema,
-    google: RuntimeGoogleLLMSchema,
+    openai: LegacyOpenAILLMSchema,
+    google: LegacyGoogleLLMSchema,
   })
-  .strict();
+  .strict()
+  .transform(normalizeLegacyLlmConfig);
+
+const RuntimeOrLegacyLLMSchema = z.union([
+  RuntimeLLMSchema,
+  LegacyRuntimeLLMSchema,
+]);
 
 const RuntimeOpenAIEmbeddingSchema = z
   .object({
@@ -136,7 +159,7 @@ const GlobalConfigRecordSchema = z
         accessToken: z.string().default(""),
       })
       .strict(),
-    defaultLlm: RuntimeLLMSchema,
+    defaultLlm: RuntimeOrLegacyLLMSchema,
     defaultEmbedding: RuntimeEmbeddingSchema,
     defaultWebSearch: RuntimeWebSearchSchema,
     defaultChannel: RuntimeChannelSchema,
@@ -174,7 +197,7 @@ export class GlobalConfig {
   }
 
   /** Applies a database-backed global config record to the loaded bootstrap. */
-  static applyRecord(record: GlobalConfigRecord): void {
+  static applyRecord(record: unknown): void {
     this.record = parseGlobalConfigRecord(record);
   }
 
@@ -227,25 +250,6 @@ export class GlobalConfig {
 
   static get defaultLlm(): LLMConfig {
     return cloneConfig(this.loadedRecord.defaultLlm);
-  }
-
-  static resolveRuntimeLlmConfig(config: LLMConfig): AgentHubLLMConfig {
-    if (config.provider === "openai") {
-      return {
-        model: config.openai.model.trim(),
-        baseUrl: config.openai.baseUrl.trim(),
-        apiKey: this.trimConfigValue(config.openai.apiKey),
-      };
-    }
-    return {
-      model: config.google.model.trim(),
-      baseUrl: config.google.baseUrl.trim(),
-      apiKey: this.trimConfigValue(
-        config.google.useVertexAi
-          ? config.google.credentialsFile
-          : config.google.apiKey,
-      ),
-    };
   }
 
   static get defaultEmbedding(): EmbeddingConfig {
@@ -409,9 +413,7 @@ function findWorkspaceRootFrom(...segments: string[]): string | null {
   }
 }
 
-export function parseGlobalConfigRecord(
-  record: GlobalConfigRecord,
-): GlobalConfigRecord {
+export function parseGlobalConfigRecord(record: unknown): GlobalConfigRecord {
   const result = GlobalConfigRecordSchema.safeParse(record);
   if (!result.success) {
     const issues = result.error.issues.map(
@@ -424,6 +426,64 @@ export function parseGlobalConfigRecord(
     );
   }
   return result.data;
+}
+
+export function normalizeLLMConfig(config: unknown): LLMConfig {
+  const result = RuntimeOrLegacyLLMSchema.safeParse(config);
+  if (!result.success) {
+    const message = result.error.issues
+      .map(
+        (issue) => `${issue.path.join(".") || "llmConfig"}: ${issue.message}`,
+      )
+      .join("; ");
+    throw new GlobalConfigError(
+      "global_config_invalid",
+      `Invalid EMA LLM config: ${message}`,
+    );
+  }
+  return result.data;
+}
+
+function trimLlmConfig(config: LLMConfig): LLMConfig {
+  return {
+    model: config.model.trim(),
+    baseUrl: config.baseUrl.trim(),
+    apiKey: config.apiKey.trim(),
+    ...(config.thinkingLevel !== undefined
+      ? { thinkingLevel: config.thinkingLevel }
+      : {}),
+  };
+}
+
+function normalizeLegacyLlmConfig(config: {
+  provider: "openai" | "google";
+  openai: {
+    model: string;
+    baseUrl: string;
+    apiKey: string;
+  };
+  google: {
+    model: string;
+    baseUrl: string;
+    apiKey: string;
+    useVertexAi: boolean;
+    credentialsFile: string;
+  };
+}): LLMConfig {
+  if (config.provider === "openai") {
+    return trimLlmConfig({
+      model: config.openai.model,
+      baseUrl: config.openai.baseUrl,
+      apiKey: config.openai.apiKey,
+    });
+  }
+  return trimLlmConfig({
+    model: config.google.model,
+    baseUrl: config.google.baseUrl,
+    apiKey: config.google.useVertexAi
+      ? config.google.credentialsFile
+      : config.google.apiKey,
+  });
 }
 
 function parseMode(value: string | undefined): "dev" | "prod" | null {

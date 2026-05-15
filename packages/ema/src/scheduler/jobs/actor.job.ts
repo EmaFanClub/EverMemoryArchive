@@ -1499,11 +1499,7 @@ async function createBackgroundAgent(
       : `actors/actor_${actorId}/${task}/${date}/${startedAt}.jsonl`;
   return new Agent(
     GlobalConfig.agent,
-    new LLMClient(
-      GlobalConfig.resolveRuntimeLlmConfig(
-        await server.dbService.getActorLLMConfig(actorId),
-      ),
-    ),
+    new LLMClient(await server.dbService.getActorLLMConfig(actorId)),
     Logger.create({
       name: "agent.task",
       context: {
