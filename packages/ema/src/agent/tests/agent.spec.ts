@@ -63,4 +63,52 @@ describe("Agent helpers", () => {
       }),
     );
   });
+
+  test("discards a resolved model response when the run was aborted", async () => {
+    let resolveGenerate:
+      | ((value: Awaited<ReturnType<LLMClient["generate"]>>) => void)
+      | undefined;
+    const generate = vi.fn(
+      () =>
+        new Promise<Awaited<ReturnType<LLMClient["generate"]>>>((resolve) => {
+          resolveGenerate = resolve;
+        }),
+    );
+    const llm = {
+      setRetryCallback: vi.fn(),
+      generate,
+    } as unknown as LLMClient;
+    const agent = new Agent(llm);
+    const messages: Message[] = [
+      { role: "user", contents: [{ type: "text", text: "hi" }] },
+    ];
+    const runFinished = new Promise<Parameters<typeof agent.events.emit>[1]>(
+      (resolve) => {
+        agent.events.once("runFinished", resolve);
+      },
+    );
+
+    const runPromise = agent.runWithState({
+      systemPrompt: "system prompt",
+      messages,
+      tools: [],
+    });
+    await Promise.resolve();
+    await agent.abort();
+    resolveGenerate?.({
+      role: "model",
+      contents: [{ type: "text", text: "stale response" }],
+    });
+
+    await runPromise;
+
+    await expect(runFinished).resolves.toMatchObject({
+      ok: false,
+      msg: "Aborted",
+    });
+    expect(messages).toEqual([
+      { role: "user", contents: [{ type: "text", text: "hi" }] },
+    ]);
+    expect(generate.mock.calls[0]?.[0].signal?.aborted).toBe(true);
+  });
 });

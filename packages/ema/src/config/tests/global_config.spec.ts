@@ -19,7 +19,7 @@ describe("GlobalConfig", () => {
     GlobalConfig.resetForTests();
   });
 
-  test("creates dev memory bootstrap with fixed data root paths", () => {
+  test("creates dev memory bootstrap with explicit data root paths", () => {
     const bootstrap = createBootstrapConfig(
       {
         mode: "dev",
@@ -40,9 +40,31 @@ describe("GlobalConfig", () => {
       logsDir: path.join(dataRoot, "logs"),
       workspaceDir: path.join(dataRoot, "workspace"),
     });
-    expect(bootstrap.devBootstrap).toEqual({
-      restoreDefaultSnapshot: true,
-    });
+    expect(bootstrap.devBootstrap).toBeUndefined();
+  });
+
+  test("creates timestamped dev data root by default", () => {
+    const bootstrap = createBootstrapConfig(
+      {
+        mode: "dev",
+        mongoKind: "memory",
+      },
+      emptyEnv,
+    );
+
+    expect(path.basename(path.dirname(bootstrap.paths.dataRoot))).toBe(
+      ".ema_dev",
+    );
+    expect(path.basename(bootstrap.paths.dataRoot)).toMatch(
+      /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/u,
+    );
+    expect(bootstrap.paths.logsDir).toBe(
+      path.join(bootstrap.paths.dataRoot, "logs"),
+    );
+    expect(bootstrap.paths.workspaceDir).toBe(
+      path.join(bootstrap.paths.dataRoot, "workspace"),
+    );
+    expect(bootstrap.devBootstrap).toBeUndefined();
   });
 
   test("uses configured workspace root for relative data root paths", () => {
@@ -86,6 +108,9 @@ describe("GlobalConfig", () => {
       uri: "mongodb://127.0.0.1:27017",
       dbName: "ema",
     });
+    expect(bootstrap.paths.dataRoot).toBe(
+      path.join(getWorkspaceRoot(), ".ema"),
+    );
     expect(bootstrap.devBootstrap).toBeUndefined();
   });
 

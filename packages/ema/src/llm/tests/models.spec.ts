@@ -44,6 +44,21 @@ describe("AgentHub model registry", () => {
     });
   });
 
+  test("rejects disabled thinking for Gemini 3.1 Pro Preview", () => {
+    expect(
+      resolveLLMModelDefinition("gemini-3.1-pro-preview").capabilities
+        .thinkingLevels,
+    ).toEqual([ThinkingLevel.LOW, ThinkingLevel.MEDIUM, ThinkingLevel.HIGH]);
+    expect(() =>
+      resolveLLMModelConfig({
+        model: "gemini-3.1-pro-preview",
+        apiKey: "test-key",
+        baseUrl: "https://generativelanguage.googleapis.com",
+        thinkingLevel: ThinkingLevel.NONE,
+      }),
+    ).toThrow("gemini-3.1-pro-preview does not support thinking level: none");
+  });
+
   test("resolves Qwen3 without thinking level because it has no level control", () => {
     expect(
       resolveLLMModelConfig({

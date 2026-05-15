@@ -49,7 +49,7 @@ import {
 const DEFAULT_WEB_USER_ID = 1;
 
 export function getLanceDbDirectory(): string {
-  return path.join(GlobalConfig.paths.dataRoot, "lancedb", GlobalConfig.mode);
+  return path.join(GlobalConfig.paths.dataRoot, "lancedb");
 }
 
 export async function prepareLanceDbDirectory(): Promise<{
@@ -57,12 +57,8 @@ export async function prepareLanceDbDirectory(): Promise<{
   reset: boolean;
 }> {
   const directory = getLanceDbDirectory();
-  const reset = GlobalConfig.mode === "dev";
-  if (reset) {
-    await nodeFs.rm(directory, { recursive: true, force: true });
-  }
   await nodeFs.mkdir(directory, { recursive: true });
-  return { directory, reset };
+  return { directory, reset: false };
 }
 
 /**

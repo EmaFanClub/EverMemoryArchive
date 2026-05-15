@@ -59,7 +59,10 @@ function main() {
     path.dirname(fileURLToPath(import.meta.url)),
     "..",
   );
-  const dataRoot = path.join(repoRoot, ".ema");
+  const dataRoot =
+    mode === "dev"
+      ? path.join(repoRoot, ".ema_dev", formatRunTimestamp())
+      : path.join(repoRoot, ".ema");
   mkdirSync(path.join(dataRoot, "logs"), { recursive: true });
   mkdirSync(path.join(dataRoot, "workspace"), { recursive: true });
 
@@ -104,6 +107,20 @@ function main() {
 function fail(message: string): never {
   process.stderr.write(`EMA WebUI startup error: ${message}\n\n${HELP}`);
   process.exit(1);
+}
+
+function formatRunTimestamp(date = new Date()): string {
+  const pad = (value: number, length = 2) =>
+    String(value).padStart(length, "0");
+  return [
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    [
+      pad(date.getHours()),
+      pad(date.getMinutes()),
+      pad(date.getSeconds()),
+      pad(date.getMilliseconds(), 3),
+    ].join("-"),
+  ].join("_");
 }
 
 main();
