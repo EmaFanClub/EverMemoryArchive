@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ActorEntity } from "../../db";
 import { createBootstrapConfig, GlobalConfig } from "../../config";
 import { createTestGlobalConfigRecord } from "../../config/tests/helpers";
-import { ThinkingLevel } from "../../agent_hub";
+import { ThinkingLevel } from "../../llm";
 import { MemFs } from "../../shared/fs";
 import { SettingsController } from "../settings_controller";
 

@@ -6,11 +6,11 @@ import {
   type LLMConfig,
   type WebSearchConfig,
 } from "../config";
-import { LLMClient, resolveLLMModelConfig, RetryConfig } from "../agent_hub";
+import { LLMClient, resolveLLMModelConfig, RetryConfig } from "../llm";
 import { EmbeddingClient } from "../memory/embedding_client";
-import type { UsageMetadata } from "../agent_hub/schema";
-import { isTextItem } from "../agent_hub/utils";
-import { listLLMModelDefinitions } from "../agent_hub/models";
+import type { UsageMetadata } from "../llm/schema";
+import { isTextItem } from "../llm/utils";
+import { listLLMModelDefinitions } from "../llm/models";
 import type { Server } from "../server";
 import type {
   EffectiveActorSettings,

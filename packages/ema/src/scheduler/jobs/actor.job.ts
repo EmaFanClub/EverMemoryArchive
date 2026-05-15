@@ -2,7 +2,7 @@ import { performance } from "node:perf_hooks";
 
 import { buildUserMessageFromActorInput } from "../../actor/utils";
 import { Agent, type AgentState, type RunFinishedEvent } from "../../agent";
-import { LLMClient } from "../../agent_hub";
+import { LLMClient } from "../../llm";
 import { formatLogTimestamp, Logger } from "../../shared/logger";
 import { formatTimestamp } from "../../shared/utils";
 import { GlobalConfig } from "../../config/index";

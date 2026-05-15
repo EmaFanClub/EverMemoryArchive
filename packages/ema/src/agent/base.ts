@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 
-import type { Message } from "../agent_hub/schema";
+import type { Message } from "../llm/schema";
 import type { Tool, ToolContext } from "../tools/base";
 import type { EmaReply } from "../tools/ema_reply_tool";
 

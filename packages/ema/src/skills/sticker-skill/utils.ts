@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ImageMIME, InlineDataItem } from "../../agent_hub/schema";
+import type { ImageMIME, InlineDataItem } from "../../llm/schema";
 import { resolveEmaSourcePath } from "../../shared/package_path";
 import {
   getStickerById,

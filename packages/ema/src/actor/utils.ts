@@ -1,5 +1,5 @@
-import type { UserMessage } from "../agent_hub/schema";
-import { expandContentsForModel } from "../agent_hub/utils";
+import type { UserMessage } from "../llm/schema";
+import { expandContentsForModel } from "../llm/utils";
 import { formatTimestamp } from "../shared/utils";
 import { formatReplyRef } from "../channel";
 import type { ActorInput } from "./base";

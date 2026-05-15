@@ -1,4 +1,4 @@
-import type { ImageItem } from "../agent_hub/schema";
+import type { ImageItem } from "../llm/schema";
 import type { Server } from "../server";
 
 /** Tool execution result. */

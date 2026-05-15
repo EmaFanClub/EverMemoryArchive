@@ -4,7 +4,7 @@ import { Agent, AgentEventNames, checkCompleteMessages } from "../agent";
 import type { AgentEventName, AgentState } from "../agent";
 import type { Server } from "../server";
 import { formatLogTimestamp, Logger } from "../shared/logger";
-import { LLMClient } from "../agent_hub";
+import { LLMClient } from "../llm";
 import { baseTools } from "../tools";
 import { resolveSession } from "../channel";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";

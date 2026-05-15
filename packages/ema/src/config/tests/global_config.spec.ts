@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import path from "node:path";
 
 import { MemFs } from "../../shared/fs";
-import { ThinkingLevel } from "../../agent_hub";
+import { ThinkingLevel } from "../../llm";
 import {
   createBootstrapConfig,
   getWorkspaceRoot,

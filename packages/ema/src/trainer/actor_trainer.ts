@@ -15,7 +15,7 @@ import type {
   ActorTrainingMessage,
 } from "./base";
 import type { EmaReply } from "../tools/ema_reply_tool";
-import { collapseContentsToText } from "../agent_hub/utils";
+import { collapseContentsToText } from "../llm/utils";
 import {
   buildTrainingCheckpointSnapshot,
   resolveCheckpointRoot,
