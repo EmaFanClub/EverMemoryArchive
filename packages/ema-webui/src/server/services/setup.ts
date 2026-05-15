@@ -1,8 +1,6 @@
 import "server-only";
 
 import {
-  DEFAULT_CHANNEL_CONFIG,
-  DEFAULT_WEB_SEARCH_CONFIG,
   resolveLLMModelDefinition,
   type EmbeddingConfig,
   type GlobalConfigRecord,
@@ -217,8 +215,8 @@ export async function runSetupServiceCheck(
     diagnostics: {
       provider: config.provider,
       model: config.model,
-      endpoint: config.useVertexAi ? "vertex-ai" : hostFromUrl(config.baseUrl),
-      credential: config.useVertexAi ? "credentials-json" : "api-key",
+      endpoint: hostFromUrl(config.baseUrl),
+      credential: "configured",
     },
   });
 }
@@ -363,7 +361,7 @@ function getSetupInitializationReason(
   if (!hasOwner || !config) {
     return "CONFIG_MISSING";
   }
-  if (!hasAccessTokenConfig(config.system)) {
+  if (!hasAccessTokenConfig(config)) {
     return "CONFIG_INCOMPLETE";
   }
 
@@ -394,31 +392,21 @@ function setupLlmFromGlobalConfig(config: LLMConfig): SetupDraft["llm"] {
 function setupEmbeddingFromGlobalConfig(
   config: EmbeddingConfig,
 ): SetupDraft["embedding"] {
-  return config.provider === "openai"
-    ? { ...initialDraft.embedding, provider: "openai", ...config.openai }
-    : { ...initialDraft.embedding, provider: "google", ...config.google };
+  return {
+    ...initialDraft.embedding,
+    provider: config.provider,
+    model: config.model,
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+  };
 }
 
 function isStoredLlmConfigStale(config: SetupDraft["llm"]) {
   return looksLikeEnvReference(config.apiKey);
 }
 
-function isStoredEmbeddingConfigStale(config: {
-  apiKey: string;
-  useVertexAi: boolean;
-  project: string;
-  location: string;
-  credentialsFile: string;
-}) {
-  if (!config.useVertexAi) {
-    return looksLikeEnvReference(config.apiKey);
-  }
-  const credentials = config.credentialsFile.trim();
-  return (
-    looksLikeEnvReference(config.project) ||
-    looksLikeEnvReference(config.location) ||
-    (credentials.length > 0 && !isJsonObject(credentials))
-  );
+function isStoredEmbeddingConfigStale(config: { apiKey: string }) {
+  return looksLikeEnvReference(config.apiKey);
 }
 
 function looksLikeEnvReference(value: string) {
@@ -430,17 +418,6 @@ function looksLikeEnvReference(value: string) {
       trimmed.endsWith("_PROJECT") ||
       trimmed.endsWith("_LOCATION"))
   );
-}
-
-function isJsonObject(value: string) {
-  try {
-    const parsed = JSON.parse(value);
-    return Boolean(
-      parsed && typeof parsed === "object" && !Array.isArray(parsed),
-    );
-  } catch {
-    return false;
-  }
 }
 
 function validateLlmModelConfig(
@@ -565,14 +542,9 @@ function buildGlobalConfigRecord(draft: SetupDraft): GlobalConfigRecord {
   return {
     id: "global",
     version: 1,
-    system: {
-      httpsProxy: "",
-      ...createAccessTokenRecord(draft.owner.accessToken),
-    },
+    ...createAccessTokenRecord(draft.owner.accessToken),
     defaultLlm: buildLlmConfig(draft),
     defaultEmbedding: buildEmbeddingConfig(draft),
-    defaultWebSearch: DEFAULT_WEB_SEARCH_CONFIG,
-    defaultChannel: DEFAULT_CHANNEL_CONFIG,
     createdAt: nowMs,
     updatedAt: nowMs,
   };
@@ -616,47 +588,8 @@ function toCoreThinkingLevel(
 function buildEmbeddingConfig(draft: SetupDraft): EmbeddingConfig {
   return {
     provider: draft.embedding.provider,
-    openai: {
-      model:
-        draft.embedding.provider === "openai"
-          ? draft.embedding.model.trim()
-          : "",
-      baseUrl:
-        draft.embedding.provider === "openai"
-          ? draft.embedding.baseUrl.trim()
-          : "",
-      apiKey:
-        draft.embedding.provider === "openai"
-          ? draft.embedding.apiKey.trim()
-          : "",
-    },
-    google: {
-      model:
-        draft.embedding.provider === "google"
-          ? draft.embedding.model.trim()
-          : "",
-      baseUrl:
-        draft.embedding.provider === "google" && !draft.embedding.useVertexAi
-          ? draft.embedding.baseUrl.trim()
-          : "",
-      apiKey:
-        draft.embedding.provider === "google" && !draft.embedding.useVertexAi
-          ? draft.embedding.apiKey.trim()
-          : "",
-      useVertexAi:
-        draft.embedding.provider === "google" && draft.embedding.useVertexAi,
-      project:
-        draft.embedding.provider === "google" && draft.embedding.useVertexAi
-          ? draft.embedding.project.trim()
-          : "",
-      location:
-        draft.embedding.provider === "google" && draft.embedding.useVertexAi
-          ? draft.embedding.location.trim()
-          : "",
-      credentialsFile:
-        draft.embedding.provider === "google" && draft.embedding.useVertexAi
-          ? draft.embedding.credentialsFile.trim()
-          : "",
-    },
+    model: draft.embedding.model.trim(),
+    baseUrl: draft.embedding.baseUrl.trim(),
+    apiKey: draft.embedding.apiKey.trim(),
   };
 }

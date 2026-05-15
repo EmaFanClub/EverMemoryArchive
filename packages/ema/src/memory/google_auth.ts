@@ -5,11 +5,10 @@ export const GOOGLE_AI_API_VERSION = "v1beta";
 export const VERTEX_AI_API_VERSION = "v1";
 export const GOOGLE_VERTEX_AI_SCOPE =
   "https://www.googleapis.com/auth/cloud-platform";
+const DEFAULT_VERTEX_AI_LOCATION = "global";
 
 export interface GoogleVertexAIConfig {
-  project: string;
-  location: string;
-  credentialsFile: string;
+  credentialsJson: string;
 }
 
 type GoogleCredentials = NonNullable<
@@ -36,21 +35,36 @@ function parseGoogleCredentialsJson(value: string): GoogleCredentials {
   return parsed as GoogleCredentials;
 }
 
+export function isGoogleVertexCredentialsJson(value: string): boolean {
+  return value.trim().startsWith("{");
+}
+
 /** Builds Vertex AI options from database-backed Google embedding config. */
 export function buildGoogleVertexAIOptions(
   config: GoogleVertexAIConfig,
 ): GoogleGenAIOptions {
-  const credentials = parseGoogleCredentialsJson(config.credentialsFile);
+  const credentials = parseGoogleCredentialsJson(config.credentialsJson);
+  const project = getGoogleCredentialsProjectId(credentials);
   return {
     apiVersion: VERTEX_AI_API_VERSION,
     vertexai: true,
-    project: config.project,
-    location: config.location,
+    project,
+    location: DEFAULT_VERTEX_AI_LOCATION,
     googleAuthOptions: {
       credentials,
       scopes: [GOOGLE_VERTEX_AI_SCOPE],
     },
   };
+}
+
+function getGoogleCredentialsProjectId(credentials: GoogleCredentials): string {
+  const projectId = (credentials as Record<string, unknown>).project_id;
+  if (typeof projectId !== "string" || !projectId.trim()) {
+    throw new Error(
+      "Google Vertex AI credentials JSON must include project_id.",
+    );
+  }
+  return projectId.trim();
 }
 
 /**

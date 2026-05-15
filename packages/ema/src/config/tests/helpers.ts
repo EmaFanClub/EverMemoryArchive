@@ -1,9 +1,5 @@
 import {
   createBootstrapConfig,
-  DEFAULT_CHANNEL_CONFIG,
-  DEFAULT_EMBEDDING_CONFIG,
-  DEFAULT_LLM_CONFIG,
-  DEFAULT_WEB_SEARCH_CONFIG,
   GlobalConfig,
   type GlobalConfigRecord,
 } from "../../config/index";
@@ -18,13 +14,17 @@ export function createTestGlobalConfigRecord(
   return {
     id: "global",
     version: 1,
-    system: {
-      httpsProxy: "",
+    defaultLlm: {
+      model: "gemini-3.1-pro-preview",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      apiKey: "",
     },
-    defaultLlm: DEFAULT_LLM_CONFIG,
-    defaultEmbedding: DEFAULT_EMBEDDING_CONFIG,
-    defaultWebSearch: DEFAULT_WEB_SEARCH_CONFIG,
-    defaultChannel: DEFAULT_CHANNEL_CONFIG,
+    defaultEmbedding: {
+      provider: "google",
+      model: "gemini-embedding-001",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      apiKey: "",
+    },
     createdAt: now,
     updatedAt: now,
     ...overrides,

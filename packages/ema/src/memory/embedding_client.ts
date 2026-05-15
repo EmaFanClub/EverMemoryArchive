@@ -2,15 +2,12 @@ import { GoogleGenAI } from "@google/genai";
 import type { GoogleGenAIOptions } from "@google/genai";
 import OpenAI from "openai";
 
-import {
-  DEFAULT_GOOGLE_BASE_URL,
-  GlobalConfig,
-  type EmbeddingConfig,
-} from "../config";
+import { GlobalConfig, type EmbeddingConfig } from "../config";
 import {
   buildGoogleVertexAIOptions,
   GenAI,
   GOOGLE_AI_API_VERSION,
+  isGoogleVertexCredentialsJson,
 } from "./google_auth";
 import { FetchWithProxy } from "../shared/proxy";
 
@@ -28,54 +25,46 @@ export class EmbeddingClient {
   constructor(config: EmbeddingConfig) {
     this.config = GlobalConfig.resolveRuntimeEmbeddingConfig(config);
     if (this.config.provider === "google") {
-      if (!this.config.google.model) {
+      if (!this.config.model) {
         throw new Error("Google embedding model is required.");
       }
-      if (
-        this.config.google.useVertexAi &&
-        (!this.config.google.project ||
-          !this.config.google.location ||
-          !this.config.google.credentialsFile)
-      ) {
+      if (!this.config.apiKey) {
         throw new Error(
-          "Google Vertex AI project, location, and credentials JSON are required.",
+          "Google API key or Vertex AI credentials JSON is required.",
         );
       }
-      if (!this.config.google.useVertexAi && !this.config.google.apiKey) {
-        throw new Error("Google API key is required.");
-      }
-      this.model = this.config.google.model;
+      this.model = this.config.model;
       const googleAIOptions: GoogleGenAIOptions = {
         apiVersion: GOOGLE_AI_API_VERSION,
         vertexai: false,
-        apiKey: this.config.google.apiKey,
+        apiKey: this.config.apiKey,
       };
       if (
-        this.config.google.baseUrl &&
-        this.config.google.baseUrl !== DEFAULT_GOOGLE_BASE_URL
+        this.config.baseUrl &&
+        this.config.baseUrl !== "https://generativelanguage.googleapis.com"
       ) {
         googleAIOptions.httpOptions = {
-          baseUrl: this.config.google.baseUrl,
+          baseUrl: this.config.baseUrl,
         };
       }
-      const options = this.config.google.useVertexAi
-        ? buildGoogleVertexAIOptions(this.config.google)
+      const options = isGoogleVertexCredentialsJson(this.config.apiKey)
+        ? buildGoogleVertexAIOptions({ credentialsJson: this.config.apiKey })
         : googleAIOptions;
       this.googleClient = new GenAI(
         options,
-        new FetchWithProxy(GlobalConfig.system.httpsProxy).createFetcher(),
+        new FetchWithProxy(GlobalConfig.httpsProxy).createFetcher(),
       );
       return;
     }
 
-    this.model = this.config.openai.model;
-    if (!this.model || !this.config.openai.apiKey) {
+    this.model = this.config.model;
+    if (!this.model || !this.config.apiKey) {
       throw new Error("OpenAI embedding model and API key are required.");
     }
     this.openaiClient = new OpenAI({
-      apiKey: this.config.openai.apiKey,
-      baseURL: this.config.openai.baseUrl,
-      fetch: new FetchWithProxy(GlobalConfig.system.httpsProxy).createFetcher(),
+      apiKey: this.config.apiKey,
+      baseURL: this.config.baseUrl,
+      fetch: new FetchWithProxy(GlobalConfig.httpsProxy).createFetcher(),
     });
   }
 

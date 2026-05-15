@@ -55,10 +55,6 @@ interface ServiceProviderFields {
   model: string;
   baseUrl: string;
   apiKey: string;
-  useVertexAi: boolean;
-  project: string;
-  location: string;
-  credentialsFile: string;
 }
 
 interface ServiceDraft {
@@ -90,7 +86,7 @@ const EMBEDDING_PROVIDER_LABELS: Record<EmbeddingProvider, string> = {
   openai: "OpenAI",
 };
 const EMBEDDING_API_KEY_PLACEHOLDERS: Record<EmbeddingProvider, string> = {
-  google: "AIzaSyA7fK...D5eJ",
+  google: "AIzaSyA7fK...D5eJ 或 Vertex AI 凭据 JSON",
   openai: "sk-u1Kv9xP...ZTyU",
 };
 const LLM_PROVIDER_LABELS: Record<LlmModelProvider, string> = {
@@ -117,38 +113,17 @@ const THINKING_LEVEL_LABELS: Record<LlmThinkingLevel, string> = {
 };
 const VERTEX_CREDENTIALS_JSON_LIMIT = 16_384;
 const LLM_CREDENTIAL_LIMIT = VERTEX_CREDENTIALS_JSON_LIMIT;
-const VERTEX_CREDENTIALS_JSON_PLACEHOLDER = String.raw`{
-  "type": "service_account",
-  "project_id": "your-project-id",
-  "private_key_id": "your-private-key-id",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----\n",
-  "client_email": "your-service-account@your-project-id.iam.gserviceaccount.com",
-  "client_id": "123456789012345678901",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project-id.iam.gserviceaccount.com"
-}`;
-
 function fieldsFromSetupDefaults(defaults: {
   mode?: LegacyOpenAiMode;
   model: string;
   baseUrl: string;
   apiKey: string;
-  useVertexAi: boolean;
-  project: string;
-  location: string;
-  credentialsFile: string;
 }): ServiceProviderFields {
   return {
     mode: defaults.mode ?? "responses",
     model: defaults.model,
     baseUrl: defaults.baseUrl,
     apiKey: defaults.apiKey,
-    useVertexAi: defaults.useVertexAi,
-    project: defaults.project,
-    location: defaults.location,
-    credentialsFile: defaults.credentialsFile,
   };
 }
 
@@ -197,51 +172,18 @@ function serviceDraftFromLlmConfig(
 function serviceDraftFromEmbeddingConfig(
   config: GlobalEmbeddingConfig,
 ): ServiceDraft {
+  const providerFields =
+    config.provider === "openai"
+      ? DEFAULT_EMBEDDING_DRAFT.openai
+      : DEFAULT_EMBEDDING_DRAFT.google;
   return {
     ...DEFAULT_EMBEDDING_DRAFT,
     provider: config.provider,
-    openai: {
-      ...DEFAULT_EMBEDDING_DRAFT.openai,
-      model: valueOrDefault(
-        config.openai.model,
-        DEFAULT_EMBEDDING_DRAFT.openai.model,
-      ),
-      baseUrl: valueOrDefault(
-        config.openai.baseUrl,
-        DEFAULT_EMBEDDING_DRAFT.openai.baseUrl,
-      ),
-      apiKey: valueOrDefault(
-        config.openai.apiKey,
-        DEFAULT_EMBEDDING_DRAFT.openai.apiKey,
-      ),
-    },
-    google: {
-      ...DEFAULT_EMBEDDING_DRAFT.google,
-      model: valueOrDefault(
-        config.google.model,
-        DEFAULT_EMBEDDING_DRAFT.google.model,
-      ),
-      baseUrl: valueOrDefault(
-        config.google.baseUrl,
-        DEFAULT_EMBEDDING_DRAFT.google.baseUrl,
-      ),
-      apiKey: valueOrDefault(
-        config.google.apiKey,
-        DEFAULT_EMBEDDING_DRAFT.google.apiKey,
-      ),
-      useVertexAi: config.google.useVertexAi,
-      project: valueOrDefault(
-        config.google.project,
-        DEFAULT_EMBEDDING_DRAFT.google.project,
-      ),
-      location: valueOrDefault(
-        config.google.location,
-        DEFAULT_EMBEDDING_DRAFT.google.location,
-      ),
-      credentialsFile: valueOrDefault(
-        config.google.credentialsFile,
-        DEFAULT_EMBEDDING_DRAFT.google.credentialsFile,
-      ),
+    [config.provider]: {
+      ...providerFields,
+      model: valueOrDefault(config.model, providerFields.model),
+      baseUrl: valueOrDefault(config.baseUrl, providerFields.baseUrl),
+      apiKey: valueOrDefault(config.apiKey, providerFields.apiKey),
     },
   };
 }
@@ -257,22 +199,12 @@ function llmConfigFromDraft(draft: LlmServiceDraft): GlobalLlmConfig {
 
 function embeddingConfigFromDraft(draft: ServiceDraft): GlobalEmbeddingConfig {
   const provider = draft.provider === "openai" ? "openai" : "google";
+  const active = draft[provider];
   return {
     provider,
-    openai: {
-      model: draft.openai.model.trim(),
-      baseUrl: draft.openai.baseUrl.trim(),
-      apiKey: draft.openai.apiKey.trim(),
-    },
-    google: {
-      model: draft.google.model.trim(),
-      baseUrl: draft.google.baseUrl.trim(),
-      apiKey: draft.google.apiKey.trim(),
-      useVertexAi: draft.google.useVertexAi,
-      project: draft.google.project.trim(),
-      location: draft.google.location.trim(),
-      credentialsFile: draft.google.credentialsFile.trim(),
-    },
+    model: active.model.trim(),
+    baseUrl: active.baseUrl.trim(),
+    apiKey: active.apiKey.trim(),
   };
 }
 
@@ -300,10 +232,6 @@ function trimServiceFields(
     model: fields.model.trim(),
     baseUrl: fields.baseUrl.trim(),
     apiKey: fields.apiKey.trim(),
-    useVertexAi: fields.useVertexAi,
-    project: fields.project.trim(),
-    location: fields.location.trim(),
-    credentialsFile: fields.credentialsFile.trim(),
   };
 }
 
@@ -328,17 +256,6 @@ function isHttpUrlValue(value: string) {
   try {
     const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function isJsonObjectValue(value: string) {
-  try {
-    const parsed = JSON.parse(value);
-    return Boolean(
-      parsed && typeof parsed === "object" && !Array.isArray(parsed),
-    );
   } catch {
     return false;
   }
@@ -429,40 +346,6 @@ function validateServiceDraft(draft: ServiceDraft) {
     return localDashboardFeedback("模型未填写", "模型名称是必填项。");
   }
 
-  if (draft.provider === "google" && draft.google.useVertexAi) {
-    const fields = [
-      ["项目", draft.google.project],
-      ["区域", draft.google.location],
-      ["凭据 JSON", draft.google.credentialsFile],
-    ] as const;
-    const missing = fields
-      .filter(([, value]) => !value.trim())
-      .map(([label]) => label);
-    if (missing.length > 0) {
-      return localDashboardFeedback(
-        `${missing.join("、")}未填写`,
-        "Vertex AI 需要项目、区域和凭据 JSON。",
-      );
-    }
-    if (
-      draft.google.project.trim().length > 128 ||
-      draft.google.location.trim().length > 128 ||
-      draft.google.credentialsFile.trim().length > VERTEX_CREDENTIALS_JSON_LIMIT
-    ) {
-      return localDashboardFeedback(
-        "Vertex AI 配置过长",
-        `项目和区域不能超过 128 个字符，凭据 JSON 不能超过 ${VERTEX_CREDENTIALS_JSON_LIMIT} 个字符。`,
-      );
-    }
-    if (!isJsonObjectValue(draft.google.credentialsFile.trim())) {
-      return localDashboardFeedback(
-        "凭据 JSON 格式错误",
-        "Vertex AI 凭据需要是有效的 JSON 对象。",
-      );
-    }
-    return null;
-  }
-
   if (!active.baseUrl.trim() || !isHttpUrlValue(active.baseUrl.trim())) {
     return localDashboardFeedback(
       "接口地址格式错误",
@@ -472,8 +355,11 @@ function validateServiceDraft(draft: ServiceDraft) {
   if (!active.apiKey.trim()) {
     return localDashboardFeedback("ApiKey未填写", "ApiKey 是必填项。");
   }
-  if (active.apiKey.trim().length > 512) {
-    return localDashboardFeedback("ApiKey过长", "ApiKey 不能超过 512 个字符。");
+  if (active.apiKey.trim().length > VERTEX_CREDENTIALS_JSON_LIMIT) {
+    return localDashboardFeedback(
+      "ApiKey过长",
+      `ApiKey 不能超过 ${VERTEX_CREDENTIALS_JSON_LIMIT} 个字符。`,
+    );
   }
   return null;
 }
@@ -1577,36 +1463,6 @@ function ServiceDetail({
               </div>
             </div>
 
-            {draft.provider === "google" ? (
-              <button
-                type="button"
-                className={`${styles.llmGlobalSwitch} ${
-                  draft.google.useVertexAi ? styles.llmGlobalSwitchOn : ""
-                }`}
-                role="switch"
-                aria-checked={draft.google.useVertexAi}
-                onClick={() =>
-                  updateProviderFields("google", {
-                    useVertexAi: !draft.google.useVertexAi,
-                  })
-                }
-              >
-                <span className={styles.llmSettingsItemText}>
-                  <span className={styles.llmSettingsItemTitle}>
-                    使用 Vertex AI
-                  </span>
-                </span>
-                <span
-                  className={`${styles.actorSettingsSwitch} ${
-                    draft.google.useVertexAi ? styles.actorSettingsSwitchOn : ""
-                  }`}
-                  aria-hidden="true"
-                >
-                  <span className={styles.actorSettingsSwitchKnob} />
-                </span>
-              </button>
-            ) : null}
-
             <div className={styles.llmSettingsFields}>
               <label className={styles.llmSettingsField}>
                 <span className={styles.llmSettingsControlTitle}>模型</span>
@@ -1686,57 +1542,22 @@ function ServiceDetail({
                 </div>
               </label>
 
-              {draft.provider === "google" && draft.google.useVertexAi ? (
-                <>
-                  <ServiceField
-                    title="项目"
-                    hint="填写 Google Cloud 项目 ID"
-                    value={draft.google.project}
-                    placeholder="my-gcp-project"
-                    onChange={(project) =>
-                      updateProviderFields("google", { project })
-                    }
-                  />
-                  <ServiceField
-                    title="区域"
-                    hint="填写 Vertex AI 区域"
-                    value={draft.google.location}
-                    placeholder="global"
-                    onChange={(location) =>
-                      updateProviderFields("google", { location })
-                    }
-                  />
-                  <ServiceField
-                    title="凭据 JSON"
-                    value={draft.google.credentialsFile}
-                    placeholder={VERTEX_CREDENTIALS_JSON_PLACEHOLDER}
-                    multiline
-                    rows={5}
-                    onChange={(credentialsFile) =>
-                      updateProviderFields("google", { credentialsFile })
-                    }
-                  />
-                </>
-              ) : (
-                <>
-                  <ServiceField
-                    title="Base URL"
-                    value={activeFields.baseUrl}
-                    placeholder={
-                      draft.provider === "google"
-                        ? "https://generativelanguage.googleapis.com"
-                        : "https://api.openai.com/v1"
-                    }
-                    onChange={(baseUrl) => updateActiveFields({ baseUrl })}
-                  />
-                  <ServiceField
-                    title="ApiKey"
-                    value={activeFields.apiKey}
-                    placeholder={EMBEDDING_API_KEY_PLACEHOLDERS[draft.provider]}
-                    onChange={(apiKey) => updateActiveFields({ apiKey })}
-                  />
-                </>
-              )}
+              <ServiceField
+                title="Base URL"
+                value={activeFields.baseUrl}
+                placeholder={
+                  draft.provider === "google"
+                    ? "https://generativelanguage.googleapis.com"
+                    : "https://api.openai.com/v1"
+                }
+                onChange={(baseUrl) => updateActiveFields({ baseUrl })}
+              />
+              <ServiceField
+                title="ApiKey"
+                value={activeFields.apiKey}
+                placeholder={EMBEDDING_API_KEY_PLACEHOLDERS[draft.provider]}
+                onChange={(apiKey) => updateActiveFields({ apiKey })}
+              />
             </div>
           </section>
 

@@ -139,7 +139,7 @@ function llmProviderDiagnostic(config: ActorLlmConfig) {
 }
 
 function selectedEmbeddingConfig(config: GlobalEmbeddingSaveRequest["config"]) {
-  return config.provider === "openai" ? config.openai : config.google;
+  return config;
 }
 
 function sameJsonValue(left: unknown, right: unknown) {
@@ -201,7 +201,7 @@ export async function buildGlobalSettingsResponse(): Promise<GlobalSettingsRespo
     user: toDashboardUserProfile(setupStatus.owner),
     access: {
       webui: {
-        configured: Boolean(record && hasAccessTokenConfig(record.system)),
+        configured: Boolean(record && hasAccessTokenConfig(record)),
       },
     },
     identityBindings: {
@@ -255,10 +255,7 @@ export async function saveGlobalAccessTokenService(
     }
     await server.dbService.globalConfigDB.upsertGlobalConfig({
       ...record,
-      system: {
-        ...record.system,
-        ...createAccessTokenRecord(token),
-      },
+      ...createAccessTokenRecord(token),
     });
     return {
       apiVersion: API_VERSION,
@@ -1160,14 +1157,8 @@ function embeddingSaveDiagnostics(
   return {
     provider: config.provider,
     model: selected.model,
-    endpoint:
-      config.provider === "google" && config.google.useVertexAi
-        ? "vertex-ai"
-        : hostFromUrl(selected.baseUrl),
-    credential:
-      config.provider === "google" && config.google.useVertexAi
-        ? credentialDiagnosticValue(config.google.credentialsFile)
-        : credentialDiagnosticValue(selected.apiKey),
+    endpoint: hostFromUrl(selected.baseUrl),
+    credential: credentialDiagnosticValue(selected.apiKey),
     storage: "ema-global-config",
   };
 }
@@ -1341,14 +1332,8 @@ export async function runGlobalEmbeddingServiceCheck(
     diagnostics: {
       provider: config.provider,
       model: selected.model,
-      endpoint:
-        config.provider === "google" && config.google.useVertexAi
-          ? "vertex-ai"
-          : hostFromUrl(selected.baseUrl),
-      credential:
-        config.provider === "google" && config.google.useVertexAi
-          ? credentialDiagnosticValue(config.google.credentialsFile)
-          : credentialDiagnosticValue(selected.apiKey),
+      endpoint: hostFromUrl(selected.baseUrl),
+      credential: credentialDiagnosticValue(selected.apiKey),
       ...(probe.diagnostics ?? {}),
     },
   });

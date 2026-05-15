@@ -51,7 +51,7 @@ export class AgentHubClient extends LLMClientBase<
   ) {
     super(retryConfig);
     process.env.AGENTHUB_CACHE_DIR = path.join(
-      GlobalConfig.system.logsDir,
+      GlobalConfig.paths.logsDir,
       "agent",
     );
     this.client = new AutoLLMClient({

@@ -209,7 +209,7 @@ export class ActorController {
       ),
       this.ignoreCleanupError(actorId, "logs", () =>
         rm(
-          path.join(GlobalConfig.system.logsDir, "actors", `actor_${actorId}`),
+          path.join(GlobalConfig.paths.logsDir, "actors", `actor_${actorId}`),
           {
             recursive: true,
             force: true,

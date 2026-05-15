@@ -111,7 +111,7 @@ describe("DBService", () => {
     const result = await dbService.snapshot("db-service-snapshot");
     expect(result.fileName).toBe(
       path.join(
-        GlobalConfig.system.dataRoot,
+        GlobalConfig.paths.dataRoot,
         "mongo-snapshots",
         "db-service-snapshot.json",
       ),

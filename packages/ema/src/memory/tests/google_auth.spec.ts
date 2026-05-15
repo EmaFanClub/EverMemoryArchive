@@ -88,16 +88,17 @@ describe("GenAI", () => {
 
   test("uses provided Vertex AI credentials JSON without key file fallback", () => {
     const options = buildGoogleVertexAIOptions({
-      project: "test-project",
-      location: "global",
-      credentialsFile:
-        '{"type":"service_account","client_email":"svc@example.com"}',
+      credentialsJson:
+        '{"type":"service_account","project_id":"test-project","client_email":"svc@example.com"}',
     });
 
     const googleAuthOptions = options.googleAuthOptions!;
+    expect(options.project).toBe("test-project");
+    expect(options.location).toBe("global");
     expect(googleAuthOptions).toEqual({
       credentials: {
         type: "service_account",
+        project_id: "test-project",
         client_email: "svc@example.com",
       },
       scopes: [GOOGLE_VERTEX_AI_SCOPE],
@@ -109,10 +110,17 @@ describe("GenAI", () => {
   test("requires Vertex AI credentials JSON", () => {
     expect(() =>
       buildGoogleVertexAIOptions({
-        project: "test-project",
-        location: "global",
-        credentialsFile: "",
+        credentialsJson: "",
       }),
     ).toThrow("Google Vertex AI credentials JSON is required.");
+  });
+
+  test("requires Vertex AI project_id in credentials JSON", () => {
+    expect(() =>
+      buildGoogleVertexAIOptions({
+        credentialsJson:
+          '{"type":"service_account","client_email":"svc@example.com"}',
+      }),
+    ).toThrow("Google Vertex AI credentials JSON must include project_id.");
   });
 });

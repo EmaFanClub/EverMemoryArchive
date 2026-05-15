@@ -1509,7 +1509,6 @@ async function createBackgroundAgent(
       : `actors/actor_${actorId}/${task}/${date}/${startedAt}`;
   return {
     agent: new Agent(
-      GlobalConfig.agent,
       new LLMClient(await server.dbService.getActorLLMConfig(actorId)),
     ),
     traceId,

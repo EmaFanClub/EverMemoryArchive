@@ -466,24 +466,11 @@ function embeddingConfigSummary(config: EmbeddingConfig): {
   provider: EmbeddingConfig["provider"];
   model: string;
   baseUrl: string;
-  useVertexAi?: boolean;
-  project?: string;
-  location?: string;
 } {
-  if (config.provider === "openai") {
-    return {
-      provider: "openai",
-      model: config.openai.model,
-      baseUrl: config.openai.baseUrl,
-    };
-  }
   return {
-    provider: "google",
-    model: config.google.model,
-    baseUrl: config.google.useVertexAi ? "vertex-ai" : config.google.baseUrl,
-    useVertexAi: config.google.useVertexAi,
-    project: config.google.useVertexAi ? config.google.project : "",
-    location: config.google.useVertexAi ? config.google.location : "",
+    provider: config.provider,
+    model: config.model,
+    baseUrl: config.baseUrl,
   };
 }
 
@@ -492,24 +479,10 @@ function errorMessage(error: unknown): string {
 }
 
 function validateEmbeddingConfig(config: EmbeddingConfig): string | null {
-  if (config.provider === "openai") {
-    return !config.openai.model.trim() ||
-      !config.openai.baseUrl.trim() ||
-      !config.openai.apiKey.trim()
-      ? "Embedding config is incomplete."
-      : null;
-  }
-  if (!config.google.model.trim()) {
+  if (!config.model.trim()) {
     return "Embedding config is incomplete.";
   }
-  if (config.google.useVertexAi) {
-    return !config.google.project.trim() ||
-      !config.google.location.trim() ||
-      !config.google.credentialsFile.trim()
-      ? "Google Vertex AI project, location, and credentials JSON are required."
-      : null;
-  }
-  return !config.google.baseUrl.trim() || !config.google.apiKey.trim()
+  return !config.baseUrl.trim() || !config.apiKey.trim()
     ? "Embedding config is incomplete."
     : null;
 }

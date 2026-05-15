@@ -2,11 +2,6 @@ import { EventEmitter } from "node:events";
 
 import type { LLMClient } from "../llm";
 import { RetryExhaustedError, isAbortError } from "../llm/retry";
-import {
-  DEFAULT_AGENT_MAX_STEPS,
-  DEFAULT_AGENT_TOKEN_LIMIT,
-  type AgentConfig,
-} from "../config/index";
 import { Logger } from "../shared/logger";
 import type { Content, Message, ModelMessage, ToolResult } from "../llm/schema";
 import { isToolCall } from "../llm/utils";
@@ -16,6 +11,8 @@ import type {
   AgentState,
   AgentStateCallback,
 } from "./base";
+
+const AGENT_MAX_STEPS = 50;
 
 /**
  * Reports whether the message history represents a complete model response.
@@ -49,7 +46,6 @@ export class ContextManager {
     llmClient: LLMClient,
     events: AgentEventsEmitter,
     logger: Logger,
-    tokenLimit: number = 80000,
   ) {
     this.llmClient = llmClient;
     this.events = events;
@@ -121,8 +117,6 @@ export class Agent {
   private abortRequested = false;
 
   constructor(
-    /** Configuration for the agent. */
-    private config: AgentConfig,
     /** LLM client used by the agent to generate responses. */
     private llm: LLMClient,
     /** Outside Logger used by the agent. */
@@ -136,7 +130,6 @@ export class Agent {
       this.llm,
       this.events,
       this.logger,
-      DEFAULT_AGENT_TOKEN_LIMIT,
     );
   }
 
@@ -182,7 +175,7 @@ export class Agent {
   /** Execute agent loop until task is complete or max steps reached. */
   async mainLoop(): Promise<void> {
     const toolDict = new Map(this.contextManager.tools.map((t) => [t.name, t]));
-    const maxSteps = DEFAULT_AGENT_MAX_STEPS;
+    const maxSteps = AGENT_MAX_STEPS;
     let step = 0;
     const traceId = this.contextManager.state.traceId;
 

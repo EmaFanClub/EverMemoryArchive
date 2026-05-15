@@ -13,20 +13,20 @@ export function createAccessTokenRecord(token: string) {
   };
 }
 
-export function hasAccessTokenConfig(system: { accessToken?: string }) {
-  return Boolean(system.accessToken?.trim());
+export function hasAccessTokenConfig(config: { accessToken?: string }) {
+  return Boolean(config.accessToken?.trim());
 }
 
 export function verifyAccessToken(
   token: string,
-  system: {
+  config: {
     accessToken?: string;
   },
 ) {
-  if (!isAccessTokenValid(token) || !hasAccessTokenConfig(system)) {
+  if (!isAccessTokenValid(token) || !hasAccessTokenConfig(config)) {
     return false;
   }
-  return token.trim() === system.accessToken!.trim();
+  return token.trim() === config.accessToken!.trim();
 }
 
 export function readAccessTokenCookie(request: Request) {

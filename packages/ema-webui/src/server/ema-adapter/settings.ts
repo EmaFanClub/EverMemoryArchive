@@ -69,20 +69,9 @@ export function toWebEmbeddingConfig(
 ): GlobalEmbeddingConfig {
   return {
     provider: config.provider,
-    openai: {
-      model: config.openai.model,
-      baseUrl: config.openai.baseUrl,
-      apiKey: config.openai.apiKey,
-    },
-    google: {
-      model: config.google.model,
-      baseUrl: config.google.baseUrl,
-      apiKey: config.google.apiKey,
-      useVertexAi: config.google.useVertexAi,
-      project: config.google.project,
-      location: config.google.location,
-      credentialsFile: config.google.credentialsFile,
-    },
+    model: config.model,
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
   };
 }
 
