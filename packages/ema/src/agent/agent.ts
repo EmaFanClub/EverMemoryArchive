@@ -180,14 +180,10 @@ export class Agent {
     const traceId = this.contextManager.state.traceId;
 
     while (step < maxSteps) {
-      if (this.abortRequested) {
-        this.finishAborted();
-        return;
-      }
-
       // Call LLM with context from context manager
       let response: ModelMessage;
       try {
+        this.throwAbortIfRequested();
         this.llm.setRetryCallback((exception, attempt) => {
           this.logger.warn("LLM request retry", {
             traceId,
@@ -203,37 +199,9 @@ export class Agent {
           traceId,
           signal: this.abortController?.signal,
         });
+        this.throwAbortIfRequested();
       } catch (error) {
-        if (isAbortError(error)) {
-          this.finishAborted();
-          return;
-        }
-        if (error instanceof RetryExhaustedError) {
-          const errorMsg = `LLM call failed after ${error.attempts} retries. Last error: ${String(error.lastException)}`;
-          this.events.emit("runFinished", {
-            ok: false,
-            msg: errorMsg,
-            error: error as RetryExhaustedError,
-          });
-          this.logger.error(errorMsg, { traceId, step: step + 1 });
-          return;
-        }
-        const errorMsg = `LLM call failed: ${(error as Error).message}`;
-        this.events.emit("runFinished", {
-          ok: false,
-          msg: errorMsg,
-          error: error as Error,
-        });
-        this.logger.error(errorMsg, {
-          traceId,
-          step: step + 1,
-          error,
-        });
-        return;
-      }
-
-      if (this.abortRequested) {
-        this.finishAborted();
+        this.handleGenerateError(error, traceId, step + 1);
         return;
       }
 
@@ -351,6 +319,49 @@ export class Agent {
     });
     this.logger.error(errorMsg, { traceId, maxSteps });
     return;
+  }
+
+  private throwAbortIfRequested(): void {
+    if (!this.abortRequested) {
+      return;
+    }
+    const error = new Error("Aborted");
+    error.name = "AbortError";
+    throw error;
+  }
+
+  private handleGenerateError(
+    error: unknown,
+    traceId: string | undefined,
+    step: number,
+  ): void {
+    if (isAbortError(error)) {
+      this.finishAborted();
+      return;
+    }
+    if (error instanceof RetryExhaustedError) {
+      const errorMsg = `LLM call failed after ${error.attempts} retries. Last error: ${String(error.lastException)}`;
+      this.events.emit("runFinished", {
+        ok: false,
+        msg: errorMsg,
+        error,
+      });
+      this.logger.error(errorMsg, { traceId, step });
+      return;
+    }
+    const resolvedError =
+      error instanceof Error ? error : new Error(String(error));
+    const errorMsg = `LLM call failed: ${resolvedError.message}`;
+    this.events.emit("runFinished", {
+      ok: false,
+      msg: errorMsg,
+      error: resolvedError,
+    });
+    this.logger.error(errorMsg, {
+      traceId,
+      step,
+      error: resolvedError,
+    });
   }
 
   private finishAborted(): void {

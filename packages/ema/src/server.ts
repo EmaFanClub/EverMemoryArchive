@@ -144,7 +144,7 @@ export class Server {
       lancedb: {
         mode: GlobalConfig.mode,
         path: getLanceDbDirectory(),
-        resetOnStart: GlobalConfig.mode === "dev",
+        resetOnStart: false,
       },
     });
   }

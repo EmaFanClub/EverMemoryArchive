@@ -9,6 +9,7 @@ import type {
   ShortTermMemoryRecord,
 } from "./base";
 import type {
+  ConversationEntity,
   ConversationMessageEntity,
   ListShortTermMemoriesRequest,
 } from "../db";
@@ -116,7 +117,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     }
     const ownerUid = await this.getOwnerUid(actorId, sessionInfo.channel);
     return {
-      conversationDescription: conversation.description ?? "None.",
+      conversationDescription: this.buildConversationDescription(conversation),
       bufferText:
         buffer.length === 0
           ? "None."
@@ -129,6 +130,16 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       activityMemory,
       sessionType: sessionInfo.type,
     };
+  }
+
+  private buildConversationDescription(
+    conversation: Pick<ConversationEntity, "name" | "description">,
+  ): string {
+    const description = [conversation.name, conversation.description]
+      .map((value) => value?.trim() ?? "")
+      .filter((value) => value.length > 0)
+      .join("\n");
+    return description || "None.";
   }
 
   private async getDetachedMemoryPromptValues(

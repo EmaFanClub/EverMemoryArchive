@@ -144,7 +144,7 @@ describe("DBService LanceDB directory", () => {
     await nodeFs.rm(dataRoot, { recursive: true, force: true });
   });
 
-  test("uses a dev LanceDB directory and resets it before connecting", async () => {
+  test("uses the data root LanceDB directory without resetting in dev", async () => {
     await loadGlobalConfigForLanceTest("dev", dataRoot);
     const directory = getLanceDbDirectory();
     const sentinel = path.join(directory, "sentinel.txt");
@@ -154,13 +154,13 @@ describe("DBService LanceDB directory", () => {
     const result = await prepareLanceDbDirectory();
 
     expect(result).toEqual({
-      directory,
-      reset: true,
+      directory: path.join(dataRoot, "lancedb"),
+      reset: false,
     });
-    await expect(nodeFs.access(sentinel)).rejects.toThrow();
+    await expect(nodeFs.readFile(sentinel, "utf8")).resolves.toBe("stale");
   });
 
-  test("uses a prod LanceDB directory without resetting existing data", async () => {
+  test("uses the data root LanceDB directory without resetting in prod", async () => {
     await loadGlobalConfigForLanceTest("prod", dataRoot);
     const directory = getLanceDbDirectory();
     const sentinel = path.join(directory, "sentinel.txt");
@@ -170,7 +170,7 @@ describe("DBService LanceDB directory", () => {
     const result = await prepareLanceDbDirectory();
 
     expect(result).toEqual({
-      directory,
+      directory: path.join(dataRoot, "lancedb"),
       reset: false,
     });
     await expect(nodeFs.readFile(sentinel, "utf8")).resolves.toBe("keep");

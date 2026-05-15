@@ -92,7 +92,6 @@ describe("SettingsController", () => {
       defaultBaseUrl: "https://generativelanguage.googleapis.com",
       capabilities: {
         thinkingLevels: [
-          ThinkingLevel.NONE,
           ThinkingLevel.LOW,
           ThinkingLevel.MEDIUM,
           ThinkingLevel.HIGH,

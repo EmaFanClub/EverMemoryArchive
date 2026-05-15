@@ -43,6 +43,12 @@ const FULL_THINKING_LEVELS = [
   ThinkingLevel.HIGH,
 ] as const;
 
+const REQUIRED_THINKING_LEVELS = [
+  ThinkingLevel.LOW,
+  ThinkingLevel.MEDIUM,
+  ThinkingLevel.HIGH,
+] as const;
+
 const ENABLED_OR_DISABLED_THINKING_LEVELS = [
   ThinkingLevel.NONE,
   ThinkingLevel.MEDIUM,
@@ -92,7 +98,7 @@ export const LLM_MODEL_DEFINITIONS = [
     clientType: "gemini-3.1-pro-preview",
     defaultBaseUrl: "https://generativelanguage.googleapis.com",
     capabilities: {
-      thinkingLevels: FULL_THINKING_LEVELS,
+      thinkingLevels: REQUIRED_THINKING_LEVELS,
       tools: true,
       images: true,
     },

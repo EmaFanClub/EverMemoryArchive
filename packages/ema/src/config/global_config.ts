@@ -19,6 +19,7 @@ import {
 
 const DEFAULT_DB_NAME = "ema";
 const DEFAULT_DATA_ROOT = ".ema";
+const DEFAULT_DEV_DATA_ROOT = ".ema_dev";
 const DEFAULT_MEMORY_MONGO_URI = "mongodb://localhost:27017";
 
 type EnvGetter = (name: string) => string | undefined;
@@ -309,9 +310,8 @@ export function createBootstrapConfig(
   }
 
   const dataRoot = resolveWorkspacePath(
-    input.dataRoot ?? env("EMA_SERVER_DATA_ROOT") ?? DEFAULT_DATA_ROOT,
+    input.dataRoot ?? env("EMA_SERVER_DATA_ROOT") ?? defaultDataRootFor(mode),
   );
-  const useDevMemory = mode === "dev" && mongoKind === "memory";
   const httpsProxy = resolveHttpsProxy(
     input.httpsProxy ?? env("EMA_SERVER_HTTPS_PROXY") ?? "",
     env,
@@ -333,14 +333,28 @@ export function createBootstrapConfig(
       workspaceDir: path.join(dataRoot, "workspace"),
     },
     httpsProxy,
-    ...(useDevMemory
-      ? {
-          devBootstrap: {
-            restoreDefaultSnapshot: true,
-          },
-        }
-      : {}),
   };
+}
+
+function defaultDataRootFor(mode: "dev" | "prod"): string {
+  if (mode === "prod") {
+    return DEFAULT_DATA_ROOT;
+  }
+  return path.join(DEFAULT_DEV_DATA_ROOT, formatRunTimestamp());
+}
+
+function formatRunTimestamp(date = new Date()): string {
+  const pad = (value: number, length = 2) =>
+    String(value).padStart(length, "0");
+  return [
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    [
+      pad(date.getHours()),
+      pad(date.getMinutes()),
+      pad(date.getSeconds()),
+      pad(date.getMilliseconds(), 3),
+    ].join("-"),
+  ].join("_");
 }
 
 export function getWorkspaceRoot(): string {

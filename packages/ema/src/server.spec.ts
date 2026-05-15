@@ -40,6 +40,27 @@ describe("Server", () => {
     GlobalConfig.resetForTests();
   });
 
+  test("system prompt injects conversation name when description is empty", async () => {
+    const fs = new MemFs();
+    const mongo = await createMongo("", "test_prompt_conversation", "memory");
+    await mongo.connect();
+    const lance = await lancedb.connect("memory://ema-prompt-conversation");
+    const server = await createServerForTest(fs, mongo, lance);
+    try {
+      const conversation = await createTestActorFixture(server.dbService);
+      expect(conversation?.id).toBeTypeOf("number");
+
+      const prompt = await server.memoryManager.buildSystemPromptForChat(
+        1,
+        conversation!.id!,
+      );
+      expect(prompt).toContain("当前对话场景是：和alice的网页聊天");
+    } finally {
+      await mongo.close();
+      await lance.close();
+    }
+  });
+
   test("system prompt should include actor schedules", async () => {
     const fs = new MemFs();
     const mongo = await createMongo("", "test_prompt_schedule", "memory");
@@ -107,18 +128,12 @@ describe("Server", () => {
     }
   });
 
-  test("does not restore default snapshot when disabled by bootstrap", async () => {
+  test("does not restore default snapshot by default in dev", async () => {
     const fs = new MemFs();
-    const baseBootstrap = createBootstrapConfig({
+    const bootstrap = createBootstrapConfig({
       mode: "dev",
       mongoKind: "memory",
     });
-    const bootstrap = {
-      ...baseBootstrap,
-      devBootstrap: {
-        restoreDefaultSnapshot: false,
-      },
-    };
     await fs.write(
       path.join(bootstrap.paths.dataRoot, "mongo-snapshots", "default.json"),
       JSON.stringify({
