@@ -1,0 +1,474 @@
+diff --git a/dist/autoClient.d.ts b/dist/autoClient.d.ts
+index 293a4c400daf5aa5cd7a99cd4050dc82c3de7865..bc5a04f73537fa4671525a58683c06352d08639c 100644
+--- a/dist/autoClient.d.ts
++++ b/dist/autoClient.d.ts
+@@ -37,7 +37,7 @@ export declare class AutoLLMClient extends LLMClient {
+     /**
+      * Delegate to underlying client's transformUniMessageToModelInput.
+      */
+-    transformUniMessageToModelInput(messages: UniMessage[]): any;
++    transformUniMessageToModelInput(messages: UniMessage[], signal?: AbortSignal): any;
+     /**
+      * Delegate to underlying client's transformModelOutputToUniEvent.
+      */
+@@ -52,6 +52,7 @@ export declare class AutoLLMClient extends LLMClient {
+     streamingResponse(options: {
+         messages: UniMessage[];
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+     /**
+      * Route to underlying client's streamingResponseStateful.
+@@ -59,6 +60,7 @@ export declare class AutoLLMClient extends LLMClient {
+     streamingResponseStateful(options: {
+         message: UniMessage;
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+     /**
+      * Clear history in the underlying client.
+diff --git a/dist/autoClient.js b/dist/autoClient.js
+index 7af1ade0139763d88ae046d08826b6f7b986d40c..bb48adb707a46c445f61a00324602a8bbb83f455 100644
+--- a/dist/autoClient.js
++++ b/dist/autoClient.js
+@@ -85,8 +85,8 @@ class AutoLLMClient extends baseClient_1.LLMClient {
+      * Delegate to underlying client's transformUniMessageToModelInput.
+      */
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-    transformUniMessageToModelInput(messages) {
+-        return this._client.transformUniMessageToModelInput(messages);
++    transformUniMessageToModelInput(messages, signal) {
++        return this._client.transformUniMessageToModelInput(messages, signal);
+     }
+     /**
+      * Delegate to underlying client's transformModelOutputToUniEvent.
+@@ -116,6 +116,7 @@ class AutoLLMClient extends baseClient_1.LLMClient {
+         for await (const event of this._client.streamingResponse({
+             messages: options.messages,
+             config: options.config,
++            signal: options.signal,
+         })) {
+             yield event;
+         }
+@@ -127,6 +128,7 @@ class AutoLLMClient extends baseClient_1.LLMClient {
+         for await (const event of this._client.streamingResponseStateful({
+             message: options.message,
+             config: options.config,
++            signal: options.signal,
+         })) {
+             yield event;
+         }
+diff --git a/dist/baseClient.d.ts b/dist/baseClient.d.ts
+index bc566da1b5c2b95defe7015ceec2bd18b9eeff72..7705647db63f9df249426c925d8a6ae331c45272 100644
+--- a/dist/baseClient.d.ts
++++ b/dist/baseClient.d.ts
+@@ -22,7 +22,7 @@ export declare abstract class LLMClient {
+      * @param messages - List of universal message objects
+      * @returns Model-specific input format (e.g., Gemini's Content list, OpenAI's messages array)
+      */
+-    abstract transformUniMessageToModelInput(messages: UniMessage[]): any;
++    abstract transformUniMessageToModelInput(messages: UniMessage[], signal?: AbortSignal): any;
+     /**
+      * Transform model output to universal event format.
+      *
+@@ -52,6 +52,7 @@ export declare abstract class LLMClient {
+     abstract _streamingResponseInternal(options: {
+         messages: UniMessage[];
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+     /**
+      * Generate content in streaming mode (stateless).
+@@ -66,6 +67,7 @@ export declare abstract class LLMClient {
+     streamingResponse(options: {
+         messages: UniMessage[];
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+     /**
+      * Generate content in streaming mode (stateful).
+@@ -81,6 +83,7 @@ export declare abstract class LLMClient {
+     streamingResponseStateful(options: {
+         message: UniMessage;
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+     /**
+      * Validate that the last event has usage_metadata and finish_reason.
+diff --git a/dist/baseClient.js b/dist/baseClient.js
+index 2662a546b83d5cb12a2bb0c1cc27aa0931a723ea..5f738d66e401b8f1cf60d52a1f66518dfe4d8b20 100644
+--- a/dist/baseClient.js
++++ b/dist/baseClient.js
+@@ -177,6 +177,7 @@ class LLMClient {
+         for await (const event of this.streamingResponse({
+             messages: tempMessages,
+             config,
++            signal: options.signal,
+         })) {
+             events.push(event);
+             yield event;
+diff --git a/dist/claude4_6/client.d.ts b/dist/claude4_6/client.d.ts
+index 5d861b61b31b87e9fa915a99a0116f76794a10eb..b1ea8572e20325a52323493519f3f74fff7bf496 100644
+--- a/dist/claude4_6/client.d.ts
++++ b/dist/claude4_6/client.d.ts
+@@ -38,7 +38,7 @@ export declare class Claude4_6Client extends LLMClient {
+     /**
+      * Transform universal message format to Claude's MessageParam format.
+      */
+-    transformUniMessageToModelInput(messages: UniMessage[]): Promise<BetaMessageParam[]>;
++    transformUniMessageToModelInput(messages: UniMessage[], signal?: AbortSignal): Promise<BetaMessageParam[]>;
+     /**
+      * Transform Claude model output to universal event format.
+      */
+@@ -49,6 +49,7 @@ export declare class Claude4_6Client extends LLMClient {
+     _streamingResponseInternal(options: {
+         messages: UniMessage[];
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+ }
+ //# sourceMappingURL=client.d.ts.map
+diff --git a/dist/claude4_6/client.js b/dist/claude4_6/client.js
+index 3e0cba4072f10e1988eae98f565cbbda41d6b24e..560c9dd557db5e959adac1338fa952a848d4e2a9 100644
+--- a/dist/claude4_6/client.js
++++ b/dist/claude4_6/client.js
+@@ -58,7 +58,7 @@ class Claude4_6Client extends baseClient_1.LLMClient {
+      *
+      * Bedrock does not support image url sources, so we need to fetch the image bytes and encode them.
+      */
+-    async _convertImageUrlToSource(url) {
++    async _convertImageUrlToSource(url, signal) {
+         if (url.startsWith("data:")) {
+             const match = url.match(/data:([^;]+);base64,(.+)/);
+             if (match) {
+@@ -78,7 +78,7 @@ class Claude4_6Client extends baseClient_1.LLMClient {
+             }
+         }
+         else if (this._use_bedrock) {
+-            const response = await fetch(url);
++            const response = await fetch(url, { signal });
+             if (!response.ok) {
+                 throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+             }
+@@ -197,7 +197,7 @@ class Claude4_6Client extends baseClient_1.LLMClient {
+     /**
+      * Transform universal message format to Claude's MessageParam format.
+      */
+-    async transformUniMessageToModelInput(messages) {
++    async transformUniMessageToModelInput(messages, signal) {
+         const claudeMessages = [];
+         for (const msg of messages) {
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+@@ -208,7 +208,7 @@ class Claude4_6Client extends baseClient_1.LLMClient {
+                 }
+                 else if (item.type === "image_url") {
+                     const imageUrl = item.image_url;
+-                    contentBlocks.push(await this._convertImageUrlToSource(imageUrl));
++                    contentBlocks.push(await this._convertImageUrlToSource(imageUrl, signal));
+                 }
+                 else if (item.type === "thinking") {
+                     if (item.thinking === REDACTED_THINKING) {
+@@ -375,7 +375,7 @@ class Claude4_6Client extends baseClient_1.LLMClient {
+      */
+     async *_streamingResponseInternal(options) {
+         const claudeConfig = this.transformUniConfigToModelConfig(options.config);
+-        const claudeMessages = await this.transformUniMessageToModelInput(options.messages);
++        const claudeMessages = await this.transformUniMessageToModelInput(options.messages, options.signal);
+         // Add cache_control to last user message's last item if enabled
+         // TODO: remove after bedrock supports cache_control in config
+         if (this._use_bedrock) {
+@@ -405,6 +405,8 @@ class Claude4_6Client extends baseClient_1.LLMClient {
+         const stream = (await this._client.beta.messages.create({
+             ...claudeConfig,
+             messages: claudeMessages,
++        }, {
++            signal: options.signal,
+         }));
+         for await (const event of stream) {
+             const uniEvent = this.transformModelOutputToUniEvent(event);
+diff --git a/dist/gemini3/client.d.ts b/dist/gemini3/client.d.ts
+index 73ed5150171391a4c8c5df5cc8388a7d1aafd272..ffce54f614d342d76fefc96553209f6064b37329 100644
+--- a/dist/gemini3/client.d.ts
++++ b/dist/gemini3/client.d.ts
+@@ -39,7 +39,7 @@ export declare class Gemini3Client extends LLMClient {
+     /**
+      * Transform universal message format to Gemini's Content format.
+      */
+-    transformUniMessageToModelInput(messages: UniMessage[]): Promise<Content[]>;
++    transformUniMessageToModelInput(messages: UniMessage[], signal?: AbortSignal): Promise<Content[]>;
+     /**
+      * Transform Gemini model output to universal event format.
+      */
+@@ -50,6 +50,7 @@ export declare class Gemini3Client extends LLMClient {
+     _streamingResponseInternal(options: {
+         messages: UniMessage[];
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+ }
+ //# sourceMappingURL=client.d.ts.map
+diff --git a/dist/gemini3/client.js b/dist/gemini3/client.js
+index 655475e57278be57b28a286f60c756af9d53902c..ef5c7c583f5cb7facb926e577955bb8a725785d2 100644
+--- a/dist/gemini3/client.js
++++ b/dist/gemini3/client.js
+@@ -105,7 +105,7 @@ class Gemini3Client extends baseClient_1.LLMClient {
+     /**
+      * Get image bytes and MIME type from URL.
+      */
+-    async _getImageBytesAndMimeType(url) {
++    async _getImageBytesAndMimeType(url, signal) {
+         if (url.startsWith("data:")) {
+             const match = url.match(/^data:([^;]+);base64,(.+)$/);
+             if (match) {
+@@ -119,7 +119,7 @@ class Gemini3Client extends baseClient_1.LLMClient {
+             }
+         }
+         else {
+-            const response = await fetch(url);
++            const response = await fetch(url, { signal });
+             if (!response.ok) {
+                 throw new Error(`Failed to fetch image: ${url}`);
+             }
+@@ -253,7 +253,7 @@ class Gemini3Client extends baseClient_1.LLMClient {
+     /**
+      * Transform universal message format to Gemini's Content format.
+      */
+-    async transformUniMessageToModelInput(messages) {
++    async transformUniMessageToModelInput(messages, signal) {
+         const mapping = {
+             user: "user",
+             assistant: "model",
+@@ -270,7 +270,7 @@ class Gemini3Client extends baseClient_1.LLMClient {
+                 }
+                 else if (item.type === "image_url") {
+                     const urlValue = item.image_url;
+-                    const imageData = await this._getImageBytesAndMimeType(urlValue);
++                    const imageData = await this._getImageBytesAndMimeType(urlValue, signal);
+                     parts.push({
+                         inlineData: {
+                             mimeType: imageData.mimeType,
+@@ -451,11 +451,11 @@ class Gemini3Client extends baseClient_1.LLMClient {
+             }
+         }
+         const geminiConfig = this.transformUniConfigToModelConfig(options.config);
+-        const contents = await this.transformUniMessageToModelInput(options.messages);
++        const contents = await this.transformUniMessageToModelInput(options.messages, options.signal);
+         const responseStream = await this._client.models.generateContentStream({
+             model: this._model,
+             contents: contents,
+-            config: geminiConfig,
++            config: { ...geminiConfig, abortSignal: options.signal },
+         });
+         for await (const chunk of responseStream) {
+             const event = this.transformModelOutputToUniEvent(chunk);
+diff --git a/dist/glm5/client.d.ts b/dist/glm5/client.d.ts
+index 28133a415692987674b33fc0984a11e2b4384919..3c17718262360d04cd38493a009022fb31216afd 100644
+--- a/dist/glm5/client.d.ts
++++ b/dist/glm5/client.d.ts
+@@ -31,7 +31,7 @@ export declare class GLM5Client extends LLMClient {
+     /**
+      * Transform universal message format to OpenAI's message format.
+      */
+-    transformUniMessageToModelInput(messages: UniMessage[]): ChatCompletionMessageParam[];
++    transformUniMessageToModelInput(messages: UniMessage[], signal?: AbortSignal): ChatCompletionMessageParam[];
+     /**
+      * Transform GLM model output to universal event format.
+      */
+@@ -42,6 +42,7 @@ export declare class GLM5Client extends LLMClient {
+     _streamingResponseInternal(options: {
+         messages: UniMessage[];
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+ }
+ //# sourceMappingURL=client.d.ts.map
+diff --git a/dist/glm5/client.js b/dist/glm5/client.js
+index e9ae32c873352358cd71de5d8c6e0f6ee3cb960f..bb72dc83041c1aaec5b00a44daadfe32b153c785 100644
+--- a/dist/glm5/client.js
++++ b/dist/glm5/client.js
+@@ -264,7 +264,9 @@ class GLM5Client extends baseClient_1.LLMClient {
+             messages: glmMessages,
+             stream: true,
+         };
+-        const stream = await this._client.chat.completions.create(params);
++        const stream = await this._client.chat.completions.create(params, {
++            signal: options.signal,
++        });
+         const partialToolCall = {};
+         let partialUsage = {};
+         for await (const chunk of stream) {
+diff --git a/dist/gpt5_5/client.d.ts b/dist/gpt5_5/client.d.ts
+index f67c6b781ea39eb48c22d71085f807c0d9a0c90b..cd0dd3a12b632dae8427686a25fc55436748b9af 100644
+--- a/dist/gpt5_5/client.d.ts
++++ b/dist/gpt5_5/client.d.ts
+@@ -31,7 +31,7 @@ export declare class GPT5_5Client extends LLMClient {
+     /**
+      * Transform universal message format to OpenAI Responses API input format.
+      */
+-    transformUniMessageToModelInput(messages: UniMessage[]): ResponseInputItem[];
++    transformUniMessageToModelInput(messages: UniMessage[], signal?: AbortSignal): ResponseInputItem[];
+     /**
+      * Transform OpenAI Responses API streaming event to universal event format.
+      */
+@@ -42,6 +42,7 @@ export declare class GPT5_5Client extends LLMClient {
+     _streamingResponseInternal(options: {
+         messages: UniMessage[];
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+ }
+ //# sourceMappingURL=client.d.ts.map
+diff --git a/dist/gpt5_5/client.js b/dist/gpt5_5/client.js
+index 5dee44fb193a4ddad4d0cf2bc5a8bf04ce1b589a..ba5aa5b5abda6247ba0f5919f809e5e93027dec9 100644
+--- a/dist/gpt5_5/client.js
++++ b/dist/gpt5_5/client.js
+@@ -344,7 +344,9 @@ class GPT5_5Client extends baseClient_1.LLMClient {
+             input: inputList,
+             stream: true,
+         };
+-        const stream = await this._client.responses.create(params);
++        const stream = await this._client.responses.create(params, {
++            signal: options.signal,
++        });
+         for await (const event of stream) {
+             const uniEvent = this.transformModelOutputToUniEvent(event);
+             if (uniEvent.event_type === "start") {
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index cd7c10aaaf97b2e0078c534923603fa87c0851af..2ab25801f930e058a31ae9a0f7e82c13761c215a 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,3 +1,12 @@
+ export { AutoLLMClient } from "./autoClient";
+ export { PromptCaching, ThinkingLevel } from "./types";
++export type {
++    ContentItem,
++    FinishReason,
++    ToolSchema,
++    UniConfig,
++    UniEvent,
++    UniMessage,
++    UsageMetadata,
++} from "./types";
+ //# sourceMappingURL=index.d.ts.map
+diff --git a/dist/kimi_k2_5/client.d.ts b/dist/kimi_k2_5/client.d.ts
+index 6ba50ac20f8f865a75652981167b3548fd22d6e3..35ed9820c02b156f40cda95a8119e65b7d679930 100644
+--- a/dist/kimi_k2_5/client.d.ts
++++ b/dist/kimi_k2_5/client.d.ts
+@@ -39,7 +39,7 @@ export declare class KimiK2_5Client extends LLMClient {
+     /**
+      * Transform universal message format to OpenAI's message format.
+      */
+-    transformUniMessageToModelInput(messages: UniMessage[]): Promise<ChatCompletionMessageParam[]>;
++    transformUniMessageToModelInput(messages: UniMessage[], signal?: AbortSignal): Promise<ChatCompletionMessageParam[]>;
+     /**
+      * Transform Kimi model output to universal event format.
+      */
+@@ -50,6 +50,7 @@ export declare class KimiK2_5Client extends LLMClient {
+     _streamingResponseInternal(options: {
+         messages: UniMessage[];
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+ }
+ //# sourceMappingURL=client.d.ts.map
+diff --git a/dist/kimi_k2_5/client.js b/dist/kimi_k2_5/client.js
+index 8990053c05e92a087360961042fe173c5dd2613d..9047201061381fb27bc538d21a8d6810d86e76a9 100644
+--- a/dist/kimi_k2_5/client.js
++++ b/dist/kimi_k2_5/client.js
+@@ -91,11 +91,11 @@ class KimiK2_5Client extends baseClient_1.LLMClient {
+     /**
+      * Convert image URL to base64-encoded data URL.
+      */
+-    async _convertImageUrlToBase64(url) {
++    async _convertImageUrlToBase64(url, signal) {
+         if (url.startsWith("data:")) {
+             return url;
+         }
+-        const response = await fetch(url);
++        const response = await fetch(url, { signal });
+         if (!response.ok) {
+             throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+         }
+@@ -177,7 +177,7 @@ class KimiK2_5Client extends baseClient_1.LLMClient {
+     /**
+      * Transform universal message format to OpenAI's message format.
+      */
+-    async transformUniMessageToModelInput(messages) {
++    async transformUniMessageToModelInput(messages, signal) {
+         const openaiMessages = [];
+         for (const msg of messages) {
+             const contentParts = [];
+@@ -189,7 +189,7 @@ class KimiK2_5Client extends baseClient_1.LLMClient {
+                     contentParts.push({ type: "text", text: item.text });
+                 }
+                 else if (item.type === "image_url") {
+-                    const base64Image = await this._convertImageUrlToBase64(item.image_url);
++                    const base64Image = await this._convertImageUrlToBase64(item.image_url, signal);
+                     contentParts.push({
+                         type: "image_url",
+                         image_url: { url: base64Image },
+@@ -216,7 +216,7 @@ class KimiK2_5Client extends baseClient_1.LLMClient {
+                     const content = [{ type: "text", text: item.text }];
+                     if (item.images && item.images.length > 0) {
+                         for (const imageUrl of item.images) {
+-                            const base64Image = await this._convertImageUrlToBase64(imageUrl);
++                            const base64Image = await this._convertImageUrlToBase64(imageUrl, signal);
+                             if (this._client.baseURL.includes("siliconflow.cn")) {
+                                 // siliconflow does not support image_url in tool result
+                                 contentParts.push({
+@@ -348,7 +348,7 @@ class KimiK2_5Client extends baseClient_1.LLMClient {
+      */
+     async *_streamingResponseInternal(options) {
+         const kimiConfig = this.transformUniConfigToModelConfig(options.config);
+-        const kimiMessages = await this.transformUniMessageToModelInput(options.messages);
++        const kimiMessages = await this.transformUniMessageToModelInput(options.messages, options.signal);
+         if (options.config.system_prompt) {
+             kimiMessages.unshift({
+                 role: "system",
+@@ -360,7 +360,9 @@ class KimiK2_5Client extends baseClient_1.LLMClient {
+             messages: kimiMessages,
+             stream: true,
+         };
+-        const stream = await this._client.chat.completions.create(params);
++        const stream = await this._client.chat.completions.create(params, {
++            signal: options.signal,
++        });
+         const partialToolCall = {};
+         let partialUsage = {};
+         for await (const chunk of stream) {
+diff --git a/dist/qwen3/client.d.ts b/dist/qwen3/client.d.ts
+index 2cf6f7ef002c2c796c4432cdb50078952a851606..e2e0fd2fa103e461bce8d3a9cd0a17ad5fe3e43f 100644
+--- a/dist/qwen3/client.d.ts
++++ b/dist/qwen3/client.d.ts
+@@ -27,7 +27,7 @@ export declare class Qwen3Client extends LLMClient {
+     /**
+      * Transform universal message format to Qwen3-specific message format.
+      */
+-    transformUniMessageToModelInput(messages: UniMessage[]): ChatCompletionMessageParam[];
++    transformUniMessageToModelInput(messages: UniMessage[], signal?: AbortSignal): ChatCompletionMessageParam[];
+     /**
+      * Transform Qwen3 model output to universal event format.
+      */
+@@ -38,6 +38,7 @@ export declare class Qwen3Client extends LLMClient {
+     _streamingResponseInternal(options: {
+         messages: UniMessage[];
+         config: UniConfig;
++        signal?: AbortSignal;
+     }): AsyncGenerator<UniEvent>;
+ }
+ //# sourceMappingURL=client.d.ts.map
+diff --git a/dist/qwen3/client.js b/dist/qwen3/client.js
+index fe8209da6e8271eeb17565a9df64895be51f106d..d231cb192e69f25d3ebc168acc98ac9f732cce13 100644
+--- a/dist/qwen3/client.js
++++ b/dist/qwen3/client.js
+@@ -252,7 +252,9 @@ class Qwen3Client extends baseClient_1.LLMClient {
+             messages: qwen3Messages,
+             stream: true,
+         };
+-        const stream = await this._client.chat.completions.create(params);
++        const stream = await this._client.chat.completions.create(params, {
++            signal: options.signal,
++        });
+         const partialToolCall = {};
+         let partialUsage = {};
+         for await (const chunk of stream) {
