@@ -24,9 +24,7 @@ describe("MongoGlobalConfigDB with in-memory MongoDB", () => {
   test("should upsert and read the singleton global config", async () => {
     const record = {
       ...createTestGlobalConfigRecord(),
-      system: {
-        httpsProxy: "http://127.0.0.1:7890",
-      },
+      accessToken: "token-1",
     };
 
     await db.upsertGlobalConfig(record);
@@ -34,19 +32,15 @@ describe("MongoGlobalConfigDB with in-memory MongoDB", () => {
     expect(first).toMatchObject({
       id: "global",
       version: 1,
-      system: {
-        httpsProxy: "http://127.0.0.1:7890",
-      },
+      accessToken: "token-1",
     });
 
     await db.upsertGlobalConfig({
       ...record,
-      system: {
-        httpsProxy: "http://127.0.0.1:7891",
-      },
+      accessToken: "token-2",
     });
     const second = await db.getGlobalConfig();
-    expect(second?.system.httpsProxy).toBe("http://127.0.0.1:7891");
+    expect(second?.accessToken).toBe("token-2");
     expect(second?.createdAt).toBe(first?.createdAt);
     expect(second?.updatedAt).toBeGreaterThanOrEqual(first?.updatedAt ?? 0);
   });

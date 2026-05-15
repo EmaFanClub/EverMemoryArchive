@@ -329,20 +329,9 @@ export interface GlobalEmbeddingIndexStatus {
 
 export interface GlobalEmbeddingConfig {
   provider: EmbeddingProvider;
-  openai: {
-    model: string;
-    baseUrl: string;
-    apiKey: string;
-  };
-  google: {
-    model: string;
-    baseUrl: string;
-    apiKey: string;
-    useVertexAi: boolean;
-    project: string;
-    location: string;
-    credentialsFile: string;
-  };
+  model: string;
+  baseUrl: string;
+  apiKey: string;
 }
 
 export interface GlobalSettingsResponse {

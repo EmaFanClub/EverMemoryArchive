@@ -56,20 +56,9 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
   const embeddingEngine = new SimpleEmbeddingEngine();
   const embeddingConfig: EmbeddingConfig = {
     provider: "openai",
-    openai: {
-      model: "text-embedding-3-small",
-      baseUrl: "https://api.openai.com/v1",
-      apiKey: "sk-test",
-    },
-    google: {
-      model: "",
-      baseUrl: "",
-      apiKey: "",
-      useVertexAi: false,
-      project: "",
-      location: "",
-      credentialsFile: "",
-    },
+    model: "text-embedding-3-small",
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "sk-test",
   };
   const 绘画 = {
     index0: "绘画",
@@ -178,7 +167,7 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
     await searcher.ensureVectorIndex(
       {
         ...embeddingConfig,
-        openai: { ...embeddingConfig.openai, apiKey: "" },
+        apiKey: "",
       },
       [],
     );

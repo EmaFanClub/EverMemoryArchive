@@ -1,4 +1,5 @@
 import {
+  DEFAULT_WEB_SEARCH_CONFIG,
   GlobalConfig,
   normalizeLLMConfig,
   parseGlobalConfigRecord,
@@ -199,7 +200,7 @@ export class SettingsController {
     if (invalidMessage) {
       throw new Error(invalidMessage);
     }
-    const record = await this.requireGlobalConfig();
+    const record = parseGlobalConfigRecord(await this.requireGlobalConfig());
     await this.server.dbService.globalConfigDB.upsertGlobalConfig({
       ...record,
       defaultEmbedding: config,
@@ -220,7 +221,7 @@ export class SettingsController {
     return {
       llm: GlobalConfig.defaultLlm,
       embedding: GlobalConfig.defaultEmbedding,
-      webSearch: GlobalConfig.defaultWebSearch,
+      webSearch: DEFAULT_WEB_SEARCH_CONFIG,
     };
   }
 
@@ -286,24 +287,10 @@ function diagnosticsFromUsage(
 }
 
 function validateEmbeddingProbeConfig(config: EmbeddingConfig): string | null {
-  if (config.provider === "openai") {
-    return !config.openai.model.trim() ||
-      !config.openai.baseUrl.trim() ||
-      !config.openai.apiKey.trim()
-      ? "Embedding config is incomplete."
-      : null;
-  }
-  if (!config.google.model.trim()) {
+  if (!config.model.trim()) {
     return "Embedding config is incomplete.";
   }
-  if (config.google.useVertexAi) {
-    return !config.google.project.trim() ||
-      !config.google.location.trim() ||
-      !config.google.credentialsFile.trim()
-      ? "Google Vertex AI project, location, and credentials JSON are required."
-      : null;
-  }
-  return !config.google.baseUrl.trim() || !config.google.apiKey.trim()
+  return !config.baseUrl.trim() || !config.apiKey.trim()
     ? "Embedding config is incomplete."
     : null;
 }

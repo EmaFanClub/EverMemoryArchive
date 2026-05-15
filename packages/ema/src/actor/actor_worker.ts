@@ -1,5 +1,4 @@
 import { EventEmitter } from "node:events";
-import { GlobalConfig } from "../config/index";
 import { Agent, AgentEventNames, checkCompleteMessages } from "../agent";
 import type { AgentEventName, AgentState } from "../agent";
 import type { Server } from "../server";
@@ -42,7 +41,7 @@ export class ActorWorker {
     logger: Logger,
   ) {
     this.logger = logger;
-    this.agent = new Agent(GlobalConfig.agent, llm);
+    this.agent = new Agent(llm);
     this.bindAgentEvent();
     this.logger.info("Actor chat worker created");
   }

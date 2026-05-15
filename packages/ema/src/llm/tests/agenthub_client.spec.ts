@@ -28,7 +28,7 @@ describe("AgentHubClient", () => {
 
     expect(client).toBeInstanceOf(AgentHubClient);
     expect(process.env.AGENTHUB_CACHE_DIR).toBe(
-      path.join(GlobalConfig.system.logsDir, "agent"),
+      path.join(GlobalConfig.paths.logsDir, "agent"),
     );
   });
 

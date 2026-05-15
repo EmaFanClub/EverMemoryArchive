@@ -63,7 +63,7 @@ export function buildActorTrainingRequest({
 
 function resolveTrainingCheckpointDir(actorId: number): string {
   return path.join(
-    GlobalConfig.system.logsDir,
+    GlobalConfig.paths.logsDir,
     "actors",
     `actor_${actorId}`,
     "train",

@@ -102,7 +102,7 @@ export class Server {
     server.logger = Logger.create({
       name: "server",
       context: {
-        mode: GlobalConfig.system.mode,
+        mode: GlobalConfig.mode,
       },
       outputs: [
         { type: "console", level: "info" },
@@ -140,11 +140,11 @@ export class Server {
     this.dbService = await DBService.create(this.fs);
     this.logger.info("Database service initialized", {
       mongo: GlobalConfig.mongo,
-      dataRoot: GlobalConfig.system.dataRoot,
+      dataRoot: GlobalConfig.paths.dataRoot,
       lancedb: {
-        mode: GlobalConfig.system.mode,
+        mode: GlobalConfig.mode,
         path: getLanceDbDirectory(),
-        resetOnStart: GlobalConfig.system.mode === "dev",
+        resetOnStart: GlobalConfig.mode === "dev",
       },
     });
   }
@@ -155,7 +155,9 @@ export class Server {
    * @returns true when a snapshot was restored.
    */
   async restoreDevelopmentDataIfNeeded(): Promise<boolean> {
-    if (!GlobalConfig.bootstrapConfig.devBootstrap.restoreDefaultSnapshot) {
+    if (
+      GlobalConfig.bootstrapConfig.devBootstrap?.restoreDefaultSnapshot !== true
+    ) {
       return false;
     }
     const restored = await this.dbService.restoreFromSnapshot("default");
@@ -187,7 +189,7 @@ export class Server {
       GlobalConfig.applyRecord(record);
       this.logger.info("Global config loaded from database");
       this.logger.info("WebUI access token configured", {
-        token: record.system.accessToken?.trim() ?? "",
+        token: GlobalConfig.accessToken ?? "",
       });
       return true;
     }
@@ -225,11 +227,9 @@ export class Server {
 
   private startLongTermMemoryVectorIndex(): void {
     const config = GlobalConfig.defaultEmbedding;
-    const selected =
-      config.provider === "openai" ? config.openai : config.google;
     this.logger.info("Long term memory vector index started", {
       provider: config.provider,
-      model: selected.model,
+      model: config.model,
     });
     void this.dbService.longTermMemoryDB
       .ensureVectorIndex(config)

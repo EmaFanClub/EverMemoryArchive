@@ -14,9 +14,6 @@ export type SetupFieldPath =
   | "embedding.model"
   | "embedding.baseUrl"
   | "embedding.apiKey"
-  | "embedding.project"
-  | "embedding.location"
-  | "embedding.credentialsFile"
   | "owner.name"
   | "owner.accessToken"
   | "owner.qq";
@@ -27,10 +24,7 @@ export const fieldLimits: Partial<Record<SetupFieldPath, number>> = {
   "llm.apiKey": LLM_CREDENTIAL_LIMIT,
   "embedding.model": 128,
   "embedding.baseUrl": 512,
-  "embedding.apiKey": 512,
-  "embedding.project": 128,
-  "embedding.location": 128,
-  "embedding.credentialsFile": VERTEX_CREDENTIALS_JSON_LIMIT,
+  "embedding.apiKey": VERTEX_CREDENTIALS_JSON_LIMIT,
   "owner.name": 48,
   "owner.qq": 12,
 };
@@ -69,18 +63,6 @@ function validateHttpUrl(value: string, path: SetupFieldPath) {
   return null;
 }
 
-function validateJsonObject(value: string, path: SetupFieldPath) {
-  try {
-    const parsed = JSON.parse(value.trim());
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return `${fieldName(path)}需要是有效的 JSON 对象。`;
-    }
-  } catch {
-    return `${fieldName(path)}需要是有效的 JSON 对象。`;
-  }
-  return null;
-}
-
 export function getFieldValue(path: SetupFieldPath, draft: SetupDraft) {
   switch (path) {
     case "llm.model":
@@ -97,12 +79,6 @@ export function getFieldValue(path: SetupFieldPath, draft: SetupDraft) {
       return draft.embedding.baseUrl;
     case "embedding.apiKey":
       return draft.embedding.apiKey;
-    case "embedding.project":
-      return draft.embedding.project;
-    case "embedding.location":
-      return draft.embedding.location;
-    case "embedding.credentialsFile":
-      return draft.embedding.credentialsFile;
     case "owner.name":
       return draft.owner.name;
     case "owner.accessToken":
@@ -112,23 +88,12 @@ export function getFieldValue(path: SetupFieldPath, draft: SetupDraft) {
   }
 }
 
-export function getStepFieldPaths(
-  stepId: SetupStepId,
-  draft: SetupDraft,
-): SetupFieldPath[] {
+export function getStepFieldPaths(stepId: SetupStepId): SetupFieldPath[] {
   switch (stepId) {
     case "llm":
       return ["llm.model", "llm.baseUrl", "llm.apiKey"];
     case "embedding":
-      return draft.embedding.provider === "google" &&
-        draft.embedding.useVertexAi
-        ? [
-            "embedding.model",
-            "embedding.project",
-            "embedding.location",
-            "embedding.credentialsFile",
-          ]
-        : ["embedding.model", "embedding.baseUrl", "embedding.apiKey"];
+      return ["embedding.model", "embedding.baseUrl", "embedding.apiKey"];
     case "owner":
       return ["owner.name", "owner.accessToken", "owner.qq"];
     case "review":
@@ -158,8 +123,6 @@ export function validateSetupField(path: SetupFieldPath, draft: SetupDraft) {
     case "llm.baseUrl":
     case "embedding.baseUrl":
       return validateHttpUrl(value, path);
-    case "embedding.credentialsFile":
-      return validateJsonObject(value, path);
     case "owner.name":
       if (/\r|\n/.test(value)) {
         return "名称不能包含换行。";
@@ -180,8 +143,6 @@ export function validateSetupField(path: SetupFieldPath, draft: SetupDraft) {
     case "llm.thinkingLevel":
     case "embedding.model":
     case "embedding.apiKey":
-    case "embedding.project":
-    case "embedding.location":
       return null;
   }
 }
@@ -190,7 +151,7 @@ export function getStepValidationErrors(
   stepId: SetupStepId,
   draft: SetupDraft,
 ) {
-  return getStepFieldPaths(stepId, draft).flatMap((path) => {
+  return getStepFieldPaths(stepId).flatMap((path) => {
     const error = validateSetupField(path, draft);
     return error ? [{ path, error }] : [];
   });

@@ -6,7 +6,6 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
-  type TextareaHTMLAttributes,
 } from "react";
 import { Check, ChevronDown, LoaderCircle, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -104,19 +103,6 @@ const apiKeyPlaceholders: Record<LlmModelProvider, string> = {
   moonshot: "sk-...",
   qwen: "本地服务可填写任意占位值",
 };
-
-const vertexCredentialsJsonPlaceholder = String.raw`{
-  "type": "service_account",
-  "project_id": "your-project-id",
-  "private_key_id": "your-private-key-id",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----\n",
-  "client_email": "your-service-account@your-project-id.iam.gserviceaccount.com",
-  "client_id": "123456789012345678901",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project-id.iam.gserviceaccount.com"
-}`;
 
 const accessTokenChars =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -251,47 +237,6 @@ function Field({
         </span>
       ) : null}
     </label>
-  );
-}
-
-function ScrollablePlaceholderTextarea({
-  value,
-  placeholder,
-  rows = 5,
-  onChange,
-  ...textareaProps
-}: {
-  value: string;
-  placeholder: string;
-  rows?: number;
-  onChange: (value: string) => void;
-} & Omit<
-  TextareaHTMLAttributes<HTMLTextAreaElement>,
-  "value" | "placeholder" | "rows" | "onChange"
->) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  return (
-    <div className={styles.scrollableTextareaShell}>
-      <textarea
-        ref={textareaRef}
-        value={value}
-        rows={rows}
-        {...textareaProps}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      {!value ? (
-        <pre
-          className={styles.scrollableTextareaPlaceholder}
-          aria-hidden="true"
-          onMouseDown={() => {
-            window.requestAnimationFrame(() => textareaRef.current?.focus());
-          }}
-        >
-          {placeholder}
-        </pre>
-      ) : null}
-    </div>
   );
 }
 
@@ -747,7 +692,7 @@ export default function SetupPage() {
   }
 
   function touchStepFields(stepId: SetupStepId = step.id) {
-    const paths = getStepFieldPaths(stepId, draft);
+    const paths = getStepFieldPaths(stepId);
     if (paths.length === 0) {
       return;
     }
@@ -1315,24 +1260,6 @@ export default function SetupPage() {
                 OpenAI
               </button>
             </div>
-            {draft.embedding.provider === "google" ? (
-              <label className={styles.switchRow}>
-                <span>
-                  <strong>使用 Vertex AI</strong>
-                </span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={draft.embedding.useVertexAi}
-                  onChange={(event) =>
-                    updateEmbedding({ useVertexAi: event.target.checked })
-                  }
-                />
-                <span className={styles.switchTrack} aria-hidden="true">
-                  <span className={styles.switchThumb} />
-                </span>
-              </label>
-            ) : null}
             <div className={styles.formGrid}>
               {renderModelSelectField({
                 path: "embedding.model",
@@ -1342,97 +1269,39 @@ export default function SetupPage() {
                 ),
                 onChange: (model) => updateEmbedding({ model }),
               })}
-              {draft.embedding.provider === "google" &&
-              draft.embedding.useVertexAi ? (
-                <>
-                  <Field
-                    label="项目"
-                    hint="填写 Google Cloud 项目 ID"
-                    error={getVisibleFieldError("embedding.project")}
-                  >
-                    <input
-                      value={draft.embedding.project}
-                      placeholder="my-gcp-project"
-                      required
-                      aria-required="true"
-                      {...getFieldControlProps("embedding.project")}
-                      onChange={(event) =>
-                        updateEmbedding({ project: event.target.value })
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label="区域"
-                    hint="填写 Vertex AI 区域"
-                    error={getVisibleFieldError("embedding.location")}
-                  >
-                    <input
-                      value={draft.embedding.location}
-                      placeholder="global"
-                      required
-                      aria-required="true"
-                      {...getFieldControlProps("embedding.location")}
-                      onChange={(event) =>
-                        updateEmbedding({ location: event.target.value })
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label="凭据 JSON"
-                    error={getVisibleFieldError("embedding.credentialsFile")}
-                  >
-                    <ScrollablePlaceholderTextarea
-                      value={draft.embedding.credentialsFile}
-                      placeholder={vertexCredentialsJsonPlaceholder}
-                      rows={5}
-                      required
-                      aria-required="true"
-                      {...getFieldControlProps("embedding.credentialsFile")}
-                      onChange={(value) =>
-                        updateEmbedding({
-                          credentialsFile: value,
-                        })
-                      }
-                    />
-                  </Field>
-                </>
-              ) : (
-                <>
-                  <Field
-                    label="Base URL"
-                    error={getVisibleFieldError("embedding.baseUrl")}
-                  >
-                    <input
-                      value={draft.embedding.baseUrl}
-                      placeholder={
-                        embeddingDefaults[draft.embedding.provider].baseUrl
-                      }
-                      required
-                      aria-required="true"
-                      {...getFieldControlProps("embedding.baseUrl")}
-                      onChange={(event) =>
-                        updateEmbedding({ baseUrl: event.target.value })
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label="ApiKey"
-                    error={getVisibleFieldError("embedding.apiKey")}
-                  >
-                    <input
-                      value={draft.embedding.apiKey}
-                      placeholder={apiKeyPlaceholders[draft.embedding.provider]}
-                      autoComplete="off"
-                      required
-                      aria-required="true"
-                      {...getFieldControlProps("embedding.apiKey")}
-                      onChange={(event) =>
-                        updateEmbedding({ apiKey: event.target.value })
-                      }
-                    />
-                  </Field>
-                </>
-              )}
+              <Field
+                label="Base URL"
+                error={getVisibleFieldError("embedding.baseUrl")}
+              >
+                <input
+                  value={draft.embedding.baseUrl}
+                  placeholder={
+                    embeddingDefaults[draft.embedding.provider].baseUrl
+                  }
+                  required
+                  aria-required="true"
+                  {...getFieldControlProps("embedding.baseUrl")}
+                  onChange={(event) =>
+                    updateEmbedding({ baseUrl: event.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="ApiKey"
+                error={getVisibleFieldError("embedding.apiKey")}
+              >
+                <input
+                  value={draft.embedding.apiKey}
+                  placeholder={apiKeyPlaceholders[draft.embedding.provider]}
+                  autoComplete="off"
+                  required
+                  aria-required="true"
+                  {...getFieldControlProps("embedding.apiKey")}
+                  onChange={(event) =>
+                    updateEmbedding({ apiKey: event.target.value })
+                  }
+                />
+              </Field>
             </div>
             <ServiceTestButton
               status={embeddingTest.status}

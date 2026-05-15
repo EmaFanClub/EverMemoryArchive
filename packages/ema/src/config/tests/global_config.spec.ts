@@ -86,9 +86,7 @@ describe("GlobalConfig", () => {
       uri: "mongodb://127.0.0.1:27017",
       dbName: "ema",
     });
-    expect(bootstrap.devBootstrap).toEqual({
-      restoreDefaultSnapshot: false,
-    });
+    expect(bootstrap.devBootstrap).toBeUndefined();
   });
 
   test("loads internal server bootstrap values from environment", () => {
@@ -109,7 +107,7 @@ describe("GlobalConfig", () => {
       dbName: "ema_dev",
     });
     expect(bootstrap.paths.dataRoot).toBe(dataRoot);
-    expect(bootstrap.devBootstrap.restoreDefaultSnapshot).toBe(false);
+    expect(bootstrap.devBootstrap).toBeUndefined();
   });
 
   test("loads bootstrap without implicitly creating runtime config", async () => {
@@ -121,36 +119,43 @@ describe("GlobalConfig", () => {
     });
     await GlobalConfig.load(new MemFs(), { bootstrap });
 
-    expect(GlobalConfig.system.mode).toBe("dev");
-    expect(GlobalConfig.system.dataRoot).toBe(bootstrap.paths.dataRoot);
-    expect(GlobalConfig.system.logsDir).toBe(bootstrap.paths.logsDir);
-    expect(GlobalConfig.system.httpsProxy).toBe("http://127.0.0.1:7890");
+    expect(GlobalConfig.mode).toBe("dev");
+    expect(GlobalConfig.paths.dataRoot).toBe(bootstrap.paths.dataRoot);
+    expect(GlobalConfig.paths.logsDir).toBe(bootstrap.paths.logsDir);
+    expect(GlobalConfig.httpsProxy).toBe("http://127.0.0.1:7890");
     expect(GlobalConfig.mongo.kind).toBe("memory");
-    expect(GlobalConfig.agent.workspaceDir).toBe(bootstrap.paths.workspaceDir);
+    expect(GlobalConfig.paths.workspaceDir).toBe(bootstrap.paths.workspaceDir);
     expect(GlobalConfig.hasRuntimeConfig).toBe(false);
     expect(() => GlobalConfig.defaultLlm).toThrow(
       "Database-backed GlobalConfig has not been loaded",
     );
   });
 
-  test("loads .env proxy values for bootstrap-time system config", async () => {
+  test("loads .env proxy values into bootstrap config", async () => {
     vi.stubEnv("HTTPS_PROXY", "");
     const fs = new MemFs();
     await fs.write(
       path.join(getWorkspaceRoot(), ".env"),
-      "HTTPS_PROXY=http://127.0.0.1:7890\n",
+      [
+        "EMA_SERVER_MODE=dev",
+        "EMA_SERVER_MONGO_KIND=memory",
+        "HTTPS_PROXY=http://127.0.0.1:7890",
+        "",
+      ].join("\n"),
     );
 
-    await GlobalConfig.load(fs, {
-      bootstrap: createBootstrapConfig({ mode: "dev", mongoKind: "memory" }),
-    });
+    await GlobalConfig.load(fs);
 
-    expect(GlobalConfig.system.httpsProxy).toBe("http://127.0.0.1:7890");
+    expect(GlobalConfig.httpsProxy).toBe("http://127.0.0.1:7890");
   });
 
   test("applies database-backed global config record", async () => {
     await GlobalConfig.load(new MemFs(), {
-      bootstrap: createBootstrapConfig({ mode: "dev", mongoKind: "memory" }),
+      bootstrap: createBootstrapConfig({
+        mode: "dev",
+        mongoKind: "memory",
+        httpsProxy: "http://127.0.0.1:7891",
+      }),
     });
     const defaultLlm = {
       model: "gpt-5.5",
@@ -161,14 +166,24 @@ describe("GlobalConfig", () => {
 
     GlobalConfig.applyRecord({
       ...createTestGlobalConfigRecord(),
-      system: {
-        httpsProxy: "http://127.0.0.1:7890",
-      },
+      accessToken: " webui-token ",
       defaultLlm,
     });
 
-    expect(GlobalConfig.system.httpsProxy).toBe("http://127.0.0.1:7890");
+    expect(GlobalConfig.httpsProxy).toBe("http://127.0.0.1:7891");
+    expect(GlobalConfig.accessToken).toBe("webui-token");
     expect(GlobalConfig.defaultLlm).toEqual(defaultLlm);
+
+    GlobalConfig.applyRecord({
+      ...createTestGlobalConfigRecord(),
+      system: {
+        accessToken: " legacy-token ",
+        httpsProxy: "http://legacy-proxy.invalid",
+      },
+    });
+
+    expect(GlobalConfig.accessToken).toBe("legacy-token");
+    expect(GlobalConfig.httpsProxy).toBe("http://127.0.0.1:7891");
   });
 
   test("updates runtime global config fields independently", async () => {
@@ -182,13 +197,9 @@ describe("GlobalConfig", () => {
       ...record.defaultLlm,
       apiKey: "updated-llm-key",
     });
-    GlobalConfig.updateSystemConfig({
-      httpsProxy: "http://127.0.0.1:7890",
-    });
 
     expect(GlobalConfig.defaultLlm.apiKey).toBe("updated-llm-key");
     expect(GlobalConfig.defaultEmbedding).toEqual(record.defaultEmbedding);
-    expect(GlobalConfig.system.httpsProxy).toBe("http://127.0.0.1:7890");
   });
 
   test("normalizes legacy chat LLM configs when loading global config", async () => {
@@ -264,25 +275,41 @@ describe("GlobalConfig", () => {
     });
   });
 
-  test("trims runtime embedding config values without changing stored config", () => {
+  test("normalizes legacy embedding configs when loading global config", async () => {
+    await GlobalConfig.load(new MemFs(), {
+      bootstrap: createBootstrapConfig({ mode: "dev", mongoKind: "memory" }),
+    });
     const record = createTestGlobalConfigRecord();
     const embeddingCredentialsJson =
       '{"type":"service_account","project_id":"embedding-p"}';
-    const embedding = {
-      ...record.defaultEmbedding,
+    const legacyEmbedding = {
+      provider: "google",
+      openai: {
+        model: "text-embedding-3-large",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "sk-embedding",
+      },
       google: {
-        ...record.defaultEmbedding.google,
-        project: " direct-embedding-project ",
+        model: "gemini-embedding-001",
+        baseUrl: " https://generativelanguage.googleapis.com ",
+        apiKey: "google-key",
+        useVertexAi: true,
+        project: "legacy-project",
+        location: "global",
         credentialsFile: ` ${embeddingCredentialsJson} `,
       },
     };
 
-    expect(
-      GlobalConfig.resolveRuntimeEmbeddingConfig(embedding).google.project,
-    ).toBe("direct-embedding-project");
-    expect(
-      GlobalConfig.resolveRuntimeEmbeddingConfig(embedding).google
-        .credentialsFile,
-    ).toBe(embeddingCredentialsJson);
+    GlobalConfig.applyRecord({
+      ...record,
+      defaultEmbedding: legacyEmbedding as never,
+    });
+
+    expect(GlobalConfig.defaultEmbedding).toEqual({
+      provider: "google",
+      model: "gemini-embedding-001",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      apiKey: embeddingCredentialsJson,
+    });
   });
 });

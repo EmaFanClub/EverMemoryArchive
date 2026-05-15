@@ -18,20 +18,9 @@ const validLlmConfig = {
 
 const validEmbeddingConfig = {
   provider: "openai",
-  openai: {
-    model: "text-embedding-3-small",
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "sk-test",
-  },
-  google: {
-    model: "",
-    baseUrl: "",
-    apiKey: "",
-    useVertexAi: false,
-    project: "",
-    location: "",
-    credentialsFile: "",
-  },
+  model: "text-embedding-3-small",
+  baseUrl: "https://api.openai.com/v1",
+  apiKey: "sk-test",
 } as const;
 
 function createFixture() {

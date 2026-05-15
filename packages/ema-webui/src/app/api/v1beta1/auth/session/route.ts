@@ -53,8 +53,5 @@ async function verifyRequestToken(request: Request, token?: string) {
   if (!record) {
     return false;
   }
-  return verifyAccessToken(
-    token ?? readAccessTokenCookie(request),
-    record.system,
-  );
+  return verifyAccessToken(token ?? readAccessTokenCookie(request), record);
 }

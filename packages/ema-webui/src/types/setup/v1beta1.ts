@@ -42,10 +42,6 @@ export interface SetupDraft {
     model: string;
     baseUrl: string;
     apiKey: string;
-    useVertexAi: boolean;
-    project: string;
-    location: string;
-    credentialsFile: string;
   };
   owner: {
     name: string;
@@ -198,20 +194,12 @@ export const embeddingDefaults: Record<
     model: "gemini-embedding-001",
     baseUrl: "https://generativelanguage.googleapis.com",
     apiKey: "",
-    useVertexAi: false,
-    project: "",
-    location: "",
-    credentialsFile: "",
   },
   openai: {
     provider: "openai",
     model: "text-embedding-3-large",
     baseUrl: "https://api.openai.com/v1",
     apiKey: "",
-    useVertexAi: false,
-    project: "",
-    location: "",
-    credentialsFile: "",
   },
 };
 
@@ -251,26 +239,6 @@ function isHttpUrl(value: string) {
   }
 }
 
-function isJsonObject(value: string) {
-  try {
-    const parsed = JSON.parse(value);
-    return Boolean(
-      parsed && typeof parsed === "object" && !Array.isArray(parsed),
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isCredentialsJsonValid(value: string) {
-  const trimmed = value.trim();
-  return (
-    hasRequiredValue(value) &&
-    trimmed.length <= VERTEX_CREDENTIALS_JSON_LIMIT &&
-    isJsonObject(trimmed)
-  );
-}
-
 export function isLLMConfigComplete(llm: SetupDraft["llm"]) {
   if (!hasRequiredValue(llm.model) || llm.model.trim().length > 128) {
     return false;
@@ -297,22 +265,12 @@ export function isEmbeddingConfigComplete(embedding: SetupDraft["embedding"]) {
     return false;
   }
 
-  if (embedding.provider === "google" && embedding.useVertexAi) {
-    return (
-      hasRequiredValue(embedding.project) &&
-      embedding.project.trim().length <= 128 &&
-      hasRequiredValue(embedding.location) &&
-      embedding.location.trim().length <= 128 &&
-      isCredentialsJsonValid(embedding.credentialsFile)
-    );
-  }
-
   return (
     hasRequiredValue(embedding.baseUrl) &&
     embedding.baseUrl.trim().length <= 512 &&
     isHttpUrl(embedding.baseUrl.trim()) &&
     hasRequiredValue(embedding.apiKey) &&
-    embedding.apiKey.trim().length <= 512
+    embedding.apiKey.trim().length <= VERTEX_CREDENTIALS_JSON_LIMIT
   );
 }
 
@@ -410,72 +368,32 @@ export function validateSetupDraft(draft: SetupDraft): SetupValidationIssue[] {
         code: "invalid",
       });
     }
-    if (draft.embedding.provider === "google" && draft.embedding.useVertexAi) {
-      if (!hasRequiredValue(draft.embedding.project)) {
-        issues.push({
-          path: "embedding.project",
-          code: "required",
-        });
-      } else if (draft.embedding.project.trim().length > 128) {
-        issues.push({
-          path: "embedding.project",
-          code: "invalid",
-        });
-      }
-      if (!hasRequiredValue(draft.embedding.location)) {
-        issues.push({
-          path: "embedding.location",
-          code: "required",
-        });
-      } else if (draft.embedding.location.trim().length > 128) {
-        issues.push({
-          path: "embedding.location",
-          code: "invalid",
-        });
-      }
-      if (!hasRequiredValue(draft.embedding.credentialsFile)) {
-        issues.push({
-          path: "embedding.credentialsFile",
-          code: "required",
-        });
-      } else if (
-        (hasRequiredValue(draft.embedding.credentialsFile) &&
-          draft.embedding.credentialsFile.trim().length >
-            VERTEX_CREDENTIALS_JSON_LIMIT) ||
-        (hasRequiredValue(draft.embedding.credentialsFile) &&
-          !isJsonObject(draft.embedding.credentialsFile.trim()))
-      ) {
-        issues.push({
-          path: "embedding.credentialsFile",
-          code: "invalid",
-        });
-      }
-    } else {
-      if (!hasRequiredValue(draft.embedding.baseUrl)) {
-        issues.push({
-          path: "embedding.baseUrl",
-          code: "required",
-        });
-      } else if (
-        draft.embedding.baseUrl.trim().length > 512 ||
-        !isHttpUrl(draft.embedding.baseUrl.trim())
-      ) {
-        issues.push({
-          path: "embedding.baseUrl",
-          code: "invalid",
-        });
-      }
-      if (!hasRequiredValue(draft.embedding.apiKey)) {
-        issues.push({
-          path: "embedding.apiKey",
-          code: "required",
-        });
-      } else if (draft.embedding.apiKey.trim().length > 512) {
-        issues.push({
-          path: "embedding.apiKey",
-          code: "invalid",
-        });
-      }
+    if (!hasRequiredValue(draft.embedding.baseUrl)) {
+      issues.push({
+        path: "embedding.baseUrl",
+        code: "required",
+      });
+    } else if (
+      draft.embedding.baseUrl.trim().length > 512 ||
+      !isHttpUrl(draft.embedding.baseUrl.trim())
+    ) {
+      issues.push({
+        path: "embedding.baseUrl",
+        code: "invalid",
+      });
+    }
+    if (!hasRequiredValue(draft.embedding.apiKey)) {
+      issues.push({
+        path: "embedding.apiKey",
+        code: "required",
+      });
+    } else if (
+      draft.embedding.apiKey.trim().length > VERTEX_CREDENTIALS_JSON_LIMIT
+    ) {
+      issues.push({
+        path: "embedding.apiKey",
+        code: "invalid",
+      });
     }
   }
 

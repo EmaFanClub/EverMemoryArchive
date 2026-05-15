@@ -9,20 +9,17 @@ import type { Fs } from "../shared/fs";
 import { RealFs } from "../shared/fs";
 import {
   cloneConfig,
-  DEFAULT_MONGO_CONFIG,
-  type AgentConfig,
   type BootstrapConfig,
-  type ChannelConfig,
   type EmbeddingConfig,
   type GlobalConfigRecord,
   type LLMConfig,
   type MongoConfig,
-  type SystemConfig,
-  type WebSearchConfig,
+  type RuntimePaths,
 } from "./base";
 
 const DEFAULT_DB_NAME = "ema";
 const DEFAULT_DATA_ROOT = ".ema";
+const DEFAULT_MEMORY_MONGO_URI = "mongodb://localhost:27017";
 
 type EnvGetter = (name: string) => string | undefined;
 
@@ -32,6 +29,7 @@ export interface BootstrapConfigInput {
   readonly mongoKind?: "memory" | "remote";
   readonly mongoDb?: string;
   readonly dataRoot?: string;
+  readonly httpsProxy?: string;
 }
 
 export type GlobalConfigErrorCode =
@@ -102,7 +100,17 @@ const RuntimeOrLegacyLLMSchema = z.union([
   LegacyRuntimeLLMSchema,
 ]);
 
-const RuntimeOpenAIEmbeddingSchema = z
+const RuntimeEmbeddingSchema = z
+  .object({
+    provider: z.enum(["openai", "google"]),
+    model: z.string(),
+    baseUrl: z.string(),
+    apiKey: z.string(),
+  })
+  .strict()
+  .transform(trimEmbeddingConfig);
+
+const LegacyOpenAIEmbeddingSchema = z
   .object({
     model: z.string(),
     baseUrl: z.string(),
@@ -110,7 +118,7 @@ const RuntimeOpenAIEmbeddingSchema = z
   })
   .strict();
 
-const RuntimeGoogleEmbeddingSchema = z
+const LegacyGoogleEmbeddingSchema = z
   .object({
     model: z.string(),
     baseUrl: z.string(),
@@ -122,32 +130,19 @@ const RuntimeGoogleEmbeddingSchema = z
   })
   .strict();
 
-const RuntimeEmbeddingSchema = z
+const LegacyRuntimeEmbeddingSchema = z
   .object({
     provider: z.enum(["openai", "google"]),
-    openai: RuntimeOpenAIEmbeddingSchema,
-    google: RuntimeGoogleEmbeddingSchema,
+    openai: LegacyOpenAIEmbeddingSchema,
+    google: LegacyGoogleEmbeddingSchema,
   })
-  .strict();
+  .strict()
+  .transform(normalizeLegacyEmbeddingConfig);
 
-const RuntimeWebSearchSchema = z
-  .object({
-    enabled: z.boolean(),
-    tavilyApiKey: z.string(),
-  })
-  .strict();
-
-const RuntimeChannelSchema = z
-  .object({
-    qq: z
-      .object({
-        enabled: z.boolean(),
-        wsUrl: z.string(),
-        accessToken: z.string(),
-      })
-      .strict(),
-  })
-  .strict();
+const RuntimeOrLegacyEmbeddingSchema = z.union([
+  RuntimeEmbeddingSchema,
+  LegacyRuntimeEmbeddingSchema,
+]);
 
 const GlobalConfigRecordSchema = z
   .object({
@@ -155,18 +150,21 @@ const GlobalConfigRecordSchema = z
     version: z.literal(1),
     system: z
       .object({
-        httpsProxy: z.string(),
+        httpsProxy: z.string().optional(),
         accessToken: z.string().default(""),
       })
-      .strict(),
+      .passthrough()
+      .optional(),
+    accessToken: z.string().optional(),
     defaultLlm: RuntimeOrLegacyLLMSchema,
-    defaultEmbedding: RuntimeEmbeddingSchema,
-    defaultWebSearch: RuntimeWebSearchSchema,
-    defaultChannel: RuntimeChannelSchema,
+    defaultEmbedding: RuntimeOrLegacyEmbeddingSchema,
+    defaultWebSearch: z.unknown().optional(),
+    defaultChannel: z.unknown().optional(),
     createdAt: z.number().optional(),
     updatedAt: z.number().optional(),
   })
-  .strict();
+  .passthrough()
+  .transform(normalizeGlobalConfigRecord);
 
 export interface GlobalConfigLoadOptions {
   readonly bootstrap?: BootstrapConfig;
@@ -205,18 +203,6 @@ export class GlobalConfig {
     this.updateRecord({ defaultLlm: cloneConfig(config) });
   }
 
-  static updateDefaultWebSearch(config: WebSearchConfig): void {
-    this.updateRecord({ defaultWebSearch: cloneConfig(config) });
-  }
-
-  static updateDefaultChannel(config: ChannelConfig): void {
-    this.updateRecord({ defaultChannel: cloneConfig(config) });
-  }
-
-  static updateSystemConfig(config: GlobalConfigRecord["system"]): void {
-    this.updateRecord({ system: cloneConfig(config) });
-  }
-
   static get hasRuntimeConfig(): boolean {
     return Boolean(this.record);
   }
@@ -225,27 +211,24 @@ export class GlobalConfig {
     return this.loadedBootstrap;
   }
 
-  static get system(): SystemConfig {
-    const bootstrap = this.loadedBootstrap;
-    return {
-      mode: bootstrap.mode,
-      dataRoot: bootstrap.paths.dataRoot,
-      logsDir: bootstrap.paths.logsDir,
-      httpsProxy: resolveHttpsProxy(
-        this.record?.system.httpsProxy ?? "",
-        getProcessEnv,
-      ),
-    };
+  static get mode(): "dev" | "prod" {
+    return this.loadedBootstrap.mode;
   }
 
   static get mongo(): MongoConfig {
     return this.loadedBootstrap.mongo;
   }
 
-  static get agent(): AgentConfig {
-    return {
-      workspaceDir: this.loadedBootstrap.paths.workspaceDir,
-    };
+  static get paths(): RuntimePaths {
+    return cloneConfig(this.loadedBootstrap.paths);
+  }
+
+  static get httpsProxy(): string {
+    return this.loadedBootstrap.httpsProxy;
+  }
+
+  static get accessToken(): string | undefined {
+    return this.loadedRecord.accessToken;
   }
 
   static get defaultLlm(): LLMConfig {
@@ -259,31 +242,7 @@ export class GlobalConfig {
   static resolveRuntimeEmbeddingConfig(
     config: EmbeddingConfig,
   ): EmbeddingConfig {
-    return {
-      provider: config.provider,
-      openai: {
-        model: config.openai.model.trim(),
-        baseUrl: config.openai.baseUrl.trim(),
-        apiKey: this.trimConfigValue(config.openai.apiKey),
-      },
-      google: {
-        model: config.google.model.trim(),
-        baseUrl: config.google.baseUrl.trim(),
-        apiKey: this.trimConfigValue(config.google.apiKey),
-        useVertexAi: config.google.useVertexAi,
-        project: this.trimConfigValue(config.google.project),
-        location: this.trimConfigValue(config.google.location),
-        credentialsFile: this.trimConfigValue(config.google.credentialsFile),
-      },
-    };
-  }
-
-  static get defaultWebSearch(): WebSearchConfig {
-    return cloneConfig(this.loadedRecord.defaultWebSearch);
-  }
-
-  static get defaultChannel(): ChannelConfig {
-    return cloneConfig(this.loadedRecord.defaultChannel);
+    return normalizeEmbeddingConfig(config);
   }
 
   /** Clears the loaded singleton for tests. Production code must not call this. */
@@ -320,10 +279,6 @@ export class GlobalConfig {
       ...patch,
     });
   }
-
-  private static trimConfigValue(value: string): string {
-    return value.trim();
-  }
 }
 
 export function createBootstrapConfig(
@@ -357,6 +312,10 @@ export function createBootstrapConfig(
     input.dataRoot ?? env("EMA_SERVER_DATA_ROOT") ?? DEFAULT_DATA_ROOT,
   );
   const useDevMemory = mode === "dev" && mongoKind === "memory";
+  const httpsProxy = resolveHttpsProxy(
+    input.httpsProxy ?? env("EMA_SERVER_HTTPS_PROXY") ?? "",
+    env,
+  );
 
   return {
     mode,
@@ -364,7 +323,7 @@ export function createBootstrapConfig(
       kind: mongoKind,
       uri:
         mongoKind === "memory"
-          ? DEFAULT_MONGO_CONFIG.uri
+          ? DEFAULT_MEMORY_MONGO_URI
           : explicitMongoUri.trim(),
       dbName: mongoDbName,
     },
@@ -373,9 +332,14 @@ export function createBootstrapConfig(
       logsDir: path.join(dataRoot, "logs"),
       workspaceDir: path.join(dataRoot, "workspace"),
     },
-    devBootstrap: {
-      restoreDefaultSnapshot: useDevMemory,
-    },
+    httpsProxy,
+    ...(useDevMemory
+      ? {
+          devBootstrap: {
+            restoreDefaultSnapshot: true,
+          },
+        }
+      : {}),
   };
 }
 
@@ -444,6 +408,51 @@ export function normalizeLLMConfig(config: unknown): LLMConfig {
   return result.data;
 }
 
+export function normalizeEmbeddingConfig(config: unknown): EmbeddingConfig {
+  const result = RuntimeOrLegacyEmbeddingSchema.safeParse(config);
+  if (!result.success) {
+    const message = result.error.issues
+      .map(
+        (issue) =>
+          `${issue.path.join(".") || "embeddingConfig"}: ${issue.message}`,
+      )
+      .join("; ");
+    throw new GlobalConfigError(
+      "global_config_invalid",
+      `Invalid EMA embedding config: ${message}`,
+    );
+  }
+  return result.data;
+}
+
+function normalizeGlobalConfigRecord(config: {
+  id: "global";
+  version: 1;
+  system?: {
+    accessToken?: string;
+  };
+  accessToken?: string;
+  defaultLlm: LLMConfig;
+  defaultEmbedding: EmbeddingConfig;
+  createdAt?: number;
+  updatedAt?: number;
+}): GlobalConfigRecord {
+  const accessToken = (
+    config.accessToken ??
+    config.system?.accessToken ??
+    ""
+  ).trim();
+  return {
+    id: "global",
+    version: 1,
+    ...(accessToken ? { accessToken } : {}),
+    defaultLlm: config.defaultLlm,
+    defaultEmbedding: config.defaultEmbedding,
+    ...(config.createdAt !== undefined ? { createdAt: config.createdAt } : {}),
+    ...(config.updatedAt !== undefined ? { updatedAt: config.updatedAt } : {}),
+  };
+}
+
 function trimLlmConfig(config: LLMConfig): LLMConfig {
   return {
     model: config.model.trim(),
@@ -478,6 +487,48 @@ function normalizeLegacyLlmConfig(config: {
     });
   }
   return trimLlmConfig({
+    model: config.google.model,
+    baseUrl: config.google.baseUrl,
+    apiKey: config.google.useVertexAi
+      ? config.google.credentialsFile
+      : config.google.apiKey,
+  });
+}
+
+function trimEmbeddingConfig(config: EmbeddingConfig): EmbeddingConfig {
+  return {
+    provider: config.provider,
+    model: config.model.trim(),
+    baseUrl: config.baseUrl.trim(),
+    apiKey: config.apiKey.trim(),
+  };
+}
+
+function normalizeLegacyEmbeddingConfig(config: {
+  provider: "openai" | "google";
+  openai: {
+    model: string;
+    baseUrl: string;
+    apiKey: string;
+  };
+  google: {
+    model: string;
+    baseUrl: string;
+    apiKey: string;
+    useVertexAi: boolean;
+    credentialsFile: string;
+  };
+}): EmbeddingConfig {
+  if (config.provider === "openai") {
+    return trimEmbeddingConfig({
+      provider: "openai",
+      model: config.openai.model,
+      baseUrl: config.openai.baseUrl,
+      apiKey: config.openai.apiKey,
+    });
+  }
+  return trimEmbeddingConfig({
+    provider: "google",
     model: config.google.model,
     baseUrl: config.google.baseUrl,
     apiKey: config.google.useVertexAi

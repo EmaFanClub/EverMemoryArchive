@@ -1,7 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
 import { Agent, checkCompleteMessages } from "../agent";
-import type { AgentConfig } from "../../config";
 import type { LLMClient } from "../../llm";
 import type { Message } from "../../llm/schema";
 
@@ -49,7 +48,7 @@ describe("Agent helpers", () => {
       setRetryCallback: vi.fn(),
       generate,
     } as unknown as LLMClient;
-    const agent = new Agent({} as AgentConfig, llm);
+    const agent = new Agent(llm);
 
     await agent.runWithState({
       traceId,
