@@ -1,4 +1,4 @@
-import type { InputContent } from "../agent_hub/schema";
+import type { InputContent } from "../llm/schema";
 import type { MessageReplyRef } from "../channel";
 import type {
   ChannelConfig,

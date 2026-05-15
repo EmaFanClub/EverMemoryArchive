@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { z } from "zod";
 
-import { ThinkingLevel } from "../agent_hub/base";
+import { ThinkingLevel } from "../llm/base";
 import type { Fs } from "../shared/fs";
 import { RealFs } from "../shared/fs";
 import {

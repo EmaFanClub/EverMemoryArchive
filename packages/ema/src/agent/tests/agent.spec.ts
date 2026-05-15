@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { checkCompleteMessages } from "../agent";
-import type { Message } from "../../agent_hub/schema";
+import type { Message } from "../../llm/schema";
 
 describe("Agent helpers", () => {
   test("checkCompleteMessages returns true for final text response", () => {

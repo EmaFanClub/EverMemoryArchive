@@ -1,6 +1,6 @@
 import { buildSession, resolveSession } from "../channel";
 import type { ConversationEntity, ConversationMessageEntity } from "../db";
-import type { InputContent } from "../agent_hub/schema";
+import type { InputContent } from "../llm/schema";
 import type { Server } from "../server";
 import type {
   ChatHistoryInput,

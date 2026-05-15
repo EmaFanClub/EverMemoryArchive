@@ -4,7 +4,7 @@ import {
   IMAGE_MIME_TYPES,
   VIDEO_MIME_TYPES,
   type MIME,
-} from "../agent_hub/schema";
+} from "../llm/schema";
 import type {
   ChannelSessionInfo,
   ChannelSessionType,

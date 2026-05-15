@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const loggerCreateConfigs = vi.hoisted(() => [] as unknown[]);
 
-vi.mock("../../agent_hub", () => ({
+vi.mock("../../llm", () => ({
   LLMClient: class LLMClient {},
 }));
 

@@ -20,7 +20,7 @@ import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
 import { buildPromptFromBufferMessage, isActorChatInput } from "./utils";
 import { parseReplyRef, resolveSession } from "../channel";
 import type { Server } from "../server";
-import type { InlineDataItem, InputContent } from "../agent_hub/schema";
+import type { InlineDataItem, InputContent } from "../llm/schema";
 import { formatTimestamp, parseTimestamp } from "../shared/utils";
 import { skillsPrompt } from "../skills";
 import type { EmaReply } from "../tools/ema_reply_tool";

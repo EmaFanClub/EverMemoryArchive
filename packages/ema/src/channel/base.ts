@@ -1,5 +1,5 @@
 import type { ActorChatResponse } from "../actor";
-import type { InputContent } from "../agent_hub/schema";
+import type { InputContent } from "../llm/schema";
 
 export type ChannelSessionType = "chat" | "group";
 

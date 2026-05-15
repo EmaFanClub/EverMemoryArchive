@@ -12,9 +12,9 @@ import type {
   WebSearchConfig,
 } from "../config";
 import type { VectorIndexStatus } from "../db";
-import type { InputContent } from "../agent_hub/schema";
-import type { ThinkingLevel } from "../agent_hub/base";
-import type { LLMProvider } from "../agent_hub/models";
+import type { InputContent } from "../llm/schema";
+import type { ThinkingLevel } from "../llm/base";
+import type { LLMProvider } from "../llm/models";
 import type { MessageReplyRef } from "../channel";
 
 export type ActorRuntimeStatus = "offline" | "sleep" | "online" | "busy";

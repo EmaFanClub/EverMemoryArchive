@@ -1,20 +1,15 @@
 import { EventEmitter } from "node:events";
 
-import type { LLMClient } from "../agent_hub";
-import { RetryExhaustedError, isAbortError } from "../agent_hub/retry";
+import type { LLMClient } from "../llm";
+import { RetryExhaustedError, isAbortError } from "../llm/retry";
 import {
   DEFAULT_AGENT_MAX_STEPS,
   DEFAULT_AGENT_TOKEN_LIMIT,
   type AgentConfig,
 } from "../config/index";
 import { Logger } from "../shared/logger";
-import type {
-  Content,
-  Message,
-  ModelMessage,
-  ToolResult,
-} from "../agent_hub/schema";
-import { isToolCall } from "../agent_hub/utils";
+import type { Content, Message, ModelMessage, ToolResult } from "../llm/schema";
+import { isToolCall } from "../llm/utils";
 import type { Tool, ToolExecutionResult } from "../tools/base";
 import type {
   AgentEventsEmitter,

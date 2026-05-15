@@ -1,4 +1,4 @@
-import type { LLMConfig } from "../agent_hub/base";
+import type { LLMConfig } from "../llm/base";
 
 export type { LLMConfig };
 

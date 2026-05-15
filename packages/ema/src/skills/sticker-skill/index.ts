@@ -2,8 +2,8 @@ import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
 import type { ConversationMessageEntity } from "../../db/base";
-import type { ImageMIME, InlineDataItem } from "../../agent_hub/schema";
-import { isImageMime } from "../../agent_hub/utils";
+import type { ImageMIME, InlineDataItem } from "../../llm/schema";
+import { isImageMime } from "../../llm/utils";
 import {
   buildAvailableStickersMarkdown,
   formatStickerDisplayText,
