@@ -30,13 +30,10 @@ const errorSummaries: Record<SetupCheckErrorCode, string> = {
 
 export const fieldLabels: Record<string, string> = {
   llm: "LLM 服务配置",
-  "llm.provider": "LLM 供应商",
   "llm.model": "LLM 模型名称",
   "llm.baseUrl": "LLM Base URL",
   "llm.apiKey": "LLM ApiKey",
-  "llm.project": "LLM Vertex AI 项目",
-  "llm.location": "LLM Vertex AI 区域",
-  "llm.credentialsFile": "LLM Vertex AI 凭据 JSON",
+  "llm.thinkingLevel": "LLM 思考等级",
   embedding: "Embedding 服务配置",
   "embedding.model": "Embedding 模型名称",
   "embedding.baseUrl": "Embedding Base URL",

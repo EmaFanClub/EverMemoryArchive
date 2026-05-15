@@ -26,6 +26,12 @@ const actorSettingsErrorSummaries: Record<ActorSettingsCheckErrorCode, string> =
     EMBEDDING_NETWORK_ERROR: "Embedding 服务请求超时",
     CHECK_FAILED: "检查未通过",
   };
+const diagnosticMetaFields = [
+  ["服务提供商", "provider"],
+  ["模型", "model"],
+  ["接口地址", "endpoint"],
+  ["思考等级", "thinkingLevel"],
+] as const;
 
 function diagnosticText(value: ActorSettingsDiagnosticValue | undefined) {
   if (Array.isArray(value)) {
@@ -41,7 +47,9 @@ function diagnosticText(value: ActorSettingsDiagnosticValue | undefined) {
   return null;
 }
 
-function technicalDetailFromDiagnostics(details: ActorSettingsDiagnostics) {
+export function technicalDetailFromDiagnostics(
+  details: ActorSettingsDiagnostics,
+) {
   const httpStatus = diagnosticText(details.httpStatus);
   const providerType = diagnosticText(details.providerErrorType);
   const providerCode = diagnosticText(details.providerErrorCode);
@@ -64,6 +72,19 @@ function technicalDetailFromDiagnostics(details: ActorSettingsDiagnostics) {
   }
 
   return null;
+}
+
+export function diagnosticMetaFromDiagnostics(
+  details: ActorSettingsDiagnostics,
+): DashboardCheckFeedback["meta"] {
+  const meta: DashboardCheckFeedback["meta"] = [];
+  for (const [label, key] of diagnosticMetaFields) {
+    const value = diagnosticText(details[key]);
+    if (value) {
+      meta.push({ label, value });
+    }
+  }
+  return meta;
 }
 
 export function actorLlmCheckFeedbackFromResponse(
@@ -90,7 +111,10 @@ export function actorLlmCheckFeedbackFromResponse(
     detail: null,
     code,
     technicalDetail,
-    meta: [{ label: "耗时", value: `${response.check.durationMs} ms` }],
+    meta: [
+      ...diagnosticMetaFromDiagnostics(response.check.diagnostics),
+      { label: "耗时", value: `${response.check.durationMs} ms` },
+    ],
   };
 }
 

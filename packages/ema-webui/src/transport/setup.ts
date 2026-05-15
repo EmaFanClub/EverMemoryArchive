@@ -5,6 +5,7 @@ import type {
   SetupDraft,
   SetupDryRunResponse,
   SetupServiceCheckResponse,
+  SetupStatusResponse,
 } from "@/types/setup/v1beta1";
 
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
@@ -55,6 +56,13 @@ const setupCheckEndpoints: Record<SetupCheckTarget, string> = {
   llm: "/api/v1beta1/initialization/llm-probes",
   embedding: "/api/v1beta1/initialization/embedding-probes",
 };
+
+export async function getSetupStatus() {
+  return fetchJson<SetupStatusResponse>("/api/v1beta1/initialization", {
+    method: "GET",
+    cache: "no-store",
+  });
+}
 
 export async function runSetupCheck(
   target: SetupCheckTarget,

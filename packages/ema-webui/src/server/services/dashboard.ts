@@ -18,6 +18,7 @@ import {
   toWebEmbeddingIndexStatus,
   toCoreLlmConfig,
   toWebLlmConfig,
+  toWebLlmModelProvider,
   toWebQqBlockedBy,
   toWebQqConversation,
   toWebQqConfig,
@@ -129,8 +130,12 @@ function credentialDiagnosticValue(value: string) {
   return value.trim() ? "configured" : "";
 }
 
-function selectedLlmConfig(config: ActorLlmConfig) {
-  return config.provider === "openai" ? config.openai : config.google;
+function llmEndpointDiagnostic(config: ActorLlmConfig) {
+  return hostFromUrl(config.baseUrl);
+}
+
+function llmProviderDiagnostic(config: ActorLlmConfig) {
+  return toWebLlmModelProvider(toCoreLlmConfig(config));
 }
 
 function selectedEmbeddingConfig(config: GlobalEmbeddingSaveRequest["config"]) {
@@ -207,6 +212,7 @@ export async function buildGlobalSettingsResponse(): Promise<GlobalSettingsRespo
     },
     services: {
       llm: toWebLlmConfig(record?.defaultLlm ?? runtimeDefaults.llm),
+      llmModels: server.controller.settings.listLlmModels(),
       embedding: toWebEmbeddingConfig(expectedEmbedding),
       embeddingRestartRequired: !sameJsonValue(
         expectedEmbedding,
@@ -400,6 +406,7 @@ export async function buildActorSettingsResponse(
   const globalDefaults = server.controller.settings.getGlobalDefaults();
   const global = {
     llm: toWebLlmConfig(globalDefaults.llm),
+    llmModels: server.controller.settings.listLlmModels(),
     embedding: toWebEmbeddingConfig(globalDefaults.embedding),
     webSearch: toWebSearchConfig(globalDefaults.webSearch),
   };
@@ -1137,14 +1144,11 @@ function llmSaveDiagnostics(
     };
   }
 
-  const selected = selectedLlmConfig(config);
+  const provider = llmProviderDiagnostic(config);
   return {
-    provider: config.provider,
-    model: selected.model,
-    endpoint:
-      config.provider === "google" && config.google.useVertexAi
-        ? "vertex-ai"
-        : hostFromUrl(selected.baseUrl),
+    provider,
+    model: config.model,
+    endpoint: llmEndpointDiagnostic(config),
     storage: "ema-actor-config",
   };
 }
@@ -1189,7 +1193,22 @@ export async function runActorLlmServiceCheck(
 ): Promise<ActorLlmCheckResponse> {
   const startedAt = now();
   const config = request.config;
-  const selected = selectedLlmConfig(config);
+  if (!config) {
+    return createActorLlmCheckResponse({
+      actorId,
+      startedAt,
+      ok: false,
+      errorCode: "INVALID_CONFIG",
+      errorDetails: {
+        issuePaths: ["llm"],
+        issueCodes: ["required"],
+      },
+      retryable: true,
+      diagnostics: {},
+    });
+  }
+
+  const provider = llmProviderDiagnostic(config);
   const probe = await (
     await ensureEmaServer()
   ).controller.settings.probeLlmConfig(toCoreLlmConfig(config));
@@ -1205,8 +1224,8 @@ export async function runActorLlmServiceCheck(
     errorDetails: probe.ok
       ? undefined
       : {
-          provider: config.provider,
-          model: selected.model,
+          provider,
+          model: config.model,
           providerErrorType: probe.unsupported
             ? "unsupported"
             : "provider_probe_failed",
@@ -1214,12 +1233,10 @@ export async function runActorLlmServiceCheck(
         },
     retryable: !probe.unsupported,
     diagnostics: {
-      provider: config.provider,
-      model: selected.model,
-      endpoint:
-        config.provider === "google" && config.google.useVertexAi
-          ? "vertex-ai"
-          : hostFromUrl(selected.baseUrl),
+      provider,
+      model: config.model,
+      endpoint: llmEndpointDiagnostic(config),
+      ...(config.thinkingLevel ? { thinkingLevel: config.thinkingLevel } : {}),
       ...(probe.diagnostics ?? {}),
     },
   });
@@ -1245,7 +1262,7 @@ export async function runGlobalLlmServiceCheck(
     }) as GlobalLlmCheckResponse;
   }
 
-  const selected = selectedLlmConfig(config);
+  const provider = llmProviderDiagnostic(config);
   const probe = await (
     await ensureEmaServer()
   ).controller.settings.probeLlmConfig(toCoreLlmConfig(config));
@@ -1261,8 +1278,8 @@ export async function runGlobalLlmServiceCheck(
     errorDetails: probe.ok
       ? undefined
       : {
-          provider: config.provider,
-          model: selected.model,
+          provider,
+          model: config.model,
           providerErrorType: probe.unsupported
             ? "unsupported"
             : "provider_probe_failed",
@@ -1270,16 +1287,11 @@ export async function runGlobalLlmServiceCheck(
         },
     retryable: !probe.unsupported,
     diagnostics: {
-      provider: config.provider,
-      model: selected.model,
-      endpoint:
-        config.provider === "google" && config.google.useVertexAi
-          ? "vertex-ai"
-          : hostFromUrl(selected.baseUrl),
-      credential:
-        config.provider === "google" && config.google.useVertexAi
-          ? credentialDiagnosticValue(config.google.credentialsFile)
-          : credentialDiagnosticValue(selected.apiKey),
+      provider,
+      model: config.model,
+      endpoint: llmEndpointDiagnostic(config),
+      credential: credentialDiagnosticValue(config.apiKey),
+      ...(config.thinkingLevel ? { thinkingLevel: config.thinkingLevel } : {}),
       ...(probe.diagnostics ?? {}),
     },
   }) as GlobalLlmCheckResponse;
@@ -1427,10 +1439,7 @@ export async function saveGlobalLlmServiceConfig(
       ok: true,
       diagnostics: {
         ...llmSaveDiagnostics(config),
-        credential:
-          config.provider === "google" && config.google.useVertexAi
-            ? credentialDiagnosticValue(config.google.credentialsFile)
-            : credentialDiagnosticValue(selectedLlmConfig(config).apiKey),
+        credential: credentialDiagnosticValue(config.apiKey),
         storage: "ema-global-config",
       },
     }) as GlobalLlmSaveResponse;
@@ -1448,16 +1457,8 @@ export async function saveGlobalLlmServiceConfig(
         message,
       },
       diagnostics: {
-        provider: config.provider,
-        model: selectedLlmConfig(config).model,
-        endpoint:
-          config.provider === "google" && config.google.useVertexAi
-            ? "vertex-ai"
-            : hostFromUrl(selectedLlmConfig(config).baseUrl),
-        credential:
-          config.provider === "google" && config.google.useVertexAi
-            ? credentialDiagnosticValue(config.google.credentialsFile)
-            : credentialDiagnosticValue(selectedLlmConfig(config).apiKey),
+        ...llmSaveDiagnostics(config),
+        credential: credentialDiagnosticValue(config.apiKey),
         storage: "ema-global-config",
       },
     }) as GlobalLlmSaveResponse;

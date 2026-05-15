@@ -15,7 +15,6 @@ import {
 import {
   isEmbeddingConfigComplete,
   isLLMConfigComplete,
-  isLLMConfigSupported,
   initialDraft,
   setupSteps,
   validateSetupDraft,
@@ -145,7 +144,7 @@ function validationIssuesForCheck(
     [target]: config,
   };
 
-  return validateSetupDraft(draft).filter(
+  return validateSetupDraftForServer(draft).filter(
     (issue) => issue.path === target || issue.path.startsWith(`${target}.`),
   );
 }
@@ -159,20 +158,13 @@ export async function runSetupServiceCheck(
 
   if (target === "llm") {
     const config = request.config as SetupDraft["llm"] | undefined;
-    if (!config || !isLLMConfigSupported(config)) {
-      return failureFromIssues(target, phase, startedAt, [
-        {
-          path: "llm.provider",
-          code: "unsupported",
-        },
-      ]);
-    }
-    if (!isLLMConfigComplete(config)) {
+    const issues = validationIssuesForCheck("llm", config);
+    if (!config || issues.length > 0 || !isLLMConfigComplete(config)) {
       return failureFromIssues(
         target,
         phase,
         startedAt,
-        validationIssuesForCheck("llm", config),
+        issues.length > 0 ? issues : validationIssuesForCheck("llm", config),
       );
     }
 
@@ -185,17 +177,17 @@ export async function runSetupServiceCheck(
       target,
       phase,
       startedAt,
-      provider: config.provider,
+      provider: diagnosticProviderForModel(config.model),
       model: config.model,
       probe,
       diagnostics: {
-        provider: config.provider,
+        provider: diagnosticProviderForModel(config.model),
         model: config.model,
-        mode: config.provider === "openai" ? config.mode : "native",
-        endpoint: config.useVertexAi
-          ? "vertex-ai"
-          : hostFromUrl(config.baseUrl),
-        credential: config.useVertexAi ? "credentials-json" : "api-key",
+        endpoint: hostFromUrl(config.baseUrl),
+        credential: "configured",
+        ...(config.thinkingLevel
+          ? { thinkingLevel: config.thinkingLevel }
+          : {}),
       },
     });
   }
@@ -303,6 +295,14 @@ function classifyProbeError(
   return target === "llm" ? "LLM_PROVIDER_ERROR" : "EMBEDDING_PROVIDER_ERROR";
 }
 
+function diagnosticProviderForModel(model: string) {
+  try {
+    return resolveLLMModelDefinition(model).provider;
+  } catch {
+    return "unknown";
+  }
+}
+
 function buildLlmConfigForCheck(config: SetupDraft["llm"]): {
   config: LLMConfig;
 } {
@@ -349,20 +349,9 @@ export async function buildSetupStatus(): Promise<SetupStatusResponse> {
     },
     recommendedSteps: setupSteps,
     capabilities: {
-      llmProviders: ["google", "openai", "anthropic"],
+      llmModels: server.controller.settings.listLlmModels(),
       embeddingProviders: ["google", "openai"],
-      unsupported: [
-        {
-          path: "default_llm.anthropic",
-          reason:
-            "Provider UI is visible but backend adapter is not wired yet.",
-        },
-        {
-          path: "default_llm.openai.mode=chat",
-          reason:
-            "Chat Completions mode is reserved for a later backend adapter.",
-        },
-      ],
+      unsupported: [],
     },
   };
 }
@@ -380,13 +369,14 @@ function getSetupInitializationReason(
 
   const llm = setupLlmFromGlobalConfig(config.defaultLlm);
   const embedding = setupEmbeddingFromGlobalConfig(config.defaultEmbedding);
-  if (
-    isStoredProviderConfigStale(llm) ||
-    isStoredProviderConfigStale(embedding)
-  ) {
+  if (isStoredLlmConfigStale(llm) || isStoredEmbeddingConfigStale(embedding)) {
     return "CONFIG_STALE";
   }
-  if (!isLLMConfigComplete(llm) || !isEmbeddingConfigComplete(embedding)) {
+  if (
+    !isLLMConfigComplete(llm) ||
+    !isEmbeddingConfigComplete(embedding) ||
+    validateLlmModelConfig(llm).length > 0
+  ) {
     return "CONFIG_INCOMPLETE";
   }
   return null;
@@ -394,16 +384,10 @@ function getSetupInitializationReason(
 
 function setupLlmFromGlobalConfig(config: LLMConfig): SetupDraft["llm"] {
   return {
-    ...initialDraft.llm,
-    provider: setupLlmProviderForModel(config),
-    mode: "responses",
     model: config.model,
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
-    useVertexAi: false,
-    project: "",
-    location: "",
-    credentialsFile: "",
+    ...(config.thinkingLevel ? { thinkingLevel: config.thinkingLevel } : {}),
   };
 }
 
@@ -415,7 +399,11 @@ function setupEmbeddingFromGlobalConfig(
     : { ...initialDraft.embedding, provider: "google", ...config.google };
 }
 
-function isStoredProviderConfigStale(config: {
+function isStoredLlmConfigStale(config: SetupDraft["llm"]) {
+  return looksLikeEnvReference(config.apiKey);
+}
+
+function isStoredEmbeddingConfigStale(config: {
   apiKey: string;
   useVertexAi: boolean;
   project: string;
@@ -455,8 +443,36 @@ function isJsonObject(value: string) {
   }
 }
 
+function validateLlmModelConfig(
+  config: SetupDraft["llm"],
+): SetupValidationIssue[] {
+  if (!config.model.trim()) {
+    return [];
+  }
+
+  try {
+    const definition = resolveLLMModelDefinition(config.model.trim());
+    const thinkingLevel = toCoreThinkingLevel(config.thinkingLevel);
+    if (
+      thinkingLevel &&
+      !definition.capabilities.thinkingLevels.includes(thinkingLevel)
+    ) {
+      return [{ path: "llm.thinkingLevel", code: "unsupported" }];
+    }
+    return [];
+  } catch {
+    return [{ path: "llm.model", code: "unsupported" }];
+  }
+}
+
+function validateSetupDraftForServer(
+  draft: SetupDraft,
+): SetupValidationIssue[] {
+  return [...validateSetupDraft(draft), ...validateLlmModelConfig(draft.llm)];
+}
+
 export function buildDryRunResponse(draft: SetupDraft): SetupDryRunResponse {
-  const issues = validateSetupDraft(draft);
+  const issues = validateSetupDraftForServer(draft);
 
   return {
     apiVersion: API_VERSION,
@@ -490,7 +506,7 @@ export function buildDryRunResponse(draft: SetupDraft): SetupDryRunResponse {
 export async function commitSetupDraft(
   draft: SetupDraft,
 ): Promise<SetupCommitResponse> {
-  const issues = validateSetupDraft(draft);
+  const issues = validateSetupDraftForServer(draft);
   if (issues.length > 0) {
     return {
       apiVersion: API_VERSION,
@@ -581,33 +597,20 @@ export function buildEmbeddingConfigFromSetupInput(
 }
 
 function buildLlmConfig(draft: SetupDraft): LLMConfig {
-  const useVertexAi = draft.llm.provider === "google" && draft.llm.useVertexAi;
   return {
     model: draft.llm.model.trim(),
     baseUrl: draft.llm.baseUrl.trim(),
-    apiKey: useVertexAi
-      ? draft.llm.credentialsFile.trim()
-      : draft.llm.apiKey.trim(),
+    apiKey: draft.llm.apiKey.trim(),
+    ...(toCoreThinkingLevel(draft.llm.thinkingLevel)
+      ? { thinkingLevel: toCoreThinkingLevel(draft.llm.thinkingLevel) }
+      : {}),
   };
 }
 
-function setupLlmProviderForModel(
-  config: LLMConfig,
-): SetupDraft["llm"]["provider"] {
-  try {
-    const provider = resolveLLMModelDefinition(config.model).provider;
-    return provider === "openai" || provider === "anthropic"
-      ? provider
-      : "google";
-  } catch {
-    if (config.model.startsWith("gpt") || config.baseUrl.includes("openai")) {
-      return "openai";
-    }
-    if (config.baseUrl.includes("anthropic")) {
-      return "anthropic";
-    }
-    return "google";
-  }
+function toCoreThinkingLevel(
+  value: SetupDraft["llm"]["thinkingLevel"],
+): LLMConfig["thinkingLevel"] {
+  return value as LLMConfig["thinkingLevel"];
 }
 
 function buildEmbeddingConfig(draft: SetupDraft): EmbeddingConfig {

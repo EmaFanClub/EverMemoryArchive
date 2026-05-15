@@ -94,6 +94,29 @@ describe("SettingsController", () => {
     GlobalConfig.resetForTests();
   });
 
+  test("lists AgentHub LLM model options for API clients", () => {
+    const fixture = createFixture();
+
+    expect(fixture.controller.listLlmModels()).toContainEqual({
+      model: "gemini-3.1-pro-preview",
+      provider: "google",
+      defaultBaseUrl: "https://generativelanguage.googleapis.com",
+      capabilities: {
+        thinkingLevels: [
+          ThinkingLevel.NONE,
+          ThinkingLevel.LOW,
+          ThinkingLevel.MEDIUM,
+          ThinkingLevel.HIGH,
+        ],
+        tools: true,
+        images: true,
+      },
+      requestDefaults: {
+        thinkingLevel: ThinkingLevel.MEDIUM,
+      },
+    });
+  });
+
   test("saves actor LLM config without probing the provider", async () => {
     const fixture = createFixture();
     const probe = vi

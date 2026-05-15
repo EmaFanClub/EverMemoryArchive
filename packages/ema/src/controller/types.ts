@@ -13,6 +13,8 @@ import type {
 } from "../config";
 import type { VectorIndexStatus } from "../db";
 import type { InputContent } from "../agent_hub/schema";
+import type { ThinkingLevel } from "../agent_hub/base";
+import type { LLMProvider } from "../agent_hub/models";
 import type { MessageReplyRef } from "../channel";
 
 export type ActorRuntimeStatus = "offline" | "sleep" | "online" | "busy";
@@ -83,6 +85,20 @@ export interface EffectiveActorSettings {
   llm: LLMConfig;
   webSearch: WebSearchConfig;
   channel: ChannelConfig;
+}
+
+export interface LlmModelOption {
+  model: string;
+  provider: LLMProvider;
+  defaultBaseUrl: string;
+  capabilities: {
+    thinkingLevels: ThinkingLevel[];
+    tools: boolean;
+    images: boolean;
+  };
+  requestDefaults: {
+    thinkingLevel?: ThinkingLevel;
+  };
 }
 
 export interface LlmProbeResult {

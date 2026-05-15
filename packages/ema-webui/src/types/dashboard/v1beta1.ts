@@ -5,8 +5,15 @@ export type ActorRuntimeTransition =
   | "waking"
   | "sleeping"
   | null;
-export type ActorLlmProvider = "google" | "openai";
-export type ActorOpenAiMode = "responses" | "chat";
+export type EmbeddingProvider = "google" | "openai";
+export type LlmModelProvider =
+  | "openai"
+  | "google"
+  | "anthropic"
+  | "zai"
+  | "moonshot"
+  | "qwen";
+export type LlmThinkingLevel = "none" | "low" | "medium" | "high";
 export type ActorSettingsCheckStatus = "passed" | "failed";
 export type ActorSettingsSaveStatus = "saved" | "failed";
 export type ActorSettingsCheckErrorCode =
@@ -33,6 +40,20 @@ export type ActorSettingsDiagnostics = Record<
   string,
   ActorSettingsDiagnosticValue
 >;
+
+export interface LlmModelOption {
+  model: string;
+  provider: LlmModelProvider;
+  defaultBaseUrl: string;
+  capabilities: {
+    thinkingLevels: LlmThinkingLevel[];
+    tools: boolean;
+    images: boolean;
+  };
+  requestDefaults: {
+    thinkingLevel?: LlmThinkingLevel;
+  };
+}
 
 export interface DashboardUserProfile {
   id: string;
@@ -135,6 +156,7 @@ export interface ActorSettingsResponse {
   settings: ActorSettingsSnapshot;
   global: {
     llm: ActorLlmConfig;
+    llmModels: LlmModelOption[];
     embedding: GlobalEmbeddingConfig;
     webSearch: ActorWebSearchConfig;
   };
@@ -226,24 +248,12 @@ export interface CreateActorTrainingRequest {
   dataset: CreateActorTrainingDataset;
 }
 
-/** Actor-scoped LLM config DTO mirrored from EMA's runtime LLMConfig. */
+/** Actor-scoped LLM config DTO mirrored from EMA's AgentHub LLMConfig. */
 export interface ActorLlmConfig {
-  provider: ActorLlmProvider;
-  openai: {
-    mode: ActorOpenAiMode;
-    model: string;
-    baseUrl: string;
-    apiKey: string;
-  };
-  google: {
-    model: string;
-    baseUrl: string;
-    apiKey: string;
-    useVertexAi: boolean;
-    project: string;
-    location: string;
-    credentialsFile: string;
-  };
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+  thinkingLevel?: LlmThinkingLevel;
 }
 
 export interface ActorLlmCheckRequest {
@@ -307,7 +317,7 @@ export type VectorIndexState =
 export interface GlobalEmbeddingIndexStatus {
   state: VectorIndexState;
   activeFingerprint: string | null;
-  activeProvider: ActorLlmProvider | null;
+  activeProvider: EmbeddingProvider | null;
   activeModel: string | null;
   dimensions?: number;
   startedAt?: string;
@@ -318,7 +328,7 @@ export interface GlobalEmbeddingIndexStatus {
 }
 
 export interface GlobalEmbeddingConfig {
-  provider: "google" | "openai";
+  provider: EmbeddingProvider;
   openai: {
     model: string;
     baseUrl: string;
@@ -351,6 +361,7 @@ export interface GlobalSettingsResponse {
   };
   services: {
     llm: ActorLlmConfig;
+    llmModels: LlmModelOption[];
     embedding: GlobalEmbeddingConfig;
     embeddingRestartRequired: boolean;
     embeddingIndex: GlobalEmbeddingIndexStatus;

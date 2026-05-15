@@ -1,4 +1,5 @@
 import {
+  LLM_CREDENTIAL_LIMIT,
   VERTEX_CREDENTIALS_JSON_LIMIT,
   type SetupDraft,
   type SetupStepId,
@@ -9,9 +10,7 @@ export type SetupFieldPath =
   | "llm.model"
   | "llm.baseUrl"
   | "llm.apiKey"
-  | "llm.project"
-  | "llm.location"
-  | "llm.credentialsFile"
+  | "llm.thinkingLevel"
   | "embedding.model"
   | "embedding.baseUrl"
   | "embedding.apiKey"
@@ -25,10 +24,7 @@ export type SetupFieldPath =
 export const fieldLimits: Partial<Record<SetupFieldPath, number>> = {
   "llm.model": 128,
   "llm.baseUrl": 512,
-  "llm.apiKey": 512,
-  "llm.project": 128,
-  "llm.location": 128,
-  "llm.credentialsFile": VERTEX_CREDENTIALS_JSON_LIMIT,
+  "llm.apiKey": LLM_CREDENTIAL_LIMIT,
   "embedding.model": 128,
   "embedding.baseUrl": 512,
   "embedding.apiKey": 512,
@@ -93,12 +89,8 @@ export function getFieldValue(path: SetupFieldPath, draft: SetupDraft) {
       return draft.llm.baseUrl;
     case "llm.apiKey":
       return draft.llm.apiKey;
-    case "llm.project":
-      return draft.llm.project;
-    case "llm.location":
-      return draft.llm.location;
-    case "llm.credentialsFile":
-      return draft.llm.credentialsFile;
+    case "llm.thinkingLevel":
+      return draft.llm.thinkingLevel ?? "";
     case "embedding.model":
       return draft.embedding.model;
     case "embedding.baseUrl":
@@ -126,15 +118,7 @@ export function getStepFieldPaths(
 ): SetupFieldPath[] {
   switch (stepId) {
     case "llm":
-      if (
-        draft.llm.provider === "anthropic" ||
-        (draft.llm.provider === "openai" && draft.llm.mode !== "responses")
-      ) {
-        return [];
-      }
-      return draft.llm.provider === "google" && draft.llm.useVertexAi
-        ? ["llm.model", "llm.project", "llm.location", "llm.credentialsFile"]
-        : ["llm.model", "llm.baseUrl", "llm.apiKey"];
+      return ["llm.model", "llm.baseUrl", "llm.apiKey"];
     case "embedding":
       return draft.embedding.provider === "google" &&
         draft.embedding.useVertexAi
@@ -154,7 +138,7 @@ export function getStepFieldPaths(
 
 export function validateSetupField(path: SetupFieldPath, draft: SetupDraft) {
   const value = getFieldValue(path, draft);
-  const optional = path === "owner.qq";
+  const optional = path === "owner.qq" || path === "llm.thinkingLevel";
 
   if (!optional) {
     const requiredError = required(value, path);
@@ -174,7 +158,6 @@ export function validateSetupField(path: SetupFieldPath, draft: SetupDraft) {
     case "llm.baseUrl":
     case "embedding.baseUrl":
       return validateHttpUrl(value, path);
-    case "llm.credentialsFile":
     case "embedding.credentialsFile":
       return validateJsonObject(value, path);
     case "owner.name":
@@ -194,8 +177,7 @@ export function validateSetupField(path: SetupFieldPath, draft: SetupDraft) {
       return null;
     case "llm.model":
     case "llm.apiKey":
-    case "llm.project":
-    case "llm.location":
+    case "llm.thinkingLevel":
     case "embedding.model":
     case "embedding.apiKey":
     case "embedding.project":

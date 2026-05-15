@@ -13,6 +13,7 @@ import {
 import type {
   GlobalEmbeddingIndexStatus,
   GlobalEmbeddingConfig,
+  LlmModelProvider,
   ActorQQBlockedBy,
   ActorLlmConfig,
   ActorQQConfig,
@@ -30,82 +31,37 @@ export interface CoreConversationForQq {
 }
 
 export function toWebLlmConfig(config: LLMConfig): ActorLlmConfig {
-  const provider = webLlmProviderForModel(config);
-  if (provider === "openai") {
-    return {
-      provider,
-      openai: {
-        mode: "responses",
-        model: config.model,
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
-      },
-      google: emptyGoogleLlmConfig(),
-    };
-  }
   return {
-    provider,
-    openai: emptyOpenAiLlmConfig(),
-    google: {
-      model: config.model,
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-      useVertexAi: false,
-      project: "",
-      location: "",
-      credentialsFile: "",
-    },
+    model: config.model,
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    ...(config.thinkingLevel ? { thinkingLevel: config.thinkingLevel } : {}),
   };
 }
 
 export function toCoreLlmConfig(config: ActorLlmConfig): LLMConfig {
-  if (config.provider === "openai") {
-    return {
-      model: config.openai.model,
-      baseUrl: config.openai.baseUrl,
-      apiKey: config.openai.apiKey,
-    };
-  }
   return {
-    model: config.google.model,
-    baseUrl: config.google.baseUrl,
-    apiKey: config.google.useVertexAi
-      ? config.google.credentialsFile
-      : config.google.apiKey,
+    model: config.model.trim(),
+    baseUrl: config.baseUrl.trim(),
+    apiKey: config.apiKey.trim(),
+    ...(config.thinkingLevel
+      ? { thinkingLevel: config.thinkingLevel as LLMConfig["thinkingLevel"] }
+      : {}),
   };
 }
 
-function webLlmProviderForModel(config: LLMConfig): ActorLlmConfig["provider"] {
+export function toWebLlmModelProvider(config: LLMConfig): LlmModelProvider {
   try {
-    return resolveLLMModelDefinition(config.model).provider === "openai"
-      ? "openai"
-      : "google";
+    return resolveLLMModelDefinition(config.model).provider;
   } catch {
-    return config.model.startsWith("gpt") || config.baseUrl.includes("openai")
-      ? "openai"
-      : "google";
+    if (config.model.startsWith("gpt") || config.baseUrl.includes("openai")) {
+      return "openai";
+    }
+    if (config.baseUrl.includes("anthropic")) {
+      return "anthropic";
+    }
+    return "google";
   }
-}
-
-function emptyOpenAiLlmConfig(): ActorLlmConfig["openai"] {
-  return {
-    mode: "responses",
-    model: "",
-    baseUrl: "",
-    apiKey: "",
-  };
-}
-
-function emptyGoogleLlmConfig(): ActorLlmConfig["google"] {
-  return {
-    model: "",
-    baseUrl: "",
-    apiKey: "",
-    useVertexAi: false,
-    project: "",
-    location: "",
-    credentialsFile: "",
-  };
 }
 
 export function toWebEmbeddingConfig(

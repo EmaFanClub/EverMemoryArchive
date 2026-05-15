@@ -12,6 +12,7 @@ export {
 } from "./base";
 export {
   LLM_MODEL_DEFINITIONS,
+  listLLMModelDefinitions,
   resolveLLMModelConfig,
   resolveLLMModelDefinition,
   type LLMClientType,
