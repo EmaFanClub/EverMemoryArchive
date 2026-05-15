@@ -113,7 +113,7 @@ export class Agent {
     name: "agent",
     outputs: [
       { type: "console", level: "warn" },
-      { type: "file", level: "debug" },
+      { type: "file", level: "warn" },
     ],
   });
   private status: "idle" | "running" = "idle";
@@ -184,58 +184,31 @@ export class Agent {
     const toolDict = new Map(this.contextManager.tools.map((t) => [t.name, t]));
     const maxSteps = DEFAULT_AGENT_MAX_STEPS;
     let step = 0;
-
-    this.logger.info("Agent run started", {
-      maxSteps,
-      messageCount: this.contextManager.messages.length,
-      toolNames: this.contextManager.tools.map((tool) => tool.name),
-    });
-    this.logger.debug("Agent system prompt prepared", {
-      systemPrompt: this.contextManager.systemPrompt,
-    });
-    this.logger.debug(
-      `request ${this.contextManager.messages.length} messages`,
-      this.contextManager.messages,
-    );
+    const traceId = this.contextManager.state.traceId;
 
     while (step < maxSteps) {
       if (this.abortRequested) {
         this.finishAborted();
         return;
       }
-      this.logger.debug(`Step ${step + 1}/${maxSteps}`);
 
       // Call LLM with context from context manager
       let response: ModelMessage;
       try {
         this.llm.setRetryCallback((exception, attempt) => {
           this.logger.warn("LLM request retry", {
+            traceId,
             step: step + 1,
             attempt,
             error: exception,
           });
         });
-        const startedAt = Date.now();
-        this.logger.debug("LLM request", {
-          step: step + 1,
-          systemPrompt: this.contextManager.systemPrompt,
-          messages: this.contextManager.messages,
-          tools: this.contextManager.tools.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.parameters,
-          })),
-        });
         response = await this.llm.generate({
           messages: this.contextManager.messages,
           tools: this.contextManager.tools,
           systemPrompt: this.contextManager.systemPrompt,
+          traceId,
           signal: this.abortController?.signal,
-        });
-        this.logger.debug(`LLM response received.`, {
-          step: step + 1,
-          durationMs: Date.now() - startedAt,
-          response,
         });
       } catch (error) {
         if (isAbortError(error)) {
@@ -249,7 +222,7 @@ export class Agent {
             msg: errorMsg,
             error: error as RetryExhaustedError,
           });
-          this.logger.error(errorMsg);
+          this.logger.error(errorMsg, { traceId, step: step + 1 });
           return;
         }
         const errorMsg = `LLM call failed: ${(error as Error).message}`;
@@ -258,7 +231,11 @@ export class Agent {
           msg: errorMsg,
           error: error as Error,
         });
-        this.logger.error(errorMsg);
+        this.logger.error(errorMsg, {
+          traceId,
+          step: step + 1,
+          error,
+        });
         return;
       }
 
@@ -277,7 +254,6 @@ export class Agent {
           ok: true,
           msg: finishReason,
         });
-        this.logger.debug(`Run finished: ${finishReason}`);
         return;
       }
 
@@ -289,12 +265,6 @@ export class Agent {
         const toolCallId = toolCall.toolCallId;
         const toolName = toolCall.name;
         const callArgs = toolCall.arguments;
-
-        this.logger.debug(`Tool call [${toolName}]`, {
-          step: step + 1,
-          toolName,
-          args: callArgs,
-        });
 
         if (toolCalls.length > 1) {
           toolResults.push({
@@ -310,6 +280,7 @@ export class Agent {
           });
           this.logger.warn(
             `Multiple tool calls in a single response are not supported. Skipping tool [${toolName}].`,
+            { traceId, step: step + 1, toolName },
           );
           continue;
         }
@@ -348,14 +319,9 @@ export class Agent {
             const { content, ...rest } = result;
             result = rest;
           }
-          this.logger.debug(`Tool [${toolName}] done.`, {
-            step: step + 1,
-            toolName,
-            durationMs: Date.now() - toolStartedAt,
-            result,
-          });
         } else {
           this.logger.warn(`Tool [${toolName}] failed.`, {
+            traceId,
             step: step + 1,
             toolName,
             durationMs: Date.now() - toolStartedAt,
@@ -390,13 +356,12 @@ export class Agent {
       msg: errorMsg,
       error: new Error(errorMsg),
     });
-    this.logger.error(errorMsg);
+    this.logger.error(errorMsg, { traceId, maxSteps });
     return;
   }
 
   private finishAborted(): void {
     const error = new Error("Aborted");
-    this.logger.debug("Agent run aborted");
     this.events.emit("runFinished", {
       ok: false,
       msg: error.message,

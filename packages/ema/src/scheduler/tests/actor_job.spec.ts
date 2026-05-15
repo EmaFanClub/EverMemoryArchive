@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-const loggerCreateConfigs = vi.hoisted(() => [] as unknown[]);
-
 vi.mock("../../llm", () => ({
   LLMClient: class LLMClient {},
 }));
@@ -9,9 +7,14 @@ vi.mock("../../llm", () => ({
 vi.mock("../../shared/logger", () => ({
   formatLogTimestamp: (timestamp: number = 0) =>
     new Date(timestamp).toISOString().replace("T", "_").replace(/[:.Z]/g, "-"),
+  formatTraceTimestamp: (timestamp: number = Date.now()) =>
+    new Date(timestamp)
+      .toISOString()
+      .replace("T", "_")
+      .replace(/[:.Z]/g, "-")
+      .replace(/-$/, ""),
   Logger: class Logger {
-    static create(config: unknown) {
-      loggerCreateConfigs.push(config);
+    static create() {
       return {
         debug() {},
         info() {},
@@ -362,7 +365,6 @@ function expectInfoLog(
 
 beforeEach(async () => {
   await loadTestGlobalConfig();
-  loggerCreateConfigs.length = 0;
 });
 
 afterEach(() => {
@@ -402,13 +404,12 @@ describe("actor background job lifecycle logs", () => {
     server.dbService.actorDB.getActor = vi.fn(async () => ({
       enabled: false,
     }));
-    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
-      async (state) => {
-        if (state.toolContext?.data) {
-          state.toolContext.data.activityAdded = true;
-        }
-      },
-    );
+    const runWithStateSpy = vi.spyOn(Agent.prototype, "runWithState");
+    runWithStateSpy.mockImplementation(async (state) => {
+      if (state.toolContext?.data) {
+        state.toolContext.data.activityAdded = true;
+      }
+    });
 
     await runActorBackgroundJob(server as any, conversationRollupJob(), 2000, {
       mode: "training",
@@ -438,33 +439,26 @@ describe("actor background job lifecycle logs", () => {
         (item) => typeof item.activityProcessedAt === "number",
       ),
     ).toHaveLength(5);
-    expect(loggerCreateConfigs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: "agent.task",
-          outputs: expect.arrayContaining([
-            expect.objectContaining({
-              filePath:
-                "actors/actor_1/train/conversation_rollup/2026-05-07_04-05-06-007-.jsonl",
-            }),
-          ]),
-        }),
-      ]),
+    expect(runWithStateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        traceId: expect.stringMatching(
+          /^actors\/actor_1\/train\/conversation_rollup\/\d{4}-\d{2}-\d{2}\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/,
+        ),
+      }),
     );
   });
 
-  test("runtime conversation rollup keeps the existing task log path", async () => {
+  test("runtime conversation rollup sets task trace id", async () => {
     const bufferedMessages = createBufferedMessages(1, 20, 1000);
     const server = createFakeServer(bufferedMessages);
     const logicalTriggeredAt = Date.UTC(2024, 6, 1, 2, 45, 0, 0);
 
-    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
-      async (state) => {
-        if (state.toolContext?.data) {
-          state.toolContext.data.activityAdded = true;
-        }
-      },
-    );
+    const runWithStateSpy = vi.spyOn(Agent.prototype, "runWithState");
+    runWithStateSpy.mockImplementation(async (state) => {
+      if (state.toolContext?.data) {
+        state.toolContext.data.activityAdded = true;
+      }
+    });
 
     await runActorBackgroundJob(
       server as any,
@@ -472,18 +466,12 @@ describe("actor background job lifecycle logs", () => {
       logicalTriggeredAt,
     );
 
-    expect(loggerCreateConfigs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: "agent.task",
-          outputs: expect.arrayContaining([
-            expect.objectContaining({
-              filePath:
-                "actors/actor_1/conversation_rollup/2024-07-01/2024-07-01_02-45-00-000-.jsonl",
-            }),
-          ]),
-        }),
-      ]),
+    expect(runWithStateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        traceId: expect.stringMatching(
+          /^actors\/actor_1\/conversation_rollup\/\d{4}-\d{2}-\d{2}\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/,
+        ),
+      }),
     );
   });
 

@@ -58,6 +58,8 @@ export type AgentEventsEmitter = EventEmitter<AgentEventMap> & AgentEventSource;
 
 /** The state of the agent. */
 export type AgentState = {
+  /** Trace identifier used by the LLM tracer for this agent run. */
+  traceId?: string;
   systemPrompt: string;
   messages: Message[];
   tools: Tool[];

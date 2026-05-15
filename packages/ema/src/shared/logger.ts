@@ -512,3 +512,13 @@ export function formatLogTimestamp(timestamp: number = Date.now()): string {
     `-${pad(date.getMilliseconds(), 3)}`
   );
 }
+
+/**
+ * Formats a local timestamp for agent trace file names.
+ *
+ * This intentionally matches log timestamps while keeping the trace naming
+ * explicit at call sites.
+ */
+export function formatTraceTimestamp(timestamp: number = Date.now()): string {
+  return formatLogTimestamp(timestamp);
+}
