@@ -17,6 +17,7 @@
     "@hokify/agenda": "^6.3.0",
     "@lancedb/lancedb": "^0.23.0",
     "@modelcontextprotocol/sdk": "^1.25.1",
+    "@prismshadow/agenthub": "0.3.1",
     "apache-arrow": "^18.1.0",
     "cron-parser": "^4.9.0",
     "dayjs": "^1.11.19",

@@ -3,3 +3,4 @@ packages:
 
 patchedDependencies:
   '@hokify/agenda@6.3.0': patches/@hokify__agenda@6.3.0.patch
+  '@prismshadow/agenthub@0.3.1': patches/@prismshadow__agenthub@0.3.1.patch
