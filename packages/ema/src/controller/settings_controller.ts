@@ -1,10 +1,12 @@
 import {
   GlobalConfig,
+  normalizeLLMConfig,
+  parseGlobalConfigRecord,
   type EmbeddingConfig,
   type LLMConfig,
   type WebSearchConfig,
 } from "../config";
-import { LLMClient, RetryConfig } from "../agent_hub";
+import { LLMClient, resolveLLMModelConfig, RetryConfig } from "../agent_hub";
 import { EmbeddingClient } from "../memory/embedding_client";
 import type { UsageMetadata } from "../agent_hub/schema";
 import { isTextItem } from "../agent_hub/utils";
@@ -28,27 +30,17 @@ export class SettingsController {
   }
 
   async probeLlmConfig(config: LLMConfig): Promise<LlmProbeResult> {
-    if (config.provider === "openai" && config.openai.mode !== "responses") {
-      return {
-        ok: false,
-        unsupported: true,
-        message: "OpenAI Chat Completions mode is not supported yet.",
-      };
-    }
-    const incompleteMessage = validateLlmProbeConfig(config);
-    if (incompleteMessage) {
+    const prepared = prepareLlmConfig(config);
+    if (!prepared.ok) {
       return {
         ok: false,
         unsupported: false,
-        message: incompleteMessage,
+        message: prepared.error,
       };
     }
     const startedAt = Date.now();
     try {
-      const client = new LLMClient(
-        GlobalConfig.resolveRuntimeLlmConfig(config),
-        new RetryConfig(false),
-      );
+      const client = new LLMClient(prepared.config, new RetryConfig(false));
       const response = await client.generate({
         messages: [
           {
@@ -137,17 +129,17 @@ export class SettingsController {
       return null;
     }
 
-    const invalidMessage = validateLlmSaveConfig(config);
-    if (invalidMessage) {
-      throw new Error(invalidMessage);
+    const prepared = prepareLlmConfig(config);
+    if (!prepared.ok) {
+      throw new Error(prepared.error);
     }
     const actor = await this.requireActor(actorId);
     await this.server.dbService.actorDB.upsertActor({
       ...actor,
-      llmConfig: config,
+      llmConfig: prepared.config,
     });
     await this.server.controller.actor.publishUpdated(actorId);
-    return config;
+    return prepared.config;
   }
 
   async saveWebSearchConfig(
@@ -167,17 +159,17 @@ export class SettingsController {
   }
 
   async saveGlobalLlmConfig(config: LLMConfig): Promise<LLMConfig> {
-    const invalidMessage = validateLlmSaveConfig(config);
-    if (invalidMessage) {
-      throw new Error(invalidMessage);
+    const prepared = prepareLlmConfig(config);
+    if (!prepared.ok) {
+      throw new Error(prepared.error);
     }
-    const record = await this.requireGlobalConfig();
+    const record = parseGlobalConfigRecord(await this.requireGlobalConfig());
     await this.server.dbService.globalConfigDB.upsertGlobalConfig({
       ...record,
-      defaultLlm: config,
+      defaultLlm: prepared.config,
     });
-    GlobalConfig.updateDefaultLlm(config);
-    return config;
+    GlobalConfig.updateDefaultLlm(prepared.config);
+    return prepared.config;
   }
 
   async saveGlobalEmbeddingConfig(
@@ -229,34 +221,30 @@ export class SettingsController {
   }
 }
 
-function validateLlmProbeConfig(config: LLMConfig): string | null {
-  if (config.provider === "openai") {
-    return !config.openai.model.trim() ||
-      !config.openai.baseUrl.trim() ||
-      !config.openai.apiKey.trim()
-      ? "LLM config is incomplete."
-      : null;
+function prepareLlmConfig(
+  config: LLMConfig,
+): { ok: true; config: LLMConfig } | { ok: false; error: string } {
+  let normalized: LLMConfig;
+  try {
+    normalized = normalizeLLMConfig(config);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
   }
-  if (!config.google.model.trim()) {
-    return "LLM config is incomplete.";
-  }
-  if (config.google.useVertexAi) {
-    return !config.google.project.trim() ||
-      !config.google.location.trim() ||
-      !config.google.credentialsFile.trim()
-      ? "Google Vertex AI project, location, and credentials JSON are required."
-      : null;
-  }
-  return !config.google.baseUrl.trim() || !config.google.apiKey.trim()
-    ? "LLM config is incomplete."
-    : null;
-}
 
-function validateLlmSaveConfig(config: LLMConfig): string | null {
-  if (config.provider === "openai" && config.openai.mode !== "responses") {
-    return "OpenAI Chat Completions mode is not supported yet.";
+  if (
+    !normalized.model.trim() ||
+    !normalized.baseUrl.trim() ||
+    !normalized.apiKey.trim()
+  ) {
+    return { ok: false, error: "LLM config is incomplete." };
   }
-  return validateLlmProbeConfig(config);
+
+  try {
+    resolveLLMModelConfig(normalized);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+  return { ok: true, config: normalized };
 }
 
 function diagnosticsFromUsage(

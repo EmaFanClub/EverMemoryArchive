@@ -3,6 +3,7 @@ import "server-only";
 import {
   DEFAULT_CHANNEL_CONFIG,
   DEFAULT_WEB_SEARCH_CONFIG,
+  resolveLLMModelDefinition,
   type EmbeddingConfig,
   type GlobalConfigRecord,
   type LLMConfig,
@@ -392,9 +393,18 @@ function getSetupInitializationReason(
 }
 
 function setupLlmFromGlobalConfig(config: LLMConfig): SetupDraft["llm"] {
-  return config.provider === "openai"
-    ? { ...initialDraft.llm, provider: "openai", ...config.openai }
-    : { ...initialDraft.llm, provider: "google", ...config.google };
+  return {
+    ...initialDraft.llm,
+    provider: setupLlmProviderForModel(config),
+    mode: "responses",
+    model: config.model,
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    useVertexAi: false,
+    project: "",
+    location: "",
+    credentialsFile: "",
+  };
 }
 
 function setupEmbeddingFromGlobalConfig(
@@ -571,39 +581,33 @@ export function buildEmbeddingConfigFromSetupInput(
 }
 
 function buildLlmConfig(draft: SetupDraft): LLMConfig {
+  const useVertexAi = draft.llm.provider === "google" && draft.llm.useVertexAi;
   return {
-    provider: draft.llm.provider === "openai" ? "openai" : "google",
-    openai: {
-      mode: draft.llm.mode,
-      model: draft.llm.provider === "openai" ? draft.llm.model.trim() : "",
-      baseUrl: draft.llm.provider === "openai" ? draft.llm.baseUrl.trim() : "",
-      apiKey: draft.llm.provider === "openai" ? draft.llm.apiKey.trim() : "",
-    },
-    google: {
-      model: draft.llm.provider === "google" ? draft.llm.model.trim() : "",
-      baseUrl:
-        draft.llm.provider === "google" && !draft.llm.useVertexAi
-          ? draft.llm.baseUrl.trim()
-          : "",
-      apiKey:
-        draft.llm.provider === "google" && !draft.llm.useVertexAi
-          ? draft.llm.apiKey.trim()
-          : "",
-      useVertexAi: draft.llm.provider === "google" && draft.llm.useVertexAi,
-      project:
-        draft.llm.provider === "google" && draft.llm.useVertexAi
-          ? draft.llm.project.trim()
-          : "",
-      location:
-        draft.llm.provider === "google" && draft.llm.useVertexAi
-          ? draft.llm.location.trim()
-          : "",
-      credentialsFile:
-        draft.llm.provider === "google" && draft.llm.useVertexAi
-          ? draft.llm.credentialsFile.trim()
-          : "",
-    },
+    model: draft.llm.model.trim(),
+    baseUrl: draft.llm.baseUrl.trim(),
+    apiKey: useVertexAi
+      ? draft.llm.credentialsFile.trim()
+      : draft.llm.apiKey.trim(),
   };
+}
+
+function setupLlmProviderForModel(
+  config: LLMConfig,
+): SetupDraft["llm"]["provider"] {
+  try {
+    const provider = resolveLLMModelDefinition(config.model).provider;
+    return provider === "openai" || provider === "anthropic"
+      ? provider
+      : "google";
+  } catch {
+    if (config.model.startsWith("gpt") || config.baseUrl.includes("openai")) {
+      return "openai";
+    }
+    if (config.baseUrl.includes("anthropic")) {
+      return "anthropic";
+    }
+    return "google";
+  }
 }
 
 function buildEmbeddingConfig(draft: SetupDraft): EmbeddingConfig {

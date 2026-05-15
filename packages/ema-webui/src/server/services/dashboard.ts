@@ -16,6 +16,7 @@ import {
 import {
   toWebEmbeddingConfig,
   toWebEmbeddingIndexStatus,
+  toCoreLlmConfig,
   toWebLlmConfig,
   toWebQqBlockedBy,
   toWebQqConversation,
@@ -1191,7 +1192,7 @@ export async function runActorLlmServiceCheck(
   const selected = selectedLlmConfig(config);
   const probe = await (
     await ensureEmaServer()
-  ).controller.settings.probeLlmConfig(config);
+  ).controller.settings.probeLlmConfig(toCoreLlmConfig(config));
   return createActorLlmCheckResponse({
     actorId,
     startedAt,
@@ -1247,7 +1248,7 @@ export async function runGlobalLlmServiceCheck(
   const selected = selectedLlmConfig(config);
   const probe = await (
     await ensureEmaServer()
-  ).controller.settings.probeLlmConfig(config);
+  ).controller.settings.probeLlmConfig(toCoreLlmConfig(config));
   return createActorLlmCheckResponse({
     actorId: "global",
     startedAt,
@@ -1367,7 +1368,7 @@ export async function saveActorLlmServiceConfig(
     const server = await ensureEmaServer();
     await server.controller.settings.saveLlmConfig(
       toCoreActorId(actorId),
-      config,
+      config === null ? null : toCoreLlmConfig(config),
     );
     return createSaveResponse({
       target: "llm",
@@ -1416,7 +1417,9 @@ export async function saveGlobalLlmServiceConfig(
 
   try {
     const server = await ensureEmaServer();
-    await server.controller.settings.saveGlobalLlmConfig(config);
+    await server.controller.settings.saveGlobalLlmConfig(
+      toCoreLlmConfig(config),
+    );
     return createSaveResponse({
       target: "llm",
       actorId: "global",

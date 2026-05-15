@@ -66,6 +66,41 @@ describe("DBService", () => {
     });
   });
 
+  test("normalizes legacy actor LLM override when resolving runtime config", async () => {
+    await mongo
+      .getDb()
+      .collection("actors")
+      .insertOne({
+        id: 1,
+        roleId: 1,
+        enabled: true,
+        llmConfig: {
+          provider: "google",
+          openai: {
+            mode: "responses",
+            model: "gpt-5.5",
+            baseUrl: "https://api.openai.com/v1",
+            apiKey: "sk-legacy",
+          },
+          google: {
+            model: "gemini-3.1-pro-preview",
+            baseUrl: " https://generativelanguage.googleapis.com ",
+            apiKey: " gemini-key ",
+            useVertexAi: false,
+            project: "",
+            location: "",
+            credentialsFile: "",
+          },
+        },
+      });
+
+    await expect(dbService.getActorLLMConfig(1)).resolves.toEqual({
+      model: "gemini-3.1-pro-preview",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      apiKey: "gemini-key",
+    });
+  });
+
   test("snapshots and restores managed collections", async () => {
     await dbService.roleDB.upsertRole({
       id: 1,

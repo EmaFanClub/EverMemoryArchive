@@ -6,6 +6,7 @@ import {
   type EffectiveActorSettings,
   type EmbeddingConfig,
   type LLMConfig,
+  resolveLLMModelDefinition,
   type VectorIndexStatus,
   type WebSearchConfig,
 } from "ema";
@@ -29,23 +30,81 @@ export interface CoreConversationForQq {
 }
 
 export function toWebLlmConfig(config: LLMConfig): ActorLlmConfig {
+  const provider = webLlmProviderForModel(config);
+  if (provider === "openai") {
+    return {
+      provider,
+      openai: {
+        mode: "responses",
+        model: config.model,
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+      },
+      google: emptyGoogleLlmConfig(),
+    };
+  }
   return {
-    provider: config.provider,
-    openai: {
-      mode: config.openai.mode,
+    provider,
+    openai: emptyOpenAiLlmConfig(),
+    google: {
+      model: config.model,
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      useVertexAi: false,
+      project: "",
+      location: "",
+      credentialsFile: "",
+    },
+  };
+}
+
+export function toCoreLlmConfig(config: ActorLlmConfig): LLMConfig {
+  if (config.provider === "openai") {
+    return {
       model: config.openai.model,
       baseUrl: config.openai.baseUrl,
       apiKey: config.openai.apiKey,
-    },
-    google: {
-      model: config.google.model,
-      baseUrl: config.google.baseUrl,
-      apiKey: config.google.apiKey,
-      useVertexAi: config.google.useVertexAi,
-      project: config.google.project,
-      location: config.google.location,
-      credentialsFile: config.google.credentialsFile,
-    },
+    };
+  }
+  return {
+    model: config.google.model,
+    baseUrl: config.google.baseUrl,
+    apiKey: config.google.useVertexAi
+      ? config.google.credentialsFile
+      : config.google.apiKey,
+  };
+}
+
+function webLlmProviderForModel(config: LLMConfig): ActorLlmConfig["provider"] {
+  try {
+    return resolveLLMModelDefinition(config.model).provider === "openai"
+      ? "openai"
+      : "google";
+  } catch {
+    return config.model.startsWith("gpt") || config.baseUrl.includes("openai")
+      ? "openai"
+      : "google";
+  }
+}
+
+function emptyOpenAiLlmConfig(): ActorLlmConfig["openai"] {
+  return {
+    mode: "responses",
+    model: "",
+    baseUrl: "",
+    apiKey: "",
+  };
+}
+
+function emptyGoogleLlmConfig(): ActorLlmConfig["google"] {
+  return {
+    model: "",
+    baseUrl: "",
+    apiKey: "",
+    useVertexAi: false,
+    project: "",
+    location: "",
+    credentialsFile: "",
   };
 }
 

@@ -69,9 +69,7 @@ export class ActorWorker {
       sessionInfo.channel,
     );
     const llm = new LLMClient(
-      GlobalConfig.resolveRuntimeLlmConfig(
-        await server.dbService.getActorLLMConfig(actorId),
-      ),
+      await server.dbService.getActorLLMConfig(actorId),
     );
     const startedAt = formatLogTimestamp();
     const date = startedAt.slice(0, 10);

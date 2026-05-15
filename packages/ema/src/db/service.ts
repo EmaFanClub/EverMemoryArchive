@@ -6,6 +6,7 @@ import { BSON } from "mongodb";
 import {
   cloneConfig,
   GlobalConfig,
+  normalizeLLMConfig,
   type ChannelConfig,
   type LLMConfig,
   type WebSearchConfig,
@@ -315,7 +316,9 @@ export class DBService {
     if (!actor) {
       throw new Error(`Actor ${actorId} not found.`);
     }
-    return cloneConfig(actor.llmConfig ?? GlobalConfig.defaultLlm);
+    return cloneConfig(
+      normalizeLLMConfig(actor.llmConfig ?? GlobalConfig.defaultLlm),
+    );
   }
 
   /**

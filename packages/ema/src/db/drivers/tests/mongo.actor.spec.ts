@@ -104,22 +104,9 @@ describe("MongoActorDB with in-memory MongoDB", () => {
       roleId: 1,
       enabled: true,
       llmConfig: {
-        provider: "openai",
-        openai: {
-          mode: "responses",
-          model: "gpt-5-mini",
-          baseUrl: "https://api.openai.com/v1",
-          apiKey: "sk-test",
-        },
-        google: {
-          model: "",
-          baseUrl: "",
-          apiKey: "",
-          useVertexAi: false,
-          project: "",
-          location: "",
-          credentialsFile: "",
-        },
+        model: "gpt-5.5",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "sk-test",
       },
     };
 
