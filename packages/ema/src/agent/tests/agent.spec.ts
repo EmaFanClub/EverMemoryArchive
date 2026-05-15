@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { checkCompleteMessages } from "../agent";
-import type { Message } from "../../shared/schema";
+import type { Message } from "../../agent_hub/schema";
 
 describe("Agent helpers", () => {
   test("checkCompleteMessages returns true for final text response", () => {
@@ -21,10 +21,10 @@ describe("Agent helpers", () => {
         role: "model",
         contents: [
           {
-            type: "function_call",
-            id: "call-1",
+            type: "tool_call",
+            toolCallId: "call-1",
             name: "get_skill",
-            args: { name: "schedule-skill" },
+            arguments: { name: "schedule-skill" },
           },
         ],
       },

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ImageMIME, InlineDataItem } from "../../shared/schema";
+import type { ImageMIME, InlineDataItem } from "../../agent_hub/schema";
 import { resolveEmaSourcePath } from "../../shared/package_path";
 import {
   getStickerById,
@@ -168,7 +168,7 @@ export async function stickerPackIdToBase64(
  */
 export async function stickerIdToInlineData(
   id: string,
-): Promise<InlineDataItem> {
+): Promise<InlineDataItem & { mimeType: ImageMIME }> {
   const sticker = await getStickerById(id);
   if (!sticker) {
     throw new Error(`Unknown sticker id: ${id}`);
@@ -189,7 +189,7 @@ export async function stickerIdToInlineData(
 export async function stickerPackIdToInlineData(
   pack: string,
   id: string,
-): Promise<InlineDataItem> {
+): Promise<InlineDataItem & { mimeType: ImageMIME }> {
   const sticker = await getStickerInPack(pack, id);
   if (!sticker) {
     throw new Error(`Sticker '${id}' does not exist in pack '${pack}'.`);

@@ -4,10 +4,10 @@ import {
   type LLMConfig,
   type WebSearchConfig,
 } from "../config";
-import { LLMClient } from "../llm";
-import { RetryConfig } from "../llm/retry";
+import { LLMClient, RetryConfig } from "../agent_hub";
 import { EmbeddingClient } from "../memory/embedding_client";
-import { isTextItem } from "../shared/schema";
+import type { UsageMetadata } from "../agent_hub/schema";
+import { isTextItem } from "../agent_hub/utils";
 import type { Server } from "../server";
 import type {
   EffectiveActorSettings,
@@ -45,18 +45,20 @@ export class SettingsController {
     }
     const startedAt = Date.now();
     try {
-      const client = new LLMClient(config, new RetryConfig(false));
-      const response = await client.generate(
-        [
+      const client = new LLMClient(
+        GlobalConfig.resolveRuntimeLlmConfig(config),
+        new RetryConfig(false),
+      );
+      const response = await client.generate({
+        messages: [
           {
             role: "user",
             contents: [{ type: "text", text: "Reply with OK." }],
           },
         ],
-        undefined,
-        "You are a connection probe. Reply with OK only.",
-      );
-      const text = response.message.contents
+        systemPrompt: "You are a connection probe. Reply with OK only.",
+      });
+      const text = response.contents
         .filter(isTextItem)
         .map((item) => item.text.trim())
         .join("");
@@ -73,8 +75,8 @@ export class SettingsController {
         message: "ok",
         diagnostics: {
           latencyMs: Date.now() - startedAt,
-          totalTokens: response.totalTokens,
-          finishReason: response.finishReason,
+          ...diagnosticsFromUsage(response.metadata?.usageMetadata),
+          finishReason: response.metadata?.finishReason ?? "UNKNOWN",
         },
       };
     } catch (error) {
@@ -255,6 +257,24 @@ function validateLlmSaveConfig(config: LLMConfig): string | null {
     return "OpenAI Chat Completions mode is not supported yet.";
   }
   return validateLlmProbeConfig(config);
+}
+
+function diagnosticsFromUsage(
+  usageMetadata: UsageMetadata | undefined,
+): Record<string, number> {
+  if (!usageMetadata) {
+    return {};
+  }
+  const totalTokens = [
+    usageMetadata.cachedTokens,
+    usageMetadata.promptTokens,
+    usageMetadata.thoughtTokens,
+    usageMetadata.responseTokens,
+  ].reduce<number>(
+    (sum, value) => sum + (typeof value === "number" ? value : 0),
+    0,
+  );
+  return totalTokens > 0 ? { totalTokens } : {};
 }
 
 function validateEmbeddingProbeConfig(config: EmbeddingConfig): string | null {

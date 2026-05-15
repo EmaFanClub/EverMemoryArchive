@@ -46,7 +46,7 @@ export class KeepSilenceTool extends Tool {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid structured reply: ${(err as Error).message}`,
+        content: `Invalid structured reply: ${(err as Error).message}`,
       };
     }
   }

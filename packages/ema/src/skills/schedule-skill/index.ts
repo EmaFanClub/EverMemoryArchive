@@ -380,7 +380,7 @@ export default class ScheduleSkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid schedule-skill input: ${(err as Error).message}`,
+        content: `Invalid schedule-skill input: ${(err as Error).message}`,
       };
     }
 
@@ -389,13 +389,13 @@ export default class ScheduleSkill extends Skill {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in skill context.",
+        content: "Missing server in skill context.",
       };
     }
     if (!actorId) {
       return {
         success: false,
-        error: "Missing actorId in skill context.",
+        content: "Missing actorId in skill context.",
       };
     }
 
@@ -451,14 +451,14 @@ export default class ScheduleSkill extends Skill {
           const unreachable: never = payload;
           return {
             success: false,
-            error: `Unsupported schedule action: ${String(unreachable)}`,
+            content: `Unsupported schedule action: ${String(unreachable)}`,
           };
         }
       }
     } catch (err) {
       return {
         success: false,
-        error: (err as Error).message,
+        content: (err as Error).message,
       };
     }
   }

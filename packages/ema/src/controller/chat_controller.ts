@@ -1,6 +1,6 @@
 import { buildSession, resolveSession } from "../channel";
 import type { ConversationEntity, ConversationMessageEntity } from "../db";
-import type { InputContent } from "../shared/schema";
+import type { InputContent } from "../agent_hub/schema";
 import type { Server } from "../server";
 import type {
   ChatHistoryInput,
@@ -321,6 +321,9 @@ export function previewFromContents(contents: InputContent[]): string {
       }
       if (content.text?.trim()) {
         return content.text.trim();
+      }
+      if (content.type === "image_url") {
+        return "[图片]";
       }
       if (content.mimeType.startsWith("image/")) {
         return "[图片]";

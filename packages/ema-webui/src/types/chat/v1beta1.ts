@@ -3,7 +3,11 @@ export type ImageMIME =
   | "image/jpeg"
   | "image/webp"
   | "image/heic"
-  | "image/heif";
+  | "image/heif"
+  | "image/bmp"
+  | "image/gif"
+  | "image/svg+xml"
+  | "image/tiff";
 
 export type VideoMIME =
   | "video/mp4"
@@ -29,7 +33,14 @@ export type DocumentMIME =
   | "text/csv"
   | "text/html";
 
-export type MIME = ImageMIME | VideoMIME | AudioMIME | DocumentMIME;
+export type DefaultMIME = "application/octet-stream";
+
+export type MIME =
+  | ImageMIME
+  | VideoMIME
+  | AudioMIME
+  | DocumentMIME
+  | DefaultMIME;
 
 export interface TextItem {
   type: "text";
@@ -43,7 +54,13 @@ export interface InlineDataItem {
   text?: string;
 }
 
-export type InputContent = TextItem | InlineDataItem;
+export interface ImageUrlItem {
+  type: "image_url";
+  url: string;
+  text?: string;
+}
+
+export type InputContent = TextItem | ImageUrlItem | InlineDataItem;
 
 export type MessageReplyRef =
   | {

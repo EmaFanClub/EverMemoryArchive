@@ -34,7 +34,7 @@ export default class UpdateRoleBookSkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid update-role-book-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
+        content: `Invalid update-role-book-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
       };
     }
 
@@ -43,13 +43,13 @@ export default class UpdateRoleBookSkill extends Skill {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in skill context.",
+        content: "Missing server in skill context.",
       };
     }
     if (!actorId) {
       return {
         success: false,
-        error: "Missing actorId in skill context.",
+        content: "Missing actorId in skill context.",
       };
     }
 
@@ -57,7 +57,7 @@ export default class UpdateRoleBookSkill extends Skill {
     if (actualLength > ROLE_BOOK_MAX_LENGTH) {
       return {
         success: false,
-        error: `prompt is too long: got approximately ${actualLength}, max ${ROLE_BOOK_MAX_LENGTH}.`,
+        content: `prompt is too long: got approximately ${actualLength}, max ${ROLE_BOOK_MAX_LENGTH}.`,
       };
     }
 

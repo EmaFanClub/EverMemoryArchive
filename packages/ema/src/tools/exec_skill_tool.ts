@@ -40,7 +40,7 @@ export class ExecSkillTool extends Tool {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid exe_skill_tool input: ${(err as Error).message}`,
+        content: `Invalid exe_skill_tool input: ${(err as Error).message}`,
       };
     }
 
@@ -48,7 +48,7 @@ export class ExecSkillTool extends Tool {
     if (!skill) {
       return {
         success: false,
-        error: `Skill '${payload.skill_name}' does not exist.`,
+        content: `Skill '${payload.skill_name}' does not exist.`,
       };
     }
     return await skill.execute(payload.skill_args, context);

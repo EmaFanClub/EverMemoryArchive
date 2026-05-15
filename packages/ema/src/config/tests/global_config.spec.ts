@@ -221,14 +221,20 @@ describe("GlobalConfig", () => {
       },
     };
 
-    expect(GlobalConfig.resolveRuntimeLlmConfig(llm).openai.apiKey).toBe(
-      "sk-direct",
-    );
-    expect(GlobalConfig.resolveRuntimeLlmConfig(llm).google.project).toBe(
-      "direct-project",
-    );
+    expect(GlobalConfig.resolveRuntimeLlmConfig(llm)).toMatchObject({
+      model: llm.openai.model,
+      baseUrl: llm.openai.baseUrl,
+      apiKey: "sk-direct",
+    });
     expect(
-      GlobalConfig.resolveRuntimeLlmConfig(llm).google.credentialsFile,
+      GlobalConfig.resolveRuntimeLlmConfig({
+        ...llm,
+        provider: "google",
+        google: {
+          ...llm.google,
+          useVertexAi: true,
+        },
+      }).apiKey,
     ).toBe(llmCredentialsJson);
     expect(
       GlobalConfig.resolveRuntimeEmbeddingConfig(embedding).google.project,

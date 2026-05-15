@@ -81,7 +81,7 @@ export default class UpdateLongTermMemorySkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid update-long-term-memory-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
+        content: `Invalid update-long-term-memory-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
       };
     }
 
@@ -90,13 +90,13 @@ export default class UpdateLongTermMemorySkill extends Skill {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in skill context.",
+        content: "Missing server in skill context.",
       };
     }
     if (!actorId) {
       return {
         success: false,
-        error: "Missing actorId in skill context.",
+        content: "Missing actorId in skill context.",
       };
     }
 
@@ -109,7 +109,7 @@ export default class UpdateLongTermMemorySkill extends Skill {
       if (actualLength > LONG_TERM_MEMORY_MAX_LENGTH) {
         return {
           success: false,
-          error: `operations[${i}].memory is too long: got approximately ${actualLength}, max ${LONG_TERM_MEMORY_MAX_LENGTH}.`,
+          content: `operations[${i}].memory is too long: got approximately ${actualLength}, max ${LONG_TERM_MEMORY_MAX_LENGTH}.`,
         };
       }
 

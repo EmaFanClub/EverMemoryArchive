@@ -5,22 +5,13 @@ import {
   GenAI,
   GOOGLE_AI_API_VERSION,
   GOOGLE_VERTEX_AI_SCOPE,
-  GoogleClient,
   VERTEX_AI_API_VERSION,
-} from "../google_client";
-import {
-  createBootstrapConfig,
-  DEFAULT_GOOGLE_BASE_URL,
-  GlobalConfig,
-} from "../../config";
-import { MemFs } from "../../shared/fs";
-import { RetryConfig } from "../retry";
+} from "../google_auth";
 
 describe("GenAI", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
-    GlobalConfig.resetForTests();
   });
 
   test("suppresses Google API key env while initializing Vertex AI client", () => {
@@ -93,31 +84,6 @@ describe("GenAI", () => {
     expect(requestedUrls[0]).toContain("generativelanguage.googleapis.com");
     expect(requestedUrls[0]).toContain(`/${GOOGLE_AI_API_VERSION}/`);
     expect(requestedUrls[0]).not.toContain("aiplatform.googleapis.com");
-  });
-
-  test("configures Google AI client with the Gemini API beta version", async () => {
-    const fs = new MemFs();
-    await GlobalConfig.load(fs, {
-      bootstrap: createBootstrapConfig({ mode: "dev", mongoKind: "memory" }),
-    });
-
-    const client = new GoogleClient(
-      {
-        model: "gemini-test",
-        baseUrl: DEFAULT_GOOGLE_BASE_URL,
-        apiKey: "gemini-api-key",
-        useVertexAi: false,
-        project: "test-project",
-        location: "global",
-        credentialsFile: "",
-      },
-      new RetryConfig(false),
-    );
-
-    const apiClient = (client as any).client.apiClient;
-    expect(apiClient.isVertexAI()).toBe(false);
-    expect(apiClient.getApiVersion()).toBe(GOOGLE_AI_API_VERSION);
-    expect(apiClient.getRequestUrl()).toContain(`/${GOOGLE_AI_API_VERSION}`);
   });
 
   test("uses provided Vertex AI credentials JSON without key file fallback", () => {

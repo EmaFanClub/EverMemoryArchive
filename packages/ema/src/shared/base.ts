@@ -1,7 +1,7 @@
 export {
   collapseContentsToText,
   expandContentsForModel,
-  formatInlineDataText,
+  formatMediaText,
 } from "./schema";
 export { parseReplyRef, formatReplyRef } from "../channel/utils";
 

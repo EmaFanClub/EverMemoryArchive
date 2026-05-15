@@ -4,7 +4,7 @@ import { Agent, AgentEventNames, checkCompleteMessages } from "../agent";
 import type { AgentEventName, AgentState } from "../agent";
 import type { Server } from "../server";
 import { formatLogTimestamp, Logger } from "../shared/logger";
-import { LLMClient } from "../llm";
+import { LLMClient } from "../agent_hub";
 import { baseTools } from "../tools";
 import { resolveSession } from "../channel";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
@@ -69,7 +69,9 @@ export class ActorWorker {
       sessionInfo.channel,
     );
     const llm = new LLMClient(
-      await server.dbService.getActorLLMConfig(actorId),
+      GlobalConfig.resolveRuntimeLlmConfig(
+        await server.dbService.getActorLLMConfig(actorId),
+      ),
     );
     const startedAt = formatLogTimestamp();
     const date = startedAt.slice(0, 10);
@@ -244,9 +246,7 @@ export class ActorWorker {
           }
           if (
             last.role === "user" &&
-            last.contents.some(
-              (content) => content.type === "function_response",
-            )
+            last.contents.some((content) => content.type === "tool_result")
           ) {
             const time = formatTimestamp("YYYY-MM-DD HH:mm:ss", Date.now());
             messages.push({

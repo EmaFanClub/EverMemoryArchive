@@ -86,19 +86,19 @@ export default class UpdateShortTermMemorySkill extends Skill {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in skill context.",
+        content: "Missing server in skill context.",
       };
     }
     if (!actorId) {
       return {
         success: false,
-        error: "Missing actorId in skill context.",
+        content: "Missing actorId in skill context.",
       };
     }
     if (!taskData) {
       return {
         success: false,
-        error: "Missing short-term memory task metadata in tool context.",
+        content: "Missing short-term memory task metadata in tool context.",
       };
     }
 
@@ -162,7 +162,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
         success: false,
         result: {
           success: false,
-          error: `Invalid update-short-term-memory-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
+          content: `Invalid update-short-term-memory-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
         },
       };
     }
@@ -176,7 +176,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
     if (!taskData) {
       return {
         success: false,
-        error: "Missing short-term memory task metadata in tool context.",
+        content: "Missing short-term memory task metadata in tool context.",
       };
     }
     if (
@@ -243,21 +243,21 @@ export default class UpdateShortTermMemorySkill extends Skill {
     ) {
       return {
         success: false,
-        error:
+        content:
           "add_activity can only be used in activity creation tasks (conversation_rollup or activity).",
       };
     }
     if (taskData.activityAdded === true) {
       return {
         success: false,
-        error: "Current activity task is already completed.",
+        content: "Current activity task is already completed.",
       };
     }
     const actualLength = countApproxTextLength(payload.memory);
     if (actualLength > SHORT_TERM_MEMORY_MAX_LENGTH.activity) {
       return {
         success: false,
-        error: `memory is too long for kind 'activity': got approximately ${actualLength}, max ${SHORT_TERM_MEMORY_MAX_LENGTH.activity}.`,
+        content: `memory is too long for kind 'activity': got approximately ${actualLength}, max ${SHORT_TERM_MEMORY_MAX_LENGTH.activity}.`,
       };
     }
 
@@ -292,7 +292,7 @@ export default class UpdateShortTermMemorySkill extends Skill {
     if (!taskData || taskData.task !== "memory_rollup") {
       return {
         success: false,
-        error:
+        content:
           "update_memory can only be used in the short-term memory rollup task.",
       };
     }
@@ -300,13 +300,13 @@ export default class UpdateShortTermMemorySkill extends Skill {
     if (currentTasks.length === 0) {
       return {
         success: false,
-        error: "There are no pending short-term memory tasks to submit.",
+        content: "There are no pending short-term memory tasks to submit.",
       };
     }
     if (payload.actions.length !== currentTasks.length) {
       return {
         success: false,
-        error: `Expected ${currentTasks.length} update_memory actions, got ${payload.actions.length}.`,
+        content: `Expected ${currentTasks.length} update_memory actions, got ${payload.actions.length}.`,
       };
     }
 
@@ -318,19 +318,19 @@ export default class UpdateShortTermMemorySkill extends Skill {
       if (!action) {
         return {
           success: false,
-          error: `Missing update_memory action for task_id ${task.taskId}.`,
+          content: `Missing update_memory action for task_id ${task.taskId}.`,
         };
       }
       if (action.kind !== task.targetKind) {
         return {
           success: false,
-          error: `Task ${task.taskId} must update kind '${task.targetKind}', got '${action.kind}'.`,
+          content: `Task ${task.taskId} must update kind '${task.targetKind}', got '${action.kind}'.`,
         };
       }
       if (action.date !== task.targetDate) {
         return {
           success: false,
-          error: `Task ${task.taskId} must update date '${task.targetDate}', got '${action.date}'.`,
+          content: `Task ${task.taskId} must update date '${task.targetDate}', got '${action.date}'.`,
         };
       }
       const maxLength = SHORT_TERM_MEMORY_MAX_LENGTH[action.kind];
@@ -338,14 +338,14 @@ export default class UpdateShortTermMemorySkill extends Skill {
       if (actualLength > maxLength) {
         return {
           success: false,
-          error: `memory is too long for kind '${action.kind}': got approximately ${actualLength}, max ${maxLength}.`,
+          content: `memory is too long for kind '${action.kind}': got approximately ${actualLength}, max ${maxLength}.`,
         };
       }
     }
     if (actionMap.size !== currentTasks.length) {
       return {
         success: false,
-        error: "Unexpected extra update_memory actions were provided.",
+        content: "Unexpected extra update_memory actions were provided.",
       };
     }
 

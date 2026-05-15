@@ -127,7 +127,7 @@ describe("EmaReplyTool", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Unknown sticker id");
+    expect(result.content).toContain("Unknown sticker id");
   });
 
   it("should reject empty strings", async () => {
@@ -140,6 +140,6 @@ describe("EmaReplyTool", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Invalid structured reply");
+    expect(result.content).toContain("Invalid structured reply");
   });
 });

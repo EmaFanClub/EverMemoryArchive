@@ -39,7 +39,7 @@ export class GetSkillTool extends Tool {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid get_skill_tool input: ${(err as Error).message}`,
+        content: `Invalid get_skill_tool input: ${(err as Error).message}`,
       };
     }
 
@@ -47,7 +47,7 @@ export class GetSkillTool extends Tool {
     if (!skill) {
       return {
         success: false,
-        error: `Skill '${payload.skill_name}' does not exist.`,
+        content: `Skill '${payload.skill_name}' does not exist.`,
       };
     }
 

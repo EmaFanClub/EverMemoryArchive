@@ -34,7 +34,7 @@ describe("GetSkillTool", () => {
     const tool = new GetSkillTool({});
     const res = await tool.execute({ skill_name: "missing" });
     expect(res.success).toBe(false);
-    expect(res.error).toMatch(/does not exist/);
+    expect(res.content).toMatch(/does not exist/);
   });
 
   it("validates input schema", async () => {
@@ -42,7 +42,7 @@ describe("GetSkillTool", () => {
     const tool = new GetSkillTool(registry);
     const res = await tool.execute({ skill_name: "" });
     expect(res.success).toBe(false);
-    expect(res.error).toMatch(/Invalid get_skill_tool input/);
+    expect(res.content).toMatch(/Invalid get_skill_tool input/);
   });
 
   it("validates non-string input", async () => {
@@ -50,7 +50,7 @@ describe("GetSkillTool", () => {
     const tool = new GetSkillTool(registry);
     const res = await tool.execute({ skill_name: 123 as any });
     expect(res.success).toBe(false);
-    expect(res.error).toMatch(/Invalid get_skill_tool input/);
+    expect(res.content).toMatch(/Invalid get_skill_tool input/);
   });
 
   it("calls getPlaybook exactly once", async () => {

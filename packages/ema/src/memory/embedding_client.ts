@@ -11,8 +11,8 @@ import {
   buildGoogleVertexAIOptions,
   GenAI,
   GOOGLE_AI_API_VERSION,
-} from "../llm/google_client";
-import { FetchWithProxy } from "../llm/proxy";
+} from "./google_auth";
+import { FetchWithProxy } from "../shared/proxy";
 
 export interface EmbeddingVectorProbeResult {
   values: number[];

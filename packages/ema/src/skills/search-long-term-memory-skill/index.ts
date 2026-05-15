@@ -50,7 +50,7 @@ export default class SearchLongTermMemorySkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid search-long-term-memory-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
+        content: `Invalid search-long-term-memory-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
       };
     }
     this.logger.debug("Searching long-term memory:", payload);
@@ -59,13 +59,13 @@ export default class SearchLongTermMemorySkill extends Skill {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in skill context.",
+        content: "Missing server in skill context.",
       };
     }
     if (!actorId) {
       return {
         success: false,
-        error: "Missing actorId in skill context.",
+        content: "Missing actorId in skill context.",
       };
     }
 

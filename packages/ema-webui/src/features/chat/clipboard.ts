@@ -302,6 +302,21 @@ export function buildMessageClipboardContent(
       return;
     }
 
+    if (content.type === "image_url") {
+      if (textFragments.length > 0 && !textFragments.at(-1)?.endsWith("\n")) {
+        textFragments.push("\n");
+        htmlFragments.push("<br>");
+      }
+      textFragments.push(content.text?.trim() || "[图片]");
+      textFragments.push("\n");
+      imageSources.push(content.url);
+      htmlFragments.push(
+        `<img src="${content.url}" alt="图片" style="max-width: 280px; height: auto;">`,
+      );
+      htmlFragments.push("<br>");
+      return;
+    }
+
     if (content.mimeType.startsWith("image/")) {
       const imageSrc = `data:${content.mimeType};base64,${content.data}`;
       if (textFragments.length > 0 && !textFragments.at(-1)?.endsWith("\n")) {

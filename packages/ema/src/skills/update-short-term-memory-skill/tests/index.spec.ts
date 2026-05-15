@@ -30,7 +30,7 @@ describe("update-short-term-memory-skill", () => {
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("conversation_rollup");
+    expect(res.content).toContain("conversation_rollup");
   });
 
   test("allows add_activity in activity", async () => {

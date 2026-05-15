@@ -41,6 +41,19 @@ export function renderMessageContents(contents: InputContent[]) {
       return <p key={index}>{content.text}</p>;
     }
 
+    if (content.type === "image_url") {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={index}
+          className={styles.inlineImage}
+          src={content.url}
+          alt={content.text?.trim() || "图片"}
+          data-copy-text={content.text?.trim() || "[图片]"}
+        />
+      );
+    }
+
     if (content.mimeType.startsWith("image/")) {
       return (
         // eslint-disable-next-line @next/next/no-img-element
@@ -95,6 +108,9 @@ export function buildReplyPreview(
         }
         if (content.text?.trim()) {
           return content.text.trim();
+        }
+        if (content.type === "image_url") {
+          return "[图片]";
         }
         if (content.mimeType.startsWith("image/")) {
           return "[图片]";
