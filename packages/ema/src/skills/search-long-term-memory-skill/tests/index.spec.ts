@@ -197,9 +197,9 @@ describe("search-long-term-memory-skill", () => {
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Use get_skill");
-    expect(res.error).toContain("index0");
-    expect(res.error).toContain("过往事件");
+    expect(res.content).toContain("Use get_skill");
+    expect(res.content).toContain("index0");
+    expect(res.content).toContain("过往事件");
   });
 
   test("does not validate index0 and index1 combinations", async () => {
@@ -268,7 +268,7 @@ describe("search-long-term-memory-skill", () => {
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Use get_skill");
-    expect(res.error).toContain("10");
+    expect(res.content).toContain("Use get_skill");
+    expect(res.content).toContain("10");
   });
 });

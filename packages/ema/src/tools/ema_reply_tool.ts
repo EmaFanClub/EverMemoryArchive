@@ -69,7 +69,7 @@ export class EmaReplyTool extends Tool {
       } else if (!(await getStickerById(payload.content))) {
         return {
           success: false,
-          error: `Unknown sticker id: ${payload.content}. Use get_skill to inspect sticker-skill first.`,
+          content: `Unknown sticker id: ${payload.content}. Use get_skill to inspect sticker-skill first.`,
         };
       }
       return {
@@ -79,7 +79,7 @@ export class EmaReplyTool extends Tool {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid structured reply: ${(err as Error).message}`,
+        content: `Invalid structured reply: ${(err as Error).message}`,
       };
     }
   }

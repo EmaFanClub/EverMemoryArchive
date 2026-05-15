@@ -2,6 +2,8 @@ import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
 import type { ConversationMessageEntity } from "../../db/base";
+import type { ImageMIME, InlineDataItem } from "../../agent_hub/schema";
+import { isImageMime } from "../../agent_hub/utils";
 import {
   buildAvailableStickersMarkdown,
   formatStickerDisplayText,
@@ -58,10 +60,10 @@ type StickerSkillInput = z.infer<typeof StickerSkillSchema>;
 
 function extractImageParts(
   row: ConversationMessageEntity,
-): NonNullable<ToolResult["parts"]> {
+): Array<InlineDataItem & { mimeType: ImageMIME }> {
   return row.message.contents.filter(
-    (content): content is NonNullable<ToolResult["parts"]>[number] =>
-      content.type === "inline_data" && content.mimeType.startsWith("image/"),
+    (content): content is InlineDataItem & { mimeType: ImageMIME } =>
+      content.type === "inline_data" && isImageMime(content.mimeType),
   );
 }
 
@@ -99,7 +101,7 @@ export default class StickerSkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid sticker-skill input: ${(err as Error).message}`,
+        content: `Invalid sticker-skill input: ${(err as Error).message}`,
       };
     }
 
@@ -108,20 +110,20 @@ export default class StickerSkill extends Skill {
       if (!pack) {
         return {
           success: false,
-          error: `Sticker pack '${payload.pack}' does not exist.`,
+          content: `Sticker pack '${payload.pack}' does not exist.`,
         };
       }
       const sticker = await getStickerInPack(payload.pack, payload.id);
       if (!sticker) {
         return {
           success: false,
-          error: `Sticker '${payload.id}' does not exist in pack '${payload.pack}'.`,
+          content: `Sticker '${payload.id}' does not exist in pack '${payload.pack}'.`,
         };
       }
       return {
         success: true,
         content: await formatStickerDisplayText(sticker.id),
-        parts: [await stickerPackIdToInlineData(pack.pack, sticker.id)],
+        images: [await stickerPackIdToInlineData(pack.pack, sticker.id)],
       };
     }
 
@@ -129,13 +131,13 @@ export default class StickerSkill extends Skill {
       if (!(await getStickerPack(payload.pack))) {
         return {
           success: false,
-          error: `Sticker pack '${payload.pack}' does not exist.`,
+          content: `Sticker pack '${payload.pack}' does not exist.`,
         };
       }
       if (!(await getStickerInPack(payload.pack, payload.id))) {
         return {
           success: false,
-          error: `Sticker '${payload.id}' does not exist in pack '${payload.pack}'.`,
+          content: `Sticker '${payload.id}' does not exist in pack '${payload.pack}'.`,
         };
       }
       await updateStickerMetadata(
@@ -155,19 +157,19 @@ export default class StickerSkill extends Skill {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in skill context.",
+        content: "Missing server in skill context.",
       };
     }
     if (!conversationId) {
       return {
         success: false,
-        error: "Missing conversationId in skill context.",
+        content: "Missing conversationId in skill context.",
       };
     }
     if (await getStickerById(payload.id)) {
       return {
         success: false,
-        error: `Sticker id '${payload.id}' already exists.`,
+        content: `Sticker id '${payload.id}' already exists.`,
       };
     }
 
@@ -181,7 +183,7 @@ export default class StickerSkill extends Skill {
     if (!row) {
       return {
         success: false,
-        error: `Message ${payload.msg_id} not found.`,
+        content: `Message ${payload.msg_id} not found.`,
       };
     }
     const images = extractImageParts(row);
@@ -189,7 +191,7 @@ export default class StickerSkill extends Skill {
     if (!image) {
       return {
         success: false,
-        error: `Message ${payload.msg_id} does not have image #${payload.idx}.`,
+        content: `Message ${payload.msg_id} does not have image #${payload.idx}.`,
       };
     }
     await createCollectedSticker(
@@ -201,7 +203,7 @@ export default class StickerSkill extends Skill {
     return {
       success: true,
       content: await formatStickerDisplayText(payload.id),
-      parts: [image],
+      images: [image],
     };
   }
 }

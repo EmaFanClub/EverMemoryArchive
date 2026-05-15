@@ -114,7 +114,7 @@ export default class WebSearchSkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid web-search-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
+        content: `Invalid web-search-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
       };
     }
 
@@ -123,13 +123,13 @@ export default class WebSearchSkill extends Skill {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in skill context.",
+        content: "Missing server in skill context.",
       };
     }
     if (!actorId) {
       return {
         success: false,
-        error: "Missing actorId in skill context.",
+        content: "Missing actorId in skill context.",
       };
     }
 
@@ -139,7 +139,7 @@ export default class WebSearchSkill extends Skill {
     if (!webSearchConfig.enabled || !apiKey) {
       return {
         success: false,
-        error: "Web search is not configured for current actor.",
+        content: "Web search is not configured for current actor.",
       };
     }
 
@@ -179,13 +179,13 @@ export default class WebSearchSkill extends Skill {
       if (response.status === 401 || response.status === 403) {
         return {
           success: false,
-          error: "Invalid Tavily API key for current actor.",
+          content: "Invalid Tavily API key for current actor.",
         };
       }
       if (!response.ok) {
         return {
           success: false,
-          error: `Tavily request failed with status ${response.status}.`,
+          content: `Tavily request failed with status ${response.status}.`,
         };
       }
 
@@ -252,7 +252,7 @@ export default class WebSearchSkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Tavily request failed: ${(err as Error).message}`,
+        content: `Tavily request failed: ${(err as Error).message}`,
       };
     } finally {
       clearTimeout(timeout);

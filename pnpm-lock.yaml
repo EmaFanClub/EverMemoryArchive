@@ -139,6 +139,9 @@ importers:
       ema:
         specifier: workspace:*
         version: link:../ema
+      express:
+        specifier: ^4.22.2
+        version: 4.22.2
       lucide-react:
         specifier: ^1.11.0
         version: 1.11.0(react@19.2.1)

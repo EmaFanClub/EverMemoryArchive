@@ -23,4 +23,3 @@ export * from "./memory/base";
 export * from "./memory/embedding_client";
 export * from "./trainer";
 export type { Tool } from "./tools/base";
-export { OpenAIClient } from "./llm/openai_client";

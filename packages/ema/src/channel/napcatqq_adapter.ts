@@ -1,5 +1,5 @@
 import type { ActorChatResponse } from "../actor";
-import type { InputContent, MIME } from "../shared/schema";
+import type { InputContent, MIME } from "../agent_hub/schema";
 import type {
   ChannelAdapter,
   ChannelAPICall,

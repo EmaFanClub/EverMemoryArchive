@@ -240,7 +240,7 @@ describe("schedule-skill", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("runAt");
+    expect(result.content).toContain("runAt");
     expect(add).not.toHaveBeenCalled();
   });
 
@@ -330,7 +330,7 @@ describe("schedule-skill", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("session");
+    expect(result.content).toContain("session");
   });
 
   test("rejects chat schedules for unknown sessions", async () => {
@@ -357,7 +357,7 @@ describe("schedule-skill", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("qq-group-missing");
+    expect(result.content).toContain("qq-group-missing");
     expect(add).not.toHaveBeenCalled();
   });
 
@@ -387,7 +387,7 @@ describe("schedule-skill", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("does not allow proactive chat");
+    expect(result.content).toContain("does not allow proactive chat");
     expect(add).not.toHaveBeenCalled();
   });
 
@@ -414,7 +414,7 @@ describe("schedule-skill", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("cron");
+    expect(result.content).toContain("cron");
     expect(add).not.toHaveBeenCalled();
   });
 });

@@ -27,7 +27,7 @@ describe("web-search-skill", () => {
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Web search is not configured");
+    expect(res.content).toContain("Web search is not configured");
   });
 
   test("returns error when Tavily API key is invalid", async () => {
@@ -56,7 +56,7 @@ describe("web-search-skill", () => {
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Invalid Tavily API key");
+    expect(res.content).toContain("Invalid Tavily API key");
   });
 
   test("returns trimmed search results for the current actor", async () => {

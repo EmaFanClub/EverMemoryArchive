@@ -12,6 +12,7 @@
     "@lancedb/lancedb": "^0.23.0",
     "apache-arrow": "^18.1.0",
     "ema": "workspace:*",
+    "express": "^4.22.2",
     "lucide-react": "^1.11.0",
     "mongodb": "^7.0.0",
     "mongodb-agenda": "npm:mongodb@4.17.2",

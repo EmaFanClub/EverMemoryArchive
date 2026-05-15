@@ -1,13 +1,14 @@
-import type { InlineDataItem } from "../shared/schema";
+import type { ImageItem } from "../agent_hub/schema";
 import type { Server } from "../server";
 
 /** Tool execution result. */
-export interface ToolResult extends Record<string, unknown> {
+export interface ToolExecutionResult {
   success: boolean;
   content?: string;
-  parts?: InlineDataItem[];
-  error?: string;
+  images?: ImageItem[];
 }
+
+export type ToolResult = ToolExecutionResult;
 
 /**
  * Context passed to tool executions.

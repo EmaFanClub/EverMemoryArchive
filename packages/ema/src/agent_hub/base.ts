@@ -1,8 +1,25 @@
-import type { PromptCaching, ThinkingLevel } from "@prismshadow/agenthub";
-export { PromptCaching, ThinkingLevel } from "@prismshadow/agenthub";
+import type {
+  PromptCaching as AgentHubPromptCaching,
+  ThinkingLevel as AgentHubThinkingLevel,
+} from "@prismshadow/agenthub";
 
 import type { Message, ModelMessage, ToolDefinition } from "./schema";
 import { RetryConfig, wrapWithRetry } from "./retry";
+
+export type ThinkingLevel = AgentHubThinkingLevel;
+export const ThinkingLevel = {
+  NONE: "none" as ThinkingLevel,
+  LOW: "low" as ThinkingLevel,
+  MEDIUM: "medium" as ThinkingLevel,
+  HIGH: "high" as ThinkingLevel,
+} as const;
+
+export type PromptCaching = AgentHubPromptCaching;
+export const PromptCaching = {
+  ENABLE: "enable" as PromptCaching,
+  DISABLE: "disable" as PromptCaching,
+  ENHANCE: "enhance" as PromptCaching,
+} as const;
 
 /**
  * User-provided configuration used to create an LLM client.

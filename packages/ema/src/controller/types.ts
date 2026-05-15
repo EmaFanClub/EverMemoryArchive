@@ -12,7 +12,7 @@ import type {
   WebSearchConfig,
 } from "../config";
 import type { VectorIndexStatus } from "../db";
-import type { InputContent } from "../shared/schema";
+import type { InputContent } from "../agent_hub/schema";
 import type { MessageReplyRef } from "../channel";
 
 export type ActorRuntimeStatus = "offline" | "sleep" | "online" | "busy";

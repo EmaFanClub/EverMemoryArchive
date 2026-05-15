@@ -34,7 +34,7 @@ export default class UpdatePersonalitySkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid update-personality-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
+        content: `Invalid update-personality-skill input: ${(err as Error).message}. Use get_skill to check the required parameters and their formats.`,
       };
     }
 
@@ -43,13 +43,13 @@ export default class UpdatePersonalitySkill extends Skill {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in skill context.",
+        content: "Missing server in skill context.",
       };
     }
     if (!actorId) {
       return {
         success: false,
-        error: "Missing actorId in skill context.",
+        content: "Missing actorId in skill context.",
       };
     }
 
@@ -57,7 +57,7 @@ export default class UpdatePersonalitySkill extends Skill {
     if (actualLength > PERSONALITY_MAX_LENGTH) {
       return {
         success: false,
-        error: `memory is too long: got approximately ${actualLength}, max ${PERSONALITY_MAX_LENGTH}.`,
+        content: `memory is too long: got approximately ${actualLength}, max ${PERSONALITY_MAX_LENGTH}.`,
       };
     }
 

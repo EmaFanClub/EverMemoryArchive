@@ -23,14 +23,14 @@ describe("ExeSkillTool", () => {
     const tool = new ExecSkillTool({});
     const res = await tool.execute({ skill_name: "missing" });
     expect(res.success).toBe(false);
-    expect(res.error).toMatch(/does not exist/);
+    expect(res.content).toMatch(/does not exist/);
   });
 
   it("validates input schema", async () => {
     const tool = new ExecSkillTool({});
     const res = await tool.execute({ skill_name: "" });
     expect(res.success).toBe(false);
-    expect(res.error).toMatch(/Invalid exe_skill_tool input/);
+    expect(res.content).toMatch(/Invalid exe_skill_tool input/);
   });
 
   it("executes skill with args", async () => {
@@ -63,7 +63,7 @@ describe("ExeSkillTool", () => {
 
   it("passes through failure ToolResult", async () => {
     const execSpy = vi.fn(async () => {
-      return { success: false, error: "boom" };
+      return { success: false, content: "boom" };
     });
     const registry = { stub: new StubSkill(execSpy) };
     const tool = new ExecSkillTool(registry);
@@ -73,7 +73,7 @@ describe("ExeSkillTool", () => {
     });
     expect(execSpy).toHaveBeenCalled();
     expect(res.success).toBe(false);
-    expect(res.error).toBe("boom");
+    expect(res.content).toBe("boom");
   });
 
   it("propagates thrown errors", async () => {

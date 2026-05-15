@@ -4,7 +4,7 @@ import {
   IMAGE_MIME_TYPES,
   VIDEO_MIME_TYPES,
   type MIME,
-} from "../shared/schema";
+} from "../agent_hub/schema";
 import type {
   ChannelSessionInfo,
   ChannelSessionType,
@@ -37,6 +37,11 @@ const MIME_BY_EXTENSION: Record<string, MIME> = {
   ".webp": "image/webp",
   ".heic": "image/heic",
   ".heif": "image/heif",
+  ".bmp": "image/bmp",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".tif": "image/tiff",
+  ".tiff": "image/tiff",
   ".mp4": "video/mp4",
   ".mpeg": "video/mpeg",
   ".mpg": "video/mpeg",

@@ -2,7 +2,7 @@ import { performance } from "node:perf_hooks";
 
 import { buildUserMessageFromActorInput } from "../../actor/utils";
 import { Agent, type AgentState, type RunFinishedEvent } from "../../agent";
-import { LLMClient } from "../../llm";
+import { LLMClient } from "../../agent_hub";
 import { formatLogTimestamp, Logger } from "../../shared/logger";
 import { formatTimestamp } from "../../shared/utils";
 import { GlobalConfig } from "../../config/index";
@@ -1499,7 +1499,11 @@ async function createBackgroundAgent(
       : `actors/actor_${actorId}/${task}/${date}/${startedAt}.jsonl`;
   return new Agent(
     GlobalConfig.agent,
-    new LLMClient(await server.dbService.getActorLLMConfig(actorId)),
+    new LLMClient(
+      GlobalConfig.resolveRuntimeLlmConfig(
+        await server.dbService.getActorLLMConfig(actorId),
+      ),
+    ),
     Logger.create({
       name: "agent.task",
       context: {

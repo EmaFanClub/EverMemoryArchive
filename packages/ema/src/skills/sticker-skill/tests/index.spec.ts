@@ -78,13 +78,13 @@ describe("StickerSkill", () => {
     expect(result.content).toBe(
       "[表情：测试表情包/测试表情,id=test_sticker_1]",
     );
-    expect(result.parts).toEqual([
+    expect(result.images).toEqual([
       expect.objectContaining({
         type: "inline_data",
         mimeType: "image/png",
       }),
     ]);
-    expect(result.parts?.[0]?.data.length).toBeGreaterThan(0);
+    expect(result.images?.[0]?.data.length).toBeGreaterThan(0);
   });
 
   test("preview rejects unknown sticker ids", async () => {
@@ -97,6 +97,6 @@ describe("StickerSkill", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("does not exist");
+    expect(result.content).toContain("does not exist");
   });
 });

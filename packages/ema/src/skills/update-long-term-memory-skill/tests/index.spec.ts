@@ -111,7 +111,7 @@ describe("update-long-term-memory-skill", () => {
     );
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Use get_skill");
-    expect(res.error).toContain('"add"');
+    expect(res.content).toContain("Use get_skill");
+    expect(res.content).toContain('"add"');
   });
 });

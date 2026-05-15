@@ -26,7 +26,7 @@ export class ListConversationsTool extends Tool {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid list_conversations input: ${(err as Error).message}`,
+        content: `Invalid list_conversations input: ${(err as Error).message}`,
       };
     }
 
@@ -35,13 +35,13 @@ export class ListConversationsTool extends Tool {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in tool context.",
+        content: "Missing server in tool context.",
       };
     }
     if (!actorId) {
       return {
         success: false,
-        error: "Missing actorId in tool context.",
+        content: "Missing actorId in tool context.",
       };
     }
 

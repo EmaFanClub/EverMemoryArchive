@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { z } from "zod";
 
+import type { LLMConfig as AgentHubLLMConfig } from "../agent_hub";
 import type { Fs } from "../shared/fs";
 import { RealFs } from "../shared/fs";
 import {
@@ -228,24 +229,22 @@ export class GlobalConfig {
     return cloneConfig(this.loadedRecord.defaultLlm);
   }
 
-  static resolveRuntimeLlmConfig(config: LLMConfig): LLMConfig {
-    return {
-      provider: config.provider,
-      openai: {
-        mode: config.openai.mode,
+  static resolveRuntimeLlmConfig(config: LLMConfig): AgentHubLLMConfig {
+    if (config.provider === "openai") {
+      return {
         model: config.openai.model.trim(),
         baseUrl: config.openai.baseUrl.trim(),
         apiKey: this.trimConfigValue(config.openai.apiKey),
-      },
-      google: {
-        model: config.google.model.trim(),
-        baseUrl: config.google.baseUrl.trim(),
-        apiKey: this.trimConfigValue(config.google.apiKey),
-        useVertexAi: config.google.useVertexAi,
-        project: this.trimConfigValue(config.google.project),
-        location: this.trimConfigValue(config.google.location),
-        credentialsFile: this.trimConfigValue(config.google.credentialsFile),
-      },
+      };
+    }
+    return {
+      model: config.google.model.trim(),
+      baseUrl: config.google.baseUrl.trim(),
+      apiKey: this.trimConfigValue(
+        config.google.useVertexAi
+          ? config.google.credentialsFile
+          : config.google.apiKey,
+      ),
     };
   }
 

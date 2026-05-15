@@ -79,7 +79,7 @@ describe("QueryChatHistorySkill", () => {
     expect(result.content).not.toContain("missing_msg_ids");
   });
 
-  test("expand_one returns media parts without redundant content", async () => {
+  test("expand_one returns media images without redundant content", async () => {
     const row: ConversationMessageEntity = {
       id: 1,
       actorId: 1,
@@ -114,7 +114,7 @@ describe("QueryChatHistorySkill", () => {
 
     expect(result.success).toBe(true);
     expect(result.content).toBeUndefined();
-    expect(result.parts).toEqual([
+    expect(result.images).toEqual([
       {
         type: "inline_data",
         mimeType: "image/jpeg",

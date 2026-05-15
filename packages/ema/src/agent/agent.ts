@@ -1,20 +1,21 @@
 import { EventEmitter } from "node:events";
 
-import type { LLMClient } from "../llm";
+import type { LLMClient } from "../agent_hub";
+import { RetryExhaustedError, isAbortError } from "../agent_hub/retry";
 import {
   DEFAULT_AGENT_MAX_STEPS,
   DEFAULT_AGENT_TOKEN_LIMIT,
   type AgentConfig,
 } from "../config/index";
 import { Logger } from "../shared/logger";
-import { RetryExhaustedError, isAbortError } from "../llm/retry";
 import type {
-  LLMResponse,
-  Message,
   Content,
-  FunctionResponse,
-} from "../shared/schema";
-import type { Tool, ToolResult } from "../tools/base";
+  Message,
+  ModelMessage,
+  ToolResult,
+} from "../agent_hub/schema";
+import { isToolCall } from "../agent_hub/utils";
+import type { Tool, ToolExecutionResult } from "../tools/base";
 import type {
   AgentEventsEmitter,
   AgentState,
@@ -33,7 +34,7 @@ export function checkCompleteMessages(messages: Message[]): boolean {
   const last = messages[messages.length - 1];
   return (
     last.role === "model" &&
-    !last.contents.some((content) => content.type === "function_call")
+    !last.contents.some((content) => isToolCall(content))
   );
 }
 
@@ -90,12 +91,12 @@ export class ContextManager {
   }
 
   /** Add an model message to context. */
-  addModelMessage(response: LLMResponse): void {
-    this.messages.push(response.message);
+  addModelMessage(message: ModelMessage): void {
+    this.messages.push(message);
   }
 
   /** Add a tool result message to context. */
-  addToolMessage(contents: FunctionResponse[]): void {
+  addToolMessage(contents: ToolResult[]): void {
     this.messages.push({ role: "user", contents: contents });
   }
 
@@ -210,7 +211,7 @@ export class Agent {
       this.logger.debug(`Step ${step + 1}/${maxSteps}`);
 
       // Call LLM with context from context manager
-      let response: LLMResponse;
+      let response: ModelMessage;
       try {
         this.llm.setRetryCallback((exception, attempt) => {
           this.logger.warn("LLM request retry", {
@@ -230,12 +231,12 @@ export class Agent {
             parameters: tool.parameters,
           })),
         });
-        response = await this.llm.generate(
-          this.contextManager.messages,
-          this.contextManager.tools,
-          this.contextManager.systemPrompt,
-          this.abortController?.signal,
-        );
+        response = await this.llm.generate({
+          messages: this.contextManager.messages,
+          tools: this.contextManager.tools,
+          systemPrompt: this.contextManager.systemPrompt,
+          signal: this.abortController?.signal,
+        });
         this.logger.debug(`LLM response received.`, {
           step: step + 1,
           durationMs: Date.now() - startedAt,
@@ -276,55 +277,56 @@ export class Agent {
 
       // Check if task is complete (no tool calls)
       if (checkCompleteMessages(this.contextManager.messages)) {
+        const finishReason = response.metadata?.finishReason ?? "UNKNOWN";
         this.events.emit("runFinished", {
           ok: true,
-          msg: response.finishReason,
+          msg: finishReason,
         });
-        this.logger.debug(`Run finished: ${response.finishReason}`);
+        this.logger.debug(`Run finished: ${finishReason}`);
         return;
       }
 
       // Execute tool calls
       // The loop cannot be interrupted during the process.
-      const functionCalls = response.message.contents.filter(
-        (content) => content.type === "function_call",
-      );
-      const functionResponses: FunctionResponse[] = [];
-      for (const functionCall of functionCalls) {
-        const toolCallId = functionCall.id;
-        const functionName = functionCall.name;
-        const callArgs = functionCall.args;
+      const toolCalls = response.contents.filter(isToolCall);
+      const toolResults: ToolResult[] = [];
+      for (const toolCall of toolCalls) {
+        const toolCallId = toolCall.toolCallId;
+        const toolName = toolCall.name;
+        const callArgs = toolCall.arguments;
 
-        this.logger.debug(`Tool call [${functionName}]`, {
+        this.logger.debug(`Tool call [${toolName}]`, {
           step: step + 1,
-          toolName: functionName,
+          toolName,
           args: callArgs,
         });
 
-        if (functionCalls.length > 1) {
-          functionResponses.push({
-            type: "function_response",
-            id: toolCallId,
-            name: functionName,
+        if (toolCalls.length > 1) {
+          toolResults.push({
+            type: "tool_result",
+            toolCallId,
+            name: toolName,
             result: {
-              success: false,
-              error: `Don't call multiple functions parallely.`,
+              text: JSON.stringify({
+                success: false,
+                content: `Don't call multiple tools in parallel.`,
+              }),
             },
           });
           this.logger.warn(
-            `Multiple tool calls in a single response are not supported. Skipping tool [${functionName}].`,
+            `Multiple tool calls in a single response are not supported. Skipping tool [${toolName}].`,
           );
           continue;
         }
 
         // Execute tool
-        let result: ToolResult;
-        const tool = toolDict.get(functionName);
+        let result: ToolExecutionResult;
+        const tool = toolDict.get(toolName);
         const toolStartedAt = Date.now();
         if (!tool) {
           result = {
             success: false,
-            error: `Unknown tool: ${functionName}`,
+            content: `Unknown tool: ${toolName}`,
           };
         } else {
           try {
@@ -337,51 +339,51 @@ export class Agent {
             const errorTrace = (err as Error).stack ?? "";
             result = {
               success: false,
-              error: `Tool execution failed: ${errorDetail}\n\nTraceback:\n${errorTrace}`,
+              content: `Tool execution failed: ${errorDetail}\n\nTraceback:\n${errorTrace}`,
             };
           }
         }
 
         // Log tool execution result
         if (result.success) {
-          if (functionName === "ema_reply" && result.success) {
+          if (toolName === "ema_reply" && result.content) {
             this.events.emit("emaReplyReceived", {
               reply: JSON.parse(result.content!),
             });
-            result.content = undefined;
+            const { content, ...rest } = result;
+            result = rest;
           }
-          this.logger.debug(`Tool [${functionName}] done.`, {
+          this.logger.debug(`Tool [${toolName}] done.`, {
             step: step + 1,
-            toolName: functionName,
+            toolName,
             durationMs: Date.now() - toolStartedAt,
             result,
           });
         } else {
-          this.logger.warn(`Tool [${functionName}] failed.`, {
+          this.logger.warn(`Tool [${toolName}] failed.`, {
             step: step + 1,
-            toolName: functionName,
+            toolName,
             durationMs: Date.now() - toolStartedAt,
             result,
           });
         }
 
-        const functionResponseParts = result.parts;
-        if (functionResponseParts) {
-          result.parts = undefined;
-        }
+        const { images, ...textPayload } = result;
 
-        // Add function response to list
-        functionResponses.push({
-          type: "function_response",
-          id: toolCallId,
-          name: functionName,
-          result: result,
-          ...(functionResponseParts ? { parts: functionResponseParts } : {}),
+        // Add tool result to list
+        toolResults.push({
+          type: "tool_result",
+          toolCallId,
+          name: toolName,
+          result: {
+            text: JSON.stringify(textPayload),
+            ...(images?.length ? { images } : {}),
+          },
         });
       }
 
-      // Add all function responses to context
-      this.contextManager.addToolMessage(functionResponses);
+      // Add all tool results to context
+      this.contextManager.addToolMessage(toolResults);
 
       step += 1;
     }

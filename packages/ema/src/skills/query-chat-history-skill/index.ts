@@ -2,6 +2,8 @@ import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
 import type { ConversationMessageEntity } from "../../db/base";
+import type { ImageItem } from "../../agent_hub/schema";
+import { isImageMime } from "../../agent_hub/utils";
 import { resolveSession } from "../../channel";
 import type { BufferMessage } from "../../memory/base";
 import { buildPromptFromBufferMessage } from "../../memory/utils";
@@ -126,12 +128,13 @@ function formatMessage(
   return buildPromptFromBufferMessage(bufferMessage, ownerUid);
 }
 
-function extractMediaParts(
+function extractImageAttachments(
   entity: ConversationMessageEntity,
-): NonNullable<ToolResult["parts"]> {
+): ImageItem[] {
   return entity.message.contents.filter(
-    (content): content is NonNullable<ToolResult["parts"]>[number] =>
-      content.type === "inline_data",
+    (content): content is ImageItem =>
+      content.type === "image_url" ||
+      (content.type === "inline_data" && isImageMime(content.mimeType)),
   );
 }
 
@@ -153,7 +156,7 @@ export default class QueryChatHistorySkill extends Skill {
     } catch (err) {
       return {
         success: false,
-        error: `Invalid query-chat-history-skill input: ${(err as Error).message}`,
+        content: `Invalid query-chat-history-skill input: ${(err as Error).message}`,
       };
     }
 
@@ -163,13 +166,13 @@ export default class QueryChatHistorySkill extends Skill {
     if (!server) {
       return {
         success: false,
-        error: "Missing server in skill context.",
+        content: "Missing server in skill context.",
       };
     }
     if (!conversationId) {
       return {
         success: false,
-        error: "Missing conversationId in skill context.",
+        content: "Missing conversationId in skill context.",
       };
     }
 
@@ -179,7 +182,7 @@ export default class QueryChatHistorySkill extends Skill {
       if (!conversation) {
         return {
           success: false,
-          error: "Conversation not found.",
+          content: "Conversation not found.",
         };
       }
       const ownerUid = (() => {
@@ -208,19 +211,19 @@ export default class QueryChatHistorySkill extends Skill {
         if (!row) {
           return {
             success: false,
-            error: `Message ${payload.msg_id} not found.`,
+            content: `Message ${payload.msg_id} not found.`,
           };
         }
-        const parts = extractMediaParts(row);
-        if (parts.length === 0) {
+        const images = extractImageAttachments(row);
+        if (images.length === 0) {
           return {
             success: false,
-            error: `Message ${payload.msg_id} has no expandable media parts.`,
+            content: `Message ${payload.msg_id} has no expandable image attachments.`,
           };
         }
         return {
           success: true,
-          parts,
+          images,
         };
       }
 
@@ -262,7 +265,7 @@ export default class QueryChatHistorySkill extends Skill {
       if (startTime > endTime) {
         return {
           success: false,
-          error: "start_time must be less than or equal to end_time.",
+          content: "start_time must be less than or equal to end_time.",
         };
       }
 
@@ -287,7 +290,7 @@ export default class QueryChatHistorySkill extends Skill {
     } catch (error) {
       return {
         success: false,
-        error: `Failed to query chat history: ${(error as Error).message}`,
+        content: `Failed to query chat history: ${(error as Error).message}`,
       };
     }
   }

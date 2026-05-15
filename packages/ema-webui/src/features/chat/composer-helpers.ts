@@ -55,7 +55,9 @@ export const EMPTY_COMPOSER_SNAPSHOT: ComposerSnapshot = {
 export function isSupportedComposerImageMimeType(
   mimeType: string,
 ): mimeType is ImageMIME {
-  return SUPPORTED_COMPOSER_IMAGE_MIME_TYPES.includes(mimeType as ImageMIME);
+  return (SUPPORTED_COMPOSER_IMAGE_MIME_TYPES as readonly string[]).includes(
+    mimeType,
+  );
 }
 
 function createComposerImageId() {
@@ -371,6 +373,9 @@ export function formatContentsPreviewForLatest(contents: InputContent[]) {
         }
         if (content.text?.trim()) {
           return content.text.trim();
+        }
+        if (content.type === "image_url") {
+          return "[图片]";
         }
         if (content.mimeType.startsWith("image/")) {
           return "[图片]";
