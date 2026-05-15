@@ -203,6 +203,24 @@ export function resolveLLMModelDefinition(model: string): LLMModelDefinition {
 }
 
 /**
+ * Lists supported model definitions as detached objects for API mapping.
+ *
+ * @returns Supported model definitions in registry order.
+ */
+export function listLLMModelDefinitions(): LLMModelDefinition[] {
+  return LLM_MODEL_DEFINITIONS.map((definition) => ({
+    ...definition,
+    capabilities: {
+      ...definition.capabilities,
+      thinkingLevels: [...definition.capabilities.thinkingLevels],
+    },
+    requestDefaults: {
+      ...definition.requestDefaults,
+    },
+  }));
+}
+
+/**
  * Resolves complete user-facing config into validated runtime model config.
  *
  * @param config - User-provided LLM configuration.

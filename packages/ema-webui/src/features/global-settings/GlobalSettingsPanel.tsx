@@ -27,28 +27,31 @@ import {
 } from "@/transport/dashboard";
 import {
   dashboardTransportFailureFeedback,
+  diagnosticMetaFromDiagnostics,
   localDashboardFeedback,
+  technicalDetailFromDiagnostics,
   type DashboardCheckFeedback,
 } from "@/types/dashboard/feedback";
 import type {
-  ActorOpenAiMode,
   GlobalEmbeddingConfig,
   GlobalEmbeddingIndexStatus,
   GlobalLlmConfig,
   GlobalSettingsResponse,
+  LlmModelOption,
+  LlmModelProvider,
+  LlmThinkingLevel,
 } from "@/types/dashboard/v1beta1";
 import {
   embeddingDefaults,
-  llmDefaults,
   type EmbeddingProvider,
-  type LLMProvider,
 } from "@/types/setup/v1beta1";
 
 type DetailTitle = "Web UI" | "QQ号绑定" | "默认LLM服务" | "默认Embedding服务";
 type CheckStatus = "idle" | "testing" | "success" | "error";
+type LegacyOpenAiMode = "responses" | "chat";
 
 interface ServiceProviderFields {
-  mode: ActorOpenAiMode;
+  mode: LegacyOpenAiMode;
   model: string;
   baseUrl: string;
   apiKey: string;
@@ -59,10 +62,16 @@ interface ServiceProviderFields {
 }
 
 interface ServiceDraft {
-  provider: LLMProvider;
+  provider: EmbeddingProvider;
   google: ServiceProviderFields;
   openai: ServiceProviderFields;
-  anthropic: ServiceProviderFields;
+}
+
+interface LlmServiceDraft {
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+  thinkingLevel?: LlmThinkingLevel;
 }
 
 interface ToastState {
@@ -72,26 +81,42 @@ interface ToastState {
 }
 
 const COPY_TOAST_DURATION = 1400;
-const LLM_MODELS: Record<LLMProvider, string[]> = {
-  google: ["gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"],
-  openai: [],
-  anthropic: [],
-};
 const EMBEDDING_MODELS: Record<EmbeddingProvider, string[]> = {
   google: ["gemini-embedding-001"],
   openai: ["text-embedding-3-large"],
 };
-const PROVIDER_LABELS: Record<LLMProvider, string> = {
+const EMBEDDING_PROVIDER_LABELS: Record<EmbeddingProvider, string> = {
   google: "Google",
   openai: "OpenAI",
-  anthropic: "Anthropic",
 };
-const API_KEY_PLACEHOLDERS: Record<LLMProvider, string> = {
+const EMBEDDING_API_KEY_PLACEHOLDERS: Record<EmbeddingProvider, string> = {
   google: "AIzaSyA7fK...D5eJ",
   openai: "sk-u1Kv9xP...ZTyU",
+};
+const LLM_PROVIDER_LABELS: Record<LlmModelProvider, string> = {
+  openai: "OpenAI",
+  google: "Google",
+  anthropic: "Anthropic",
+  zai: "Z.ai",
+  moonshot: "Moonshot",
+  qwen: "Qwen",
+};
+const LLM_API_KEY_PLACEHOLDERS: Record<LlmModelProvider, string> = {
+  google: "AIzaSyA7fK...D5eJ 或 Vertex AI 凭据 JSON",
+  openai: "sk-u1Kv9xP...ZTyU",
   anthropic: "sk-ant-9xW...G0hJ",
+  zai: "zai_...",
+  moonshot: "sk-...",
+  qwen: "本地服务可填写任意占位值",
+};
+const THINKING_LEVEL_LABELS: Record<LlmThinkingLevel, string> = {
+  none: "关闭",
+  low: "低",
+  medium: "中",
+  high: "高",
 };
 const VERTEX_CREDENTIALS_JSON_LIMIT = 16_384;
+const LLM_CREDENTIAL_LIMIT = VERTEX_CREDENTIALS_JSON_LIMIT;
 const VERTEX_CREDENTIALS_JSON_PLACEHOLDER = String.raw`{
   "type": "service_account",
   "project_id": "your-project-id",
@@ -106,7 +131,7 @@ const VERTEX_CREDENTIALS_JSON_PLACEHOLDER = String.raw`{
 }`;
 
 function fieldsFromSetupDefaults(defaults: {
-  mode?: ActorOpenAiMode;
+  mode?: LegacyOpenAiMode;
   model: string;
   baseUrl: string;
   apiKey: string;
@@ -132,17 +157,15 @@ function valueOrDefault(value: string, fallback: string): string {
   return trimmed ? trimmed : fallback;
 }
 
-const DEFAULT_LLM_DRAFT: ServiceDraft = {
-  provider: "google",
-  google: fieldsFromSetupDefaults(llmDefaults.google),
-  openai: fieldsFromSetupDefaults(llmDefaults.openai),
-  anthropic: fieldsFromSetupDefaults(llmDefaults.anthropic),
+const DEFAULT_LLM_DRAFT: LlmServiceDraft = {
+  model: "",
+  baseUrl: "",
+  apiKey: "",
 };
 const DEFAULT_EMBEDDING_DRAFT: ServiceDraft = {
   provider: "google",
   google: fieldsFromSetupDefaults(embeddingDefaults.google),
   openai: fieldsFromSetupDefaults(embeddingDefaults.openai),
-  anthropic: fieldsFromSetupDefaults(llmDefaults.anthropic),
 };
 const EMPTY_INDEX_STATUS: GlobalEmbeddingIndexStatus = {
   state: "not_started",
@@ -157,54 +180,17 @@ function userInitial(name: string) {
 
 function serviceDraftFromLlmConfig(
   config: GlobalSettingsResponse["services"]["llm"],
-): ServiceDraft {
+  models: LlmModelOption[],
+): LlmServiceDraft {
+  const selected =
+    models.find((option) => option.model === config.model) ?? models[0] ?? null;
   return {
-    ...DEFAULT_LLM_DRAFT,
-    provider: config.provider,
-    openai: {
-      ...DEFAULT_LLM_DRAFT.openai,
-      mode: config.openai.mode,
-      model: valueOrDefault(
-        config.openai.model,
-        DEFAULT_LLM_DRAFT.openai.model,
-      ),
-      baseUrl: valueOrDefault(
-        config.openai.baseUrl,
-        DEFAULT_LLM_DRAFT.openai.baseUrl,
-      ),
-      apiKey: valueOrDefault(
-        config.openai.apiKey,
-        DEFAULT_LLM_DRAFT.openai.apiKey,
-      ),
-    },
-    google: {
-      ...DEFAULT_LLM_DRAFT.google,
-      model: valueOrDefault(
-        config.google.model,
-        DEFAULT_LLM_DRAFT.google.model,
-      ),
-      baseUrl: valueOrDefault(
-        config.google.baseUrl,
-        DEFAULT_LLM_DRAFT.google.baseUrl,
-      ),
-      apiKey: valueOrDefault(
-        config.google.apiKey,
-        DEFAULT_LLM_DRAFT.google.apiKey,
-      ),
-      useVertexAi: config.google.useVertexAi,
-      project: valueOrDefault(
-        config.google.project,
-        DEFAULT_LLM_DRAFT.google.project,
-      ),
-      location: valueOrDefault(
-        config.google.location,
-        DEFAULT_LLM_DRAFT.google.location,
-      ),
-      credentialsFile: valueOrDefault(
-        config.google.credentialsFile,
-        DEFAULT_LLM_DRAFT.google.credentialsFile,
-      ),
-    },
+    model: valueOrDefault(config.model, selected?.model ?? ""),
+    baseUrl: valueOrDefault(config.baseUrl, selected?.defaultBaseUrl ?? ""),
+    apiKey: config.apiKey,
+    thinkingLevel: selected
+      ? normalizeThinkingLevel(selected, config.thinkingLevel)
+      : config.thinkingLevel,
   };
 }
 
@@ -260,24 +246,12 @@ function serviceDraftFromEmbeddingConfig(
   };
 }
 
-function llmConfigFromDraft(draft: ServiceDraft): GlobalLlmConfig {
+function llmConfigFromDraft(draft: LlmServiceDraft): GlobalLlmConfig {
   return {
-    provider: draft.provider === "openai" ? "openai" : "google",
-    openai: {
-      mode: draft.openai.mode,
-      model: draft.openai.model.trim(),
-      baseUrl: draft.openai.baseUrl.trim(),
-      apiKey: draft.openai.apiKey.trim(),
-    },
-    google: {
-      model: draft.google.model.trim(),
-      baseUrl: draft.google.baseUrl.trim(),
-      apiKey: draft.google.apiKey.trim(),
-      useVertexAi: draft.google.useVertexAi,
-      project: draft.google.project.trim(),
-      location: draft.google.location.trim(),
-      credentialsFile: draft.google.credentialsFile.trim(),
-    },
+    model: draft.model.trim(),
+    baseUrl: draft.baseUrl.trim(),
+    apiKey: draft.apiKey.trim(),
+    ...(draft.thinkingLevel ? { thinkingLevel: draft.thinkingLevel } : {}),
   };
 }
 
@@ -306,8 +280,16 @@ function areDraftsEqual(left: ServiceDraft, right: ServiceDraft) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function areLlmDraftsEqual(left: LlmServiceDraft, right: LlmServiceDraft) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function draftSignature(draft: ServiceDraft) {
   return JSON.stringify(trimServiceDraft(draft));
+}
+
+function llmDraftSignature(draft: LlmServiceDraft) {
+  return JSON.stringify(trimLlmDraft(draft));
 }
 
 function trimServiceFields(
@@ -330,7 +312,15 @@ function trimServiceDraft(draft: ServiceDraft): ServiceDraft {
     provider: draft.provider,
     google: trimServiceFields(draft.google),
     openai: trimServiceFields(draft.openai),
-    anthropic: trimServiceFields(draft.anthropic),
+  };
+}
+
+function trimLlmDraft(draft: LlmServiceDraft): LlmServiceDraft {
+  return {
+    model: draft.model.trim(),
+    baseUrl: draft.baseUrl.trim(),
+    apiKey: draft.apiKey.trim(),
+    ...(draft.thinkingLevel ? { thinkingLevel: draft.thinkingLevel } : {}),
   };
 }
 
@@ -354,20 +344,87 @@ function isJsonObjectValue(value: string) {
   }
 }
 
-function validateServiceDraft(draft: ServiceDraft, kind: "llm" | "embedding") {
-  const active = draft[draft.provider];
+function defaultThinkingLevel(option: LlmModelOption) {
+  if (option.capabilities.thinkingLevels.length === 0) {
+    return undefined;
+  }
   if (
-    kind === "llm" &&
-    (draft.provider === "anthropic" ||
-      (draft.provider === "openai" && draft.openai.mode === "chat"))
+    option.requestDefaults.thinkingLevel &&
+    option.capabilities.thinkingLevels.includes(
+      option.requestDefaults.thinkingLevel,
+    )
   ) {
+    return option.requestDefaults.thinkingLevel;
+  }
+  return option.capabilities.thinkingLevels[0];
+}
+
+function normalizeThinkingLevel(
+  option: LlmModelOption,
+  value: LlmThinkingLevel | undefined,
+) {
+  if (option.capabilities.thinkingLevels.length === 0) {
+    return undefined;
+  }
+  return value && option.capabilities.thinkingLevels.includes(value)
+    ? value
+    : defaultThinkingLevel(option);
+}
+
+function llmDraftForModel(
+  option: LlmModelOption,
+  current: LlmServiceDraft,
+): LlmServiceDraft {
+  return {
+    model: option.model,
+    baseUrl: option.defaultBaseUrl,
+    apiKey: current.apiKey,
+    thinkingLevel: normalizeThinkingLevel(option, current.thinkingLevel),
+  };
+}
+
+function validateLlmDraft(draft: LlmServiceDraft, models: LlmModelOption[]) {
+  if (!draft.model.trim()) {
+    return localDashboardFeedback("模型未填写", "模型名称是必填项。");
+  }
+  const selected = models.find((option) => option.model === draft.model.trim());
+  if (!selected) {
     return localDashboardFeedback(
-      "当前模式暂不可用",
-      "当前 LLM 供应商或模式暂未开放。",
+      "模型暂不支持",
+      "请从模型列表中选择一个支持的模型。",
       "UNSUPPORTED",
     );
   }
+  if (!draft.baseUrl.trim() || !isHttpUrlValue(draft.baseUrl.trim())) {
+    return localDashboardFeedback(
+      "接口地址格式错误",
+      "请填写以 http:// 或 https:// 开头的有效接口地址。",
+    );
+  }
+  if (!draft.apiKey.trim()) {
+    return localDashboardFeedback("ApiKey未填写", "ApiKey 是必填项。");
+  }
+  if (draft.apiKey.trim().length > LLM_CREDENTIAL_LIMIT) {
+    return localDashboardFeedback(
+      "ApiKey过长",
+      `ApiKey 不能超过 ${LLM_CREDENTIAL_LIMIT} 个字符。`,
+    );
+  }
+  if (
+    draft.thinkingLevel &&
+    !selected.capabilities.thinkingLevels.includes(draft.thinkingLevel)
+  ) {
+    return localDashboardFeedback(
+      "思考等级暂不支持",
+      "当前模型不支持所选思考等级。",
+      "UNSUPPORTED",
+    );
+  }
+  return null;
+}
 
+function validateServiceDraft(draft: ServiceDraft) {
+  const active = draft[draft.provider];
   if (!active.model.trim()) {
     return localDashboardFeedback("模型未填写", "模型名称是必填项。");
   }
@@ -437,6 +494,7 @@ function feedbackFromErrorResponse(
   }
   const error = response.check.error;
   const details = error?.details ?? {};
+  const diagnostics = response.check.diagnostics;
   return {
     summary:
       error?.code === "UNSUPPORTED"
@@ -449,8 +507,13 @@ function feedbackFromErrorResponse(
         ? details.providerErrorMessage
         : null,
     code: error?.code ?? "CHECK_FAILED",
-    technicalDetail: null,
-    meta: [{ label: "耗时", value: `${response.check.durationMs} ms` }],
+    technicalDetail:
+      technicalDetailFromDiagnostics(details) ??
+      technicalDetailFromDiagnostics(diagnostics),
+    meta: [
+      ...diagnosticMetaFromDiagnostics(diagnostics),
+      { label: "耗时", value: `${response.check.durationMs} ms` },
+    ],
   };
 }
 
@@ -529,8 +592,8 @@ export function GlobalSettingsPanel() {
   const [webuiTokenDraft, setWebuiTokenDraft] = useState("");
   const [webuiTokenConfigured, setWebuiTokenConfigured] = useState(false);
   const [webuiTokenSaving, setWebuiTokenSaving] = useState(false);
-  const [savedLlm, setSavedLlm] = useState<ServiceDraft>(DEFAULT_LLM_DRAFT);
-  const [llmDraft, setLlmDraft] = useState<ServiceDraft>(DEFAULT_LLM_DRAFT);
+  const [savedLlm, setSavedLlm] = useState<LlmServiceDraft>(DEFAULT_LLM_DRAFT);
+  const [llmDraft, setLlmDraft] = useState<LlmServiceDraft>(DEFAULT_LLM_DRAFT);
   const [llmStatus, setLlmStatus] = useState<CheckStatus>("idle");
   const [llmFeedback, setLlmFeedback] = useState<DashboardCheckFeedback | null>(
     null,
@@ -567,7 +630,10 @@ export function GlobalSettingsPanel() {
         setSavedQq(response.identityBindings.qq.uid);
         setWebuiTokenDraft("");
         setWebuiTokenConfigured(response.access.webui.configured);
-        const nextLlm = serviceDraftFromLlmConfig(response.services.llm);
+        const nextLlm = serviceDraftFromLlmConfig(
+          response.services.llm,
+          response.services.llmModels,
+        );
         const nextEmbedding = serviceDraftFromEmbeddingConfig(
           response.services.embedding,
         );
@@ -619,7 +685,7 @@ export function GlobalSettingsPanel() {
   }, [embeddingIndex.state]);
 
   const userName = settings?.user.name ?? "你";
-  const llmDirty = !areDraftsEqual(llmDraft, savedLlm);
+  const llmDirty = !areLlmDraftsEqual(llmDraft, savedLlm);
   const embeddingDirty = !areDraftsEqual(embeddingDraft, savedEmbedding);
   const qqDirty = qqDraft.trim() !== savedQq;
   const webuiTokenDirty = Boolean(webuiTokenDraft.trim());
@@ -677,7 +743,7 @@ export function GlobalSettingsPanel() {
     return false;
   }
 
-  function updateLlmDraft(nextDraft: ServiceDraft) {
+  function updateLlmDraft(nextDraft: LlmServiceDraft) {
     setLlmDraft(nextDraft);
     setLlmStatus("idle");
     setLlmFeedback(null);
@@ -722,13 +788,16 @@ export function GlobalSettingsPanel() {
   }
 
   async function testLlm() {
-    const feedback = validateServiceDraft(llmDraft, "llm");
+    const feedback = validateLlmDraft(
+      llmDraft,
+      settings?.services.llmModels ?? [],
+    );
     if (feedback) {
       setLlmStatus("error");
       setLlmFeedback(feedback);
       return false;
     }
-    const signature = draftSignature(llmDraft);
+    const signature = llmDraftSignature(llmDraft);
     setLlmStatus("testing");
     setLlmFeedback(null);
     try {
@@ -746,7 +815,7 @@ export function GlobalSettingsPanel() {
 
   async function saveLlm() {
     if (!llmDirty || llmSaving) return;
-    const signature = draftSignature(llmDraft);
+    const signature = llmDraftSignature(llmDraft);
     if (!(llmStatus === "success" && llmLastPassed === signature)) {
       const ok = await testLlm();
       if (!ok) return;
@@ -770,7 +839,7 @@ export function GlobalSettingsPanel() {
   }
 
   async function testEmbedding() {
-    const feedback = validateServiceDraft(embeddingDraft, "embedding");
+    const feedback = validateServiceDraft(embeddingDraft);
     if (feedback) {
       setEmbeddingStatus("error");
       setEmbeddingFeedback(feedback);
@@ -980,9 +1049,9 @@ export function GlobalSettingsPanel() {
               onSave={saveQq}
             />
           ) : detailTitle === "默认LLM服务" ? (
-            <ServiceDetail
-              kind="llm"
+            <LlmServiceDetail
               draft={llmDraft}
+              models={settings?.services.llmModels ?? []}
               dirty={llmDirty}
               status={llmStatus}
               feedback={llmFeedback}
@@ -993,7 +1062,6 @@ export function GlobalSettingsPanel() {
             />
           ) : (
             <ServiceDetail
-              kind="embedding"
               draft={embeddingDraft}
               dirty={embeddingDirty}
               status={embeddingStatus}
@@ -1145,8 +1213,263 @@ function QqBindingDetail({
   );
 }
 
+function LlmServiceDetail({
+  draft,
+  models,
+  dirty,
+  status,
+  feedback,
+  isSaving,
+  onDraftChange,
+  onTestConnection,
+  onSave,
+}: {
+  draft: LlmServiceDraft;
+  models: LlmModelOption[];
+  dirty: boolean;
+  status: CheckStatus;
+  feedback: DashboardCheckFeedback | null;
+  isSaving: boolean;
+  onDraftChange: (draft: LlmServiceDraft) => void;
+  onTestConnection: () => void | Promise<unknown>;
+  onSave: () => void | Promise<void>;
+}) {
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const selectedModel =
+    models.find((option) => option.model === draft.model) ?? null;
+  const isTesting = status === "testing";
+
+  function updateDraft(patch: Partial<LlmServiceDraft>) {
+    onDraftChange({ ...draft, ...patch });
+  }
+
+  function selectModel(option: LlmModelOption) {
+    onDraftChange(llmDraftForModel(option, draft));
+    setModelDropdownOpen(false);
+  }
+
+  return (
+    <>
+      <div className={styles.llmSettingsBody}>
+        <div className={styles.llmSettingsContent}>
+          <section className={styles.llmSettingsSection}>
+            <div className={styles.llmSettingsFields}>
+              <label className={styles.llmSettingsField}>
+                <span className={styles.llmSettingsControlTitle}>模型</span>
+                <div
+                  className={styles.llmModelSelect}
+                  onBlur={(event) => {
+                    const nextTarget = event.relatedTarget;
+                    if (
+                      nextTarget instanceof Node &&
+                      event.currentTarget.contains(nextTarget)
+                    ) {
+                      return;
+                    }
+                    setModelDropdownOpen(false);
+                  }}
+                >
+                  <button
+                    type="button"
+                    className={`${styles.llmModelSelectButton} ${
+                      !draft.model ? styles.llmModelSelectPlaceholder : ""
+                    } ${
+                      modelDropdownOpen ? styles.llmModelSelectButtonOpen : ""
+                    }`}
+                    aria-haspopup="listbox"
+                    aria-expanded={modelDropdownOpen}
+                    onClick={() => setModelDropdownOpen((current) => !current)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        setModelDropdownOpen(false);
+                        event.currentTarget.blur();
+                      }
+                    }}
+                  >
+                    <span>{draft.model || "选择模型"}</span>
+                    <ChevronDown aria-hidden="true" />
+                  </button>
+                  {modelDropdownOpen ? (
+                    <div
+                      className={styles.llmModelSelectMenu}
+                      role="listbox"
+                      aria-label="选择模型"
+                    >
+                      {models.length > 0 ? (
+                        models.map((option, index) => {
+                          const groupLabel =
+                            LLM_PROVIDER_LABELS[option.provider];
+                          const previous = models[index - 1];
+                          const showGroup =
+                            !previous || previous.provider !== option.provider;
+                          return (
+                            <div
+                              key={option.model}
+                              className={styles.llmModelSelectGroup}
+                              role="presentation"
+                            >
+                              {showGroup ? (
+                                <span
+                                  className={styles.llmModelSelectGroupLabel}
+                                >
+                                  {groupLabel}
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={draft.model === option.model}
+                                className={`${styles.llmModelSelectOption} ${
+                                  draft.model === option.model
+                                    ? styles.llmModelSelectOptionActive
+                                    : ""
+                                }`}
+                                onClick={() => selectModel(option)}
+                              >
+                                <span>{option.model}</span>
+                                {draft.model === option.model ? (
+                                  <Check aria-hidden="true" />
+                                ) : null}
+                              </button>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <span
+                          className={`${styles.llmModelSelectOption} ${styles.llmModelSelectOptionDisabled}`}
+                          role="option"
+                          aria-selected="false"
+                          aria-disabled="true"
+                        >
+                          <span>暂无可用模型</span>
+                        </span>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </label>
+
+              {selectedModel?.capabilities.thinkingLevels.length ? (
+                <div className={styles.llmSettingsControl}>
+                  <span className={styles.llmSettingsControlTitle}>
+                    思考等级
+                  </span>
+                  <div
+                    className={styles.llmEndpointTabs}
+                    role="tablist"
+                    style={{
+                      gridTemplateColumns: `repeat(${selectedModel.capabilities.thinkingLevels.length}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {selectedModel.capabilities.thinkingLevels.map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        role="tab"
+                        aria-selected={draft.thinkingLevel === level}
+                        className={`${styles.llmEndpointTab} ${
+                          draft.thinkingLevel === level
+                            ? styles.llmEndpointTabActive
+                            : ""
+                        }`}
+                        onClick={() => updateDraft({ thinkingLevel: level })}
+                      >
+                        {THINKING_LEVEL_LABELS[level]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <ServiceField
+                title="Base URL"
+                value={draft.baseUrl}
+                placeholder={selectedModel?.defaultBaseUrl ?? ""}
+                onChange={(baseUrl) => updateDraft({ baseUrl })}
+              />
+              <ServiceField
+                title="ApiKey"
+                value={draft.apiKey}
+                placeholder={
+                  selectedModel
+                    ? LLM_API_KEY_PLACEHOLDERS[selectedModel.provider]
+                    : "输入 API Key"
+                }
+                onChange={(apiKey) => updateDraft({ apiKey })}
+              />
+            </div>
+          </section>
+
+          <button
+            type="button"
+            className={`${styles.llmTestButton} ${
+              status === "success" ? styles.llmTestButtonSuccess : ""
+            } ${status === "error" ? styles.llmTestButtonError : ""}`}
+            disabled={isTesting}
+            onClick={() => {
+              void onTestConnection();
+            }}
+          >
+            {isTesting ? (
+              <LoaderCircle aria-hidden="true" />
+            ) : status === "success" ? (
+              <Check aria-hidden="true" />
+            ) : status === "error" ? (
+              <X aria-hidden="true" />
+            ) : null}
+            <span>
+              {isTesting
+                ? "正在测试连接"
+                : status === "success"
+                  ? "Succeed"
+                  : status === "error"
+                    ? feedback?.code === "CLIENT_VALIDATION" ||
+                      feedback?.code === "UNSUPPORTED"
+                      ? (feedback.summary ?? "配置错误")
+                      : "Failed"
+                    : "测试连接状态"}
+            </span>
+          </button>
+
+          {status === "error" && feedback ? (
+            <div className={styles.llmErrorDetails} role="alert">
+              <div className={styles.llmErrorDetailsHeader}>
+                <span>错误</span>
+                {feedback.code ? <code>{feedback.code}</code> : null}
+              </div>
+              {feedback.detail ? (
+                <p className={styles.llmErrorDetailText}>{feedback.detail}</p>
+              ) : null}
+              {feedback.technicalDetail ? (
+                <div className={styles.llmErrorTechnicalCard}>
+                  {feedback.technicalDetail}
+                </div>
+              ) : null}
+              {feedback.meta.length ? (
+                <dl className={styles.llmErrorMeta}>
+                  {feedback.meta.map((item) => (
+                    <div key={`${item.label}:${item.value}`}>
+                      <dt>{item.label}</dt>
+                      <dd>{item.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <SettingsFooter
+        dirty={dirty}
+        isSaving={isSaving}
+        isChecking={isTesting}
+        onSave={onSave}
+      />
+    </>
+  );
+}
+
 function ServiceDetail({
-  kind,
   draft,
   dirty,
   status,
@@ -1158,7 +1481,6 @@ function ServiceDetail({
   onTestConnection,
   onSave,
 }: {
-  kind: "llm" | "embedding";
   draft: ServiceDraft;
   dirty: boolean;
   status: CheckStatus;
@@ -1174,26 +1496,18 @@ function ServiceDetail({
   const embeddingProvider: EmbeddingProvider =
     draft.provider === "openai" ? "openai" : "google";
   const activeFields = draft[draft.provider];
-  const models =
-    kind === "llm"
-      ? LLM_MODELS[draft.provider]
-      : EMBEDDING_MODELS[embeddingProvider];
-  const llmComingSoon =
-    kind === "llm" &&
-    (draft.provider === "anthropic" ||
-      (draft.provider === "openai" && draft.openai.mode !== "responses"));
+  const models = EMBEDDING_MODELS[embeddingProvider];
   const isTesting = status === "testing";
-  const indexCard =
-    kind === "embedding" && embeddingIndex
-      ? indexStatusCard(embeddingIndex, embeddingRestartRequired, dirty)
-      : null;
+  const indexCard = embeddingIndex
+    ? indexStatusCard(embeddingIndex, embeddingRestartRequired, dirty)
+    : null;
 
   function updateDraft(patch: Partial<ServiceDraft>) {
     onDraftChange({ ...draft, ...patch });
   }
 
   function updateProviderFields(
-    provider: LLMProvider,
+    provider: EmbeddingProvider,
     patch: Partial<ServiceProviderFields>,
   ) {
     onDraftChange({
@@ -1209,7 +1523,7 @@ function ServiceDetail({
     updateProviderFields(draft.provider, patch);
   }
 
-  function switchProvider(provider: LLMProvider) {
+  function switchProvider(provider: EmbeddingProvider) {
     setModelDropdownOpen(false);
     updateDraft({ provider });
   }
@@ -1241,15 +1555,10 @@ function ServiceDetail({
             <div className={styles.llmSettingsControl}>
               <span className={styles.llmSettingsControlTitle}>服务提供商</span>
               <div
-                className={`${styles.llmProviderTabs} ${
-                  kind === "embedding" ? styles.llmProviderTabsCompact : ""
-                }`}
+                className={`${styles.llmProviderTabs} ${styles.llmProviderTabsCompact}`}
                 role="tablist"
               >
-                {(kind === "llm"
-                  ? (["google", "openai", "anthropic"] as const)
-                  : (["google", "openai"] as const)
-                ).map((provider) => (
+                {(["google", "openai"] as const).map((provider) => (
                   <button
                     key={provider}
                     type="button"
@@ -1262,37 +1571,11 @@ function ServiceDetail({
                     }`}
                     onClick={() => switchProvider(provider)}
                   >
-                    {PROVIDER_LABELS[provider]}
+                    {EMBEDDING_PROVIDER_LABELS[provider]}
                   </button>
                 ))}
               </div>
             </div>
-
-            {kind === "llm" && draft.provider === "openai" ? (
-              <div className={styles.llmSettingsControl}>
-                <span className={styles.llmSettingsControlTitle}>接口协议</span>
-                <div className={styles.llmEndpointTabs} role="tablist">
-                  {(["chat", "responses"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      role="tab"
-                      aria-selected={draft.openai.mode === mode}
-                      className={`${styles.llmEndpointTab} ${
-                        draft.openai.mode === mode
-                          ? styles.llmEndpointTabActive
-                          : ""
-                      }`}
-                      onClick={() => updateProviderFields("openai", { mode })}
-                    >
-                      {mode === "responses"
-                        ? "Responses API"
-                        : "Chat Completions"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
 
             {draft.provider === "google" ? (
               <button
@@ -1324,181 +1607,169 @@ function ServiceDetail({
               </button>
             ) : null}
 
-            {llmComingSoon ? (
-              <div className={styles.llmComingSoon}>
-                <strong>coming soon</strong>
-              </div>
-            ) : (
-              <div className={styles.llmSettingsFields}>
-                <label className={styles.llmSettingsField}>
-                  <span className={styles.llmSettingsControlTitle}>模型</span>
-                  <div
-                    className={styles.llmModelSelect}
-                    onBlur={(event) => {
-                      const nextTarget = event.relatedTarget;
-                      if (
-                        nextTarget instanceof Node &&
-                        event.currentTarget.contains(nextTarget)
-                      ) {
-                        return;
+            <div className={styles.llmSettingsFields}>
+              <label className={styles.llmSettingsField}>
+                <span className={styles.llmSettingsControlTitle}>模型</span>
+                <div
+                  className={styles.llmModelSelect}
+                  onBlur={(event) => {
+                    const nextTarget = event.relatedTarget;
+                    if (
+                      nextTarget instanceof Node &&
+                      event.currentTarget.contains(nextTarget)
+                    ) {
+                      return;
+                    }
+                    setModelDropdownOpen(false);
+                  }}
+                >
+                  <button
+                    type="button"
+                    className={`${styles.llmModelSelectButton} ${
+                      !activeFields.model
+                        ? styles.llmModelSelectPlaceholder
+                        : ""
+                    } ${
+                      modelDropdownOpen ? styles.llmModelSelectButtonOpen : ""
+                    }`}
+                    aria-haspopup="listbox"
+                    aria-expanded={modelDropdownOpen}
+                    onClick={() => setModelDropdownOpen((current) => !current)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        setModelDropdownOpen(false);
+                        event.currentTarget.blur();
                       }
-                      setModelDropdownOpen(false);
                     }}
                   >
-                    <button
-                      type="button"
-                      className={`${styles.llmModelSelectButton} ${
-                        !activeFields.model
-                          ? styles.llmModelSelectPlaceholder
-                          : ""
-                      } ${
-                        modelDropdownOpen ? styles.llmModelSelectButtonOpen : ""
-                      }`}
-                      aria-haspopup="listbox"
-                      aria-expanded={modelDropdownOpen}
-                      onClick={() =>
-                        setModelDropdownOpen((current) => !current)
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === "Escape") {
-                          setModelDropdownOpen(false);
-                          event.currentTarget.blur();
-                        }
-                      }}
+                    <span>{activeFields.model || "选择模型"}</span>
+                    <ChevronDown aria-hidden="true" />
+                  </button>
+                  {modelDropdownOpen ? (
+                    <div
+                      className={styles.llmModelSelectMenu}
+                      role="listbox"
+                      aria-label="选择模型"
                     >
-                      <span>{activeFields.model || "选择模型"}</span>
-                      <ChevronDown aria-hidden="true" />
-                    </button>
-                    {modelDropdownOpen ? (
-                      <div
-                        className={styles.llmModelSelectMenu}
-                        role="listbox"
-                        aria-label="选择模型"
-                      >
-                        {models.map((model) => (
-                          <button
-                            key={model}
-                            type="button"
-                            role="option"
-                            aria-selected={activeFields.model === model}
-                            className={`${styles.llmModelSelectOption} ${
-                              activeFields.model === model
-                                ? styles.llmModelSelectOptionActive
-                                : ""
-                            }`}
-                            onClick={() => {
-                              updateActiveFields({ model });
-                              setModelDropdownOpen(false);
-                            }}
-                          >
-                            <span>{model}</span>
-                            {activeFields.model === model ? (
-                              <Check aria-hidden="true" />
-                            ) : null}
-                          </button>
-                        ))}
-                        <span
-                          className={`${styles.llmModelSelectOption} ${styles.llmModelSelectOptionDisabled}`}
+                      {models.map((model) => (
+                        <button
+                          key={model}
+                          type="button"
                           role="option"
-                          aria-selected="false"
-                          aria-disabled="true"
+                          aria-selected={activeFields.model === model}
+                          className={`${styles.llmModelSelectOption} ${
+                            activeFields.model === model
+                              ? styles.llmModelSelectOptionActive
+                              : ""
+                          }`}
+                          onClick={() => {
+                            updateActiveFields({ model });
+                            setModelDropdownOpen(false);
+                          }}
                         >
-                          <span>更多模型敬请期待</span>
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
-                </label>
+                          <span>{model}</span>
+                          {activeFields.model === model ? (
+                            <Check aria-hidden="true" />
+                          ) : null}
+                        </button>
+                      ))}
+                      <span
+                        className={`${styles.llmModelSelectOption} ${styles.llmModelSelectOptionDisabled}`}
+                        role="option"
+                        aria-selected="false"
+                        aria-disabled="true"
+                      >
+                        <span>更多模型敬请期待</span>
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              </label>
 
-                {draft.provider === "google" && draft.google.useVertexAi ? (
-                  <>
-                    <ServiceField
-                      title="项目"
-                      hint="填写 Google Cloud 项目 ID"
-                      value={draft.google.project}
-                      placeholder="my-gcp-project"
-                      onChange={(project) =>
-                        updateProviderFields("google", { project })
-                      }
-                    />
-                    <ServiceField
-                      title="区域"
-                      hint="填写 Vertex AI 区域"
-                      value={draft.google.location}
-                      placeholder="global"
-                      onChange={(location) =>
-                        updateProviderFields("google", { location })
-                      }
-                    />
-                    <ServiceField
-                      title="凭据 JSON"
-                      value={draft.google.credentialsFile}
-                      placeholder={VERTEX_CREDENTIALS_JSON_PLACEHOLDER}
-                      multiline
-                      rows={5}
-                      onChange={(credentialsFile) =>
-                        updateProviderFields("google", { credentialsFile })
-                      }
-                    />
-                  </>
-                ) : (
-                  <>
-                    <ServiceField
-                      title="Base URL"
-                      value={activeFields.baseUrl}
-                      placeholder={
-                        draft.provider === "google"
-                          ? "https://generativelanguage.googleapis.com"
-                          : draft.provider === "openai"
-                            ? "https://api.openai.com/v1"
-                            : "https://api.anthropic.com"
-                      }
-                      onChange={(baseUrl) => updateActiveFields({ baseUrl })}
-                    />
-                    <ServiceField
-                      title="ApiKey"
-                      value={activeFields.apiKey}
-                      placeholder={API_KEY_PLACEHOLDERS[draft.provider]}
-                      onChange={(apiKey) => updateActiveFields({ apiKey })}
-                    />
-                  </>
-                )}
-              </div>
-            )}
+              {draft.provider === "google" && draft.google.useVertexAi ? (
+                <>
+                  <ServiceField
+                    title="项目"
+                    hint="填写 Google Cloud 项目 ID"
+                    value={draft.google.project}
+                    placeholder="my-gcp-project"
+                    onChange={(project) =>
+                      updateProviderFields("google", { project })
+                    }
+                  />
+                  <ServiceField
+                    title="区域"
+                    hint="填写 Vertex AI 区域"
+                    value={draft.google.location}
+                    placeholder="global"
+                    onChange={(location) =>
+                      updateProviderFields("google", { location })
+                    }
+                  />
+                  <ServiceField
+                    title="凭据 JSON"
+                    value={draft.google.credentialsFile}
+                    placeholder={VERTEX_CREDENTIALS_JSON_PLACEHOLDER}
+                    multiline
+                    rows={5}
+                    onChange={(credentialsFile) =>
+                      updateProviderFields("google", { credentialsFile })
+                    }
+                  />
+                </>
+              ) : (
+                <>
+                  <ServiceField
+                    title="Base URL"
+                    value={activeFields.baseUrl}
+                    placeholder={
+                      draft.provider === "google"
+                        ? "https://generativelanguage.googleapis.com"
+                        : "https://api.openai.com/v1"
+                    }
+                    onChange={(baseUrl) => updateActiveFields({ baseUrl })}
+                  />
+                  <ServiceField
+                    title="ApiKey"
+                    value={activeFields.apiKey}
+                    placeholder={EMBEDDING_API_KEY_PLACEHOLDERS[draft.provider]}
+                    onChange={(apiKey) => updateActiveFields({ apiKey })}
+                  />
+                </>
+              )}
+            </div>
           </section>
 
-          {!llmComingSoon ? (
-            <button
-              type="button"
-              className={`${styles.llmTestButton} ${
-                status === "success" ? styles.llmTestButtonSuccess : ""
-              } ${status === "error" ? styles.llmTestButtonError : ""}`}
-              disabled={isTesting}
-              onClick={() => {
-                void onTestConnection();
-              }}
-            >
-              {isTesting ? (
-                <LoaderCircle aria-hidden="true" />
-              ) : status === "success" ? (
-                <Check aria-hidden="true" />
-              ) : status === "error" ? (
-                <X aria-hidden="true" />
-              ) : null}
-              <span>
-                {isTesting
-                  ? "正在测试连接"
-                  : status === "success"
-                    ? "Succeed"
-                    : status === "error"
-                      ? feedback?.code === "CLIENT_VALIDATION" ||
-                        feedback?.code === "UNSUPPORTED"
-                        ? (feedback.summary ?? "配置错误")
-                        : "Failed"
-                      : "测试连接状态"}
-              </span>
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className={`${styles.llmTestButton} ${
+              status === "success" ? styles.llmTestButtonSuccess : ""
+            } ${status === "error" ? styles.llmTestButtonError : ""}`}
+            disabled={isTesting}
+            onClick={() => {
+              void onTestConnection();
+            }}
+          >
+            {isTesting ? (
+              <LoaderCircle aria-hidden="true" />
+            ) : status === "success" ? (
+              <Check aria-hidden="true" />
+            ) : status === "error" ? (
+              <X aria-hidden="true" />
+            ) : null}
+            <span>
+              {isTesting
+                ? "正在测试连接"
+                : status === "success"
+                  ? "Succeed"
+                  : status === "error"
+                    ? feedback?.code === "CLIENT_VALIDATION" ||
+                      feedback?.code === "UNSUPPORTED"
+                      ? (feedback.summary ?? "配置错误")
+                      : "Failed"
+                    : "测试连接状态"}
+            </span>
+          </button>
 
           {status === "error" && feedback ? (
             <div className={styles.llmErrorDetails} role="alert">
@@ -1517,7 +1788,6 @@ function ServiceDetail({
         dirty={dirty}
         isSaving={isSaving}
         isChecking={isTesting}
-        disabled={llmComingSoon}
         onSave={onSave}
       />
     </>

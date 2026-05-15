@@ -661,6 +661,20 @@
   stroke-width: 2.6;
 }
 
+.modelSelectGroup {
+  display: grid;
+  gap: 4px;
+}
+
+.modelSelectGroupLabel {
+  padding: 5px 10px 2px;
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .modelSelectOption:hover,
 .modelSelectOption:focus-visible {
   background: color-mix(in srgb, var(--surface-hover) 72%, transparent);

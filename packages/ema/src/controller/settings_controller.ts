@@ -10,16 +10,36 @@ import { LLMClient, resolveLLMModelConfig, RetryConfig } from "../agent_hub";
 import { EmbeddingClient } from "../memory/embedding_client";
 import type { UsageMetadata } from "../agent_hub/schema";
 import { isTextItem } from "../agent_hub/utils";
+import { listLLMModelDefinitions } from "../agent_hub/models";
 import type { Server } from "../server";
 import type {
   EffectiveActorSettings,
   EmbeddingProbeResult,
+  LlmModelOption,
   LlmProbeResult,
   SaveGlobalEmbeddingConfigResult,
 } from "./types";
 
 export class SettingsController {
   constructor(private readonly server: Server) {}
+
+  listLlmModels(): LlmModelOption[] {
+    return listLLMModelDefinitions().map((definition) => ({
+      model: definition.model,
+      provider: definition.provider,
+      defaultBaseUrl: definition.defaultBaseUrl,
+      capabilities: {
+        thinkingLevels: [...definition.capabilities.thinkingLevels],
+        tools: definition.capabilities.tools,
+        images: definition.capabilities.images,
+      },
+      requestDefaults: {
+        ...(definition.requestDefaults.thinkingLevel !== undefined
+          ? { thinkingLevel: definition.requestDefaults.thinkingLevel }
+          : {}),
+      },
+    }));
+  }
 
   async getEffective(actorId: number): Promise<EffectiveActorSettings> {
     return {
