@@ -41,7 +41,7 @@ Ema 当前支持 macOS、Linux 与 Windows。运行 Ema 至少需要：
 ### 1. 下载安装包
 
 > [!NOTE]
-> 在 Ema 没有正式发布 Release 版本之前，请参考[安装文档](https://github.com/EmaFanClub/EverMemoryArchive/blob/dev/docs/installation.md)进行安装。
+> 在 Ema 没有正式发布 Release 版本之前，请参考[安装文档](docs/installation.md)进行安装。
 
 打开 GitHub Release 页面：https://github.com/EmaFanClub/EverMemoryArchive/releases
 
