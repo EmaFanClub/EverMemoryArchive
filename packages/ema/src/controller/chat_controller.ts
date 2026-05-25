@@ -69,6 +69,9 @@ export class ChatController {
     if (!message) {
       return null;
     }
+    if (isKeepSilenceMessage(message)) {
+      return null;
+    }
     const conversation =
       await this.server.dbService.conversationDB.getConversation(
         conversationId,
@@ -146,10 +149,15 @@ export class ChatController {
           sort: "asc",
         },
       );
+    const visibleMessages = allMessages.filter(
+      (message) => !isKeepSilenceMessage(message),
+    );
     const filtered =
       typeof input.beforeMsgId === "number"
-        ? allMessages.filter((message) => message.msgId < input.beforeMsgId!)
-        : allMessages;
+        ? visibleMessages.filter(
+            (message) => message.msgId < input.beforeMsgId!,
+          )
+        : visibleMessages;
     const messages = filtered.slice(-limit);
     const firstMsgId = messages[0]?.msgId;
     const hasMore =
@@ -296,6 +304,9 @@ export class ChatController {
     conversation: ConversationEntity,
     message: ConversationMessageEntity,
   ): Promise<void> {
+    if (isKeepSilenceMessage(message)) {
+      return;
+    }
     if (resolveSession(conversation.session)?.channel !== "web") {
       return;
     }
@@ -311,6 +322,12 @@ export class ChatController {
       }),
     );
   }
+}
+
+function isKeepSilenceMessage(message: ConversationMessageEntity): boolean {
+  return (
+    message.message.kind === "actor" && message.message.keep_silence === true
+  );
 }
 
 export function previewFromContents(contents: InputContent[]): string {

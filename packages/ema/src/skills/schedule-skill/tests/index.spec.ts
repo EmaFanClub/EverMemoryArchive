@@ -15,6 +15,12 @@ function createServerWithScheduler(
     getActorScheduler: vi.fn().mockReturnValue(scheduler),
     dbService: {
       conversationDB: {
+        getConversation: vi.fn(
+          async (conversationId: number) =>
+            conversations.find(
+              (conversation) => conversation.id === conversationId,
+            ) ?? null,
+        ),
         getConversationByActorAndSession: vi.fn(
           async (actorId: number, session: string) =>
             conversations.find(
@@ -44,6 +50,7 @@ describe("schedule-skill", () => {
             task: "chat",
             runAt: "2026-04-20 08:30:00",
             session: "web-chat-1",
+            summary: "明早问候",
             prompt: "明早主动打个招呼。",
           },
         ],
@@ -63,6 +70,7 @@ describe("schedule-skill", () => {
         task: "chat",
         runAt: expect.any(Number),
         conversationId: 12,
+        summary: "明早问候",
         prompt: "明早主动打个招呼。",
       },
     ]);
@@ -109,6 +117,59 @@ describe("schedule-skill", () => {
     });
   });
 
+  test("focuses a proactive conversation by session", async () => {
+    const add = vi.fn().mockResolvedValue({
+      added: [
+        {
+          id: "focus-1",
+          type: "every",
+          task: "focus",
+          conversationId: 12,
+          nextRunAt: "2026-04-20 08:35:00",
+          lastRunAt: null,
+          interval: 300_000,
+          prompt: "",
+          addition: {},
+        },
+      ],
+    });
+    const skill = new ScheduleSkill(".", "schedule-skill");
+
+    const result = await skill.execute(
+      {
+        action: "focus",
+        session: "web-chat-1",
+      },
+      {
+        actorId: 1,
+        server: createServerWithScheduler({ add }, [
+          { id: 12, session: "web-chat-1", allowProactive: true },
+        ]) as any,
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(add).toHaveBeenCalledWith([
+      {
+        task: "focus",
+        conversationId: 12,
+      },
+    ]);
+    expect(JSON.parse(result.content!)).toEqual({
+      focused: [
+        {
+          id: "focus-1",
+          type: "every",
+          task: "focus",
+          session: "web-chat-1",
+          nextRunAt: "2026-04-20 08:35:00",
+          lastRunAt: null,
+          interval: 300_000,
+        },
+      ],
+    });
+  });
+
   test("parses recurring activity with runAt plus interval milliseconds", async () => {
     const add = vi.fn().mockResolvedValue({
       added: [
@@ -133,6 +194,7 @@ describe("schedule-skill", () => {
             task: "activity",
             runAt: "2026-04-20 08:30:00",
             interval: 60_000,
+            summary: "每分钟记录状态",
             prompt: "每隔一分钟记录一次状态。",
           },
         ],
@@ -150,6 +212,7 @@ describe("schedule-skill", () => {
         task: "activity",
         runAt: expect.any(Number),
         interval: 60_000,
+        summary: "每分钟记录状态",
         prompt: "每隔一分钟记录一次状态。",
       },
     ]);
@@ -191,6 +254,7 @@ describe("schedule-skill", () => {
             task: "chat",
             interval: "0 9 * * *",
             session: "web-chat-1",
+            summary: "每天上午问候",
             prompt: "每天上午问候一下。",
           },
         ],
@@ -210,9 +274,62 @@ describe("schedule-skill", () => {
         task: "chat",
         interval: "0 9 * * *",
         conversationId: 12,
+        summary: "每天上午问候",
         prompt: "每天上午问候一下。",
       },
     ]);
+  });
+
+  test("parses schedule summary updates", async () => {
+    const update = vi.fn().mockResolvedValue({
+      updated: [
+        {
+          id: "job-1",
+          type: "once",
+          task: "activity",
+          runAt: "2026-04-20 08:30:00",
+          summary: "更新后的摘要",
+          prompt: "更新后的完整任务。",
+        },
+      ],
+    });
+    const skill = new ScheduleSkill(".", "schedule-skill");
+
+    const result = await skill.execute(
+      {
+        action: "update_schedules",
+        items: [
+          {
+            id: "job-1",
+            summary: "更新后的摘要",
+          },
+        ],
+      },
+      {
+        actorId: 1,
+        server: createServerWithScheduler({ update }) as any,
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(update).toHaveBeenCalledWith([
+      {
+        id: "job-1",
+        summary: "更新后的摘要",
+      },
+    ]);
+    expect(JSON.parse(result.content!)).toEqual({
+      updated: [
+        {
+          id: "job-1",
+          type: "once",
+          task: "activity",
+          runAt: "2026-04-20 08:30:00",
+          summary: "更新后的摘要",
+          prompt: "更新后的完整任务。",
+        },
+      ],
+    });
   });
 
   test("rejects recurring chat cron with runAt", async () => {
@@ -229,6 +346,7 @@ describe("schedule-skill", () => {
             runAt: "2026-04-20 08:30:00",
             interval: "0 9 * * *",
             session: "web-chat-1",
+            summary: "每天上午问候",
             prompt: "每天上午问候一下。",
           },
         ],
@@ -253,6 +371,7 @@ describe("schedule-skill", () => {
           task: "chat",
           runAt: "2026-04-20 08:30:00",
           conversationId: 12,
+          summary: "打招呼",
           prompt: "打个招呼。",
           addition: { overdue: true },
         },
@@ -271,6 +390,19 @@ describe("schedule-skill", () => {
           addition: {},
         },
       ],
+      focused: [
+        {
+          id: "focus-1",
+          type: "every",
+          task: "focus",
+          nextRunAt: "2026-04-21 08:10:00",
+          lastRunAt: null,
+          interval: 300_000,
+          conversationId: 12,
+          prompt: "",
+          addition: {},
+        },
+      ],
     });
     const skill = new ScheduleSkill(".", "schedule-skill");
 
@@ -278,7 +410,9 @@ describe("schedule-skill", () => {
       { action: "list_schedules" },
       {
         actorId: 1,
-        server: createServerWithScheduler({ list }) as any,
+        server: createServerWithScheduler({ list }, [
+          { id: 12, session: "web-chat-1", allowProactive: true },
+        ]) as any,
       },
     );
 
@@ -290,7 +424,8 @@ describe("schedule-skill", () => {
           type: "once",
           task: "chat",
           runAt: "2026-04-20 08:30:00",
-          conversationId: 12,
+          session: "web-chat-1",
+          summary: "打招呼",
           prompt: "打个招呼。",
         },
       ],
@@ -303,6 +438,17 @@ describe("schedule-skill", () => {
           nextRunAt: "2026-04-21 08:00:00",
           lastRunAt: "2026-04-20 08:00:00",
           interval: "0 8 * * *",
+        },
+      ],
+      focused: [
+        {
+          id: "focus-1",
+          type: "every",
+          task: "focus",
+          session: "web-chat-1",
+          nextRunAt: "2026-04-21 08:10:00",
+          lastRunAt: null,
+          interval: 300_000,
         },
       ],
     });
@@ -319,6 +465,7 @@ describe("schedule-skill", () => {
             type: "once",
             task: "chat",
             runAt: "2026-04-20 08:30:00",
+            summary: "缺少 session",
             prompt: "缺少 session。",
           },
         ],
@@ -331,6 +478,32 @@ describe("schedule-skill", () => {
 
     expect(result.success).toBe(false);
     expect(result.content).toContain("session");
+  });
+
+  test("validates that chat schedules require summary", async () => {
+    const skill = new ScheduleSkill(".", "schedule-skill");
+
+    const result = await skill.execute(
+      {
+        action: "add_schedules",
+        items: [
+          {
+            type: "once",
+            task: "chat",
+            runAt: "2026-04-20 08:30:00",
+            session: "web-chat-1",
+            prompt: "缺少 summary。",
+          },
+        ],
+      },
+      {
+        actorId: 1,
+        server: createServerWithScheduler({ add: vi.fn() }) as any,
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.content).toContain("summary");
   });
 
   test("rejects chat schedules for unknown sessions", async () => {
@@ -346,6 +519,7 @@ describe("schedule-skill", () => {
             task: "chat",
             runAt: "2026-04-20 08:30:00",
             session: "qq-group-missing",
+            summary: "找不到会话",
             prompt: "找不到会话。",
           },
         ],
@@ -374,9 +548,32 @@ describe("schedule-skill", () => {
             task: "chat",
             runAt: "2026-04-20 08:30:00",
             session: "qq-group-123456",
+            summary: "主动问候",
             prompt: "主动问候。",
           },
         ],
+      },
+      {
+        actorId: 1,
+        server: createServerWithScheduler({ add }, [
+          { id: 12, session: "qq-group-123456", allowProactive: false },
+        ]) as any,
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.content).toContain("does not allow proactive chat");
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  test("rejects focus when proactive chat is disabled", async () => {
+    const add = vi.fn();
+    const skill = new ScheduleSkill(".", "schedule-skill");
+
+    const result = await skill.execute(
+      {
+        action: "focus",
+        session: "qq-group-123456",
       },
       {
         actorId: 1,

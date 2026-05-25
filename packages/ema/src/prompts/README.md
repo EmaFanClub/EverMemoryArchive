@@ -24,9 +24,7 @@ prompts/
 │   ├── foreground.md
 │   │   前台聊天使用的 system prompt 模板
 │   ├── background.md
-│   │   无绑定对话的后台执行使用的 system prompt 模板
-│   ├── background-conversation.md
-│   │   对话整理后台执行使用的 system prompt 模板
+│   │   后台执行使用的 system prompt 模板
 │   └── partials/
 │       ├── preamble.md
 │       │   基础身份和存在形式
@@ -43,7 +41,7 @@ prompts/
 │       ├── memory.md
 │       │   长短期记忆上下文
 │       ├── conversation.md
-│       │   当前对话场景和近期对话窗口
+│       │   会话列表、当前会话和近期对话窗口
 │       └── schedule.md
 │           日程上下文和日程使用规则
 └── task_prompt/
@@ -90,7 +88,7 @@ prompts/
 
 ---
 
-# 近期对话（Recent Conversation）
+# 对话（Conversation）
 
 ---
 
@@ -120,33 +118,7 @@ prompts/
 
 ---
 
-# 日程（Schedule）
-```
-
-`system_prompt/background-conversation.md` 展开后的主要章节顺序：
-
-```md
-# 前言（Preamble）
-
----
-
-# 系统（System）
-
----
-
-# 世界（World）
-
----
-
-# 你是谁（You）
-
----
-
-# 记忆（Memory）
-
----
-
-# 近期对话（Recent Conversation）
+# 对话（Conversation）
 
 ---
 
@@ -158,8 +130,7 @@ prompts/
 | 模板 | 进入方式 | 使用场景 |
 | --- | --- | --- |
 | `system_prompt/foreground.md` | system prompt | 前台聊天回复 |
-| `system_prompt/background.md` | system prompt | 无绑定对话的后台任务、训练回放等执行 |
-| `system_prompt/background-conversation.md` | system prompt | 需要读取近期对话窗口的后台执行，例如从对话整理活动记忆 |
+| `system_prompt/background.md` | system prompt | 后台任务、训练回放、对话整理等执行；是否注入当前会话窗口由运行时变量决定 |
 | `task_prompt/*.md` | task message | 一次具体任务执行的目标、流程和约束 |
 
 ## Loading
@@ -197,7 +168,8 @@ include 路径可以使用变量，例如 `system_prompt/partials/interaction-gu
 | `{SKILLS_METADATA}` | 当前可用工具和技能的摘要 | `system_prompt/partials/system.md` |
 | `{ROLE_PROMPT}` | 角色书内容 | `system_prompt/partials/you.md` |
 | `{PERSONALITY_MEMORY}` | 人格记忆 | `system_prompt/partials/you.md` |
-| `{CONVERSATION_DESCRIPTION}` | 当前对话场景描述；未配置描述时为 `None.` | `system_prompt/partials/conversation.md` |
+| `{CONVERSATIONS}` | 当前 actor 的会话列表；无会话时为 `None.` | `system_prompt/partials/conversation.md` |
+| `{CURRENT_CONVERSATION}` | 当前会话标题；无绑定会话时为 `None.` | `system_prompt/partials/conversation.md` |
 | `{CONVERSATION_WINDOW}` | 近期对话窗口；无近期消息时为 `None.` | `system_prompt/partials/conversation.md` |
 | `{MEMORY_YEAR}` | 年记 | `system_prompt/partials/memory.md` |
 | `{MEMORY_MONTH}` | 月记 | `system_prompt/partials/memory.md` |

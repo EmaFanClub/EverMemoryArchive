@@ -15,10 +15,17 @@ import type {
 } from "../db";
 import { Logger } from "../shared/logger";
 import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
-import { stringifyModelScheduleList } from "../scheduler/actor_scheduler";
+import type {
+  ActorScheduleItem,
+  ActorScheduleListResult,
+} from "../scheduler/actor_scheduler";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
 import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
-import { buildPromptFromBufferMessage, isActorChatInput } from "./utils";
+import {
+  buildPromptFromBufferMessage,
+  isActorChatInput,
+  isActorKeepSilenceResponse,
+} from "./utils";
 import { parseReplyRef, resolveSession } from "../channel";
 import type { Server } from "../server";
 import type { InlineDataItem, InputContent } from "../llm/schema";
@@ -35,13 +42,13 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   /** Number of pending buffered messages required before triggering a conversation activity update. */
   readonly diaryUpdateEvery = 20;
   /** Number of pending activities required before triggering a memory rollup. */
-  readonly activityRollupEvery = 20;
+  readonly activityRollupEvery = 7;
   /** Number of unprocessed day entries injected into chat prompts. */
   readonly dayWindowSize = 2;
   /** Number of unprocessed month entries injected into chat prompts. */
   readonly monthWindowSize = 2;
   /** Number of activity entries injected into chat prompts. */
-  readonly activityWindowSize = 30;
+  readonly activityWindowSize = 10;
   /** Conversation IDs currently running one conversation-to-activity update. */
   private readonly runningConversationActivities = new Set<number>();
   /** Actor IDs currently running one threshold-based activity-to-day rollup. */
@@ -83,7 +90,8 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     activityRecords?: ShortTermMemoryRecord[],
     bufferMessages?: BufferMessage[],
   ): Promise<{
-    conversationDescription: string;
+    conversationsText: string;
+    currentConversationText: string;
     bufferText: string;
     yearMemory: string;
     monthMemory: string;
@@ -98,6 +106,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       dayMemory,
       activityMemory,
       buffer,
+      conversationsText,
     ] = await Promise.all([
       this.server.dbService.conversationDB.getConversation(conversationId),
       this.buildYearMemoryPrompt(actorId),
@@ -107,6 +116,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       bufferMessages
         ? Promise.resolve(bufferMessages)
         : this.getBuffer(conversationId, this.bufferWindowSize),
+      this.buildConversationsPrompt(actorId),
     ]);
     if (!conversation) {
       throw new Error(`Conversation with ID ${conversationId} not found.`);
@@ -117,7 +127,8 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     }
     const ownerUid = await this.getOwnerUid(actorId, sessionInfo.channel);
     return {
-      conversationDescription: this.buildConversationDescription(conversation),
+      conversationsText,
+      currentConversationText: this.formatConversationTitle(conversation),
       bufferText:
         buffer.length === 0
           ? "None."
@@ -132,36 +143,34 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     };
   }
 
-  private buildConversationDescription(
-    conversation: Pick<ConversationEntity, "name" | "description">,
-  ): string {
-    const description = [conversation.name, conversation.description]
-      .map((value) => value?.trim() ?? "")
-      .filter((value) => value.length > 0)
-      .join("\n");
-    return description || "None.";
-  }
-
   private async getDetachedMemoryPromptValues(
     actorId: number,
     activityRecords?: ShortTermMemoryRecord[],
   ): Promise<{
-    conversationDescription: string;
+    conversationsText: string;
+    currentConversationText: string;
     bufferText: string;
     yearMemory: string;
     monthMemory: string;
     dayMemory: string;
     activityMemory: string;
   }> {
-    const [yearMemory, monthMemory, dayMemory, activityMemory] =
-      await Promise.all([
-        this.buildYearMemoryPrompt(actorId),
-        this.buildMonthMemoryPrompt(actorId),
-        this.buildDayMemoryPrompt(actorId),
-        this.buildActivityMemoryPrompt(actorId, activityRecords),
-      ]);
+    const [
+      yearMemory,
+      monthMemory,
+      dayMemory,
+      activityMemory,
+      conversationsText,
+    ] = await Promise.all([
+      this.buildYearMemoryPrompt(actorId),
+      this.buildMonthMemoryPrompt(actorId),
+      this.buildDayMemoryPrompt(actorId),
+      this.buildActivityMemoryPrompt(actorId, activityRecords),
+      this.buildConversationsPrompt(actorId),
+    ]);
     return {
-      conversationDescription: "None.",
+      conversationsText,
+      currentConversationText: "None.",
       bufferText: "None.",
       yearMemory,
       monthMemory,
@@ -178,7 +187,8 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       bufferMessages?: BufferMessage[];
     },
   ): Promise<{
-    conversationDescription: string;
+    conversationsText: string;
+    currentConversationText: string;
     bufferText: string;
     yearMemory: string;
     monthMemory: string;
@@ -199,16 +209,203 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     );
   }
 
-  private async buildSchedulePrompt(actorId: number): Promise<string> {
-    if (!this.server.scheduler) {
-      return stringifyModelScheduleList({
-        overdue: [],
-        upcoming: [],
-        recurring: [],
+  private async buildConversationsPrompt(actorId: number): Promise<string> {
+    const conversations =
+      await this.server.dbService.conversationDB.listConversations({
+        actorId,
       });
+    const lines: string[] = [];
+    for (const conversation of conversations.sort(
+      (left, right) => (left.id ?? 0) - (right.id ?? 0),
+    )) {
+      lines.push(
+        `- ${this.formatConversationTitle(conversation)}｜主动联系：${conversation.allowProactive === true ? "允许" : "禁止"}`,
+      );
+      const description = conversation.description?.trim();
+      if (description) {
+        lines.push(`  ${description}`);
+      }
+    }
+    return lines.length > 0 ? lines.join("\n") : "None.";
+  }
+
+  private formatConversationTitle(
+    conversation: Pick<ConversationEntity, "name" | "session">,
+  ): string {
+    const sessionInfo = resolveSession(conversation.session);
+    const typeText =
+      sessionInfo?.type === "group"
+        ? "群聊"
+        : sessionInfo?.type === "chat"
+          ? "私聊"
+          : "未知";
+    return `${conversation.name}｜${typeText}｜session：${conversation.session}`;
+  }
+
+  private async buildSchedulePrompt(actorId: number): Promise<string> {
+    const empty: ActorScheduleListResult = {
+      overdue: [],
+      upcoming: [],
+      recurring: [],
+      focused: [],
+    };
+    if (!this.server.scheduler) {
+      return this.formatScheduleListForPrompt(empty, new Map());
     }
     const listed = await this.server.getActorScheduler(actorId).list();
-    return stringifyModelScheduleList(listed);
+    const conversations = await this.buildScheduleConversationMap(listed);
+    return this.formatScheduleListForPrompt(listed, conversations);
+  }
+
+  private async buildScheduleConversationMap(
+    listed: ActorScheduleListResult,
+  ): Promise<Map<number, Pick<ConversationEntity, "name" | "session">>> {
+    const conversationIds = new Set<number>();
+    for (const item of [
+      ...listed.overdue,
+      ...listed.upcoming,
+      ...listed.recurring,
+      ...listed.focused,
+    ]) {
+      if (
+        (item.task === "chat" || item.task === "focus") &&
+        typeof item.conversationId === "number"
+      ) {
+        conversationIds.add(item.conversationId);
+      }
+    }
+
+    const entries = await Promise.all(
+      [...conversationIds].map(async (conversationId) => {
+        const conversation =
+          await this.server.dbService.conversationDB.getConversation(
+            conversationId,
+          );
+        return [conversationId, conversation] as const;
+      }),
+    );
+
+    const conversations = new Map<
+      number,
+      Pick<ConversationEntity, "name" | "session">
+    >();
+    for (const [conversationId, conversation] of entries) {
+      if (conversation) {
+        conversations.set(conversationId, conversation);
+      }
+    }
+    return conversations;
+  }
+
+  private formatScheduleListForPrompt(
+    listed: ActorScheduleListResult,
+    conversations: Map<number, Pick<ConversationEntity, "name" | "session">>,
+  ): string {
+    return [
+      "## 过时日程",
+      "",
+      this.formatScheduleGroup(listed.overdue, conversations),
+      "",
+      "## 未来日程",
+      "",
+      this.formatScheduleGroup(listed.upcoming, conversations),
+      "",
+      "## 周期日程",
+      "",
+      this.formatScheduleGroup(listed.recurring, conversations),
+      "",
+      "## 关注会话",
+      "",
+      this.formatScheduleGroup(listed.focused, conversations),
+    ].join("\n");
+  }
+
+  private formatScheduleGroup(
+    items: ActorScheduleItem[],
+    conversations: Map<number, Pick<ConversationEntity, "name" | "session">>,
+  ): string {
+    if (items.length === 0) {
+      return "None.";
+    }
+    return items
+      .map((item) => this.formatScheduleLine(item, conversations))
+      .join("\n");
+  }
+
+  private formatScheduleLine(
+    item: ActorScheduleItem,
+    conversations: Map<number, Pick<ConversationEntity, "name" | "session">>,
+  ): string {
+    const timeText =
+      item.type === "once" ? item.runAt : `下次 ${item.nextRunAt ?? "未知"}`;
+    if (item.task === "chat" || item.task === "focus") {
+      const segments = [
+        `id=${item.id}`,
+        timeText,
+        item.task,
+        this.formatScheduleConversationTarget(
+          item.conversationId,
+          conversations,
+        ),
+      ];
+      if (item.type === "every") {
+        segments.push(`周期：${this.formatScheduleInterval(item.interval)}`);
+      }
+      if (item.task === "focus") {
+        return `- ${segments.join("｜")}`;
+      }
+      segments.push(this.formatScheduleSummary(item));
+      return `- ${segments.join("｜")}`;
+    }
+    if (item.task === "activity") {
+      const segments = [`id=${item.id}`, timeText, item.task];
+      if (item.type === "every") {
+        segments.push(`周期：${this.formatScheduleInterval(item.interval)}`);
+      }
+      segments.push(this.formatScheduleSummary(item));
+      return `- ${segments.join("｜")}`;
+    }
+    const segments = [`id=${item.id}`, timeText, item.task];
+    if (item.type === "every") {
+      segments.push(`周期：${this.formatScheduleInterval(item.interval)}`);
+    }
+    return `- ${segments.join("｜")}`;
+  }
+
+  private formatScheduleConversationTarget(
+    conversationId: number | null,
+    conversations: Map<number, Pick<ConversationEntity, "name" | "session">>,
+  ): string {
+    if (typeof conversationId !== "number") {
+      return "session=未知";
+    }
+    const conversation = conversations.get(conversationId);
+    if (!conversation) {
+      return "session=未知";
+    }
+    return `session=${conversation.session}`;
+  }
+
+  private formatScheduleInterval(interval: string | number): string {
+    if (typeof interval !== "number") {
+      return interval;
+    }
+    if (interval > 0 && interval % 60_000 === 0) {
+      return `${interval / 60_000}min`;
+    }
+    return `${interval}ms`;
+  }
+
+  private formatScheduleSummary(item: ActorScheduleItem): string {
+    const summary = item.summary?.trim();
+    if (summary) {
+      return this.toSingleLine(summary);
+    }
+    const prompt = this.toSingleLine(item.prompt);
+    if (prompt === "None.") {
+      return "无摘要";
+    }
+    return prompt.length > 60 ? `${prompt.slice(0, 60)}...` : prompt;
   }
 
   private async getActorIdByConversation(
@@ -273,9 +470,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         this.buildSchedulePrompt(actorId),
       ]);
     return await this.server.promptStore.loadSystemPrompt(
-      typeof options?.conversationId === "number"
-        ? "background-conversation"
-        : "background",
+      "background",
       this.buildSystemPromptVariables(
         rolePrompt,
         personalityMemory,
@@ -289,7 +484,8 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     rolePrompt: string,
     personalityMemory: string,
     memoryValues: {
-      conversationDescription: string;
+      conversationsText: string;
+      currentConversationText: string;
       bufferText: string;
       yearMemory: string;
       monthMemory: string;
@@ -302,7 +498,8 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       SKILLS_METADATA: skillsPrompt,
       ROLE_PROMPT: rolePrompt,
       PERSONALITY_MEMORY: personalityMemory,
-      CONVERSATION_DESCRIPTION: memoryValues.conversationDescription,
+      CONVERSATIONS: memoryValues.conversationsText,
+      CURRENT_CONVERSATION: memoryValues.currentConversationText,
       MEMORY_YEAR: memoryValues.yearMemory,
       MEMORY_MONTH: memoryValues.monthMemory,
       MEMORY_DAY: memoryValues.dayMemory,
@@ -553,6 +750,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         ...(message.think && message.think.length > 0
           ? { think: message.think }
           : {}),
+        ...(message.keep_silence ? { keep_silence: true as const } : {}),
         time: item.createdAt ?? Date.now(),
       };
     });
@@ -565,46 +763,59 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   async persistChatMessage(message: BufferWriteMessage): Promise<void> {
     const conversationId = message.conversationId;
     const actorId = await this.getActorIdByConversation(conversationId);
-    const payload = isActorChatInput(message)
-      ? {
-          kind: "user" as const,
-          msgId: message.msgId,
-          uid: message.speaker.uid,
-          name: message.speaker.name,
-          ...(message.replyTo ? { replyTo: message.replyTo } : {}),
-          contents: message.inputs,
-        }
-      : {
-          kind: "actor" as const,
-          msgId: message.msgId,
-          name: await this.getActorDisplayName(actorId),
-          ...(() => {
-            const replyTo = message.ema_reply.reply_to
-              ? parseReplyRef(message.ema_reply.reply_to)
-              : null;
-            return replyTo ? { replyTo } : {};
-          })(),
-          contents:
-            message.ema_reply.kind === "sticker"
-              ? await this.buildStickerReplyContents(message.ema_reply)
-              : [
-                  ...(message.ema_reply.mention_uids ?? []).map((uid) => ({
-                    type: "text" as const,
-                    text: `@(${uid})`,
-                  })),
-                  {
-                    type: "text" as const,
-                    text: message.ema_reply.content,
-                  },
-                ],
-          think: message.ema_reply.think,
-        };
+    let payload;
+    let channelMessageId: string | undefined;
+    if (isActorChatInput(message)) {
+      payload = {
+        kind: "user" as const,
+        msgId: message.msgId,
+        uid: message.speaker.uid,
+        name: message.speaker.name,
+        ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+        contents: message.inputs,
+      };
+      channelMessageId = message.channelMessageId;
+    } else if (isActorKeepSilenceResponse(message)) {
+      payload = {
+        kind: "actor" as const,
+        msgId: message.msgId,
+        name: await this.getActorDisplayName(actorId),
+        contents: [],
+        think: message.think,
+        keep_silence: true as const,
+      };
+    } else {
+      payload = {
+        kind: "actor" as const,
+        msgId: message.msgId,
+        name: await this.getActorDisplayName(actorId),
+        ...(() => {
+          const replyTo = message.ema_reply.reply_to
+            ? parseReplyRef(message.ema_reply.reply_to)
+            : null;
+          return replyTo ? { replyTo } : {};
+        })(),
+        contents:
+          message.ema_reply.kind === "sticker"
+            ? await this.buildStickerReplyContents(message.ema_reply)
+            : [
+                ...(message.ema_reply.mention_uids ?? []).map((uid) => ({
+                  type: "text" as const,
+                  text: `@(${uid})`,
+                })),
+                {
+                  type: "text" as const,
+                  text: message.ema_reply.content,
+                },
+              ],
+        ...(message.ema_reply.think ? { think: message.ema_reply.think } : {}),
+      };
+      channelMessageId = `${message.conversationId}:${message.msgId}`;
+    }
     await this.server.dbService.conversationMessageDB.addConversationMessage({
       conversationId,
       actorId,
-      channelMessageId: isActorChatInput(message)
-        ? message.channelMessageId
-        : `${message.conversationId}:${message.msgId}`,
+      ...(channelMessageId ? { channelMessageId } : {}),
       buffered: false,
       message: payload,
       createdAt: message.time,

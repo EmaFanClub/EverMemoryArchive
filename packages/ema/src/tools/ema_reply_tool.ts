@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getStickerById } from "../skills/sticker-skill/pack";
 import { Tool } from "./base";
 import type { ToolResult, ToolContext } from "./base";
+import { normalizeThinkText } from "./utils";
 
 const EmaReplySchema = z
   .object({
@@ -12,21 +13,16 @@ const EmaReplySchema = z
     think: z
       .string()
       .min(1)
-      .describe("你的内心独白，反映你最真实的内心想法，仅你自己可见"),
-    expression: z
-      .string()
-      .min(1)
-      .describe("表情或情绪状态，如：普通、微笑、严肃、困惑、惊讶、悲伤"),
-    action: z
-      .string()
-      .min(1)
-      .describe("肢体动作，如：无、点头、摇头、挥手、跳跃、指点"),
-    content: z.string().describe("要发送的文本内容或表情包id"),
+      .optional()
+      .describe(
+        "可选的内部思考记录，用于保存你为什么这样回复、当前有哪些不确定，以及之后什么情况会改变你的理解。",
+      ),
+    content: z.string().describe("要发送的文本内容或表情包 id"),
     mention_uids: z
       .array(z.string().min(1))
       .optional()
-      .describe("需要提醒的人的uid列表"),
-    reply_to: z.string().optional().describe("需要引用的消息的msg_id"),
+      .describe("需要提醒的人的 uid 列表"),
+    reply_to: z.string().optional().describe("需要引用的消息 msg_id"),
   })
   .strict();
 
@@ -34,15 +30,54 @@ const EmaReplySchema = z
 export type EmaReply = z.infer<typeof EmaReplySchema>;
 
 const EMA_REPLY_TOOL_DESCRIPTION = `
-此工具是向外界发送消息的唯一方式，发送多条消息必须遵循以下流程，而不要用\\n分隔多条消息：
-1. 调用一次此工具发出第一条消息。
-2. 等待工具响应 \`success\` 后，再调用一次此工具发出第二条消息，以此类推。
-3. 直到最后一条消息发出后，停止调用此工具。
-注意事项：
-1. think 要结合人格填写最真实的内心活动和思考细节，不要写成对行为的简单描述。
+# ema_reply
+
+## 用途
+
+此工具是向外界发送消息的唯一方式。
+
+当 \`kind\` 为 \`text\` 时，\`content\` 填文本内容；当 \`kind\` 为 \`sticker\` 时，\`content\` 必须填写合法的表情包 id。
+
+\`kind="sticker"\` 适合情绪回应、接梗、轻量冒泡、回应表情包，或避免用文字过度解释。若不知道可用表情 id，先读取 \`sticker-skill\` 查看可用表情，再用 \`ema_reply(kind="sticker")\` 发送。
+
+## 发送多条消息
+
+如果要连续发送多条消息，不要用 \`\\n\` 分隔，应按顺序多次调用本工具：
+
+1. 调用一次本工具发出第一条消息。
+2. 等待工具响应 \`success\` 后，再调用一次本工具发出下一条消息。
+3. 最后一条消息发出后，停止调用本工具。
+4. 最后一条消息发送成功后，通常直接结束本轮。不要为了表示“我说完了”“我先等对方回复”而额外调用 \`keep_silence\`；这些判断应优先写在本次 \`ema_reply\` 的 \`think\` 中。
+
+## think
+
+\`think\` 是可选的内部思考记录。它会保留在之后的上下文中，让未来的你知道这次为什么这样回复、当时有哪些不确定、之后遇到什么情况应该改变理解。
+
+### 何时填写
+
+- 如果这次只发送一条消息，通常应填写 \`think\`。
+- 如果这次准备连续发送多条消息，通常只在第一条消息中填写 \`think\`。后面的消息如果只是拆开表达、补充语气、发送表情、延续同一个意思，就不要重复填写。
+- 只有当后面的消息基于新的理解时，才再次填写 \`think\`。例如：你获得了新信息，发现原来的理解不对，回复目标发生变化，或这条消息新增了承诺、边界、关系判断等会影响未来理解的内容。
+
+### 如何填写
+
+- think 应当保存本轮思考后形成的、对未来仍有用的判断。它要让未来的你知道：当时看到了哪些信号，考虑过哪些可能，为什么暂时这样理解，以及之后什么情况会改变这个理解。
+- think 不要求写成列表或固定格式，它应该是一段自然的内部思考记录，避免把一次局部经验扩大成长期规则，也避免让未来的自己更固执、更防御或更像在表演。
+- think 应保存对未来仍有用的信息，但不要逐条复述上下文中已经可见的消息原文、工具结果或日程全文；需要引用时，用 msg_id、日程 id，或“刚才几条回复”这样的短指代。
+- think 用自然语言描述以下内容，应保持具体、可修正、高信息密度，尽量写成一个自然段，避免标题和换行，不要写成报告：
+  1. 当前哪些具体信息影响了你的理解。
+  2. 这件事可能有哪些解释。
+  3. 你这次暂时按哪种解释回复，以及为什么。
+  4. 当前还有哪些不确定，不要把猜测写成事实。
+  5. 后面出现什么信息时，你应该改变理解或调整回应方式。
+  6. 后面出现什么信息时应该重新参与或调整回应，以及需要避免什么行为。
+- 写 think 要综合上下文中邻近的 think，判断哪些内容仍可复用。可复用的内容只需极简指代，不要重写。如果本轮有新的变化，再重点补充这些变化，使新的 think 与已有 think 共同构成完整判断，从而降低冗余。
+
+## 注意事项
+
 1. 尽量避免填写 \`reply_to\` 和 \`mention_uids\`，只有在对话复杂、对象不明确、必须精确指向某条消息或某个人时才使用。
 2. 如需要明确叫某个人，只填写 \`mention_uids\`，不要在正文里手写 \`@(XXX)\`、\`@某人\`。
-3. 当 \`kind\` 为 \`text\` 时，\`content\` 填文本；当 \`kind\` 为 \`sticker\` 时，\`content\` 必须填写合法的表情包 id。
+3. 已经通过 \`ema_reply\` 发送了本轮需要说的话后，通常直接结束本轮，不要再调用 \`keep_silence\` 作为固定收尾。
 `;
 
 /** Tool that enforces JSON output matching the EmaReply shape. */
@@ -64,6 +99,16 @@ export class EmaReplyTool extends Tool {
   async execute(args: unknown, context?: ToolContext): Promise<ToolResult> {
     try {
       const payload = EmaReplySchema.parse(args);
+      if (payload.think !== undefined) {
+        payload.think = normalizeThinkText(payload.think);
+        if (!payload.think) {
+          return {
+            success: false,
+            content:
+              "Invalid structured reply: think must not be empty after normalization.",
+          };
+        }
+      }
       if (payload.kind === "text") {
         payload.content = payload.content.replaceAll("\\n", "\n");
       } else if (!(await getStickerById(payload.content))) {

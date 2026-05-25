@@ -55,10 +55,16 @@ export function isActorChatResponse(
   return "ema_reply" in message;
 }
 
+export function isActorKeepSilenceResponse(
+  message: BufferWriteMessage,
+): message is Extract<BufferWriteMessage, { kind: "keep_silence" }> {
+  return message.kind === "keep_silence";
+}
+
 export function isActorChatInput(
   message: BufferWriteMessage,
 ): message is Extract<BufferWriteMessage, { speaker: unknown }> {
-  return !isActorChatResponse(message);
+  return "speaker" in message;
 }
 
 /**
@@ -80,10 +86,14 @@ export function buildPromptFromBufferMessage(
     if (message.replyTo) {
       metadata.push(`reply_to="${formatReplyRef(message.replyTo)}"`);
     }
+    if (message.keep_silence) {
+      metadata.push(`action="keep_silence"`);
+    }
     if (message.think && message.think.length > 0) {
       metadata.push(`think="${message.think}"`);
     }
-    return `- [${formatTimestamp("YYYY-MM-DD HH:mm:ss", message.time)}][${metadata.join(" ")}] ${contents}`;
+    const prefix = `- [${formatTimestamp("YYYY-MM-DD HH:mm:ss", message.time)}][${metadata.join(" ")}]`;
+    return message.keep_silence && !contents ? prefix : `${prefix} ${contents}`;
   }
   const userMessage = message as BufferUserMessage;
   const speaker =

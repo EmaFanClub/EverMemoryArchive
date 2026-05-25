@@ -481,9 +481,6 @@ describe("NapCatQQAdapter", () => {
         session: "qq-chat-12345",
         ema_reply: {
           kind: "text",
-          think: "",
-          expression: "普通",
-          action: "无",
           content: "你好",
         },
         time: 1,
@@ -505,9 +502,6 @@ describe("NapCatQQAdapter", () => {
         session: "qq-group-54321",
         ema_reply: {
           kind: "text",
-          think: "",
-          expression: "普通",
-          action: "无",
           content: "大家好",
         },
         time: 1,
@@ -533,9 +527,6 @@ describe("NapCatQQAdapter", () => {
         session: "qq-chat-12345",
         ema_reply: {
           kind: "sticker",
-          think: "",
-          expression: "开心",
-          action: "比心",
           content: "ZmFrZS1zdGlja2Vy",
         },
         time: 1,

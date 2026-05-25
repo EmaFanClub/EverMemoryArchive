@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import { Agent, checkCompleteMessages } from "../agent";
 import type { LLMClient } from "../../llm";
 import type { Message } from "../../llm/schema";
+import { KeepSilenceTool } from "../../tools/keep_silence_tool";
 
 describe("Agent helpers", () => {
   test("checkCompleteMessages returns true for final text response", () => {
@@ -110,5 +111,62 @@ describe("Agent helpers", () => {
       { role: "user", contents: [{ type: "text", text: "hi" }] },
     ]);
     expect(generate.mock.calls[0]?.[0].signal?.aborted).toBe(true);
+  });
+
+  test("emits keep silence and completes the run after keep_silence", async () => {
+    const messages: Message[] = [
+      { role: "user", contents: [{ type: "text", text: "hi" }] },
+    ];
+    const generate = vi
+      .fn()
+      .mockResolvedValueOnce({
+        role: "model",
+        contents: [
+          {
+            type: "tool_call",
+            toolCallId: "call-1",
+            name: "keep_silence",
+            arguments: {
+              think:
+                "这轮没有明确需要我接话的内容，先停住；如果用户继续追问，再进入具体回应。",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        role: "model",
+        contents: [{ type: "text", text: "done" }],
+      });
+    const llm = {
+      setRetryCallback: vi.fn(),
+      generate,
+    } as unknown as LLMClient;
+    const agent = new Agent(llm);
+    const keepSilenceEvents: unknown[] = [];
+    (agent.events as any).on("keepSilenceReceived", (event: unknown) => {
+      keepSilenceEvents.push(event);
+    });
+
+    await agent.runWithState({
+      systemPrompt: "system prompt",
+      messages,
+      tools: [new KeepSilenceTool()],
+    });
+
+    expect(keepSilenceEvents).toEqual([
+      {
+        think:
+          "这轮没有明确需要我接话的内容，先停住；如果用户继续追问，再进入具体回应。",
+      },
+    ]);
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(
+      messages.some(
+        (message) =>
+          message.role === "user" &&
+          message.contents.some((content) => content.type === "tool_result"),
+      ),
+    ).toBe(false);
+    expect(checkCompleteMessages(messages)).toBe(true);
   });
 });

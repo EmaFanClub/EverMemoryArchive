@@ -13,8 +13,6 @@ function createResponse(session: string): ActorChatResponse {
     ema_reply: {
       kind: "text",
       think: "thinking",
-      expression: "普通",
-      action: "无",
       content: "你好",
     },
   };

@@ -3,7 +3,7 @@ import { countApproxTextLength, Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
 import { Logger } from "../../shared/logger";
 
-const PERSONALITY_MAX_LENGTH = 300;
+const PERSONALITY_MAX_LENGTH = 500;
 
 const UpdatePersonalitySchema = z
   .object({
@@ -13,7 +13,7 @@ const UpdatePersonalitySchema = z
 
 export default class UpdatePersonalitySkill extends Skill {
   description =
-    "该技能用于更新当前角色的第一人称人格自述，用于 ActGuiding 中的“人格”部分。";
+    "该技能用于更新当前角色的人格记忆，记录深层自我认知和重要关系认知。";
 
   parameters = UpdatePersonalitySchema.toJSONSchema();
 

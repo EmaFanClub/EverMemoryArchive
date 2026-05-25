@@ -544,9 +544,6 @@ export class ActorTrainer {
     }
     const reply: EmaReply = {
       kind: "text",
-      think: "",
-      expression: "普通",
-      action: "无",
       content: this.stringifyInputContents(input.inputs),
     };
     return {

@@ -3,7 +3,8 @@ import { Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
 import {
   isValidCronExpression,
-  toModelScheduleItem,
+  type ActorScheduleItem,
+  type ActorScheduleListResult,
   type CreateScheduleInput,
   type UpdateScheduleInput,
 } from "../../scheduler/actor_scheduler";
@@ -24,6 +25,11 @@ const MillisecondsIntervalSchema = z
   .positive()
   .describe("循环间隔毫秒数，必须为正整数毫秒。");
 
+const ScheduleSummarySchema = z
+  .string()
+  .min(1)
+  .describe("日程摘要：一条短句，用于在日程表中快速说明这件事。");
+
 const AddChatOnceScheduleSchema = z
   .object({
     type: z.literal("once").describe("一次性日程"),
@@ -37,6 +43,7 @@ const AddChatOnceScheduleSchema = z
       .string()
       .min(1)
       .describe("要执行的任务内容；应描述未来要在该会话里主动做什么。"),
+    summary: ScheduleSummarySchema,
     session: z.string().min(1).describe("要在哪个会话 session 中执行该任务"),
   })
   .strict();
@@ -57,6 +64,7 @@ const AddChatRecurringScheduleSchema = z.union([
         .string()
         .min(1)
         .describe("要执行的任务内容；应描述未来要在该会话里主动做什么。"),
+      summary: ScheduleSummarySchema,
       session: z.string().min(1).describe("要在哪个会话 session 中执行该任务"),
     })
     .strict(),
@@ -77,6 +85,7 @@ const AddChatRecurringScheduleSchema = z.union([
         .string()
         .min(1)
         .describe("要执行的任务内容；应描述未来要在该会话里主动做什么。"),
+      summary: ScheduleSummarySchema,
       session: z.string().min(1).describe("要在哪个会话 session 中执行该任务"),
     })
     .strict(),
@@ -97,6 +106,7 @@ const AddActivityOnceScheduleSchema = z
       .describe(
         "要执行的任务内容；应描述后台活动本身，而不是去某个会话发消息。",
       ),
+    summary: ScheduleSummarySchema,
   })
   .strict();
 
@@ -118,6 +128,7 @@ const AddActivityRecurringScheduleSchema = z.union([
         .describe(
           "要执行的任务内容；应描述后台活动本身，而不是去某个会话发消息。",
         ),
+      summary: ScheduleSummarySchema,
     })
     .strict(),
   z
@@ -139,6 +150,7 @@ const AddActivityRecurringScheduleSchema = z.union([
         .describe(
           "要执行的任务内容；应描述后台活动本身，而不是去某个会话发消息。",
         ),
+      summary: ScheduleSummarySchema,
     })
     .strict(),
 ]);
@@ -184,6 +196,7 @@ const UpdateScheduleItemSchema = z
         "新的周期：wake/sleep 必须是 5 段 cron；chat/activity 可为 5 段 cron，或配合 runAt 一起填写的正整数毫秒数。",
       ),
     prompt: z.string().min(1).optional().describe("新的任务内容"),
+    summary: ScheduleSummarySchema.optional().describe("新的日程摘要"),
     session: z
       .string()
       .min(1)
@@ -196,10 +209,11 @@ const UpdateScheduleItemSchema = z
       value.runAt !== undefined ||
       value.interval !== undefined ||
       value.prompt !== undefined ||
+      value.summary !== undefined ||
       value.session !== undefined,
     {
       message:
-        "At least one of runAt, interval, prompt, or session must be provided.",
+        "At least one of runAt, interval, prompt, summary, or session must be provided.",
     },
   );
 
@@ -223,11 +237,19 @@ const ListSchedulesSchema = z
   })
   .strict();
 
+const FocusSchema = z
+  .object({
+    action: z.literal("focus"),
+    session: z.string().min(1).describe("要关注的会话 session"),
+  })
+  .strict();
+
 const ScheduleSkillSchema = z.discriminatedUnion("action", [
   ListSchedulesSchema,
   AddSchedulesSchema,
   UpdateSchedulesSchema,
   DeleteSchedulesSchema,
+  FocusSchema,
 ]);
 
 type ScheduleSkillInput = z.infer<typeof ScheduleSkillSchema>;
@@ -263,6 +285,7 @@ async function toCreateScheduleInput(
             runAt: parseRunAt(item.runAt),
             interval: item.interval,
             prompt: item.prompt,
+            summary: item.summary,
             conversationId,
           };
         }
@@ -272,6 +295,7 @@ async function toCreateScheduleInput(
           task: "chat",
           interval,
           prompt: item.prompt,
+          summary: item.summary,
           conversationId,
         };
       }
@@ -280,6 +304,7 @@ async function toCreateScheduleInput(
         task: "chat",
         runAt: parseRunAt(item.runAt),
         prompt: item.prompt,
+        summary: item.summary,
         conversationId,
       };
     case "activity":
@@ -291,6 +316,7 @@ async function toCreateScheduleInput(
             runAt: parseRunAt(item.runAt),
             interval: item.interval,
             prompt: item.prompt,
+            summary: item.summary,
           };
         }
         const interval = item.interval as string;
@@ -299,6 +325,7 @@ async function toCreateScheduleInput(
           task: "activity",
           interval,
           prompt: item.prompt,
+          summary: item.summary,
         };
       }
       return {
@@ -306,6 +333,7 @@ async function toCreateScheduleInput(
         task: "activity",
         runAt: parseRunAt(item.runAt),
         prompt: item.prompt,
+        summary: item.summary,
       };
     case "wake":
     case "sleep":
@@ -326,6 +354,7 @@ async function toUpdateScheduleInput(
     ...(item.runAt !== undefined ? { runAt: parseRunAt(item.runAt) } : {}),
     ...(item.interval !== undefined ? { interval: item.interval } : {}),
     ...(item.prompt !== undefined ? { prompt: item.prompt } : {}),
+    ...(item.summary !== undefined ? { summary: item.summary } : {}),
     ...(item.session !== undefined
       ? {
           conversationId: await resolveChatConversationId(
@@ -359,12 +388,154 @@ async function resolveChatConversationId(
   return conversation.id;
 }
 
+async function buildScheduleSessionMap(
+  items: ActorScheduleItem[],
+  server: Server,
+): Promise<Map<number, string>> {
+  const conversationIds = new Set<number>();
+  for (const item of items) {
+    if (
+      (item.task === "chat" || item.task === "focus") &&
+      typeof item.conversationId === "number"
+    ) {
+      conversationIds.add(item.conversationId);
+    }
+  }
+  const entries = await Promise.all(
+    [...conversationIds].map(async (conversationId) => {
+      const conversation =
+        await server.dbService.conversationDB.getConversation(conversationId);
+      return [conversationId, conversation?.session] as const;
+    }),
+  );
+  return new Map(
+    entries
+      .filter(
+        (entry): entry is readonly [number, string] =>
+          typeof entry[1] === "string" && entry[1].trim().length > 0,
+      )
+      .map(([conversationId, session]) => [conversationId, session]),
+  );
+}
+
+async function serializeScheduleItems(
+  items: ActorScheduleItem[],
+  server: Server,
+): Promise<Record<string, unknown>[]> {
+  const sessions = await buildScheduleSessionMap(items, server);
+  return items.map((item) => toSkillScheduleItem(item, sessions));
+}
+
+async function serializeScheduleList(
+  listed: ActorScheduleListResult,
+  server: Server,
+): Promise<{
+  overdue: Record<string, unknown>[];
+  upcoming: Record<string, unknown>[];
+  recurring: Record<string, unknown>[];
+  focused: Record<string, unknown>[];
+}> {
+  const allItems = [
+    ...listed.overdue,
+    ...listed.upcoming,
+    ...listed.recurring,
+    ...listed.focused,
+  ];
+  const sessions = await buildScheduleSessionMap(allItems, server);
+  return {
+    overdue: listed.overdue.map((item) => toSkillScheduleItem(item, sessions)),
+    upcoming: listed.upcoming.map((item) =>
+      toSkillScheduleItem(item, sessions),
+    ),
+    recurring: listed.recurring.map((item) =>
+      toSkillScheduleItem(item, sessions),
+    ),
+    focused: listed.focused.map((item) => toSkillScheduleItem(item, sessions)),
+  };
+}
+
+function toSkillScheduleItem(
+  item: ActorScheduleItem,
+  sessions: Map<number, string>,
+): Record<string, unknown> {
+  const base = {
+    id: item.id,
+    type: item.type,
+    task: item.task,
+  } satisfies Record<string, unknown>;
+  const session =
+    typeof item.conversationId === "number"
+      ? sessions.get(item.conversationId)
+      : undefined;
+
+  if (item.type === "once") {
+    if (item.task === "chat") {
+      return {
+        ...base,
+        runAt: item.runAt,
+        ...(session ? { session } : {}),
+        summary: item.summary,
+        prompt: item.prompt,
+      };
+    }
+    if (item.task === "activity") {
+      return {
+        ...base,
+        runAt: item.runAt,
+        summary: item.summary,
+        prompt: item.prompt,
+      };
+    }
+    return {
+      ...base,
+      runAt: item.runAt,
+    };
+  }
+
+  if (item.task === "chat") {
+    return {
+      ...base,
+      nextRunAt: item.nextRunAt,
+      lastRunAt: item.lastRunAt,
+      interval: item.interval,
+      ...(session ? { session } : {}),
+      summary: item.summary,
+      prompt: item.prompt,
+    };
+  }
+  if (item.task === "focus") {
+    return {
+      ...base,
+      nextRunAt: item.nextRunAt,
+      lastRunAt: item.lastRunAt,
+      interval: item.interval,
+      ...(session ? { session } : {}),
+    };
+  }
+  if (item.task === "activity") {
+    return {
+      ...base,
+      nextRunAt: item.nextRunAt,
+      lastRunAt: item.lastRunAt,
+      interval: item.interval,
+      summary: item.summary,
+      prompt: item.prompt,
+    };
+  }
+  return {
+    ...base,
+    nextRunAt: item.nextRunAt,
+    lastRunAt: item.lastRunAt,
+    interval: item.interval,
+  };
+}
+
 /**
  * Skill for managing actor schedules.
  */
 export default class ScheduleSkill extends Skill {
   description =
-    "该技能用于查询、创建、修改和删除当前的日程安排，可以调整作息、安排未来的主动对话和自主活动、调整计划等。";
+    "用于查询、创建、修改和删除当前的日程安排，包括提醒、主动对话、自主活动、记忆沉淀与作息维护等日程项。";
 
   parameters = ScheduleSkillSchema.toJSONSchema();
 
@@ -407,10 +578,27 @@ export default class ScheduleSkill extends Skill {
           const listed = await actorScheduler.list();
           return {
             success: true,
+            content: JSON.stringify(
+              await serializeScheduleList(listed, server),
+            ),
+          };
+        }
+        case "focus": {
+          const conversationId = await resolveChatConversationId(
+            server,
+            actorId,
+            payload.session,
+          );
+          const result = await actorScheduler.add([
+            {
+              task: "focus",
+              conversationId,
+            },
+          ]);
+          return {
+            success: true,
             content: JSON.stringify({
-              overdue: listed.overdue.map(toModelScheduleItem),
-              upcoming: listed.upcoming.map(toModelScheduleItem),
-              recurring: listed.recurring.map(toModelScheduleItem),
+              focused: await serializeScheduleItems(result.added, server),
             }),
           };
         }
@@ -424,7 +612,7 @@ export default class ScheduleSkill extends Skill {
           return {
             success: true,
             content: JSON.stringify({
-              added: result.added.map(toModelScheduleItem),
+              added: await serializeScheduleItems(result.added, server),
             }),
           };
         }
@@ -438,7 +626,7 @@ export default class ScheduleSkill extends Skill {
           return {
             success: true,
             content: JSON.stringify({
-              updated: result.updated.map(toModelScheduleItem),
+              updated: await serializeScheduleItems(result.updated, server),
             }),
           };
         }

@@ -2,13 +2,16 @@ import { z } from "zod";
 
 import { Tool } from "./base";
 import type { ToolResult, ToolContext } from "./base";
+import { normalizeThinkText } from "./utils";
 
 const KeepSilenceSchema = z
   .object({
     think: z
       .string()
       .min(1)
-      .describe("你的内心独白，反映你最真实的内心想法，仅你自己可见"),
+      .describe(
+        "内部思考记录，用于保存你为什么选择不说话、当前有哪些不确定，以及之后什么情况会改变你的理解。",
+      ),
   })
   .strict();
 
@@ -16,8 +19,40 @@ const KeepSilenceSchema = z
 export type KeepSilence = z.infer<typeof KeepSilenceSchema>;
 
 const KEEP_SILENCE_TOOL_DESCRIPTION = `
-此工具用于保持沉默，即不向外界发送任何消息。可以填写内心独白来表达自己的想法，但不发送任何文本消息。
-调用此工具后不应再调用任何工具，包括此工具本身，并结束当前对话轮次。
+# keep_silence
+
+## 用途
+
+此工具用于结束当前轮次且不向外发送消息。
+
+它主要用于本轮不发送任何消息时，留下这次选择不说话的 think，形成可追溯的判断依据。已经调用 \`ema_reply\` 后，通常不需要再调用本工具；只有当还有一段独立、重要、未写入 \`ema_reply.think\`，并且会影响未来判断的内容必须保留时，才在完成其他工具后调用。
+
+## think
+
+\`think\` 是内部思考记录。它会保留在之后的上下文中，让未来的你知道这次为什么选择不说话、当时有哪些不确定、之后遇到什么情况应该改变理解。
+
+### 如何填写
+
+- think 应当保存本轮思考后形成的、对未来仍有用的判断。它要让未来的你知道：当时看到了哪些信号，考虑过哪些可能，为什么暂时这样理解，以及之后什么情况会改变这个理解。
+- think 不要求写成列表或固定格式，它应该是一段自然的内部思考记录，避免把一次局部经验扩大成长期规则，也避免让未来的自己更固执、更防御或更像在表演。
+- think 应保存对未来仍有用的信息，但不要逐条复述上下文中已经可见的消息原文、工具结果或日程全文；需要引用时，用 msg_id、日程 id，或“刚才几条回复”这样的短指代。
+- think 用自然语言描述以下内容，应保持具体、可修正、高信息密度，尽量写成一个自然段，避免标题和换行，不要写成报告：
+  1. 当前哪些具体信息影响了你的理解。
+  2. 这件事可能有哪些解释。
+  3. 你这次暂时按哪种解释回复，以及为什么。
+  4. 当前还有哪些不确定，不要把猜测写成事实。
+  5. 后面出现什么信息时，你应该改变理解或调整回应方式。
+  6. 后面出现什么信息时应该重新参与或调整回应，以及需要避免什么行为。
+- 写 think 要综合上下文中邻近的 think，判断哪些内容仍可复用。可复用的内容只需极简指代，不要重写。如果本轮有新的变化，再重点补充这些变化，使新的 think 与已有 think 共同构成完整判断，从而降低冗余。
+
+## 注意事项
+
+1. 调用本工具后停止本轮，不再调用任何工具。
+2. 如果需要向外发送消息，应使用 \`ema_reply\`，不要使用本工具。
+3. 如果还需要安排日程、更新记忆或执行其他工具，必须先完成这些操作，再调用本工具。
+4. 不要用本工具代替后续安排。当前轮次里不继续发消息，不等于放弃之后的关注、提醒或整理。
+5. 在 focus 心跳中，调用本工具只表示这一次不发言，不会结束关注；只有已经删除对应 focus 日程时，才表示这条关注已经结束。
+6. 已经通过 \`ema_reply\` 发送了本轮需要说的话后，通常直接结束本轮，不要把本工具作为固定收尾。
 `;
 
 export class KeepSilenceTool extends Tool {
@@ -38,10 +73,17 @@ export class KeepSilenceTool extends Tool {
   async execute(args: unknown, context?: ToolContext): Promise<ToolResult> {
     try {
       const payload = KeepSilenceSchema.parse(args);
+      payload.think = normalizeThinkText(payload.think);
+      if (!payload.think) {
+        return {
+          success: false,
+          content:
+            "Invalid structured reply: think must not be empty after normalization.",
+        };
+      }
       return {
         success: true,
-        content:
-          "你选择沉默，请不要再调用任何工具了，包括这个工具本身，直接结束当前对话轮次即可。",
+        content: payload.think,
       };
     } catch (err) {
       return {

@@ -273,6 +273,20 @@ export class Agent {
 
         // Log tool execution result
         if (result.success) {
+          if (toolName === "keep_silence" && result.content) {
+            this.events.emit("keepSilenceReceived", {
+              think: result.content,
+            });
+            this.contextManager.addModelMessage({
+              role: "model",
+              contents: [{ type: "text", text: "" }],
+            });
+            this.events.emit("runFinished", {
+              ok: true,
+              msg: "keep_silence",
+            });
+            return;
+          }
           if (toolName === "ema_reply" && result.content) {
             this.events.emit("emaReplyReceived", {
               reply: JSON.parse(result.content!),

@@ -18,4 +18,8 @@
 
 ---
 
+<!-- @include system_prompt/partials/conversation.md -->
+
+---
+
 <!-- @include system_prompt/partials/schedule.md -->

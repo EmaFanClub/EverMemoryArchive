@@ -1,21 +1,38 @@
 import { z } from "zod";
 import { Skill } from "../base";
 import type { ToolContext, ToolResult } from "../../tools/base";
-import type { ConversationMessageEntity } from "../../db/base";
+import type {
+  ConversationEntity,
+  ConversationMessageEntity,
+} from "../../db/base";
 import type { ImageItem } from "../../llm/schema";
 import { isImageMime } from "../../llm/utils";
 import { resolveSession } from "../../channel";
 import type { BufferMessage } from "../../memory/base";
 import { buildPromptFromBufferMessage } from "../../memory/utils";
 import { parseTimestamp } from "../../shared/utils";
+import type { Server } from "../../server";
 
 const TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 50;
 
+const SessionSchema = z
+  .string()
+  .min(1)
+  .describe("目标会话 session，来自 system prompt 的会话列表。");
+
+const QueryWindowSchema = z
+  .object({
+    mode: z.literal("window").describe("查询指定会话的近期消息窗口"),
+    session: SessionSchema,
+  })
+  .strict();
+
 const QueryByTimeRangeSchema = z
   .object({
     mode: z.literal("by_time_range").describe("按时间范围检索消息"),
+    session: SessionSchema,
     start_time: z
       .string()
       .min(1)
@@ -52,6 +69,7 @@ const QueryByTimeRangeSchema = z
 const QueryByIdsSchema = z
   .object({
     mode: z.literal("by_ids").describe("按消息ID列表检索消息"),
+    session: SessionSchema,
     msg_ids: z.array(z.number().int().positive()).min(1).describe("消息ID列表"),
   })
   .strict();
@@ -61,11 +79,13 @@ const QueryExpandOneSchema = z
     mode: z
       .literal("expand_one")
       .describe("展开单条消息中的原始图片或文件内容"),
+    session: SessionSchema,
     msg_id: z.number().int().positive().describe("需要展开的消息ID"),
   })
   .strict();
 
 const QueryChatHistorySchema = z.discriminatedUnion("mode", [
+  QueryWindowSchema,
   QueryByTimeRangeSchema,
   QueryByIdsSchema,
   QueryExpandOneSchema,
@@ -123,9 +143,21 @@ function formatMessage(
           ...(message.replyTo ? { replyTo: message.replyTo } : {}),
           contents: message.contents,
           ...(message.think ? { think: message.think } : {}),
+          ...(message.keep_silence ? { keep_silence: true as const } : {}),
           time: entity.createdAt ?? Date.now(),
         };
   return buildPromptFromBufferMessage(bufferMessage, ownerUid);
+}
+
+function formatBufferMessages(
+  messages: BufferMessage[],
+  ownerUid: string | null,
+): string {
+  return messages.length > 0
+    ? messages
+        .map((message) => buildPromptFromBufferMessage(message, ownerUid))
+        .join("\n")
+    : "None.";
 }
 
 function extractImageAttachments(
@@ -140,7 +172,7 @@ function extractImageAttachments(
 
 export default class QueryChatHistorySkill extends Skill {
   description =
-    "该技能用于查询当前会话中的真实聊天记录，或者查看某条消息中的媒体内容。需要精确回溯某条消息内容、查看消息中的图片或文件的具体内容时使用。";
+    "该技能用于查询指定会话中的真实聊天记录，或者查看某条消息中的媒体内容。需要查看某个会话的近期窗口、精确回溯消息内容、查看消息中的图片或文件时使用。";
 
   parameters = QueryChatHistorySchema.toJSONSchema();
 
@@ -162,33 +194,39 @@ export default class QueryChatHistorySkill extends Skill {
 
     const server = context?.server;
     const actorId = context?.actorId;
-    const conversationId = context?.conversationId;
     if (!server) {
       return {
         success: false,
         content: "Missing server in skill context.",
       };
     }
-    if (!conversationId) {
+    if (typeof actorId !== "number") {
       return {
         success: false,
-        content: "Missing conversationId in skill context.",
+        content: "Missing actorId in skill context.",
       };
     }
 
     try {
-      const conversation =
-        await server.dbService.conversationDB.getConversation(conversationId);
+      const conversation = await resolveConversation(
+        server,
+        actorId,
+        payload.session,
+      );
       if (!conversation) {
         return {
           success: false,
-          content: "Conversation not found.",
+          content: `Conversation not found for session: ${payload.session}.`,
+        };
+      }
+      const conversationId = conversation.id;
+      if (typeof conversationId !== "number") {
+        return {
+          success: false,
+          content: `Conversation is missing id for session: ${payload.session}.`,
         };
       }
       const ownerUid = (() => {
-        if (!actorId) {
-          return Promise.resolve<string | null>(null);
-        }
         const sessionInfo = resolveSession(conversation.session);
         if (!sessionInfo) {
           return Promise.resolve<string | null>(null);
@@ -196,6 +234,17 @@ export default class QueryChatHistorySkill extends Skill {
         return server.memoryManager.getOwnerUid(actorId, sessionInfo.channel);
       })();
       const resolvedOwnerUid = await ownerUid;
+
+      if (payload.mode === "window") {
+        const messages = await server.memoryManager.getBuffer(
+          conversationId,
+          server.memoryManager.bufferWindowSize,
+        );
+        return {
+          success: true,
+          content: formatBufferMessages(messages, resolvedOwnerUid),
+        };
+      }
 
       if (payload.mode === "expand_one") {
         const rows =
@@ -272,6 +321,7 @@ export default class QueryChatHistorySkill extends Skill {
       const rows =
         await server.dbService.conversationMessageDB.listConversationMessages({
           conversationId,
+          actorId,
           createdAfter: startTime,
           createdBefore: endTime,
           sort: "asc",
@@ -294,4 +344,12 @@ export default class QueryChatHistorySkill extends Skill {
       };
     }
   }
+}
+
+async function resolveConversation(
+  server: Server,
+  actorId: number,
+  session: string,
+): Promise<ConversationEntity | null> {
+  return await server.dbService.getConversationBySession(actorId, session);
 }

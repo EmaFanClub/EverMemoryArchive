@@ -13,6 +13,7 @@ import { buildUserMessageFromActorInput } from "./utils";
 import type {
   ActorInput,
   ActorChatResponse,
+  ActorKeepSilenceResponse,
   ActorWorkerStatus,
   ActorWorkerEvent,
   ActorWorkerEventMap,
@@ -131,6 +132,30 @@ export class ActorWorker {
           this.emitEvent("actorResponsed", {
             response: outboundResponse,
           });
+        });
+      }
+      if (eventName === "keepSilenceReceived") {
+        this.agent.events.on("keepSilenceReceived", async (content) => {
+          const msgId =
+            await this.server.dbService.conversationMessageDB.reserveMessageId(
+              this.actorId,
+            );
+          const response: ActorKeepSilenceResponse = {
+            kind: "keep_silence",
+            actorId: this.actorId,
+            conversationId: this.conversationId,
+            msgId,
+            session: this.session,
+            think: content.think,
+            time: Date.now(),
+          };
+          await this.server.memoryManager.persistChatMessage(response);
+          await this.server.memoryManager.addToBuffer(
+            this.conversationId,
+            msgId,
+            true,
+            response.time,
+          );
         });
       }
     }

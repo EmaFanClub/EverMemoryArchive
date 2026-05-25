@@ -49,6 +49,23 @@ function createFixture() {
       },
     ],
     [
+      "1:11",
+      {
+        id: 102,
+        conversationId: 1,
+        actorId: 1,
+        msgId: 11,
+        message: {
+          kind: "actor" as const,
+          name: "EMA",
+          contents: [],
+          think: "这轮没有必要继续回复。",
+          keep_silence: true as const,
+        },
+        createdAt: 1100,
+      },
+    ],
+    [
       "2:20",
       {
         id: 201,
@@ -123,16 +140,25 @@ function createFixture() {
           async ({
             conversationId,
             msgIds,
+            sort,
           }: {
             conversationId?: number;
             msgIds?: number[];
+            sort?: "asc" | "desc";
           }) => {
-            if (typeof conversationId !== "number" || !msgIds?.length) {
+            if (typeof conversationId !== "number") {
               return [];
             }
-            return msgIds
-              .map((msgId) => messages.get(`${conversationId}:${msgId}`))
-              .filter(Boolean);
+            const results = msgIds?.length
+              ? msgIds
+                  .map((msgId) => messages.get(`${conversationId}:${msgId}`))
+                  .filter(Boolean)
+              : Array.from(messages.values()).filter(
+                  (message) => message?.conversationId === conversationId,
+                );
+            return sort === "asc"
+              ? results.sort((left, right) => left!.msgId - right!.msgId)
+              : results;
           },
         ),
       },
@@ -226,6 +252,35 @@ describe("ChatController stream", () => {
         }),
       }),
     ]);
+  });
+
+  test("does not publish keep_silence messages to web clients", async () => {
+    const { controller, bus } = createFixture();
+    const conversationEvents: unknown[] = [];
+    const busEvents: unknown[] = [];
+    controller.subscribeConversation(1, (event) => {
+      conversationEvents.push(event);
+    });
+    bus.subscribe((event) => {
+      busEvents.push(event);
+    });
+
+    const event = await controller.publishConversationMessage(1, 11);
+
+    expect(event).toBeNull();
+    expect(conversationEvents).toEqual([]);
+    expect(busEvents).toEqual([]);
+  });
+
+  test("filters keep_silence messages from chat history", async () => {
+    const { controller } = createFixture();
+
+    const history = await controller.listHistory({
+      actorId: 1,
+      session: "web-chat-1",
+    });
+
+    expect(history.messages.map((message) => message.msgId)).toEqual([10]);
   });
 
   test("ensures the default web conversation without overwriting saved metadata", async () => {

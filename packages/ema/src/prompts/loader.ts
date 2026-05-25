@@ -3,13 +3,11 @@ import path from "node:path";
 
 import { resolveEmaSourcePath } from "../shared/package_path";
 
-export type SystemPromptName =
-  | "foreground"
-  | "background"
-  | "background-conversation";
+export type SystemPromptName = "foreground" | "background";
 
 export type TaskPromptName =
   | "scheduled-chat"
+  | "conversation-focus"
   | "scheduled-activity"
   | "conversation-rollup"
   | "memory-rollup"

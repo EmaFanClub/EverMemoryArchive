@@ -168,8 +168,7 @@ export class AgendaScheduler implements Scheduler {
     if (job.unique) {
       agendaJob.unique(job.unique);
     }
-    agendaJob.schedule(new Date(job.runAt));
-    agendaJob.repeatEvery(job.interval);
+    this.applyRecurringSchedule(agendaJob, job);
     const saved = await agendaJob.save();
     const id = saved.attrs._id?.toString();
     if (!id) {
@@ -200,8 +199,7 @@ export class AgendaScheduler implements Scheduler {
     if (job.unique) {
       agendaJob.unique(job.unique);
     }
-    agendaJob.schedule(new Date(job.runAt));
-    agendaJob.repeatEvery(job.interval);
+    this.applyRecurringSchedule(agendaJob, job);
     await agendaJob.save();
     return true;
   }
@@ -219,6 +217,17 @@ export class AgendaScheduler implements Scheduler {
   private async initialize(): Promise<void> {
     await this.agenda.database(this.mongo.getUri(), this.collectionName);
     await this.agenda.ready;
+  }
+
+  private applyRecurringSchedule(job: Job, spec: JobEverySpec): void {
+    if (typeof spec.interval === "number") {
+      job.repeatEvery(spec.interval);
+      job.schedule(new Date(spec.runAt));
+      return;
+    }
+
+    job.schedule(new Date(spec.runAt));
+    job.repeatEvery(spec.interval);
   }
 
   /**

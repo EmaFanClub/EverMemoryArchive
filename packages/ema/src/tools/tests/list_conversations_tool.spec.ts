@@ -39,14 +39,12 @@ describe("ListConversationsTool", () => {
     expect(JSON.parse(result.content!)).toEqual({
       conversations: [
         {
-          conversationId: 12,
           session: "web-chat-1",
           name: "Alice",
           description: "和 Alice 的私聊",
           allowProactive: true,
         },
         {
-          conversationId: 18,
           session: "qq-group-123456",
           name: "项目群",
           description: "项目讨论群",

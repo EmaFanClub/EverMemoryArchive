@@ -25,7 +25,7 @@ describe("AgentHub model registry", () => {
       model: "gemini-3.1-flash-lite-preview",
       apiKey: "test-key",
       baseUrl: "https://generativelanguage.googleapis.com",
-      clientType: "gemini-3.1-flash-lite-preview",
+      clientType: "gemini-3-client",
       capabilities: {
         thinkingLevels: [
           ThinkingLevel.NONE,

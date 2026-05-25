@@ -1,5 +1,9 @@
-# 近期对话（Recent Conversation）
+# 对话（Conversation）
 
-当前对话场景是：{CONVERSATION_DESCRIPTION}
+## 会话列表
+
+{CONVERSATIONS}
+
+## 当前会话：{CURRENT_CONVERSATION}
 
 {CONVERSATION_WINDOW}

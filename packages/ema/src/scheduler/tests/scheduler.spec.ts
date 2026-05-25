@@ -318,6 +318,51 @@ describe("AgendaScheduler", () => {
     expect(count).toBeGreaterThanOrEqual(expectedRuns);
   }, 8000);
 
+  test("keeps numeric recurring jobs scheduled at their future runAt", async () => {
+    const runAt = Date.now() + 300_000;
+
+    const jobId = await scheduler.scheduleEvery({
+      name: "test",
+      runAt,
+      interval: 300_000,
+      data: { message: "delayed-recurring" },
+      unique: { name: "test", "data.message": "delayed-recurring" },
+    });
+
+    const job = await scheduler.getJob(jobId);
+
+    expect(job?.attrs.nextRunAt?.getTime()).toBeGreaterThanOrEqual(
+      runAt - 1000,
+    );
+  });
+
+  test("keeps rescheduled numeric recurring jobs at their future runAt", async () => {
+    const initialRunAt = Date.now() + 300_000;
+    const updatedRunAt = initialRunAt + 300_000;
+
+    const jobId = await scheduler.scheduleEvery({
+      name: "test",
+      runAt: initialRunAt,
+      interval: 300_000,
+      data: { message: "numeric-recurring" },
+      unique: { name: "test", "data.message": "numeric-recurring" },
+    });
+
+    const updated = await scheduler.rescheduleEvery(jobId, {
+      name: "test",
+      runAt: updatedRunAt,
+      interval: 300_000,
+      data: { message: "numeric-recurring-updated" },
+      unique: { name: "test", "data.message": "numeric-recurring-updated" },
+    });
+
+    expect(updated).toBe(true);
+    const job = await scheduler.getJob(jobId);
+    expect(job?.attrs.nextRunAt?.getTime()).toBeGreaterThanOrEqual(
+      updatedRunAt - 1000,
+    );
+  });
+
   test("recurring job runs expected times when runAt is in the past", async () => {
     const handlers: JobHandlerMap = { test: async () => {} };
     await scheduler.start(handlers);

@@ -36,10 +36,15 @@ export interface ActorChatResponse extends ActorResponseBase<"chat"> {
   ema_reply: EmaReply;
 }
 
-export type ActorResponse = ActorChatResponse;
+export interface ActorKeepSilenceResponse extends ActorResponseBase<"keep_silence"> {
+  session: string;
+  think: string;
+}
+
+export type ActorResponse = ActorChatResponse | ActorKeepSilenceResponse;
 
 export interface ActorResponsedEvent {
-  response: ActorResponse;
+  response: ActorChatResponse;
 }
 
 export interface WorkFinishedEvent {

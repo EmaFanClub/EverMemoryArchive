@@ -11,7 +11,7 @@ import { formatTimestamp } from "../../shared/utils";
 
 const SHORT_TERM_MEMORY_MAX_LENGTH = {
   activity: 100,
-  day: 200,
+  day: 500,
   month: 300,
   year: 400,
 } as const;

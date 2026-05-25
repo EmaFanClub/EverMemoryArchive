@@ -12,12 +12,19 @@ const SCHEDULE_TASKS = new Set<ActorScheduleTask>([
   "activity",
   "wake",
   "sleep",
+  "focus",
 ]);
+const FOCUS_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
  * Actor-visible schedule task types.
  */
-export type ActorScheduleTask = "chat" | "activity" | "wake" | "sleep";
+export type ActorScheduleTask =
+  | "chat"
+  | "activity"
+  | "wake"
+  | "sleep"
+  | "focus";
 
 /**
  * One-time schedule item exposed to the actor layer.
@@ -28,6 +35,7 @@ export interface ActorOnceScheduleItem {
   task: ActorScheduleTask;
   runAt: string;
   conversationId: number | null;
+  summary?: string;
   prompt: string;
   addition: Record<string, unknown>;
 }
@@ -43,6 +51,7 @@ export interface ActorRecurringScheduleItem {
   interval: string | number;
   lastRunAt: string | null;
   conversationId: number | null;
+  summary?: string;
   prompt: string;
   addition: Record<string, unknown>;
 }
@@ -61,84 +70,7 @@ export interface ActorScheduleListResult {
   overdue: ActorOnceScheduleItem[];
   upcoming: ActorOnceScheduleItem[];
   recurring: ActorRecurringScheduleItem[];
-}
-
-/**
- * Converts one actor-visible schedule item into the compact model-facing shape.
- * @param item - Actor-visible schedule item.
- * @returns Schedule payload safe to expose to the model layer.
- */
-export function toModelScheduleItem(
-  item: ActorScheduleItem,
-): Record<string, unknown> {
-  const base = {
-    id: item.id,
-    type: item.type,
-    task: item.task,
-  } satisfies Record<string, unknown>;
-
-  if (item.type === "once") {
-    if (item.task === "chat") {
-      return {
-        ...base,
-        runAt: item.runAt,
-        conversationId: item.conversationId,
-        prompt: item.prompt,
-      };
-    }
-    if (item.task === "activity") {
-      return {
-        ...base,
-        runAt: item.runAt,
-        prompt: item.prompt,
-      };
-    }
-    return {
-      ...base,
-      runAt: item.runAt,
-    };
-  }
-
-  if (item.task === "chat") {
-    return {
-      ...base,
-      nextRunAt: item.nextRunAt,
-      lastRunAt: item.lastRunAt,
-      interval: item.interval,
-      conversationId: item.conversationId,
-      prompt: item.prompt,
-    };
-  }
-  if (item.task === "activity") {
-    return {
-      ...base,
-      nextRunAt: item.nextRunAt,
-      lastRunAt: item.lastRunAt,
-      interval: item.interval,
-      prompt: item.prompt,
-    };
-  }
-  return {
-    ...base,
-    nextRunAt: item.nextRunAt,
-    lastRunAt: item.lastRunAt,
-    interval: item.interval,
-  };
-}
-
-/**
- * Serializes one actor-visible schedule list into the model-facing JSON string.
- * @param listed - Categorized schedule items.
- * @returns JSON string aligned with schedule-skill output.
- */
-export function stringifyModelScheduleList(
-  listed: ActorScheduleListResult,
-): string {
-  return JSON.stringify({
-    overdue: listed.overdue.map(toModelScheduleItem),
-    upcoming: listed.upcoming.map(toModelScheduleItem),
-    recurring: listed.recurring.map(toModelScheduleItem),
-  });
+  focused: ActorRecurringScheduleItem[];
 }
 
 interface CreateChatOnceScheduleInput {
@@ -146,6 +78,7 @@ interface CreateChatOnceScheduleInput {
   task: "chat";
   runAt: number;
   conversationId: number;
+  summary?: string;
   prompt: string;
   addition?: Record<string, unknown>;
 }
@@ -155,6 +88,7 @@ interface CreateChatRecurringScheduleInput {
   task: "chat";
   interval: string;
   conversationId: number;
+  summary?: string;
   prompt: string;
   addition?: Record<string, unknown>;
 }
@@ -165,6 +99,7 @@ interface CreateChatRecurringNumericScheduleInput {
   runAt: number;
   interval: number;
   conversationId: number;
+  summary?: string;
   prompt: string;
   addition?: Record<string, unknown>;
 }
@@ -173,6 +108,7 @@ interface CreateActivityOnceScheduleInput {
   type: "once";
   task: "activity";
   runAt: number;
+  summary?: string;
   prompt: string;
   addition?: Record<string, unknown>;
 }
@@ -181,6 +117,7 @@ interface CreateActivityRecurringScheduleInput {
   type: "every";
   task: "activity";
   interval: string;
+  summary?: string;
   prompt: string;
   addition?: Record<string, unknown>;
 }
@@ -190,6 +127,7 @@ interface CreateActivityRecurringNumericScheduleInput {
   task: "activity";
   runAt: number;
   interval: number;
+  summary?: string;
   prompt: string;
   addition?: Record<string, unknown>;
 }
@@ -197,6 +135,12 @@ interface CreateActivityRecurringNumericScheduleInput {
 interface CreateRoutineScheduleInput {
   task: "wake" | "sleep";
   interval: string | number;
+  addition?: Record<string, unknown>;
+}
+
+interface CreateFocusScheduleInput {
+  task: "focus";
+  conversationId: number;
   addition?: Record<string, unknown>;
 }
 
@@ -210,7 +154,8 @@ export type CreateScheduleInput =
   | CreateActivityOnceScheduleInput
   | CreateActivityRecurringScheduleInput
   | CreateActivityRecurringNumericScheduleInput
-  | CreateRoutineScheduleInput;
+  | CreateRoutineScheduleInput
+  | CreateFocusScheduleInput;
 
 /**
  * Input for updating an existing schedule.
@@ -220,6 +165,7 @@ export interface UpdateScheduleInput {
   runAt?: number;
   interval?: string | number;
   conversationId?: number | null;
+  summary?: string;
   prompt?: string;
   addition?: Record<string, unknown>;
 }
@@ -245,6 +191,7 @@ export class ActorScheduler {
     const overdue: ActorOnceScheduleItem[] = [];
     const upcoming: ActorOnceScheduleItem[] = [];
     const recurring: ActorRecurringScheduleItem[] = [];
+    const focused: ActorRecurringScheduleItem[] = [];
 
     for (const job of jobs) {
       const item = this.toScheduleItem(job);
@@ -252,6 +199,10 @@ export class ActorScheduler {
         continue;
       }
       if (item.type === "every") {
+        if (item.task === "focus") {
+          focused.push(item);
+          continue;
+        }
         recurring.push(item);
         continue;
       }
@@ -271,11 +222,17 @@ export class ActorScheduler {
       const rightRunAt = right.nextRunAt ?? "";
       return leftRunAt.localeCompare(rightRunAt);
     });
+    focused.sort((left, right) => {
+      const leftRunAt = left.nextRunAt ?? "";
+      const rightRunAt = right.nextRunAt ?? "";
+      return leftRunAt.localeCompare(rightRunAt);
+    });
 
     return {
       overdue,
       upcoming,
       recurring,
+      focused,
     };
   }
 
@@ -296,9 +253,14 @@ export class ActorScheduler {
             item.task,
             spec as JobEverySpec,
           )
-        : item.type === "every"
-          ? await this.scheduler.scheduleEvery(spec as JobEverySpec)
-          : await this.scheduler.schedule(spec as JobSpec);
+        : isFocusCreateInput(item)
+          ? await this.upsertRecurringFocusSchedule(
+              item.conversationId,
+              spec as JobEverySpec,
+            )
+          : item.type === "every"
+            ? await this.scheduler.scheduleEvery(spec as JobEverySpec)
+            : await this.scheduler.schedule(spec as JobSpec);
       added.push(await this.getOwnedScheduleItem(id));
     }
     return { added };
@@ -317,6 +279,10 @@ export class ActorScheduler {
       const current = await this.getOwnedScheduleItem(item.id);
       validateUpdateScheduleInput(current, item);
 
+      if (current.task === "focus") {
+        throw new Error("focus schedules do not support updates.");
+      }
+
       if (isRoutineTask(current.task)) {
         if (current.type !== "every") {
           throw new Error(`${current.task} schedules must be recurring.`);
@@ -324,7 +290,8 @@ export class ActorScheduler {
         if (
           item.runAt !== undefined ||
           item.prompt !== undefined ||
-          item.conversationId !== undefined
+          item.conversationId !== undefined ||
+          item.summary !== undefined
         ) {
           throw new Error(
             `${current.task} schedules only support interval updates.`,
@@ -348,6 +315,7 @@ export class ActorScheduler {
             current.task,
             "",
             null,
+            undefined,
             sanitizeAddition(item.addition ?? current.addition),
           ),
         });
@@ -365,6 +333,7 @@ export class ActorScheduler {
       }
 
       const prompt = item.prompt ?? current.prompt;
+      const summary = item.summary ?? current.summary;
       const conversationId = resolveConversationId(
         current.task,
         item.conversationId !== undefined
@@ -395,6 +364,7 @@ export class ActorScheduler {
             current.task,
             prompt,
             conversationId,
+            summary,
             addition,
           ),
         });
@@ -420,6 +390,7 @@ export class ActorScheduler {
             current.task,
             prompt,
             conversationId,
+            summary,
             addition,
           ),
         });
@@ -509,6 +480,37 @@ export class ActorScheduler {
     return id;
   }
 
+  private async upsertRecurringFocusSchedule(
+    conversationId: number,
+    spec: JobEverySpec,
+  ): Promise<JobId> {
+    const jobs = await this.scheduler.listJobs({
+      "data.actorId": this.actorId,
+      "data.task": "focus",
+      "data.conversationId": conversationId,
+    });
+    const existing = jobs.find((job) =>
+      Boolean(job.attrs.repeatInterval || job.attrs.repeatAt),
+    );
+    if (!existing) {
+      return this.scheduler.scheduleEvery(spec);
+    }
+    const id = existing.attrs._id?.toString();
+    if (!id) {
+      throw new Error("Recurring focus schedule is missing id.");
+    }
+    const updated = await this.scheduler.rescheduleEvery(id, spec);
+    if (!updated) {
+      throw new Error(`Failed to update recurring focus schedule ${id}.`);
+    }
+    const job = await this.scheduler.getJob(id);
+    if (job) {
+      job.enable();
+      await job.save();
+    }
+    return id;
+  }
+
   private buildScheduleSpec(item: CreateScheduleInput): JobSpec | JobEverySpec {
     if (isRoutineCreateInput(item)) {
       return {
@@ -520,6 +522,22 @@ export class ActorScheduler {
           item.task,
           "",
           null,
+          undefined,
+          sanitizeAddition(item.addition),
+        ),
+      };
+    }
+    if (isFocusCreateInput(item)) {
+      return {
+        name: getJobName(item.task),
+        runAt: Date.now() + FOCUS_INTERVAL_MS,
+        interval: FOCUS_INTERVAL_MS,
+        data: buildJobData(
+          this.actorId,
+          item.task,
+          "",
+          item.conversationId,
+          undefined,
           sanitizeAddition(item.addition),
         ),
       };
@@ -534,6 +552,7 @@ export class ActorScheduler {
       item.task,
       item.prompt,
       conversationId,
+      item.summary,
       sanitizeAddition(item.addition),
     );
     if (item.type === "every") {
@@ -580,6 +599,10 @@ export class ActorScheduler {
       return null;
     }
     const addition = cloneAddition(data.addition);
+    const summary =
+      typeof data.summary === "string" && data.summary.trim().length > 0
+        ? data.summary.trim()
+        : undefined;
     const conversationId =
       typeof data.conversationId === "number" ? data.conversationId : null;
     if (job.attrs.repeatInterval || job.attrs.repeatAt) {
@@ -595,6 +618,7 @@ export class ActorScheduler {
         interval,
         lastRunAt: formatScheduleTime(job.attrs.lastRunAt),
         conversationId,
+        summary,
         prompt,
         addition,
       };
@@ -609,6 +633,7 @@ export class ActorScheduler {
       task,
       runAt,
       conversationId,
+      summary,
       prompt,
       addition,
     };
@@ -620,17 +645,20 @@ function buildJobData(
   task: ActorScheduleTask,
   prompt: string,
   conversationId: number | null,
+  summary: string | undefined,
   addition: Record<string, unknown>,
 ): ActorForegroundJobData | ActorBackgroundJobData {
-  if (task === "chat") {
+  const normalizedSummary = normalizeSummary(summary);
+  if (task === "chat" || task === "focus") {
     if (typeof conversationId !== "number") {
-      throw new Error("conversationId is required for chat schedules.");
+      throw new Error(`conversationId is required for ${task} schedules.`);
     }
     return {
       actorId,
       conversationId,
       task,
       prompt,
+      ...(normalizedSummary ? { summary: normalizedSummary } : {}),
       addition,
     };
   }
@@ -646,14 +674,26 @@ function buildJobData(
     ...(typeof conversationId === "number" ? { conversationId } : {}),
     task,
     prompt,
+    ...(normalizedSummary ? { summary: normalizedSummary } : {}),
     addition,
   };
+}
+
+function normalizeSummary(summary: string | undefined): string | undefined {
+  const normalized = summary?.trim();
+  return normalized ? normalized : undefined;
 }
 
 function isRoutineCreateInput(
   item: CreateScheduleInput,
 ): item is CreateRoutineScheduleInput {
   return item.task === "wake" || item.task === "sleep";
+}
+
+function isFocusCreateInput(
+  item: CreateScheduleInput,
+): item is CreateFocusScheduleInput {
+  return item.task === "focus";
 }
 
 function isRoutineTask(
@@ -665,7 +705,9 @@ function isRoutineTask(
 function getJobName(
   task: ActorScheduleTask,
 ): "actor_foreground" | "actor_background" {
-  return task === "chat" ? "actor_foreground" : "actor_background";
+  return task === "chat" || task === "focus"
+    ? "actor_foreground"
+    : "actor_background";
 }
 
 function getScheduleTask(job: Job): ActorScheduleTask | null {
@@ -675,7 +717,7 @@ function getScheduleTask(job: Job): ActorScheduleTask | null {
     | undefined;
   const task = data?.task;
   if (job.attrs.name === "actor_foreground") {
-    return task === "chat" ? "chat" : null;
+    return task === "chat" || task === "focus" ? task : null;
   }
   if (job.attrs.name !== "actor_background") {
     return null;
@@ -690,9 +732,9 @@ function resolveConversationId(
   task: ActorScheduleTask,
   conversationId: number | null | undefined,
 ): number | null {
-  if (task === "chat") {
+  if (task === "chat" || task === "focus") {
     if (typeof conversationId !== "number") {
-      throw new Error("conversationId is required for chat schedules.");
+      throw new Error(`conversationId is required for ${task} schedules.`);
     }
     return conversationId;
   }
@@ -732,6 +774,9 @@ function validateCreateScheduleInput(item: CreateScheduleInput): void {
     assertCronInterval(item.interval, `${item.task} schedules`);
     return;
   }
+  if (isFocusCreateInput(item)) {
+    return;
+  }
   if (item.type !== "every") {
     return;
   }
@@ -750,6 +795,9 @@ function validateUpdateScheduleInput(
     if (item.interval !== undefined) {
       throw new Error("once schedules do not support interval updates.");
     }
+    return;
+  }
+  if (current.task === "focus") {
     return;
   }
   if (isRoutineTask(current.task)) {

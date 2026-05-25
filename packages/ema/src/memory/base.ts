@@ -1,8 +1,15 @@
-import type { ActorChatInput, ActorChatResponse } from "../actor";
+import type {
+  ActorChatInput,
+  ActorChatResponse,
+  ActorKeepSilenceResponse,
+} from "../actor";
 import type { MessageReplyRef, SpeakerInformation } from "../channel";
 import type { InputContent } from "../llm/schema";
 
-export type BufferWriteMessage = ActorChatInput | ActorChatResponse;
+export type BufferWriteMessage =
+  | ActorChatInput
+  | ActorChatResponse
+  | ActorKeepSilenceResponse;
 
 export type ShortTermMemoryTask =
   | "conversation_rollup"
@@ -40,6 +47,7 @@ export interface BufferUserMessage extends BufferMessageBase<"user"> {
 
 export interface BufferActorMessage extends BufferMessageBase<"actor"> {
   think?: string;
+  keep_silence?: true;
 }
 
 /**

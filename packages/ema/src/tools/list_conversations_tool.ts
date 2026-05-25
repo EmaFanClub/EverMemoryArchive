@@ -55,7 +55,6 @@ export class ListConversationsTool extends Tool {
       success: true,
       content: JSON.stringify({
         conversations: conversations.map((conversation) => ({
-          conversationId: conversation.id,
           session: conversation.session,
           name: conversation.name,
           description: conversation.description,

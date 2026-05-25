@@ -632,6 +632,10 @@ export interface ConversationActorMessage extends ConversationMessageBase<"actor
    * Internal thought persisted with the actor reply.
    */
   think?: string;
+  /**
+   * Whether this hidden actor message records a keep_silence decision.
+   */
+  keep_silence?: true;
 }
 
 /**

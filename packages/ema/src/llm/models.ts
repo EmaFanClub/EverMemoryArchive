@@ -93,9 +93,25 @@ export const LLM_MODEL_DEFINITIONS = [
     },
   },
   {
+    model: "gemini-3.5-flash",
+    provider: "google",
+    clientType: "gemini-3-client",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    capabilities: {
+      thinkingLevels: FULL_THINKING_LEVELS,
+      tools: true,
+      images: true,
+    },
+    requestDefaults: {
+      thinkingLevel: ThinkingLevel.MEDIUM,
+      thinkingSummary: true,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
     model: "gemini-3.1-pro-preview",
     provider: "google",
-    clientType: "gemini-3.1-pro-preview",
+    clientType: "gemini-3-client",
     defaultBaseUrl: "https://generativelanguage.googleapis.com",
     capabilities: {
       thinkingLevels: REQUIRED_THINKING_LEVELS,
@@ -111,7 +127,7 @@ export const LLM_MODEL_DEFINITIONS = [
   {
     model: "gemini-3.1-flash-lite-preview",
     provider: "google",
-    clientType: "gemini-3.1-flash-lite-preview",
+    clientType: "gemini-3-client",
     defaultBaseUrl: "https://generativelanguage.googleapis.com",
     capabilities: {
       thinkingLevels: FULL_THINKING_LEVELS,

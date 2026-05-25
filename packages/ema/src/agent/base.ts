@@ -16,10 +16,16 @@ export interface EmaReplyReceivedEvent {
   reply: EmaReply;
 }
 
+/* Emitted when the keep_silence tool is called successfully. */
+export interface KeepSilenceReceivedEvent {
+  think: string;
+}
+
 /** Map of agent event names to their corresponding event data types. */
 export interface AgentEventMap {
   runFinished: [RunFinishedEvent];
   emaReplyReceived: [EmaReplyReceivedEvent];
+  keepSilenceReceived: [KeepSilenceReceivedEvent];
 }
 
 /** Union type of all agent event names. */
@@ -35,6 +41,7 @@ export type AgentEventUnion = AgentEvent<AgentEventName>;
 export const AgentEventNames: Record<AgentEventName, AgentEventName> = {
   runFinished: "runFinished",
   emaReplyReceived: "emaReplyReceived",
+  keepSilenceReceived: "keepSilenceReceived",
 };
 
 /** Event source interface for the agent. */

@@ -64,8 +64,11 @@ interface ActorBackgroundRunContext {
   memoryPolicy?: ActorBackgroundMemoryPolicy;
 }
 
+type ForegroundConversationTask = ActorForegroundJobData["task"];
+
 interface ChatTaskData {
   actorId: number;
+  task: ForegroundConversationTask;
   prompt: string;
   conversationId: number;
   triggeredAt: number;
@@ -111,8 +114,9 @@ interface SleepTaskData {
 export interface ActorForegroundJobData {
   actorId: number;
   prompt: string;
+  summary?: string;
   conversationId: number;
-  task: "chat";
+  task: "chat" | "focus";
   addition?: Record<string, unknown>;
 }
 
@@ -124,6 +128,7 @@ export interface ActorBackgroundJobData {
   conversationId?: number;
   task: "activity" | "conversation_rollup" | "memory_rollup" | "wake" | "sleep";
   prompt?: string;
+  summary?: string;
   addition?: Record<string, unknown>;
 }
 
@@ -156,8 +161,10 @@ export async function runActorForegroundJob(
   }
   switch (job.task) {
     case "chat":
+    case "focus":
       await runChatTask(server, {
         actorId: job.actorId,
+        task: job.task,
         conversationId: job.conversationId,
         prompt: job.prompt,
         triggeredAt,
@@ -326,7 +333,7 @@ async function runChatTask(server: Server, job: ChatTaskData): Promise<void> {
   if (!conversation || conversation.actorId !== job.actorId) {
     server.logger?.warn("Actor foreground task skipped", {
       actorId: job.actorId,
-      task: "chat",
+      task: job.task,
       conversationId: job.conversationId,
       triggeredAt: job.triggeredAt,
       reason: "invalid_conversation",
@@ -336,7 +343,7 @@ async function runChatTask(server: Server, job: ChatTaskData): Promise<void> {
   if (conversation.allowProactive !== true) {
     server.logger?.info("Actor foreground task skipped", {
       actorId: job.actorId,
-      task: "chat",
+      task: job.task,
       conversationId: job.conversationId,
       triggeredAt: job.triggeredAt,
       reason: "proactive_disabled",
@@ -347,7 +354,7 @@ async function runChatTask(server: Server, job: ChatTaskData): Promise<void> {
   if (!actor.canRunActiveTasks()) {
     server.logger?.info("Actor foreground task skipped", {
       actorId: job.actorId,
-      task: "chat",
+      task: job.task,
       conversationId: job.conversationId,
       triggeredAt: job.triggeredAt,
       reason: "actor_not_awake",
@@ -361,15 +368,18 @@ async function runChatTask(server: Server, job: ChatTaskData): Promise<void> {
     inputs: [
       {
         type: "text",
-        text: await server.promptStore.loadTaskPrompt("scheduled-chat", {
-          SCHEDULED_PROMPT: job.prompt,
-        }),
+        text:
+          job.task === "focus"
+            ? await server.promptStore.loadTaskPrompt("conversation-focus")
+            : await server.promptStore.loadTaskPrompt("scheduled-chat", {
+                SCHEDULED_PROMPT: job.prompt,
+              }),
       },
     ],
   });
   server.logger?.info("Actor foreground task enqueued", {
     actorId: job.actorId,
-    task: "chat",
+    task: job.task,
     conversationId: job.conversationId,
     triggeredAt: job.triggeredAt,
   });

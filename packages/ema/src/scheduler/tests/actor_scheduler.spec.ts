@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { createMongo, type Mongo } from "../../db";
 import { ActorScheduler, AgendaScheduler } from "..";
+import { parseTimestamp } from "../../shared/utils";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -32,6 +33,7 @@ describe("ActorScheduler", () => {
         task: "chat",
         runAt: now + 60_000,
         conversationId: 12,
+        summary: "早上主动问候",
         prompt: "在早上主动打个招呼。",
         addition: { source: "test" },
       },
@@ -40,6 +42,7 @@ describe("ActorScheduler", () => {
         task: "activity",
         runAt: now + 120_000,
         interval: 3_600_000,
+        summary: "记录轻量活动",
         prompt: "记录一条轻量后台活动。",
       },
     ]);
@@ -71,12 +74,14 @@ describe("ActorScheduler", () => {
     expect(listed.upcoming[0]).toMatchObject({
       task: "chat",
       conversationId: 12,
+      summary: "早上主动问候",
       prompt: "在早上主动打个招呼。",
       addition: { source: "test" },
     });
     expect(listed.recurring[0]).toMatchObject({
       task: "activity",
       conversationId: null,
+      summary: "记录轻量活动",
       prompt: "记录一条轻量后台活动。",
       interval: 3_600_000,
     });
@@ -85,6 +90,7 @@ describe("ActorScheduler", () => {
       {
         id: created.added[0].id,
         runAt: now + 240_000,
+        summary: "中午主动问候",
         prompt: "在中午主动打个招呼。",
         addition: { source: "updated" },
       },
@@ -93,6 +99,7 @@ describe("ActorScheduler", () => {
       id: created.added[0].id,
       type: "once",
       task: "chat",
+      summary: "中午主动问候",
       prompt: "在中午主动打个招呼。",
       conversationId: 12,
       addition: { source: "updated" },
@@ -120,6 +127,7 @@ describe("ActorScheduler", () => {
         actorId: 1,
         conversationId: 12,
         task: "chat",
+        summary: "旧过期日程",
         prompt: "已经过期的打招呼。",
       },
     });
@@ -135,12 +143,14 @@ describe("ActorScheduler", () => {
       {
         id: jobId,
         runAt: Date.now() + 60_000,
+        summary: "改到之后问候",
         prompt: "改成之后再打招呼。",
       },
     ]);
     expect(updated.updated[0]).toMatchObject({
       id: jobId,
       type: "once",
+      summary: "改到之后问候",
       prompt: "改成之后再打招呼。",
     });
     expect(updated.updated[0].addition.overdue).toBeUndefined();
@@ -167,6 +177,7 @@ describe("ActorScheduler", () => {
         actorId: 1,
         conversationId: 12,
         task: "chat",
+        summary: "过期问候",
         prompt: "已经过期的打招呼。",
       },
     });
@@ -176,6 +187,7 @@ describe("ActorScheduler", () => {
     const updated = await actorScheduler.update([
       {
         id: jobId,
+        summary: "只改摘要",
         prompt: "只改提示词，不改时间。",
         addition: { source: "review-fix" },
       },
@@ -184,6 +196,7 @@ describe("ActorScheduler", () => {
     expect(updated.updated[0]).toMatchObject({
       id: jobId,
       type: "once",
+      summary: "只改摘要",
       prompt: "只改提示词，不改时间。",
       addition: {
         source: "review-fix",
@@ -201,6 +214,7 @@ describe("ActorScheduler", () => {
     expect(listed.overdue).toHaveLength(1);
     expect(listed.overdue[0]).toMatchObject({
       id: jobId,
+      summary: "只改摘要",
       prompt: "只改提示词，不改时间。",
       addition: {
         source: "review-fix",
@@ -239,6 +253,56 @@ describe("ActorScheduler", () => {
 
     const job = await scheduler.getJob(first.added[0].id);
     expect(job?.attrs.data).not.toHaveProperty("prompt");
+  });
+
+  test("lists focus schedules separately and reuses existing focus for one conversation", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+
+    const first = await actorScheduler.add([
+      {
+        task: "focus",
+        conversationId: 12,
+      },
+    ]);
+    const second = await actorScheduler.add([
+      {
+        task: "focus",
+        conversationId: 12,
+      },
+    ]);
+
+    expect(second.added[0].id).toBe(first.added[0].id);
+
+    const listed = await actorScheduler.list();
+    expect(listed.focused).toHaveLength(1);
+    expect(listed.recurring).toHaveLength(0);
+    expect(listed.focused[0]).toMatchObject({
+      id: first.added[0].id,
+      type: "every",
+      task: "focus",
+      conversationId: 12,
+      interval: 300_000,
+      prompt: "",
+    });
+  });
+
+  test("schedules focus first heartbeat five minutes later", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+    const start = Date.now();
+
+    await actorScheduler.add([
+      {
+        task: "focus",
+        conversationId: 12,
+      },
+    ]);
+
+    const listed = await actorScheduler.list(start);
+    expect(listed.focused).toHaveLength(1);
+    const nextRunAt = listed.focused[0].nextRunAt;
+    expect(nextRunAt).not.toBeNull();
+    const parsedNextRunAt = parseTimestamp("YYYY-MM-DD HH:mm:ss", nextRunAt!);
+    expect(parsedNextRunAt).toBeGreaterThanOrEqual(start + 299_000);
   });
 
   test("lists routine schedules that do not store prompt payloads", async () => {
@@ -305,6 +369,7 @@ describe("ActorScheduler", () => {
         task: "chat",
         interval: "0 9 * * *",
         conversationId: 12,
+        summary: "上午问候",
         prompt: "每天上午问候。",
       },
     ]);
@@ -316,6 +381,7 @@ describe("ActorScheduler", () => {
       task: "chat",
       interval: "0 9 * * *",
       conversationId: 12,
+      summary: "上午问候",
       prompt: "每天上午问候。",
     });
     expect(listed.recurring[0].nextRunAt).not.toBeNull();
@@ -332,6 +398,7 @@ describe("ActorScheduler", () => {
           runAt: Date.now() + 60_000,
           interval: "0 9 * * *",
           conversationId: 12,
+          summary: "上午问候",
           prompt: "每天上午问候。",
         } as any,
       ]),
@@ -347,6 +414,7 @@ describe("ActorScheduler", () => {
         runAt: Date.now() + 60_000,
         interval: 60_000,
         conversationId: 12,
+        summary: "固定间隔提醒",
         prompt: "按固定间隔提醒。",
       },
     ]);
@@ -368,6 +436,7 @@ describe("ActorScheduler", () => {
         type: "once",
         task: "activity",
         runAt: Date.now() + 60_000,
+        summary: "记录状态",
         prompt: "记录一次状态。",
       },
     ]);

@@ -72,7 +72,7 @@ function extractImageParts(
  */
 export default class StickerSkill extends Skill {
   description =
-    "该技能用于预览、更新和收藏表情包，在需要查看某个表情的原图、修改表情信息或把聊天记录中的图片收藏成表情时使用。发送表情仍需使用 ema_reply 工具。";
+    "该技能用于查看可用表情包，并在聊天中选择合适表情回应。适合在想发表情、回应对方表情包/图片/梗、轻量冒泡、接梗、表达情绪，或觉得文字会过度解释时使用。发送表情仍需使用 ema_reply 工具。";
 
   parameters = StickerSkillSchema.toJSONSchema();
 

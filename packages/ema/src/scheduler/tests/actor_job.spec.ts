@@ -663,6 +663,43 @@ describe("actor foreground job lifecycle logs", () => {
     });
   });
 
+  test("focus task enqueues the conversation focus prompt", async () => {
+    const actor = createFakeActor("awake");
+    const server = createFakeServer([], [], actor);
+
+    await runActorForegroundJob(
+      server as any,
+      {
+        actorId: 1,
+        task: "focus",
+        conversationId: 12,
+        prompt: "",
+      },
+      2000,
+    );
+
+    expect(actor.enqueueActorInput).toHaveBeenCalledWith(
+      12,
+      expect.objectContaining({
+        kind: "system",
+        conversationId: 12,
+        time: 2000,
+        inputs: [
+          {
+            type: "text",
+            text: "conversation-focus prompt",
+          },
+        ],
+      }),
+    );
+    expectInfoLog(server, "Actor foreground task enqueued", {
+      actorId: 1,
+      task: "focus",
+      conversationId: 12,
+      triggeredAt: 2000,
+    });
+  });
+
   test("chat task skips invalid scheduled conversations", async () => {
     const actor = createFakeActor("awake");
     const server = createFakeServer([], [], actor);

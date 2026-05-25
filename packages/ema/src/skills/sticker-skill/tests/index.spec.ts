@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, test, vi } from "vitest";
 
 vi.mock("../pack", () => ({
@@ -64,7 +66,19 @@ vi.mock("../utils", () => ({
 
 import StickerSkill from "..";
 
+const skillsRoot = fileURLToPath(new URL("../..", import.meta.url));
+
 describe("StickerSkill", () => {
+  test("playbook frames stickers as a chat response option", async () => {
+    const skill = new StickerSkill(skillsRoot, "sticker-skill");
+
+    const playbook = await skill.getPlaybook();
+
+    expect(playbook).toContain("聊天中选择合适表情回应");
+    expect(playbook).toContain("回应对方的表情包、图片或梗");
+    expect(playbook).toContain("id: `test_sticker_1`");
+  });
+
   test("preview returns readable content and inline image data", async () => {
     const skill = new StickerSkill("packages/ema/src/skills", "sticker-skill");
 
