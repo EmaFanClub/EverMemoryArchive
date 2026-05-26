@@ -1,0 +1,4 @@
+interface:
+  display_name: "EMA Release"
+  short_description: "Prepare EverMemoryArchive releases."
+  default_prompt: "Prepare an EverMemoryArchive release using the repository release scripts."
