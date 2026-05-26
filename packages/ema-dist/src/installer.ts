@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { removeDanglingSymlinks } from "./archive";
+import { writeSha256File } from "./checksums";
 import { installerFileName, platformDistRoot, stageRoot } from "./paths";
 import type { PackageKind, Platform } from "./platforms";
 import { buildRustBinary } from "./rust";
@@ -30,5 +31,6 @@ export async function createSelfInstaller(
   if (platform.os !== "win32") {
     await fs.chmod(outputPath, 0o755);
   }
+  await writeSha256File(outputPath);
   return outputPath;
 }

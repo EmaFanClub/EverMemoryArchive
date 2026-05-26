@@ -48,6 +48,8 @@ ema-$platform-minimal-$revision.zip
 ema-$platform-portable-$revision.zip
 ```
 
+Each archive and installer is accompanied by a sibling `.sha256` file.
+
 The platform ids are:
 
 ```text

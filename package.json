@@ -27,6 +27,10 @@
     "dist:pack": "pnpm --filter ema-dist run pack",
     "dist:installers": "pnpm --filter ema-dist run installers",
     "dist:build": "pnpm --filter ema-dist run build",
+    "dist:list-platforms": "pnpm --filter ema-dist run list-platforms",
+    "release:preflight": "node scripts/release-preflight.mjs",
+    "release:changelog": "node scripts/generate-changelog.mjs",
+    "draft-release": "node scripts/draft-release.mjs",
     "format": "prettier --write \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\"",
     "format:check": "prettier --check \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\""
   },

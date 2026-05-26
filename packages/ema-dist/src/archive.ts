@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writeSha256File } from "./checksums";
 import { commandExists, execFile } from "./shell";
 import { packageFileName, platformDistRoot } from "./paths";
 import type { PackageKind, Platform } from "./platforms";
@@ -90,6 +91,7 @@ async function createArchiveFiles(
     await execFile(sevenZip, ["a", `-t${format}`, outputs[index], rootName], {
       cwd: parent,
     });
+    await writeSha256File(outputs[index]);
   }
 
   return [...outputs];

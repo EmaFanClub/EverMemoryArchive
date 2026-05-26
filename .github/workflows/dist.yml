@@ -177,7 +177,9 @@ jobs:
         with:
           name: ema-${{ matrix.platform }}-minimal-zip
           if-no-files-found: error
-          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.zip
+          path: |
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.zip
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.zip.sha256
 
       - name: Build minimal 7z package
         run: pnpm --filter ema-dist run pack -- --platform ${{ matrix.platform }} --kind minimal --format 7z
@@ -187,7 +189,9 @@ jobs:
         with:
           name: ema-${{ matrix.platform }}-minimal-7z
           if-no-files-found: error
-          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.7z
+          path: |
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.7z
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-minimal-*.7z.sha256
 
       - name: Stage portable package
         run: pnpm --filter ema-dist run stage -- --platform ${{ matrix.platform }} --kind portable
@@ -205,7 +209,9 @@ jobs:
         with:
           name: ema-${{ matrix.platform }}-portable-zip
           if-no-files-found: error
-          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.zip
+          path: |
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.zip
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.zip.sha256
 
       - name: Build portable 7z package
         if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
@@ -217,7 +223,11 @@ jobs:
         with:
           name: ema-${{ matrix.platform }}-portable-7z
           if-no-files-found: error
-          path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.7z
+          path: |
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.7z
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*.7z.sha256
+            !dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-debug-symbols-*.7z
+            !dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-debug-symbols-*.7z.sha256
 
       - name: Build portable installer
         if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
@@ -231,6 +241,16 @@ jobs:
           if-no-files-found: error
           path: dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-*-installer.*
 
+      - name: Upload portable debug symbols artifact
+        if: ${{ matrix.platform != 'linux-armhf' && matrix.platform != 'alpine-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ema-${{ matrix.platform }}-portable-debug-symbols
+          if-no-files-found: ignore
+          path: |
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-debug-symbols-*.7z
+            dist/${{ matrix.platform }}/ema-${{ matrix.platform }}-portable-debug-symbols-*.7z.sha256
+
       - name: Write portable skipped note
         if: ${{ matrix.platform == 'linux-armhf' || matrix.platform == 'alpine-x64' }}
         run: pnpm --filter ema-dist run skip-note -- --platform ${{ matrix.platform }}
@@ -242,3 +262,48 @@ jobs:
           name: ema-${{ matrix.platform }}-portable-skipped
           if-no-files-found: error
           path: dist/${{ matrix.platform }}/*.SKIPPED.txt
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ema-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install parse-changelog
+        uses: taiki-e/install-action@parse-changelog
+
+      - name: Generate release notes
+        run: node scripts/draft-release.mjs "$GITHUB_REF_NAME" --artifacts artifacts --output dist/release-notes.md
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease_flag=""
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            prerelease_flag="--prerelease"
+          fi
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" artifacts/* --clobber
+            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file dist/release-notes.md $prerelease_flag
+          else
+            gh release create "$GITHUB_REF_NAME" artifacts/* --title "$GITHUB_REF_NAME" --notes-file dist/release-notes.md $prerelease_flag
+          fi
