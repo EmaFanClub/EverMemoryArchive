@@ -4,6 +4,7 @@ export type EmaEventTopic =
   | "actor.deleted"
   | "actor.runtime.changed"
   | "actor.latest_preview"
+  | "actor.token_usage.changed"
   | "channel.qq.connection.changed";
 
 export interface EmaEvent<

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "@/app/dashboard/page.module.css";
 import type { ActorSummary } from "@/types/dashboard/v1beta1";
 import { getActorTokenUsage } from "@/transport/dashboard";
+import { subscribeEmaEvents } from "@/transport/events";
 
 import {
   TOKEN_USAGE_RANGE_OPTIONS,
@@ -12,7 +13,9 @@ import {
   TOKEN_USAGE_TOOLTIP_METRICS,
   TOKEN_USAGE_TREND_STACK,
   buildTokenUsageAxisTicks,
+  buildTokenUsageSegments,
   buildTokenUsageTrendSlots,
+  shouldRefreshTokenUsageForEvent,
   type ActorTokenUsageSourceSummary,
   type ActorTokenUsageSummaryResponse,
   type TokenUsageRange,
@@ -32,12 +35,12 @@ type TokenUsageMetric = {
 const TOKEN_USAGE_METRICS: TokenUsageMetric[] = [
   {
     key: "cacheReadTokens",
-    label: "Cache Read",
+    label: "Cache",
     tone: styles.actorStatsToneCacheRead,
   },
   {
     key: "cacheWriteTokens",
-    label: "Cache Write",
+    label: "Input",
     tone: styles.actorStatsToneCacheWrite,
   },
   {
@@ -51,11 +54,13 @@ const SOURCE_DETAIL_METRICS: Array<{
   key: keyof TokenUsageTotals;
   shortLabel: string;
 }> = [
-  { key: "cacheReadTokens", shortLabel: "Read" },
-  { key: "cacheWriteTokens", shortLabel: "Write" },
+  { key: "cacheReadTokens", shortLabel: "Cache" },
+  { key: "cacheWriteTokens", shortLabel: "Input" },
   { key: "outputTokens", shortLabel: "Output" },
   { key: "totalTokens", shortLabel: "Total" },
 ];
+
+const TOKEN_USAGE_REFRESH_DEBOUNCE_MS = 700;
 
 const SOURCE_TONES: Record<TokenUsageSource, string> = {
   chat: styles.actorStatsToneChat,
@@ -98,6 +103,7 @@ export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
   const [loadState, setLoadState] = useState<ActorTokenUsageLoadState>({
     status: "loading",
   });
+  const loadVersionRef = useRef(0);
   const currentLoadState =
     loadState.status !== "loading" &&
     loadState.actorId === actor.id &&
@@ -124,31 +130,75 @@ export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
     [summary?.trendByDay],
   );
 
+  const loadTokenUsage = useCallback(
+    (signal?: AbortSignal) => {
+      const loadVersion = loadVersionRef.current + 1;
+      loadVersionRef.current = loadVersion;
+
+      return getActorTokenUsage(actor.id, range, { signal })
+        .then((nextSummary) => {
+          if (loadVersionRef.current !== loadVersion) {
+            return;
+          }
+          setLoadState({
+            status: "ready",
+            actorId: actor.id,
+            range,
+            summary: nextSummary,
+          });
+        })
+        .catch((error) => {
+          if (signal?.aborted || loadVersionRef.current !== loadVersion) {
+            return;
+          }
+          setLoadState({
+            status: "error",
+            actorId: actor.id,
+            range,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
+    },
+    [actor.id, range],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
-    getActorTokenUsage(actor.id, range, { signal: controller.signal })
-      .then((nextSummary) => {
-        setLoadState({
-          status: "ready",
-          actorId: actor.id,
-          range,
-          summary: nextSummary,
-        });
-      })
-      .catch((error) => {
-        if (controller.signal.aborted) return;
-        setLoadState({
-          status: "error",
-          actorId: actor.id,
-          range,
-          message: error instanceof Error ? error.message : String(error),
-        });
-      });
+    void loadTokenUsage(controller.signal);
 
     return () => {
       controller.abort();
     };
-  }, [actor.id, range]);
+  }, [loadTokenUsage]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let controller: AbortController | null = null;
+    const subscription = subscribeEmaEvents(
+      ["actor.token_usage.changed"],
+      (event) => {
+        if (!shouldRefreshTokenUsageForEvent(event, actor.id)) {
+          return;
+        }
+        if (timer) {
+          clearTimeout(timer);
+        }
+        timer = setTimeout(() => {
+          controller?.abort();
+          controller = new AbortController();
+          void loadTokenUsage(controller.signal);
+        }, TOKEN_USAGE_REFRESH_DEBOUNCE_MS);
+      },
+    );
+
+    return () => {
+      subscription.close();
+      if (timer) {
+        clearTimeout(timer);
+      }
+      controller?.abort();
+    };
+  }, [actor.id, loadTokenUsage]);
 
   return (
     <div className={styles.actorStatsPanel}>
@@ -311,9 +361,9 @@ export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
                           tabIndex={0}
                           aria-label={`${formatDayLabel(slot.date)} ${formatTokenCount(
                             slot.totalTokens,
-                          )} tokens，Cache Read ${formatTokenCount(
+                          )} tokens，Cache ${formatTokenCount(
                             slot.cacheReadTokens,
-                          )}，Cache Write ${formatTokenCount(
+                          )}，Input ${formatTokenCount(
                             slot.cacheWriteTokens,
                           )}，Output ${formatTokenCount(slot.outputTokens)}`}
                         >
@@ -390,6 +440,7 @@ function ActorTokenUsageSourceItem({
   totalTokens: number;
 }) {
   const percent = totalTokens > 0 ? (item.totalTokens / totalTokens) * 100 : 0;
+  const segments = buildTokenUsageSegments(item);
 
   return (
     <div className={styles.actorStatsSourceItem}>
@@ -401,12 +452,24 @@ function ActorTokenUsageSourceItem({
         role="img"
         aria-label={`${TOKEN_USAGE_SOURCE_LABELS[item.source]} ${formatPercent(
           percent,
-        )}`}
+        )}，Cache ${formatTokenCount(item.cacheReadTokens)}，Input ${formatTokenCount(
+          item.cacheWriteTokens,
+        )}，Output ${formatTokenCount(item.outputTokens)}`}
       >
         <span
           className={`${styles.actorStatsSourceBar} ${SOURCE_TONES[item.source]}`}
           style={{ width: `${percent > 0 ? Math.max(3, percent) : 0}%` }}
-        />
+        >
+          {segments.map((segment) => (
+            <span
+              key={segment.key}
+              className={`${styles.actorStatsSourceSegment} ${
+                TREND_BUCKET_TONES[segment.key]
+              }`}
+              style={{ width: `${segment.percent}%` }}
+            />
+          ))}
+        </span>
       </div>
       <div className={styles.actorStatsSourceDetail}>
         {SOURCE_DETAIL_METRICS.map((metric) => (

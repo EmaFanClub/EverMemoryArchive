@@ -1292,12 +1292,19 @@
 }
 
 .actorStatsSourceBar {
-  display: block;
+  display: flex;
   height: 100%;
   border-radius: inherit;
-  background: var(--actor-stats-tone, var(--accent));
+  overflow: hidden;
+  background: transparent;
   box-shadow: 0 0 14px
     color-mix(in srgb, var(--actor-stats-tone, var(--accent)) 18%, transparent);
+}
+
+.actorStatsSourceSegment {
+  height: 100%;
+  flex: 0 0 auto;
+  background: var(--actor-stats-tone, var(--accent));
 }
 
 .actorStatsSourceDetail {

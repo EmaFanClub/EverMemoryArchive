@@ -5,7 +5,9 @@ import {
   TOKEN_USAGE_TOOLTIP_METRICS,
   TOKEN_USAGE_TREND_STACK,
   buildTokenUsageAxisTicks,
+  buildTokenUsageSegments,
   buildTokenUsageTrendSlots,
+  shouldRefreshTokenUsageForEvent,
   isTokenUsageRange,
   tokenUsageRangeLabel,
   type ActorTokenUsageDaySummary,
@@ -34,6 +36,11 @@ describe("actor token usage helpers", () => {
       "cacheWriteTokens",
       "outputTokens",
     ]);
+    expect(TOKEN_USAGE_TREND_STACK.map((bucket) => bucket.label)).toEqual([
+      "Cache",
+      "Input",
+      "Output",
+    ]);
   });
 
   test("defines tooltip metrics in display order", () => {
@@ -43,6 +50,48 @@ describe("actor token usage helpers", () => {
       "outputTokens",
       "totalTokens",
     ]);
+    expect(TOKEN_USAGE_TOOLTIP_METRICS.map((metric) => metric.label)).toEqual([
+      "Cache",
+      "Input",
+      "Output",
+      "Total",
+    ]);
+  });
+
+  test("builds source bar segments from cache, input, and output totals", () => {
+    expect(
+      buildTokenUsageSegments({
+        cacheReadTokens: 20,
+        cacheWriteTokens: 30,
+        outputTokens: 50,
+        totalTokens: 100,
+      }),
+    ).toEqual([
+      { key: "cacheReadTokens", percent: 20 },
+      { key: "cacheWriteTokens", percent: 30 },
+      { key: "outputTokens", percent: 50 },
+    ]);
+  });
+
+  test("matches token usage change events for the visible actor only", () => {
+    expect(
+      shouldRefreshTokenUsageForEvent(
+        { type: "actor.token_usage.changed", actorId: "1" },
+        "1",
+      ),
+    ).toBe(true);
+    expect(
+      shouldRefreshTokenUsageForEvent(
+        { type: "actor.token_usage.changed", actorId: "2" },
+        "1",
+      ),
+    ).toBe(false);
+    expect(
+      shouldRefreshTokenUsageForEvent(
+        { type: "actor.updated", actorId: "1" },
+        "1",
+      ),
+    ).toBe(false);
   });
 
   test("builds compact axis ticks above the largest day total", () => {

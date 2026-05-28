@@ -35,6 +35,7 @@ export function subscribeSse<T>(
     source.addEventListener("actor.runtime.changed", source.onmessage);
     source.addEventListener("actor.latest_preview", source.onmessage);
     source.addEventListener("actor.unread.changed", source.onmessage);
+    source.addEventListener("actor.token_usage.changed", source.onmessage);
     source.addEventListener("conversation.message.created", source.onmessage);
     source.addEventListener("conversation.typing.changed", source.onmessage);
     source.addEventListener("channel.qq.connection.changed", source.onmessage);

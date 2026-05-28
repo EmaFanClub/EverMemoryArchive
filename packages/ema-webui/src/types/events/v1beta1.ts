@@ -5,6 +5,7 @@ import type {
   ActorRuntimeStatus,
   ActorRuntimeTransition,
   ActorSummary,
+  TokenUsageSource,
 } from "@/types/dashboard/v1beta1";
 
 export type EmaEventTopic =
@@ -14,6 +15,7 @@ export type EmaEventTopic =
   | "actor.runtime.changed"
   | "actor.latest_preview"
   | "actor.unread.changed"
+  | "actor.token_usage.changed"
   | "conversation.message.created"
   | "conversation.typing.changed"
   | "channel.qq.connection.changed";
@@ -49,6 +51,11 @@ export interface ActorUnreadChangedEventData {
   count: number;
 }
 
+export interface ActorTokenUsageChangedEventData {
+  source: TokenUsageSource;
+  conversationId?: string;
+}
+
 export interface ConversationMessageCreatedEventData {
   message: ConversationMessage;
 }
@@ -73,6 +80,7 @@ export type EmaKnownEvent =
   | EmaEvent<"actor.runtime.changed", ActorRuntimeChangedEventData>
   | EmaEvent<"actor.latest_preview", ActorLatestPreviewEventData>
   | EmaEvent<"actor.unread.changed", ActorUnreadChangedEventData>
+  | EmaEvent<"actor.token_usage.changed", ActorTokenUsageChangedEventData>
   | EmaEvent<
       "conversation.message.created",
       ConversationMessageCreatedEventData

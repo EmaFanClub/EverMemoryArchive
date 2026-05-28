@@ -5,15 +5,27 @@ import type {
   ActorRuntimeSnapshot,
   EmaEvent as CoreEmaEvent,
 } from "ema";
+import type { TokenUsageSource } from "@/types/dashboard/v1beta1";
 import type {
   ActorLatestPreviewEventData,
   ActorRuntimeChangedEventData,
+  ActorTokenUsageChangedEventData,
   ChannelQqConnectionChangedEventData,
   EmaKnownEvent,
 } from "@/types/events/v1beta1";
 import { toActorSummary } from "./dashboard";
 import { toWebActorId } from "./ids";
 import { toWebQqBlockedBy, toWebQqTransportStatus } from "./settings";
+
+const TOKEN_USAGE_SOURCES = [
+  "chat",
+  "activity",
+  "conversation_rollup",
+  "memory_rollup",
+  "wake",
+  "sleep",
+  "training",
+] as const satisfies readonly TokenUsageSource[];
 
 export function toWebBusEvent(event: CoreEmaEvent): EmaKnownEvent | null {
   switch (event.type) {
@@ -27,6 +39,8 @@ export function toWebBusEvent(event: CoreEmaEvent): EmaKnownEvent | null {
       return toActorRuntimeChangedEvent(event);
     case "actor.latest_preview":
       return toActorLatestPreviewEvent(event);
+    case "actor.token_usage.changed":
+      return toActorTokenUsageChangedEvent(event);
     case "channel.qq.connection.changed":
       return toChannelQqConnectionChangedEvent(event);
   }
@@ -105,6 +119,30 @@ function toActorLatestPreviewEvent(event: CoreEmaEvent): EmaKnownEvent | null {
   };
 }
 
+function toActorTokenUsageChangedEvent(
+  event: CoreEmaEvent,
+): EmaKnownEvent | null {
+  if (typeof event.actorId !== "number") {
+    return null;
+  }
+  const source = readString(event.data, "source");
+  if (!isTokenUsageSource(source)) {
+    return null;
+  }
+  const conversationId = readNumber(event.data, "conversationId");
+  return {
+    type: "actor.token_usage.changed",
+    ts: event.ts,
+    actorId: toWebActorId(event.actorId),
+    data: {
+      source,
+      ...(typeof conversationId === "number"
+        ? { conversationId: String(conversationId) }
+        : {}),
+    } satisfies ActorTokenUsageChangedEventData,
+  };
+}
+
 function toChannelQqConnectionChangedEvent(
   event: CoreEmaEvent,
 ): EmaKnownEvent | null {
@@ -162,6 +200,13 @@ function isRuntimeTransition(
     value === "shutting_down" ||
     value === "waking" ||
     value === "sleeping"
+  );
+}
+
+function isTokenUsageSource(value: unknown): value is TokenUsageSource {
+  return (
+    typeof value === "string" &&
+    TOKEN_USAGE_SOURCES.includes(value as TokenUsageSource)
   );
 }
 

@@ -172,6 +172,7 @@ export class ActorWorker {
     const write: Promise<void> = recordAgentTokenUsage(
       this.server.dbService,
       event,
+      this.server.bus,
     )
       .then(() => undefined)
       .catch((error) => {

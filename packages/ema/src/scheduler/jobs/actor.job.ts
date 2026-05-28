@@ -1387,7 +1387,11 @@ async function runBackgroundAgentWithState(
   };
   const usageWrites = new Set<Promise<void>>();
   const handleUsage = (event: Parameters<typeof recordAgentTokenUsage>[1]) => {
-    const write: Promise<void> = recordAgentTokenUsage(server.dbService, event)
+    const write: Promise<void> = recordAgentTokenUsage(
+      server.dbService,
+      event,
+      server.bus,
+    )
       .then(() => undefined)
       .catch((error) => {
         server.logger.warn("Failed to record actor token usage", {

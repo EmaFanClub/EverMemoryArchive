@@ -20,6 +20,14 @@ import {
   type ActorSideTabId,
 } from "@/features/actor-sidebar/ActorSidePanel";
 import {
+  deleteActorSideTab,
+  readActorSideTabs,
+  resolveActorSideTab,
+  updateActorSideTab,
+  writeActorSideTabs,
+  type ActorSideTabByActorId,
+} from "@/features/actor-sidebar/actor-side-tabs";
+import {
   ActorItem,
   type ActorLatestPreviewState,
 } from "@/features/actor-sidebar/ActorItem";
@@ -63,6 +71,7 @@ const DASHBOARD_FIRST_LOGIN_STORAGE_KEY = "ema-webui-dashboard-first-login-v1";
 const CREATE_ACTOR_GUIDE_STORAGE_KEY =
   "ema-webui-create-actor-guide-dismissed-v1";
 const ACTOR_STARTUP_TIP_STORAGE_KEY = "ema-webui-actor-startup-tip-pending-v1";
+const ACTOR_SIDE_TAB_STORAGE_KEY = "ema-webui-actor-side-tabs-v1";
 const DASHBOARD_LAYOUT_STORAGE_KEYS = [
   "ema-webui-dashboard-layout",
   "ema-webui-dashboard-layout-v2",
@@ -234,8 +243,10 @@ function DashboardContent() {
     useState(false);
   const [createActorGuideDismissed, setCreateActorGuideDismissed] =
     useState(false);
-  const [actorInfoActiveTab, setActorInfoActiveTab] =
-    useState<ActorSideTabId>("schedule");
+  const [actorInfoTabsByActorId, setActorInfoTabsByActorId] =
+    useState<ActorSideTabByActorId>({});
+  const [actorInfoTabStorageReady, setActorInfoTabStorageReady] =
+    useState(false);
   const [startupTipActorId, setStartupTipActorId] = useState<string | null>(
     null,
   );
@@ -266,6 +277,9 @@ function DashboardContent() {
     : null;
   const activeActor =
     actors.find((actor) => actor.id === activeActorId) ?? null;
+  const actorInfoActiveTab = activeActor
+    ? resolveActorSideTab(actorInfoTabsByActorId, activeActor.id)
+    : "schedule";
   const isCreateActorRouteActive = searchParams.get("createActor") === "1";
   const isCreateActorActive = createActorVisible || isCreateActorRouteActive;
   const isHomeActive = !requestedActorId && !isCreateActorActive;
@@ -301,6 +315,15 @@ function DashboardContent() {
         },
       );
     }
+  }
+
+  function changeActorInfoActiveTab(tab: ActorSideTabId) {
+    if (!activeActor) {
+      return;
+    }
+    setActorInfoTabsByActorId((current) =>
+      updateActorSideTab(current, activeActor.id, tab),
+    );
   }
 
   function applyOverview(result: DashboardOverviewResponse) {
@@ -425,6 +448,9 @@ function DashboardContent() {
         delete next[actorId];
         return next;
       });
+      setActorInfoTabsByActorId((current) =>
+        deleteActorSideTab(current, actorId),
+      );
       setStartupTipActorId((current) => (current === actorId ? null : current));
       if (activeActorId === actorId) {
         router.replace("/dashboard", { scroll: false });
@@ -471,6 +497,12 @@ function DashboardContent() {
         ? null
         : window.localStorage.getItem(ACTOR_STARTUP_TIP_STORAGE_KEY),
     );
+    setActorInfoTabsByActorId(
+      isFirstDashboardEntry
+        ? {}
+        : readActorSideTabs(window.localStorage, ACTOR_SIDE_TAB_STORAGE_KEY),
+    );
+    setActorInfoTabStorageReady(true);
     setLayoutStorageReady(true);
     // The initial client-only layout intentionally reads localStorage after
     // hydration so the server and first client render keep identical style
@@ -490,6 +522,18 @@ function DashboardContent() {
   }, [layoutState, layoutStorageReady]);
 
   useEffect(() => {
+    if (!actorInfoTabStorageReady) {
+      return;
+    }
+
+    writeActorSideTabs(
+      window.localStorage,
+      ACTOR_SIDE_TAB_STORAGE_KEY,
+      actorInfoTabsByActorId,
+    );
+  }, [actorInfoTabStorageReady, actorInfoTabsByActorId]);
+
+  useEffect(() => {
     if (
       !activeActor ||
       startupTipActorId !== activeActor.id ||
@@ -499,7 +543,9 @@ function DashboardContent() {
       return;
     }
 
-    setActorInfoActiveTab("settings");
+    setActorInfoTabsByActorId((current) =>
+      updateActorSideTab(current, activeActor.id, "settings"),
+    );
     setLayoutState((current) =>
       current.actorInfoVisible
         ? current
@@ -1100,7 +1146,7 @@ function DashboardContent() {
               actor={activeActor}
               hidden={!actorInfoVisible}
               activeTab={actorInfoActiveTab}
-              onActiveTabChange={setActorInfoActiveTab}
+              onActiveTabChange={changeActorInfoActiveTab}
               renderSettings={() => (
                 <ActorSettingsPanel
                   key={activeActor.id}
@@ -1175,7 +1221,9 @@ function DashboardContent() {
                 [actor.id]: training,
               }));
             }
-            setActorInfoActiveTab("settings");
+            setActorInfoTabsByActorId((current) =>
+              updateActorSideTab(current, actor.id, "settings"),
+            );
             if (training) {
               setStartupTipActorId(null);
               window.localStorage.removeItem(ACTOR_STARTUP_TIP_STORAGE_KEY);

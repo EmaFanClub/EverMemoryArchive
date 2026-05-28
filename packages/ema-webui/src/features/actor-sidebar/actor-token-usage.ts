@@ -10,6 +10,7 @@ import {
   type TokenUsageSource,
   type TokenUsageTotals,
 } from "../../types/dashboard/v1beta1";
+import type { EmaKnownEvent } from "@/types/events/v1beta1";
 
 export {
   TOKEN_USAGE_RANGE_OPTIONS,
@@ -25,8 +26,8 @@ export {
 };
 
 export const TOKEN_USAGE_TREND_STACK = [
-  { key: "cacheReadTokens", label: "Cache Read" },
-  { key: "cacheWriteTokens", label: "Cache Write" },
+  { key: "cacheReadTokens", label: "Cache" },
+  { key: "cacheWriteTokens", label: "Input" },
   { key: "outputTokens", label: "Output" },
 ] as const satisfies Array<{
   key: keyof Pick<
@@ -37,14 +38,19 @@ export const TOKEN_USAGE_TREND_STACK = [
 }>;
 
 export const TOKEN_USAGE_TOOLTIP_METRICS = [
-  { key: "cacheReadTokens", label: "Cache Read" },
-  { key: "cacheWriteTokens", label: "Cache Write" },
+  { key: "cacheReadTokens", label: "Cache" },
+  { key: "cacheWriteTokens", label: "Input" },
   { key: "outputTokens", label: "Output" },
   { key: "totalTokens", label: "Total" },
 ] as const satisfies Array<{
   key: keyof TokenUsageTotals;
   label: string;
 }>;
+
+export type TokenUsageSegment = {
+  key: (typeof TOKEN_USAGE_TREND_STACK)[number]["key"];
+  percent: number;
+};
 
 export type ActorTokenUsageTrendSlot =
   | {
@@ -82,6 +88,33 @@ export function buildTokenUsageTrendSlots(
       ...day,
     })),
   ];
+}
+
+export function buildTokenUsageSegments(
+  totals: Pick<
+    TokenUsageTotals,
+    "cacheReadTokens" | "cacheWriteTokens" | "outputTokens" | "totalTokens"
+  >,
+): TokenUsageSegment[] {
+  if (totals.totalTokens <= 0) {
+    return TOKEN_USAGE_TREND_STACK.map((bucket) => ({
+      key: bucket.key,
+      percent: 0,
+    }));
+  }
+  return TOKEN_USAGE_TREND_STACK.map((bucket) => ({
+    key: bucket.key,
+    percent: (totals[bucket.key] / totals.totalTokens) * 100,
+  }));
+}
+
+export function shouldRefreshTokenUsageForEvent(
+  event: Pick<EmaKnownEvent, "type" | "actorId">,
+  actorId: string,
+): boolean {
+  return (
+    event.type === "actor.token_usage.changed" && event.actorId === actorId
+  );
 }
 
 function roundAxisMax(value: number): number {
