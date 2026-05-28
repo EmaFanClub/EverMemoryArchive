@@ -1,10 +1,11 @@
 import { EventEmitter } from "node:events";
 import { Agent, AgentEventNames, checkCompleteMessages } from "../agent";
-import type { AgentEventName, AgentState } from "../agent";
+import type { AgentEvent, AgentEventName, AgentState } from "../agent";
 import type { Server } from "../server";
 import { formatTraceTimestamp, Logger } from "../shared/logger";
 import { LLMClient } from "../llm";
 import { baseTools } from "../tools";
+import { recordAgentTokenUsage } from "../token_usage";
 import { resolveSession } from "../channel";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
 import { stickerIdToBase64 } from "../skills/sticker-skill/utils";
@@ -31,6 +32,7 @@ export class ActorWorker {
   private queue: ActorInput[] = [];
   private currentRunPromise: Promise<void> | null = null;
   private processingQueue = false;
+  private readonly tokenUsageWrites = new Set<Promise<void>>();
 
   private constructor(
     private readonly actorId: number,
@@ -158,7 +160,38 @@ export class ActorWorker {
           );
         });
       }
+      if (eventName === "llmUsageReceived") {
+        this.agent.events.on("llmUsageReceived", (content) => {
+          this.trackTokenUsageWrite(content);
+        });
+      }
     }
+  }
+
+  private trackTokenUsageWrite(event: AgentEvent<"llmUsageReceived">): void {
+    const write: Promise<void> = recordAgentTokenUsage(
+      this.server.dbService,
+      event,
+    )
+      .then(() => undefined)
+      .catch((error) => {
+        this.logger.warn("Failed to record actor token usage", {
+          actorId: this.actorId,
+          conversationId: this.conversationId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    this.tokenUsageWrites.add(write);
+    void write.finally(() => {
+      this.tokenUsageWrites.delete(write);
+    });
+  }
+
+  private async flushTokenUsageWrites(): Promise<void> {
+    if (this.tokenUsageWrites.size === 0) {
+      return;
+    }
+    await Promise.allSettled(Array.from(this.tokenUsageWrites));
   }
 
   /**
@@ -286,6 +319,11 @@ export class ActorWorker {
         } else {
           this.agentState = {
             traceId: this.buildTraceId(),
+            usageContext: {
+              actorId: this.actorId,
+              conversationId: this.conversationId,
+              source: "chat",
+            },
             systemPrompt:
               await this.server.memoryManager.buildSystemPromptForChat(
                 this.actorId,
@@ -308,6 +346,7 @@ export class ActorWorker {
         try {
           await this.currentRunPromise;
         } finally {
+          await this.flushTokenUsageWrites();
           this.currentRunPromise = null;
           if (
             this.agentState &&

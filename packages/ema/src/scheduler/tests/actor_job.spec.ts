@@ -113,6 +113,9 @@ type FakeServer = {
         allowProactive?: boolean;
       } | null>;
     };
+    tokenUsageDB: {
+      createTokenUsageRecord: ReturnType<typeof vi.fn>;
+    };
   };
   memoryManager: FakeMemoryManager;
   promptStore: {
@@ -184,6 +187,9 @@ function createFakeServer(
             allowProactive: true,
           };
         },
+      },
+      tokenUsageDB: {
+        createTokenUsageRecord: vi.fn(async () => 1),
       },
     },
     memoryManager: {
@@ -444,6 +450,11 @@ describe("actor background job lifecycle logs", () => {
         traceId: expect.stringMatching(
           /^actors\/actor_1\/train\/conversation_rollup\/\d{4}-\d{2}-\d{2}\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/,
         ),
+        usageContext: {
+          actorId: 1,
+          conversationId: 1,
+          source: "training",
+        },
       }),
     );
   });
@@ -471,6 +482,11 @@ describe("actor background job lifecycle logs", () => {
         traceId: expect.stringMatching(
           /^actors\/actor_1\/conversation_rollup\/\d{4}-\d{2}-\d{2}\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/,
         ),
+        usageContext: {
+          actorId: 1,
+          conversationId: 1,
+          source: "conversation_rollup",
+        },
       }),
     );
   });
@@ -570,7 +586,21 @@ describe("actor background job lifecycle logs", () => {
 
   test("activity logs lifecycle for non-rollup background tasks", async () => {
     const server = createFakeServer();
-    vi.spyOn(Agent.prototype, "runWithState").mockResolvedValue(undefined);
+    const runWithStateSpy = vi
+      .spyOn(Agent.prototype, "runWithState")
+      .mockImplementation(async function (this: Agent, state) {
+        this.events.emit("llmUsageReceived", {
+          createdAt: 1000,
+          model: "gpt-5.5",
+          usageContext: state.usageContext!,
+          usageMetadata: {
+            cachedTokens: 1,
+            promptTokens: 2,
+            thoughtTokens: 3,
+            responseTokens: 4,
+          },
+        });
+      });
 
     await runActorBackgroundJob(
       server as any,
@@ -594,6 +624,26 @@ describe("actor background job lifecycle logs", () => {
       triggeredAt: 2000,
       activityAdded: false,
       durationMs: expect.any(Number),
+    });
+    expect(runWithStateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usageContext: {
+          actorId: 1,
+          source: "activity",
+        },
+      }),
+    );
+    expect(
+      server.dbService.tokenUsageDB.createTokenUsageRecord,
+    ).toHaveBeenCalledWith({
+      actorId: 1,
+      createdAt: 1000,
+      source: "activity",
+      model: "gpt-5.5",
+      cacheReadTokens: 1,
+      cacheWriteTokens: 2,
+      outputTokens: 7,
+      totalTokens: 10,
     });
   });
 

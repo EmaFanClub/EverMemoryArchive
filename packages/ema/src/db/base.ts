@@ -8,6 +8,7 @@ import type {
   LLMConfig,
   WebSearchConfig,
 } from "../config/index";
+import type { TokenUsageSource, TokenUsageTotals } from "../token_usage/base";
 
 /**
  * Represents an entity in the database
@@ -1052,4 +1053,40 @@ export interface SearchLongTermMemoriesRequest {
    * The 1-index to filter, a.k.a. 二级分类
    */
   index1?: string;
+}
+
+export interface TokenUsageRecordEntity extends Entity, TokenUsageTotals {
+  actorId: number;
+  createdAt: DbDate;
+  source: TokenUsageSource;
+  conversationId?: number;
+  model: string;
+}
+
+export interface SummarizeActorTokenUsageRequest {
+  actorId: number;
+  from?: DbDate;
+  to?: DbDate;
+}
+
+export interface TokenUsageSourceSummary extends TokenUsageTotals {
+  source: TokenUsageSource;
+}
+
+export interface TokenUsageDailySummary extends TokenUsageTotals {
+  date: string;
+}
+
+export interface ActorTokenUsageSummary {
+  total: TokenUsageTotals;
+  bySource: TokenUsageSourceSummary[];
+  byDay: TokenUsageDailySummary[];
+}
+
+export interface TokenUsageDB {
+  createTokenUsageRecord(entity: TokenUsageRecordEntity): Promise<number>;
+  summarizeActorTokenUsage(
+    req: SummarizeActorTokenUsageRequest,
+  ): Promise<ActorTokenUsageSummary>;
+  deleteTokenUsageRecordsByActorId(actorId: number): Promise<number>;
 }

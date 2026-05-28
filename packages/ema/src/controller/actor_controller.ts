@@ -201,6 +201,9 @@ export class ActorController {
       this.ignoreCleanupError(actorId, "long_term_memories", () =>
         this.removeActorLongTermMemories(actorId),
       ),
+      this.ignoreCleanupError(actorId, "token_usage", () =>
+        this.removeActorTokenUsage(actorId),
+      ),
       this.ignoreCleanupError(actorId, "personality", () =>
         this.server.dbService.personalityDB.deletePersonality(actorId),
       ),
@@ -279,6 +282,12 @@ export class ActorController {
 
   private async removeActorLongTermMemories(actorId: number): Promise<void> {
     await this.server.dbService.longTermMemoryDB.deleteLongTermMemoriesByActorId(
+      actorId,
+    );
+  }
+
+  private async removeActorTokenUsage(actorId: number): Promise<void> {
+    await this.server.dbService.tokenUsageDB.deleteTokenUsageRecordsByActorId(
       actorId,
     );
   }

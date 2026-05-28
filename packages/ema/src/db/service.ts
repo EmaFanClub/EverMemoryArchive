@@ -24,6 +24,7 @@ import type {
   PersonalityDB,
   RoleDB,
   ShortTermMemoryDB,
+  TokenUsageDB,
   UserDB,
   UserOwnActorDB,
 } from "./base";
@@ -42,6 +43,7 @@ import {
   MongoPersonalityDB,
   MongoRoleDB,
   MongoShortTermMemoryDB,
+  MongoTokenUsageDB,
   MongoUserDB,
   MongoUserOwnActorDB,
 } from "./drivers";
@@ -106,6 +108,10 @@ export class DBService {
     collections: string[];
     createIndices(): Promise<void>;
   };
+  readonly tokenUsageDB: TokenUsageDB & {
+    collections: string[];
+    createIndices(): Promise<void>;
+  };
   private readonly longTermMemoryVectorIndex: LanceMemoryVectorIndex;
 
   /**
@@ -150,6 +156,7 @@ export class DBService {
     this.conversationDB = new MongoConversationDB(mongo);
     this.conversationMessageDB = new MongoConversationMessageDB(mongo);
     this.shortTermMemoryDB = new MongoShortTermMemoryDB(mongo);
+    this.tokenUsageDB = new MongoTokenUsageDB(mongo);
     this.longTermMemoryVectorIndex = new LanceMemoryVectorIndex(mongo, lancedb);
     this.longTermMemoryDB = new CompositeLongTermMemoryDB(
       new MongoLongTermMemoryDB(mongo),
@@ -172,6 +179,7 @@ export class DBService {
       this.conversationMessageDB.createIndices(),
       this.shortTermMemoryDB.createIndices(),
       this.longTermMemoryDB.createIndices(),
+      this.tokenUsageDB.createIndices(),
     ]);
   }
 
@@ -196,6 +204,7 @@ export class DBService {
       ...this.conversationMessageDB.collections,
       ...this.shortTermMemoryDB.collections,
       ...this.longTermMemoryDB.collections,
+      ...this.tokenUsageDB.collections,
       ...extraCollections,
     ]);
     const snapshot = await this.mongo.snapshot(Array.from(collections));

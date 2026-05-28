@@ -6,6 +6,7 @@ import { RuntimeController } from "./runtime_controller";
 import { ScheduleController } from "./schedule_controller";
 import { SettingsController } from "./settings_controller";
 import { SetupController } from "./setup_controller";
+import { TokenUsageController } from "./token_usage_controller";
 
 export class EmaController {
   readonly setup: SetupController;
@@ -15,6 +16,7 @@ export class EmaController {
   readonly chat: ChatController;
   readonly channel: ChannelController;
   readonly schedule: ScheduleController;
+  readonly tokenUsage: TokenUsageController;
 
   constructor(server: Server) {
     this.setup = new SetupController(server);
@@ -24,5 +26,6 @@ export class EmaController {
     this.chat = new ChatController(server);
     this.channel = new ChannelController(server);
     this.schedule = new ScheduleController(server);
+    this.tokenUsage = new TokenUsageController(server);
   }
 }

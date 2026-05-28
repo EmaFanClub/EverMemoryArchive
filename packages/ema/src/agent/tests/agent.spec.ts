@@ -65,6 +65,60 @@ describe("Agent helpers", () => {
     );
   });
 
+  test("emits LLM usage after a successful model response with usage context", async () => {
+    const generate = vi.fn().mockResolvedValue({
+      role: "model",
+      contents: [{ type: "text", text: "done" }],
+      metadata: {
+        usageMetadata: {
+          cachedTokens: 1,
+          promptTokens: 2,
+          thoughtTokens: 3,
+          responseTokens: 4,
+        },
+      },
+    });
+    const llm = {
+      config: { model: "gpt-5.5" },
+      setRetryCallback: vi.fn(),
+      generate,
+    } as unknown as LLMClient;
+    const agent = new Agent(llm);
+    const usageEvents: unknown[] = [];
+    (agent.events as any).on("llmUsageReceived", (event: unknown) => {
+      usageEvents.push(event);
+    });
+
+    await agent.runWithState({
+      usageContext: {
+        actorId: 1,
+        conversationId: 42,
+        source: "chat",
+      },
+      systemPrompt: "system prompt",
+      messages: [{ role: "user", contents: [{ type: "text", text: "hi" }] }],
+      tools: [],
+    });
+
+    expect(usageEvents).toEqual([
+      {
+        createdAt: expect.any(Number),
+        model: "gpt-5.5",
+        usageContext: {
+          actorId: 1,
+          conversationId: 42,
+          source: "chat",
+        },
+        usageMetadata: {
+          cachedTokens: 1,
+          promptTokens: 2,
+          thoughtTokens: 3,
+          responseTokens: 4,
+        },
+      },
+    ]);
+  });
+
   test("discards a resolved model response when the run was aborted", async () => {
     let resolveGenerate:
       | ((value: Awaited<ReturnType<LLMClient["generate"]>>) => void)

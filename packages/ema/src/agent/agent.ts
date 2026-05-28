@@ -205,6 +205,8 @@ export class Agent {
         return;
       }
 
+      this.emitLlmUsageReceived(response);
+
       // Add model message to context
       this.contextManager.addModelMessage(response);
 
@@ -390,5 +392,19 @@ export class Agent {
   /** Get message history. */
   getHistory(): Message[] {
     return this.contextManager.getHistory();
+  }
+
+  private emitLlmUsageReceived(response: ModelMessage): void {
+    const usageContext = this.contextManager.state.usageContext;
+    const usageMetadata = response.metadata?.usageMetadata;
+    if (!usageContext || !usageMetadata) {
+      return;
+    }
+    this.events.emit("llmUsageReceived", {
+      createdAt: Date.now(),
+      model: this.llm.config.model,
+      usageContext,
+      usageMetadata,
+    });
   }
 }

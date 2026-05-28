@@ -21,5 +21,6 @@ export * from "./controller";
 export * from "./gateway";
 export * from "./memory/base";
 export * from "./memory/embedding_client";
+export * from "./token_usage";
 export * from "./trainer";
 export type { Tool } from "./tools/base";

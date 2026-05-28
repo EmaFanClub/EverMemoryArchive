@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 
-import type { Message } from "../llm/schema";
+import type { Message, UsageMetadata } from "../llm/schema";
+import type { TokenUsageContext } from "../token_usage/base";
 import type { Tool, ToolContext } from "../tools/base";
 import type { EmaReply } from "../tools/ema_reply_tool";
 
@@ -21,11 +22,19 @@ export interface KeepSilenceReceivedEvent {
   think: string;
 }
 
+export interface LlmUsageReceivedEvent {
+  createdAt: number;
+  model: string;
+  usageContext: TokenUsageContext;
+  usageMetadata: UsageMetadata;
+}
+
 /** Map of agent event names to their corresponding event data types. */
 export interface AgentEventMap {
   runFinished: [RunFinishedEvent];
   emaReplyReceived: [EmaReplyReceivedEvent];
   keepSilenceReceived: [KeepSilenceReceivedEvent];
+  llmUsageReceived: [LlmUsageReceivedEvent];
 }
 
 /** Union type of all agent event names. */
@@ -42,6 +51,7 @@ export const AgentEventNames: Record<AgentEventName, AgentEventName> = {
   runFinished: "runFinished",
   emaReplyReceived: "emaReplyReceived",
   keepSilenceReceived: "keepSilenceReceived",
+  llmUsageReceived: "llmUsageReceived",
 };
 
 /** Event source interface for the agent. */
@@ -67,6 +77,8 @@ export type AgentEventsEmitter = EventEmitter<AgentEventMap> & AgentEventSource;
 export type AgentState = {
   /** Trace identifier used by the LLM tracer for this agent run. */
   traceId?: string;
+  /** Actor-scoped attribution used for token usage records. */
+  usageContext?: TokenUsageContext;
   systemPrompt: string;
   messages: Message[];
   tools: Tool[];

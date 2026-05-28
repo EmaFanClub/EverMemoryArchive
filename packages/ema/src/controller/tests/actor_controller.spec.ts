@@ -94,6 +94,9 @@ function createFixture() {
         deleteLongTermMemory: vi.fn(async () => true),
         deleteLongTermMemoriesByActorId: vi.fn(async () => 1),
       },
+      tokenUsageDB: {
+        deleteTokenUsageRecordsByActorId: vi.fn(async () => 1),
+      },
     },
     bus: {
       createEvent: vi.fn((event) => event),
@@ -250,6 +253,9 @@ describe("ActorController", () => {
     await vi.waitFor(() => {
       expect(
         server.dbService.longTermMemoryDB.deleteLongTermMemoriesByActorId,
+      ).toHaveBeenCalledWith(1);
+      expect(
+        server.dbService.tokenUsageDB.deleteTokenUsageRecordsByActorId,
       ).toHaveBeenCalledWith(1);
     });
   });

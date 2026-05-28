@@ -13,6 +13,10 @@ import { GlobalConfig } from "../../config/index";
 import type { ShortTermMemoryRecord } from "../../memory/base";
 import type { Server } from "../../server";
 import { baseTools } from "../../tools";
+import {
+  recordAgentTokenUsage,
+  type TokenUsageContext,
+} from "../../token_usage";
 import type { JobHandler } from "../base";
 
 const actorMemoryRollupQueue = new Map<number, Promise<unknown>>();
@@ -554,6 +558,12 @@ async function runConversationRollupTaskOnce(
   );
   const agentState: AgentState = {
     traceId,
+    usageContext: buildBackgroundUsageContext(
+      job.actorId,
+      "conversation_rollup",
+      job.conversationId,
+      context,
+    ),
     systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
       job.actorId,
       {
@@ -581,7 +591,7 @@ async function runConversationRollupTaskOnce(
       },
     },
   };
-  await runBackgroundAgentWithState(agent, agentState);
+  await runBackgroundAgentWithState(server, agent, agentState);
   const activityAdded = agentState.toolContext?.data?.activityAdded === true;
   let processedMessageCount = 0;
   if (activityAdded) {
@@ -843,6 +853,12 @@ async function runActivityTask(
     );
     const agentState: AgentState = {
       traceId,
+      usageContext: buildBackgroundUsageContext(
+        job.actorId,
+        "activity",
+        undefined,
+        context,
+      ),
       systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
         job.actorId,
         {
@@ -876,7 +892,7 @@ async function runActivityTask(
         },
       },
     };
-    await runBackgroundAgentWithState(agent, agentState);
+    await runBackgroundAgentWithState(server, agent, agentState);
     await runThresholdMemoryRollupWhenNeeded(
       server,
       job.actorId,
@@ -951,6 +967,12 @@ async function runWakeTask(
     );
     const agentState: AgentState = {
       traceId,
+      usageContext: buildBackgroundUsageContext(
+        job.actorId,
+        "wake",
+        undefined,
+        context,
+      ),
       systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
         job.actorId,
         {
@@ -979,7 +1001,7 @@ async function runWakeTask(
         },
       },
     };
-    await runBackgroundAgentWithState(agent, agentState);
+    await runBackgroundAgentWithState(server, agent, agentState);
     actor.completeWake();
     logBackgroundTaskCompleted(
       server,
@@ -1096,6 +1118,12 @@ async function runSleepTask(
     );
     const agentState: AgentState = {
       traceId,
+      usageContext: buildBackgroundUsageContext(
+        job.actorId,
+        "sleep",
+        undefined,
+        context,
+      ),
       systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
         job.actorId,
         {
@@ -1124,7 +1152,7 @@ async function runSleepTask(
         },
       },
     };
-    await runBackgroundAgentWithState(agent, agentState);
+    await runBackgroundAgentWithState(server, agent, agentState);
     actor.completeSleep();
     logBackgroundTaskCompleted(
       server,
@@ -1206,6 +1234,19 @@ function buildBackgroundTaskLogData(
       ? { conversationId: job.conversationId }
       : {}),
     ...(job.addition ? { addition: job.addition } : {}),
+  };
+}
+
+function buildBackgroundUsageContext(
+  actorId: number,
+  task: ActorBackgroundTaskName,
+  conversationId: number | undefined,
+  context: ActorBackgroundRunContext,
+): TokenUsageContext {
+  return {
+    actorId,
+    source: context.mode === "training" ? "training" : task,
+    ...(typeof conversationId === "number" ? { conversationId } : {}),
   };
 }
 
@@ -1336,6 +1377,7 @@ function isBackgroundTaskErrorLogged(error: unknown): boolean {
 }
 
 async function runBackgroundAgentWithState(
+  server: Server,
   agent: Agent,
   agentState: AgentState,
 ): Promise<void> {
@@ -1343,11 +1385,30 @@ async function runBackgroundAgentWithState(
   const handleFinished = (event: RunFinishedEvent) => {
     finishedRef.value = event;
   };
+  const usageWrites = new Set<Promise<void>>();
+  const handleUsage = (event: Parameters<typeof recordAgentTokenUsage>[1]) => {
+    const write: Promise<void> = recordAgentTokenUsage(server.dbService, event)
+      .then(() => undefined)
+      .catch((error) => {
+        server.logger.warn("Failed to record actor token usage", {
+          actorId: event.usageContext.actorId,
+          source: event.usageContext.source,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    usageWrites.add(write);
+    void write.finally(() => {
+      usageWrites.delete(write);
+    });
+  };
   agent.events.once("runFinished", handleFinished);
+  agent.events.on("llmUsageReceived", handleUsage);
   try {
     await agent.runWithState(agentState);
   } finally {
     agent.events.off("runFinished", handleFinished);
+    agent.events.off("llmUsageReceived", handleUsage);
+    await Promise.allSettled(Array.from(usageWrites));
   }
   const finished = finishedRef.value;
   if (finished && !finished.ok) {
@@ -1411,6 +1472,12 @@ async function runMemoryRollupTaskOnce(
   );
   const agentState: AgentState = {
     traceId,
+    usageContext: buildBackgroundUsageContext(
+      job.actorId,
+      "memory_rollup",
+      undefined,
+      context,
+    ),
     systemPrompt: await server.memoryManager.buildSystemPromptForBackground(
       job.actorId,
       {
@@ -1435,7 +1502,7 @@ async function runMemoryRollupTaskOnce(
       },
     },
   };
-  await runBackgroundAgentWithState(agent, agentState);
+  await runBackgroundAgentWithState(server, agent, agentState);
   return agentState.toolContext?.data?.memoryUpdated === true;
 }
 
