@@ -2,7 +2,7 @@ import { buildActorTokenUsageResponse } from "@/server/services/actor-token-usag
 import {
   isTokenUsageRange,
   type TokenUsageRange,
-} from "../../../../../../types/dashboard/v1beta1";
+} from "@/types/dashboard/v1beta1";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

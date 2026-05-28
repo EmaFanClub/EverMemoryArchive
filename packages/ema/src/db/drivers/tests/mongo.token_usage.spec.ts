@@ -21,7 +21,7 @@ describe("MongoTokenUsageDB with in-memory MongoDB", () => {
     const records: TokenUsageRecordEntity[] = [
       {
         actorId: 1,
-        createdAt: Date.UTC(2026, 4, 27, 1),
+        createdAt: localTimestamp(2026, 5, 27, 1),
         source: "chat",
         conversationId: 10,
         model: "gpt-5.5",
@@ -32,7 +32,7 @@ describe("MongoTokenUsageDB with in-memory MongoDB", () => {
       },
       {
         actorId: 1,
-        createdAt: Date.UTC(2026, 4, 27, 2),
+        createdAt: localTimestamp(2026, 5, 27, 2),
         source: "activity",
         model: "gpt-5.5",
         cacheReadTokens: 4,
@@ -42,7 +42,7 @@ describe("MongoTokenUsageDB with in-memory MongoDB", () => {
       },
       {
         actorId: 1,
-        createdAt: Date.UTC(2026, 4, 28, 1),
+        createdAt: localTimestamp(2026, 5, 28, 1),
         source: "chat",
         conversationId: 10,
         model: "gpt-5.5",
@@ -53,7 +53,7 @@ describe("MongoTokenUsageDB with in-memory MongoDB", () => {
       },
       {
         actorId: 2,
-        createdAt: Date.UTC(2026, 4, 27, 1),
+        createdAt: localTimestamp(2026, 5, 27, 1),
         source: "chat",
         conversationId: 20,
         model: "gpt-5.5",
@@ -112,7 +112,7 @@ describe("MongoTokenUsageDB with in-memory MongoDB", () => {
   test("deletes token usage records by actor id", async () => {
     await db.createTokenUsageRecord({
       actorId: 1,
-      createdAt: 1,
+      createdAt: localTimestamp(2026, 1, 1, 1),
       source: "chat",
       model: "gpt-5.5",
       cacheReadTokens: 1,
@@ -122,7 +122,7 @@ describe("MongoTokenUsageDB with in-memory MongoDB", () => {
     });
     await db.createTokenUsageRecord({
       actorId: 2,
-      createdAt: 2,
+      createdAt: localTimestamp(2026, 1, 2, 1),
       source: "chat",
       model: "gpt-5.5",
       cacheReadTokens: 2,
@@ -160,7 +160,7 @@ describe("MongoTokenUsageDB with in-memory MongoDB", () => {
       ],
       byDay: [
         {
-          date: "1970-01-01",
+          date: "2026-01-02",
           cacheReadTokens: 2,
           cacheWriteTokens: 2,
           outputTokens: 2,
@@ -170,3 +170,12 @@ describe("MongoTokenUsageDB with in-memory MongoDB", () => {
     });
   });
 });
+
+function localTimestamp(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+): number {
+  return new Date(year, month - 1, day, hour).getTime();
+}

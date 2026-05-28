@@ -8,12 +8,17 @@ import type {
 } from "../base";
 import type { Mongo } from "../mongo";
 import {
-  addTokenUsageTotals,
   createEmptyTokenUsageTotals,
   TokenUsageSources,
+  type TokenUsageTotals,
 } from "../../token_usage/base";
-import { formatTimestamp } from "../../shared/utils";
-import { getNextId, omitMongoId } from "../mongo/utils";
+import { getNextId } from "../mongo/utils";
+
+type TokenUsageAggregationResult = {
+  total: TokenUsageTotals[];
+  bySource: TokenUsageSourceSummary[];
+  byDay: TokenUsageDailySummary[];
+};
 
 export class MongoTokenUsageDB implements TokenUsageDB {
   private readonly mongo: Mongo;
@@ -46,18 +51,66 @@ export class MongoTokenUsageDB implements TokenUsageDB {
     }
     const db = this.mongo.getDb();
     const collection = db.collection<TokenUsageRecordEntity>(this.$cn);
-    const filter: any = { actorId: req.actorId };
+    const filter: Record<string, unknown> = { actorId: req.actorId };
     if (req.from !== undefined || req.to !== undefined) {
-      filter.createdAt = {};
+      const createdAtFilter: Record<string, number> = {};
       if (req.from !== undefined) {
-        filter.createdAt.$gte = req.from;
+        createdAtFilter.$gte = req.from;
       }
       if (req.to !== undefined) {
-        filter.createdAt.$lte = req.to;
+        createdAtFilter.$lte = req.to;
       }
+      filter.createdAt = createdAtFilter;
     }
-    const records = (await collection.find(filter).toArray()).map(omitMongoId);
-    return summarizeRecords(records);
+    const [summary] = await collection
+      .aggregate<TokenUsageAggregationResult>([
+        { $match: filter },
+        {
+          $facet: {
+            total: [
+              { $group: buildTokenUsageGroupStage(null) },
+              { $project: { _id: 0 } },
+            ],
+            bySource: [
+              { $group: buildTokenUsageGroupStage("$source") },
+              {
+                $project: {
+                  _id: 0,
+                  source: "$_id",
+                  cacheReadTokens: 1,
+                  cacheWriteTokens: 1,
+                  outputTokens: 1,
+                  totalTokens: 1,
+                },
+              },
+            ],
+            byDay: [
+              {
+                $group: buildTokenUsageGroupStage({
+                  $dateToString: {
+                    format: "%Y-%m-%d",
+                    date: { $toDate: "$createdAt" },
+                    timezone: getLocalTimezone(),
+                  },
+                }),
+              },
+              {
+                $project: {
+                  _id: 0,
+                  date: "$_id",
+                  cacheReadTokens: 1,
+                  cacheWriteTokens: 1,
+                  outputTokens: 1,
+                  totalTokens: 1,
+                },
+              },
+              { $sort: { date: 1 } },
+            ],
+          },
+        },
+      ])
+      .toArray();
+    return normalizeAggregationResult(summary);
   }
 
   async deleteTokenUsageRecordsByActorId(actorId: number): Promise<number> {
@@ -79,48 +132,33 @@ export class MongoTokenUsageDB implements TokenUsageDB {
   }
 }
 
-function summarizeRecords(
-  records: TokenUsageRecordEntity[],
+function normalizeAggregationResult(
+  summary: TokenUsageAggregationResult | undefined,
 ): ActorTokenUsageSummary {
-  const total = createEmptyTokenUsageTotals();
-  const sourceMap = new Map<string, TokenUsageSourceSummary>();
-  const dayMap = new Map<string, TokenUsageDailySummary>();
-
-  for (const record of records) {
-    addTokenUsageTotals(total, record);
-
-    const sourceBucket =
-      sourceMap.get(record.source) ??
-      ({
-        source: record.source,
-        ...createEmptyTokenUsageTotals(),
-      } satisfies TokenUsageSourceSummary);
-    addTokenUsageTotals(sourceBucket, record);
-    sourceMap.set(record.source, sourceBucket);
-
-    const date = formatTimestamp("YYYY-MM-DD", record.createdAt);
-    const dayBucket =
-      dayMap.get(date) ??
-      ({
-        date,
-        ...createEmptyTokenUsageTotals(),
-      } satisfies TokenUsageDailySummary);
-    addTokenUsageTotals(dayBucket, record);
-    dayMap.set(date, dayBucket);
-  }
-
   const sourceOrder = new Map(
     TokenUsageSources.map((source, index) => [source, index]),
   );
   return {
-    total,
-    bySource: Array.from(sourceMap.values()).sort(
+    total: summary?.total[0] ?? createEmptyTokenUsageTotals(),
+    bySource: [...(summary?.bySource ?? [])].sort(
       (a, b) =>
         (sourceOrder.get(a.source) ?? Number.MAX_SAFE_INTEGER) -
         (sourceOrder.get(b.source) ?? Number.MAX_SAFE_INTEGER),
     ),
-    byDay: Array.from(dayMap.values()).sort((a, b) =>
-      a.date.localeCompare(b.date),
-    ),
+    byDay: summary?.byDay ?? [],
   };
+}
+
+function buildTokenUsageGroupStage(id: unknown) {
+  return {
+    _id: id,
+    cacheReadTokens: { $sum: "$cacheReadTokens" },
+    cacheWriteTokens: { $sum: "$cacheWriteTokens" },
+    outputTokens: { $sum: "$outputTokens" },
+    totalTokens: { $sum: "$totalTokens" },
+  };
+}
+
+function getLocalTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }

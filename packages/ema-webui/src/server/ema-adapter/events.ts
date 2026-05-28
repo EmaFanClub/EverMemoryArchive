@@ -5,7 +5,10 @@ import type {
   ActorRuntimeSnapshot,
   EmaEvent as CoreEmaEvent,
 } from "ema";
-import type { TokenUsageSource } from "@/types/dashboard/v1beta1";
+import {
+  TOKEN_USAGE_SOURCES,
+  type TokenUsageSource,
+} from "@/types/dashboard/v1beta1";
 import type {
   ActorLatestPreviewEventData,
   ActorRuntimeChangedEventData,
@@ -16,16 +19,6 @@ import type {
 import { toActorSummary } from "./dashboard";
 import { toWebActorId } from "./ids";
 import { toWebQqBlockedBy, toWebQqTransportStatus } from "./settings";
-
-const TOKEN_USAGE_SOURCES = [
-  "chat",
-  "activity",
-  "conversation_rollup",
-  "memory_rollup",
-  "wake",
-  "sleep",
-  "training",
-] as const satisfies readonly TokenUsageSource[];
 
 export function toWebBusEvent(event: CoreEmaEvent): EmaKnownEvent | null {
   switch (event.type) {
