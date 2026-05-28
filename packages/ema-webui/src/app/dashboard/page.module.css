@@ -1061,6 +1061,561 @@
   margin: 0;
 }
 
+.actorStatsPanel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  scrollbar-width: none;
+}
+
+.actorStatsPanel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.actorStatsRangeTabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 38%, transparent);
+  border-radius: 999px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--surface-inset) 54%, transparent);
+}
+
+.actorStatsRangeTab {
+  display: inline-flex;
+  min-width: 0;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 740;
+  letter-spacing: 0;
+  white-space: nowrap;
+  transition:
+    background 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorStatsRangeTab:hover {
+  color: var(--text-muted);
+  transform: translateY(-1px);
+}
+
+.actorStatsRangeTab:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.actorStatsRangeTab:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.actorStatsRangeTabActive {
+  background: color-mix(in srgb, var(--accent) 82%, var(--accent-hover));
+  color: color-mix(in srgb, white 92%, var(--text));
+  box-shadow:
+    0 6px 14px color-mix(in srgb, var(--accent) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+}
+
+.actorStatsCard {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 42%, transparent);
+  border-radius: 14px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--surface-raised) 22%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 3%, transparent);
+}
+
+.actorStatsCardHeader {
+  display: flex;
+  min-width: 0;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.actorStatsTitle {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.actorStatsTitle > span {
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.actorStatsTitle > strong {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.actorStatsRangeBadge {
+  display: inline-flex;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 34%, transparent);
+  border-radius: 999px;
+  padding: 0 9px;
+  background: color-mix(in srgb, var(--surface-inset) 48%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.actorStatsTotalBlock {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.actorStatsTotalBlock > strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 1.56rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.actorStatsTotalBlock > span {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.actorStatsMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+  border-top: 1px solid
+    color-mix(in srgb, var(--border-strong) 34%, transparent);
+  padding-top: 12px;
+}
+
+.actorStatsMetric {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.actorStatsMetricAccent {
+  width: 24px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--actor-stats-tone, var(--accent));
+}
+
+.actorStatsMetricLabel {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.actorStatsMetric > strong {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+.actorStatsSourceList {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.actorStatsSourceItem {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.actorStatsSourceMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.actorStatsSourceMeta > span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actorStatsSourceTrack {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-inset) 72%, transparent);
+}
+
+.actorStatsSourceBar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--actor-stats-tone, var(--accent));
+  box-shadow: 0 0 14px
+    color-mix(in srgb, var(--actor-stats-tone, var(--accent)) 18%, transparent);
+}
+
+.actorStatsSourceDetail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  min-width: 0;
+}
+
+.actorStatsSourceDetail > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.actorStatsSourceDetail strong {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+}
+
+.actorStatsTrendPlot {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+  min-width: 0;
+}
+
+.actorStatsTrendAxis {
+  display: flex;
+  height: 92px;
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px solid
+    color-mix(in srgb, var(--border-strong) 34%, transparent);
+  padding-right: 7px;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: right;
+}
+
+.actorStatsTrendChart {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.actorStatsTrendChart::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 92px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--border-strong) 22%, transparent) 0 1px,
+    transparent 1px 50%,
+    color-mix(in srgb, var(--border-strong) 16%, transparent) 50%
+      calc(50% + 1px),
+    transparent calc(50% + 1px) calc(100% - 1px),
+    color-mix(in srgb, var(--border-strong) 22%, transparent) calc(100% - 1px)
+      100%
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.actorStatsTrendColumn {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: 92px auto;
+  min-width: 0;
+  gap: 8px;
+}
+
+.actorStatsTrendColumn:hover,
+.actorStatsTrendColumn:focus-within {
+  z-index: 8;
+}
+
+.actorStatsTrendColumnEmpty {
+  pointer-events: none;
+}
+
+.actorStatsTrendBarSlot {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.actorStatsTrendBarWrap {
+  position: relative;
+  box-sizing: border-box;
+  width: 12px;
+  min-height: 0;
+}
+
+.actorStatsTrendBarWrap:focus-visible {
+  outline: 0;
+}
+
+.actorStatsTrendBarWrap:focus-visible .actorStatsTrendBar {
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    0 8px 14px color-mix(in srgb, black 18%, transparent);
+}
+
+.actorStatsTrendBar {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column-reverse;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 28%, transparent);
+  border-radius: 3px 3px 1px 1px;
+  background: color-mix(in srgb, var(--surface-inset) 74%, transparent);
+  box-shadow: 0 8px 14px color-mix(in srgb, black 18%, transparent);
+}
+
+.actorStatsTrendTooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 4;
+  display: grid;
+  width: max-content;
+  min-width: 128px;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 54%, transparent);
+  border-radius: 8px;
+  padding: 8px 9px;
+  background: color-mix(in srgb, #24262c 94%, black);
+  box-shadow:
+    0 12px 24px color-mix(in srgb, black 36%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 5%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.actorStatsTrendColumnStart .actorStatsTrendTooltip {
+  left: -8px;
+  transform: translate(0, 4px);
+}
+
+.actorStatsTrendColumnEnd .actorStatsTrendTooltip {
+  right: -8px;
+  left: auto;
+  transform: translate(0, 4px);
+}
+
+.actorStatsTrendTooltip::after {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 1px solid
+    color-mix(in srgb, var(--border-strong) 54%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-strong) 54%, transparent);
+  background: color-mix(in srgb, #24262c 94%, black);
+  content: "";
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.actorStatsTrendColumnStart .actorStatsTrendTooltip::after {
+  left: 10px;
+  transform: rotate(45deg);
+}
+
+.actorStatsTrendColumnEnd .actorStatsTrendTooltip::after {
+  right: 10px;
+  left: auto;
+  transform: rotate(45deg);
+}
+
+.actorStatsTrendBarWrap:hover .actorStatsTrendTooltip,
+.actorStatsTrendBarWrap:focus-visible .actorStatsTrendTooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.actorStatsTrendColumnStart
+  .actorStatsTrendBarWrap:hover
+  .actorStatsTrendTooltip,
+.actorStatsTrendColumnStart
+  .actorStatsTrendBarWrap:focus-visible
+  .actorStatsTrendTooltip,
+.actorStatsTrendColumnEnd .actorStatsTrendBarWrap:hover .actorStatsTrendTooltip,
+.actorStatsTrendColumnEnd
+  .actorStatsTrendBarWrap:focus-visible
+  .actorStatsTrendTooltip {
+  transform: translate(0, 0);
+}
+
+.actorStatsTrendTooltipDate {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.actorStatsTrendTooltipRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.actorStatsTrendTooltipRow strong {
+  color: var(--text);
+  font-size: 0.62rem;
+  font-weight: 780;
+  letter-spacing: 0;
+}
+
+.actorStatsTrendSegment {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  background: var(--actor-stats-tone, var(--accent));
+}
+
+.actorStatsTrendLabel {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actorStatsEmpty {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 68%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-raised) 9%, transparent);
+  color: var(--text-subtle);
+  text-align: center;
+}
+
+.actorStatsEmpty > span {
+  display: none;
+}
+
+.actorStatsEmpty > strong {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.actorStatsToneCacheRead,
+.actorStatsToneChat {
+  --actor-stats-tone: color-mix(in srgb, var(--accent-hover) 82%, white);
+}
+
+.actorStatsToneCacheWrite,
+.actorStatsToneActivity,
+.actorStatsToneWake {
+  --actor-stats-tone: color-mix(in srgb, var(--warning) 86%, white);
+}
+
+.actorStatsToneOutput,
+.actorStatsToneMemoryRollup {
+  --actor-stats-tone: color-mix(in srgb, var(--success) 82%, white);
+}
+
+.actorStatsToneConversationRollup {
+  --actor-stats-tone: color-mix(in srgb, #7dd3fc 74%, var(--text));
+}
+
+.actorStatsToneSleep {
+  --actor-stats-tone: color-mix(in srgb, #a78bfa 82%, white);
+}
+
+.actorStatsToneTraining {
+  --actor-stats-tone: color-mix(in srgb, #f472b6 78%, white);
+}
+
 .actorSleepScheduleCard {
   display: grid;
   gap: 13px;

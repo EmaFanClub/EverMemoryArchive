@@ -14,6 +14,8 @@ import {
 import styles from "@/app/dashboard/page.module.css";
 import type { ActorSummary } from "@/types/dashboard/v1beta1";
 
+import { ActorTokenUsageStats } from "./ActorTokenUsageStats";
+
 const SLEEP_AXIS_MINUTES = 24 * 60;
 const SLEEP_AXIS_CLOCK_OFFSET_MINUTES = 12 * 60;
 
@@ -103,6 +105,8 @@ export function ActorSidePanel({
           renderSettings()
         ) : resolvedActiveTab === "schedule" ? (
           <ActorSchedulePreview actor={actor} />
+        ) : resolvedActiveTab === "stats" ? (
+          <ActorTokenUsageStats actor={actor} />
         ) : (
           <div className={styles.actorInfoComingSoon}>
             <span>{activeTabLabel}</span>
