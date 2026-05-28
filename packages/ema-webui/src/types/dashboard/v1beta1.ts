@@ -107,6 +107,73 @@ export interface ActorSummary {
   training?: ActorTrainingUiState;
 }
 
+export const TOKEN_USAGE_SOURCES = [
+  "chat",
+  "activity",
+  "conversation_rollup",
+  "memory_rollup",
+  "wake",
+  "sleep",
+  "training",
+] as const;
+
+export type TokenUsageSource = (typeof TOKEN_USAGE_SOURCES)[number];
+
+export const TOKEN_USAGE_RANGE_OPTIONS = [
+  { id: "today", label: "今天" },
+  { id: "week", label: "7天" },
+  { id: "month", label: "30天" },
+  { id: "all", label: "全部" },
+] as const;
+
+export type TokenUsageRange = (typeof TOKEN_USAGE_RANGE_OPTIONS)[number]["id"];
+
+export const TOKEN_USAGE_SOURCE_LABELS: Record<TokenUsageSource, string> = {
+  chat: "聊天",
+  activity: "活动生成",
+  conversation_rollup: "会话总结",
+  memory_rollup: "记忆整理",
+  wake: "唤醒",
+  sleep: "睡眠",
+  training: "训练",
+};
+
+export function isTokenUsageRange(value: string): value is TokenUsageRange {
+  return TOKEN_USAGE_RANGE_OPTIONS.some((option) => option.id === value);
+}
+
+export function tokenUsageRangeLabel(range: TokenUsageRange): string {
+  return (
+    TOKEN_USAGE_RANGE_OPTIONS.find((option) => option.id === range)?.label ??
+    "今天"
+  );
+}
+
+export interface TokenUsageTotals {
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+export interface ActorTokenUsageSourceSummary extends TokenUsageTotals {
+  source: TokenUsageSource;
+}
+
+export interface ActorTokenUsageDaySummary extends TokenUsageTotals {
+  date: string;
+}
+
+export interface ActorTokenUsageSummaryResponse {
+  apiVersion: "v1beta1";
+  actorId: string;
+  range: TokenUsageRange;
+  rangeLabel: string;
+  total: TokenUsageTotals;
+  bySource: ActorTokenUsageSourceSummary[];
+  trendByDay: ActorTokenUsageDaySummary[];
+}
+
 export interface ActorActivityState {
   enabled: boolean;
   status: ActorRuntimeStatus;

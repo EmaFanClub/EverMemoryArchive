@@ -22,6 +22,7 @@ import type {
   ActorSettingsResponse,
   ActorTrainingClearResponse,
   ActorTrainingStartResponse,
+  ActorTokenUsageSummaryResponse,
   ActorWebSearchConfig,
   ActorWebSearchSaveResponse,
   DashboardOverviewResponse,
@@ -35,6 +36,7 @@ import type {
   GlobalSettingsResponse,
   OwnerQqBindingSaveResponse,
   OwnerResponse,
+  TokenUsageRange,
 } from "@/types/dashboard/v1beta1";
 
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
@@ -149,6 +151,21 @@ export function clearActorTraining(actorId: string) {
     `/api/v1beta1/actors/${encodeURIComponent(actorId)}/training`,
     {
       method: "DELETE",
+    },
+  );
+}
+
+export function getActorTokenUsage(
+  actorId: string,
+  range: TokenUsageRange,
+  init?: RequestInit,
+) {
+  const params = new URLSearchParams({ range });
+  return fetchJson<ActorTokenUsageSummaryResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/token-usage?${params}`,
+    {
+      method: "GET",
+      ...init,
     },
   );
 }

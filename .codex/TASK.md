@@ -54,7 +54,15 @@ Commit: `feat(webui): mock actor token usage stats`
 
 ## Step 3: Frontend/Backend Integration (To Discuss)
 
-Connect the mocked statistics UI to real backend token usage summary data. The webui API route, server adapter shape, polling or refresh behavior, and final error handling are still pending discussion before implementation.
+- [x] Confirm the backend summary API shape from `packages/ema`, including range parameters, source labels, daily trend shape, and zero-data behavior.
+- [x] Add the `packages/ema-webui` server adapter method that reads actor token usage summaries from the EMA backend instead of mock data.
+- [x] Add the WebUI API route for actor token usage summaries, preserving the existing actor-scoped API conventions and auth/error handling.
+- [x] Replace `ActorTokenUsageStats` mock data usage with real client-side loading through the WebUI transport layer.
+- [x] Add loading, error, and empty states that match the current statistics panel layout.
+- [x] Keep the current visual behavior for range switching, source distribution, stacked trend bars, and hover/focus token detail bubbles.
+- [x] Remove all mock-only code paths, mock data generators, mock-specific exports, and mock-only tests; there must be no mock fallback in the final integration.
+- [x] Add focused tests for the server adapter/API route mapping and the frontend data transformation.
+- [x] Run `pnpm format`, `pnpm webui:lint`, `pnpm webui:build`, and any focused WebUI tests added in this step.
 
 Commit: `feat(webui): connect actor token usage stats`
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import styles from "@/app/dashboard/page.module.css";
 import type { ActorSummary } from "@/types/dashboard/v1beta1";
+import { getActorTokenUsage } from "@/transport/dashboard";
 
 import {
   TOKEN_USAGE_RANGE_OPTIONS,
@@ -12,12 +13,12 @@ import {
   TOKEN_USAGE_TREND_STACK,
   buildTokenUsageAxisTicks,
   buildTokenUsageTrendSlots,
-  createMockActorTokenUsageSummary,
   type ActorTokenUsageSourceSummary,
+  type ActorTokenUsageSummaryResponse,
   type TokenUsageRange,
   type TokenUsageSource,
   type TokenUsageTotals,
-} from "./actor-token-usage-mock";
+} from "./actor-token-usage";
 
 type TokenUsageMetric = {
   key: keyof Pick<
@@ -75,29 +76,79 @@ const TREND_BUCKET_TONES: Record<
   outputTokens: styles.actorStatsToneOutput,
 };
 
+type ActorTokenUsageLoadState =
+  | {
+      status: "loading";
+    }
+  | {
+      status: "ready";
+      actorId: string;
+      range: TokenUsageRange;
+      summary: ActorTokenUsageSummaryResponse;
+    }
+  | {
+      status: "error";
+      actorId: string;
+      range: TokenUsageRange;
+      message: string;
+    };
+
 export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
   const [range, setRange] = useState<TokenUsageRange>("today");
-  const summary = useMemo(
-    () => createMockActorTokenUsageSummary(actor.id, range),
-    [actor.id, range],
-  );
+  const [loadState, setLoadState] = useState<ActorTokenUsageLoadState>({
+    status: "loading",
+  });
+  const currentLoadState =
+    loadState.status !== "loading" &&
+    loadState.actorId === actor.id &&
+    loadState.range === range
+      ? loadState
+      : ({ status: "loading" } satisfies ActorTokenUsageLoadState);
+  const summary =
+    currentLoadState.status === "ready" ? currentLoadState.summary : undefined;
   const sourceItems = useMemo(
     () =>
-      [...summary.bySource].sort(
+      [...(summary?.bySource ?? [])].sort(
         (left, right) => right.totalTokens - left.totalTokens,
       ),
-    [summary.bySource],
+    [summary?.bySource],
   );
   const maxDayTokens = Math.max(
     1,
-    ...summary.trendByDay.map((day) => day.totalTokens),
+    ...(summary?.trendByDay ?? []).map((day) => day.totalTokens),
   );
   const axisTicks = buildTokenUsageAxisTicks(maxDayTokens);
   const axisMaxTokens = axisTicks[0] || 1;
   const trendSlots = useMemo(
-    () => buildTokenUsageTrendSlots(summary.trendByDay),
-    [summary.trendByDay],
+    () => buildTokenUsageTrendSlots(summary?.trendByDay ?? []),
+    [summary?.trendByDay],
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getActorTokenUsage(actor.id, range, { signal: controller.signal })
+      .then((nextSummary) => {
+        setLoadState({
+          status: "ready",
+          actorId: actor.id,
+          range,
+          summary: nextSummary,
+        });
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setLoadState({
+          status: "error",
+          actorId: actor.id,
+          range,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [actor.id, range]);
 
   return (
     <div className={styles.actorStatsPanel}>
@@ -121,7 +172,14 @@ export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
         ))}
       </div>
 
-      {summary.total.totalTokens <= 0 ? (
+      {currentLoadState.status === "loading" ? (
+        <ActorTokenUsageStatus title="加载中" />
+      ) : currentLoadState.status === "error" ? (
+        <ActorTokenUsageStatus
+          title="加载失败"
+          message={currentLoadState.message}
+        />
+      ) : currentLoadState.summary.total.totalTokens <= 0 ? (
         <section className={styles.actorStatsEmpty} aria-label="Token 使用">
           <span>Token 使用</span>
           <strong>暂无记录</strong>
@@ -138,13 +196,15 @@ export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
                 <strong>总计</strong>
               </div>
               <span className={styles.actorStatsRangeBadge}>
-                {summary.rangeLabel}
+                {currentLoadState.summary.rangeLabel}
               </span>
             </header>
 
             <div className={styles.actorStatsTotalBlock}>
               <strong>
-                {formatHeadlineTokenCount(summary.total.totalTokens)}
+                {formatHeadlineTokenCount(
+                  currentLoadState.summary.total.totalTokens,
+                )}
               </strong>
             </div>
 
@@ -159,7 +219,9 @@ export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
                     {metric.label}
                   </span>
                   <strong>
-                    {formatCompactTokenCount(summary.total[metric.key])}
+                    {formatCompactTokenCount(
+                      currentLoadState.summary.total[metric.key],
+                    )}
                   </strong>
                 </div>
               ))}
@@ -176,7 +238,7 @@ export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
                 <strong>按来源</strong>
               </div>
               <span className={styles.actorStatsRangeBadge}>
-                {summary.rangeLabel}
+                {currentLoadState.summary.rangeLabel}
               </span>
             </header>
 
@@ -185,7 +247,7 @@ export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
                 <ActorTokenUsageSourceItem
                   key={item.source}
                   item={item}
-                  totalTokens={summary.total.totalTokens}
+                  totalTokens={currentLoadState.summary.total.totalTokens}
                 />
               ))}
             </div>
@@ -301,6 +363,22 @@ export function ActorTokenUsageStats({ actor }: { actor: ActorSummary }) {
         </>
       )}
     </div>
+  );
+}
+
+function ActorTokenUsageStatus({
+  title,
+  message,
+}: {
+  title: string;
+  message?: string;
+}) {
+  return (
+    <section className={styles.actorStatsEmpty} aria-label="Token 使用">
+      <span>Token 使用</span>
+      <strong>{title}</strong>
+      {message ? <p>{message}</p> : null}
+    </section>
   );
 }
 

@@ -1588,6 +1588,14 @@
   letter-spacing: 0;
 }
 
+.actorStatsEmpty > p {
+  max-width: 220px;
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
 .actorStatsToneCacheRead,
 .actorStatsToneChat {
   --actor-stats-tone: color-mix(in srgb, var(--accent-hover) 82%, white);
