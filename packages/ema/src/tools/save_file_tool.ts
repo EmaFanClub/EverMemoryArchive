@@ -51,10 +51,10 @@ const SAVE_FILE_DESCRIPTION = `
 
 - \`url\`：图片 URL。
 - \`source\`：可省略；当前只支持 \`url\`。
-- \`path\`：可选的工作区虚拟路径。不提供时会自动保存到 \`downloads/images/\`。
+- \`path\`：可选的工作区虚拟路径。不提供时会自动保存到 \`tmp/\`，临时文件之后可能被清理。
 - \`overwrite\`：默认 \`false\`。目标已存在时需要显式设为 \`true\` 才会覆盖。
 
-工具只返回工作区虚拟路径，不会返回真实文件系统路径。保存后如果需要查看图片，可以用 \`file_tool.read\` 读取该路径。
+工具只返回工作区虚拟路径，不会返回真实文件系统路径。保存后如果需要查看图片，可以用 \`file_tool.read\` 读取该路径；如果需要发送图片，使用 \`ema_reply(kind="image", content="返回的路径")\`。
 `;
 
 export class SaveFileTool extends Tool {
@@ -114,7 +114,6 @@ export class SaveFileTool extends Tool {
         path: written.path,
         mimeType: downloaded.mimeType,
         size: written.size,
-        sha256: written.sha256,
         overwritten: written.overwritten,
       });
     } catch (error) {
@@ -335,7 +334,7 @@ function resolveTargetPath(
   sha256: string,
 ): string {
   if (!normalizedPath) {
-    return `downloads/images/${sha256.slice(0, 12)}${IMAGE_EXTENSIONS[mimeType]}`;
+    return `tmp/${sha256.slice(0, 12)}${IMAGE_EXTENSIONS[mimeType]}`;
   }
 
   const pathMime = imageMimeTypeForPath(normalizedPath);

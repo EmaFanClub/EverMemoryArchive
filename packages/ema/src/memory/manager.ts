@@ -21,6 +21,7 @@ import type {
 } from "../scheduler/actor_scheduler";
 import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
 import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
+import { MEDIA_INLINE_LIMIT_BYTES } from "../channel/utils";
 import {
   buildPromptFromBufferMessage,
   isActorChatInput,
@@ -32,6 +33,8 @@ import type { InlineDataItem, InputContent } from "../llm/schema";
 import { formatTimestamp, parseTimestamp } from "../shared/utils";
 import { skillsPrompt } from "../skills";
 import type { EmaReply } from "../tools/ema_reply_tool";
+import { formatImageReplyMediaText } from "../tools/ema_reply_tool";
+import { ActorWorkspaceService } from "../workspace/actor_workspace";
 
 /**
  * Memory manager implementation backed by database interfaces.
@@ -65,7 +68,10 @@ export class MemoryManager implements BufferStorage, ActorMemory {
    * Creates a new MemoryManager instance.
    * @param server - Server runtime used for database access and background coordination.
    */
-  constructor(private readonly server: Server) {}
+  constructor(
+    private readonly server: Server,
+    private readonly workspace: ActorWorkspaceService = new ActorWorkspaceService(),
+  ) {}
 
   private async getBasePromptValues(actorId: number): Promise<{
     rolePrompt: string;
@@ -798,16 +804,18 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         contents:
           message.ema_reply.kind === "sticker"
             ? await this.buildStickerReplyContents(message.ema_reply)
-            : [
-                ...(message.ema_reply.mention_uids ?? []).map((uid) => ({
-                  type: "text" as const,
-                  text: `@(${uid})`,
-                })),
-                {
-                  type: "text" as const,
-                  text: message.ema_reply.content,
-                },
-              ],
+            : message.ema_reply.kind === "image"
+              ? await this.buildImageReplyContents(actorId, message.ema_reply)
+              : [
+                  ...(message.ema_reply.mention_uids ?? []).map((uid) => ({
+                    type: "text" as const,
+                    text: `@(${uid})`,
+                  })),
+                  {
+                    type: "text" as const,
+                    text: message.ema_reply.content,
+                  },
+                ],
         ...(message.ema_reply.think ? { think: message.ema_reply.think } : {}),
       };
       channelMessageId = `${message.conversationId}:${message.msgId}`;
@@ -821,6 +829,46 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       createdAt: message.time,
       msgId: message.msgId,
     });
+  }
+
+  private async buildImageReplyContents(
+    actorId: number,
+    reply: EmaReply,
+  ): Promise<InputContent[]> {
+    const mentionContents = (reply.mention_uids ?? []).map((uid) => ({
+      type: "text" as const,
+      text: `@(${uid})`,
+    }));
+    try {
+      const image = await this.workspace.readImageDataFile(
+        actorId,
+        reply.content,
+        {
+          maxBytes: MEDIA_INLINE_LIMIT_BYTES,
+        },
+      );
+      return [
+        ...mentionContents,
+        {
+          type: "inline_data" as const,
+          mimeType: image.mimeType,
+          data: image.data.toString("base64"),
+          text: formatImageReplyMediaText(reply),
+        },
+      ];
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist workspace image inline data for '${reply.content}', storing text proxy only.`,
+        error,
+      );
+    }
+    return [
+      ...mentionContents,
+      {
+        type: "text" as const,
+        text: formatImageReplyMediaText(reply),
+      },
+    ];
   }
 
   private async buildStickerReplyContents(

@@ -1,5 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+import { ActorWorkspaceService } from "../../workspace/actor_workspace";
 import { EmaReplyTool } from "../ema_reply_tool";
+import type { ToolContext } from "../base";
 
 vi.mock("../../skills/sticker-skill/pack", () => ({
   getStickerById: vi.fn(async (id: string) =>
@@ -20,9 +27,15 @@ vi.mock("../../skills/sticker-skill/pack", () => ({
 
 describe("EmaReplyTool", () => {
   let tool: EmaReplyTool;
+  let workspaceDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "ema-reply-"));
     tool = new EmaReplyTool();
+  });
+
+  afterEach(async () => {
+    await fs.rm(workspaceDir, { recursive: true, force: true });
   });
 
   it("should have correct name and description", () => {
@@ -129,6 +142,86 @@ describe("EmaReplyTool", () => {
 
     expect(result.success).toBe(false);
     expect(result.content).toContain("Unknown sticker id");
+  });
+
+  it("accepts image replies from the actor workspace", async () => {
+    const workspace = new ActorWorkspaceService({ workspaceDir });
+    await workspace.writeBinaryFile(1, "images/cat.png", Buffer.from("image"));
+    const imageTool = new EmaReplyTool(workspace);
+    const context: ToolContext = {
+      actorId: 1,
+      server: {} as ToolContext["server"],
+    };
+
+    const result = await imageTool.execute(
+      {
+        kind: "image",
+        think: "这张图能直接回应对方的问题",
+        content: "/images/cat.png",
+      },
+      context,
+    );
+
+    expect(result.success).toBe(true);
+    expect(JSON.parse(result.content as string)).toMatchObject({
+      kind: "image",
+      think: "这张图能直接回应对方的问题",
+      content: "images/cat.png",
+    });
+  });
+
+  it("rejects caption because follow-up text should use another text reply", async () => {
+    const workspace = new ActorWorkspaceService({ workspaceDir });
+    await workspace.writeBinaryFile(1, "images/cat.png", Buffer.from("image"));
+    const imageTool = new EmaReplyTool(workspace);
+
+    const result = await imageTool.execute(
+      {
+        kind: "image",
+        content: "images/cat.png",
+        caption: "看这个",
+      },
+      {
+        actorId: 1,
+        server: {} as ToolContext["server"],
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.content).toContain("Invalid structured reply");
+  });
+
+  it("rejects image replies without actor context", async () => {
+    const result = await tool.execute({
+      kind: "image",
+      content: "images/cat.png",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.content).toContain("actorId");
+  });
+
+  it("rejects non-image workspace paths for image replies", async () => {
+    const workspace = new ActorWorkspaceService({ workspaceDir });
+    await workspace.writeFile(1, "notes/cat.txt", {
+      mode: "overwrite",
+      content: "not an image",
+    });
+    const imageTool = new EmaReplyTool(workspace);
+
+    const result = await imageTool.execute(
+      {
+        kind: "image",
+        content: "notes/cat.txt",
+      },
+      {
+        actorId: 1,
+        server: {} as ToolContext["server"],
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.content).toContain("image");
   });
 
   it("rejects empty think when provided", async () => {

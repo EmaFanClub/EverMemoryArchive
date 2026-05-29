@@ -11,6 +11,7 @@ import type {
   DeleteFilesResult,
   ListFilesResult,
   MkdirResult,
+  ReadImageDataFileResult,
   MovePathResult,
   ReadFileResult,
   ResolvedWorkspacePath,
@@ -170,6 +171,45 @@ export class ActorWorkspaceService {
       MAX_READ_BYTES,
     );
     return await this.readTextOrBinaryFile(resolved, stat.size, maxBytes);
+  }
+
+  async readImageDataFile(
+    actorId: number,
+    modelPath: string,
+    options: { maxBytes?: number } = {},
+  ): Promise<ReadImageDataFileResult> {
+    const resolved = await this.resolvePath(actorId, modelPath, {
+      allowRoot: false,
+      mustExist: true,
+    });
+    const stat = await fs.lstat(resolved.realPath);
+    if (stat.isDirectory()) {
+      throw new Error(`path is a directory: ${resolved.virtualPath}`);
+    }
+    if (!stat.isFile()) {
+      throw new Error(`path is not a regular file: ${resolved.virtualPath}`);
+    }
+
+    const mimeType = imageMimeTypeForPath(resolved.virtualPath);
+    if (!mimeType) {
+      throw new Error(`path is not a supported image: ${resolved.virtualPath}`);
+    }
+    if (options.maxBytes !== undefined && stat.size > options.maxBytes) {
+      throw new Error(`image exceeds ${options.maxBytes} bytes.`);
+    }
+
+    const data = await fs.readFile(resolved.realPath);
+    if (options.maxBytes !== undefined && data.byteLength > options.maxBytes) {
+      throw new Error(`image exceeds ${options.maxBytes} bytes.`);
+    }
+
+    return {
+      path: resolved.virtualPath,
+      size: data.byteLength,
+      sha256: hashBuffer(data),
+      mimeType,
+      data,
+    };
   }
 
   async writeFile(

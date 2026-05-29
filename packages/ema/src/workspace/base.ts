@@ -1,4 +1,4 @@
-import type { ImageItem } from "../llm/schema";
+import type { ImageItem, ImageMIME } from "../llm/schema";
 
 export type WorkspaceEntryType = "file" | "directory" | "other";
 
@@ -43,6 +43,14 @@ export interface ReadFileResult {
   content?: string;
   truncated?: boolean;
   images?: ImageItem[];
+}
+
+export interface ReadImageDataFileResult {
+  path: string;
+  size: number;
+  sha256: string;
+  mimeType: ImageMIME;
+  data: Buffer;
 }
 
 export interface WriteFileResult {

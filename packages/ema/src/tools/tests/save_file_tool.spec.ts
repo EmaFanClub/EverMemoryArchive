@@ -48,7 +48,7 @@ describe("SaveFileTool", () => {
     await fs.rm(workspaceDir, { recursive: true, force: true });
   });
 
-  test("downloads image URLs to a default workspace path", async () => {
+  test("downloads image URLs to a temporary default workspace path", async () => {
     const body = Buffer.from("fake-png");
     const hash = sha256(body);
     mockFetchResponse(body, { "content-type": "image/png" });
@@ -59,10 +59,9 @@ describe("SaveFileTool", () => {
 
     expect(saved).toEqual({
       operation: "save_file",
-      path: `downloads/images/${hash.slice(0, 12)}.png`,
+      path: `tmp/${hash.slice(0, 12)}.png`,
       mimeType: "image/png",
       size: body.byteLength,
-      sha256: hash,
       overwritten: false,
     });
     await expect(
@@ -71,8 +70,7 @@ describe("SaveFileTool", () => {
           workspaceDir,
           "actor_3",
           "home",
-          "downloads",
-          "images",
+          "tmp",
           `${hash.slice(0, 12)}.png`,
         ),
       ),

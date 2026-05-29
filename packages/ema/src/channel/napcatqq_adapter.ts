@@ -274,6 +274,16 @@ export class NapCatQQAdapter implements ChannelAdapter<unknown, string> {
           file: `base64://${response.ema_reply.content}`,
         },
       });
+    } else if (
+      response.ema_reply.kind === "image" &&
+      response.ema_reply.content.length > 0
+    ) {
+      segments.push({
+        type: "image",
+        data: {
+          file: `base64://${response.ema_reply.content}`,
+        },
+      });
     }
     return segments;
   }

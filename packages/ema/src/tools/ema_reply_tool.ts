@@ -1,6 +1,8 @@
 import { z } from "zod";
 
+import { MEDIA_INLINE_LIMIT_BYTES } from "../channel/utils";
 import { getStickerById } from "../skills/sticker-skill/pack";
+import { ActorWorkspaceService } from "../workspace/actor_workspace";
 import { Tool } from "./base";
 import type { ToolResult, ToolContext } from "./base";
 import { normalizeThinkText } from "./utils";
@@ -8,8 +10,10 @@ import { normalizeThinkText } from "./utils";
 const EmaReplySchema = z
   .object({
     kind: z
-      .enum(["text", "sticker"])
-      .describe("消息类型。text 表示发送文本，sticker 表示发送表情包。"),
+      .enum(["text", "sticker", "image"])
+      .describe(
+        "消息类型。text 表示发送文本，sticker 表示发送表情包，image 表示发送私人工作区中的图片。",
+      ),
     think: z
       .string()
       .min(1)
@@ -17,7 +21,9 @@ const EmaReplySchema = z
       .describe(
         "可选的内部思考记录，用于保存你为什么这样回复、当前有哪些不确定，以及之后什么情况会改变你的理解。",
       ),
-    content: z.string().describe("要发送的文本内容或表情包 id"),
+    content: z
+      .string()
+      .describe("要发送的文本内容、表情包 id，或图片工作区虚拟路径。"),
     mention_uids: z
       .array(z.string().min(1))
       .optional()
@@ -36,9 +42,11 @@ const EMA_REPLY_TOOL_DESCRIPTION = `
 
 此工具是向外界发送消息的唯一方式。
 
-当 \`kind\` 为 \`text\` 时，\`content\` 填文本内容；当 \`kind\` 为 \`sticker\` 时，\`content\` 必须填写合法的表情包 id。
+当 \`kind\` 为 \`text\` 时，\`content\` 填文本内容；当 \`kind\` 为 \`sticker\` 时，\`content\` 必须填写合法的表情包 id；当 \`kind\` 为 \`image\` 时，\`content\` 填私人工作区中的图片虚拟路径。
 
 \`kind="sticker"\` 适合情绪回应、接梗、轻量冒泡、回应表情包，或避免用文字过度解释。若不知道可用表情 id，先读取 \`sticker-skill\` 查看可用表情，再用 \`ema_reply(kind="sticker")\` 发送。
+
+\`kind="image"\` 适合发送已经保存到工作区中的图片。图片路径必须来自 \`file_tool\` 或 \`save_file\` 返回的虚拟路径。如果还需要补充文字，请在图片发送成功后再次调用 \`ema_reply(kind="text")\`。
 
 ## 发送多条消息
 
@@ -82,6 +90,13 @@ const EMA_REPLY_TOOL_DESCRIPTION = `
 
 /** Tool that enforces JSON output matching the EmaReply shape. */
 export class EmaReplyTool extends Tool {
+  private readonly workspace: ActorWorkspaceService;
+
+  constructor(workspace: ActorWorkspaceService = new ActorWorkspaceService()) {
+    super();
+    this.workspace = workspace;
+  }
+
   /** Returns the unique tool name. */
   name = "ema_reply";
 
@@ -109,13 +124,30 @@ export class EmaReplyTool extends Tool {
           };
         }
       }
-      if (payload.kind === "text") {
-        payload.content = payload.content.replaceAll("\\n", "\n");
-      } else if (!(await getStickerById(payload.content))) {
-        return {
-          success: false,
-          content: `Unknown sticker id: ${payload.content}. Use get_skill to inspect sticker-skill first.`,
-        };
+      switch (payload.kind) {
+        case "text":
+          payload.content = payload.content.replaceAll("\\n", "\n");
+          break;
+        case "sticker":
+          if (!(await getStickerById(payload.content))) {
+            return {
+              success: false,
+              content: `Unknown sticker id: ${payload.content}. Use get_skill to inspect sticker-skill first.`,
+            };
+          }
+          break;
+        case "image": {
+          const contextError = await this.validateImageReply(payload, context);
+          if (contextError) {
+            return contextError;
+          }
+          break;
+        }
+        default:
+          return {
+            success: false,
+            content: "Invalid structured reply: unsupported reply kind.",
+          };
       }
       return {
         success: true,
@@ -128,4 +160,47 @@ export class EmaReplyTool extends Tool {
       };
     }
   }
+
+  private async validateImageReply(
+    payload: EmaReply,
+    context?: ToolContext,
+  ): Promise<ToolResult | null> {
+    if (typeof context?.actorId !== "number") {
+      return {
+        success: false,
+        content: "Invalid structured reply: missing actorId for image reply.",
+      };
+    }
+
+    try {
+      const image = await this.workspace.readImageDataFile(
+        context.actorId,
+        payload.content,
+        {
+          maxBytes: MEDIA_INLINE_LIMIT_BYTES,
+        },
+      );
+      payload.content = image.path;
+      return null;
+    } catch (error) {
+      return {
+        success: false,
+        content: `Invalid image reply: ${sanitizeFileErrorMessage(error)}`,
+      };
+    }
+  }
+}
+
+export function formatImageReplyMediaText(
+  reply: Pick<EmaReply, "content">,
+): string {
+  return `[图片：${reply.content}]`;
+}
+
+function sanitizeFileErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(
+    /(?:[A-Za-z]:)?[\\/](?:[^\\/ \t\r\n"'`]+[\\/])*[^\\/ \t\r\n"'`]+/g,
+    "[path]",
+  );
 }

@@ -7,9 +7,8 @@ import { LLMClient } from "../llm";
 import { baseTools } from "../tools";
 import { recordAgentTokenUsage } from "../token_usage";
 import { resolveSession } from "../channel";
-import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
-import { stickerIdToBase64 } from "../skills/sticker-skill/utils";
 import { formatTimestamp } from "../shared/utils";
+import { buildOutboundActorChatResponse } from "./outbound_response";
 import { buildUserMessageFromActorInput } from "./utils";
 import type {
   ActorInput,
@@ -205,32 +204,9 @@ export class ActorWorker {
   private async buildOutboundResponse(
     response: ActorChatResponse,
   ): Promise<ActorChatResponse> {
-    if (response.ema_reply.kind !== "sticker") {
-      return response;
-    }
-
-    try {
-      return {
-        ...response,
-        ema_reply: {
-          ...response.ema_reply,
-          content: await stickerIdToBase64(response.ema_reply.content),
-        },
-      };
-    } catch (error) {
-      this.logger.warn(
-        `Failed to resolve sticker '${response.ema_reply.content}', falling back to text proxy.`,
-        error,
-      );
-      return {
-        ...response,
-        ema_reply: {
-          ...response.ema_reply,
-          kind: "text",
-          content: await formatStickerDisplayText(response.ema_reply.content),
-        },
-      };
-    }
+    return await buildOutboundActorChatResponse(response, {
+      logger: this.logger,
+    });
   }
 
   async work(envelope: ActorInput): Promise<void> {

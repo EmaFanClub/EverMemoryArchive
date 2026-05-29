@@ -216,6 +216,34 @@ describe("ActorWorkspaceService", () => {
     ).resolves.toEqual(Buffer.from([2]));
   });
 
+  test("reads image data for outbound sending", async () => {
+    const service = new ActorWorkspaceService({ workspaceDir });
+    const content = Buffer.from("fake-image");
+    await service.writeBinaryFile(1, "images/cat.png", content);
+
+    const image = await service.readImageDataFile(1, "/images/cat.png");
+
+    expect(image).toMatchObject({
+      path: "images/cat.png",
+      size: content.byteLength,
+      mimeType: "image/png",
+    });
+    expect(image.data).toEqual(content);
+    expect(image.sha256).toEqual(expect.any(String));
+  });
+
+  test("rejects non-image files for outbound sending", async () => {
+    const service = new ActorWorkspaceService({ workspaceDir });
+    await service.writeFile(1, "notes/cat.txt", {
+      mode: "overwrite",
+      content: "not an image",
+    });
+
+    await expect(service.readImageDataFile(1, "notes/cat.txt")).rejects.toThrow(
+      /image/i,
+    );
+  });
+
   test("serializes writes against ancestor directory deletes", async () => {
     const service = new ActorWorkspaceService({ workspaceDir });
     await service.writeFile(1, "drafts/old.md", {

@@ -547,6 +547,38 @@ describe("NapCatQQAdapter", () => {
     });
   });
 
+  test("builds image segments for workspace image replies", async () => {
+    const adapter = new NapCatQQAdapter();
+
+    expect(
+      await adapter.chatToAPICall({
+        kind: "chat",
+        actorId: 1,
+        conversationId: 1,
+        msgId: 1,
+        session: "qq-chat-12345",
+        ema_reply: {
+          kind: "image",
+          content: "ZmFrZS1pbWFnZQ==",
+        },
+        time: 1,
+      }),
+    ).toEqual({
+      method: "send_private_msg",
+      params: {
+        user_id: "12345",
+        message: [
+          {
+            type: "image",
+            data: {
+              file: "base64://ZmFrZS1pbWFnZQ==",
+            },
+          },
+        ],
+      },
+    });
+  });
+
   test("encodes API call using onebot websocket envelope", async () => {
     const adapter = new NapCatQQAdapter();
     expect(
