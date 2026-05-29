@@ -7,6 +7,7 @@ import { GetSkillTool } from "./get_skill_tool";
 import { ExecSkillTool } from "./exec_skill_tool";
 import { ListConversationsTool } from "./list_conversations_tool";
 import { FileTool } from "./file_tool";
+import { SaveFileTool } from "./save_file_tool";
 import { skillRegistry } from "../skills";
 
 export const baseTools: Tool[] = [
@@ -14,6 +15,7 @@ export const baseTools: Tool[] = [
   new KeepSilenceTool(),
   new ListConversationsTool(),
   new FileTool(),
+  new SaveFileTool(),
   new GetSkillTool(skillRegistry),
   new ExecSkillTool(skillRegistry),
 ];

@@ -16,6 +16,7 @@ import type {
   ResolvedWorkspacePath,
   ResolveWorkspacePathOptions,
   WorkspaceEntry,
+  WriteBinaryFileResult,
   WriteFileResult,
 } from "./base";
 import {
@@ -39,6 +40,7 @@ const MAX_WRITE_BYTES = 1024 * 1024;
 const MAX_IMAGE_PREVIEW_BYTES = 5 * 1024 * 1024;
 
 interface ActivePathLock {
+  workspaceDir: string;
   actorId: number;
   virtualPaths: string[];
   done: Promise<void>;
@@ -46,8 +48,9 @@ interface ActivePathLock {
 }
 
 export class ActorWorkspaceService {
+  private static readonly pathLocks: ActivePathLock[] = [];
+
   private readonly workspaceDir?: string;
-  private readonly pathLocks: ActivePathLock[] = [];
 
   constructor(options: ActorWorkspaceServiceOptions = {}) {
     this.workspaceDir = options.workspaceDir;
@@ -235,6 +238,66 @@ export class ActorWorkspaceService {
         mode: options.mode,
         size: finalStat.size,
         sha256: await hashFile(writeResolved.realPath),
+      };
+    });
+  }
+
+  async writeBinaryFile(
+    actorId: number,
+    modelPath: string,
+    content: Buffer,
+    options: { overwrite?: boolean; maxBytes?: number } = {},
+  ): Promise<WriteBinaryFileResult> {
+    const virtualPath = normalizeWorkspacePath(modelPath);
+    return await this.withPathLock(actorId, virtualPath, async () => {
+      if (
+        options.maxBytes !== undefined &&
+        content.byteLength > options.maxBytes
+      ) {
+        throw new Error(`content exceeds ${options.maxBytes} bytes.`);
+      }
+
+      const resolved = await this.resolvePath(actorId, virtualPath, {
+        allowRoot: false,
+      });
+      this.assertBinaryWriteTarget(
+        await this.lstatOrNull(resolved.realPath),
+        resolved.virtualPath,
+        Boolean(options.overwrite),
+      );
+
+      await fs.mkdir(path.dirname(resolved.realPath), { recursive: true });
+      const writeResolved = await this.resolvePath(
+        actorId,
+        resolved.virtualPath,
+        {
+          allowRoot: false,
+        },
+      );
+      const overwritten = this.assertBinaryWriteTarget(
+        await this.lstatOrNull(writeResolved.realPath),
+        writeResolved.virtualPath,
+        Boolean(options.overwrite),
+      );
+
+      let tmpFile: string | null =
+        `${writeResolved.realPath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+      try {
+        await fs.writeFile(tmpFile, content);
+        await fs.rename(tmpFile, writeResolved.realPath);
+        tmpFile = null;
+      } finally {
+        if (tmpFile) {
+          await fs.rm(tmpFile, { force: true }).catch(() => undefined);
+        }
+      }
+
+      const finalStat = await fs.lstat(writeResolved.realPath);
+      return {
+        path: writeResolved.virtualPath,
+        size: finalStat.size,
+        sha256: await hashFile(writeResolved.realPath),
+        overwritten,
       };
     });
   }
@@ -619,10 +682,12 @@ export class ActorWorkspaceService {
       return await callback();
     }
 
+    const workspaceDir = path.resolve(this.getWorkspaceDir());
     while (true) {
-      const blockers = this.pathLocks
+      const blockers = ActorWorkspaceService.pathLocks
         .filter(
           (lock) =>
+            lock.workspaceDir === workspaceDir &&
             lock.actorId === actorId &&
             lock.virtualPaths.some((lockedPath) =>
               lockPaths.some((virtualPath) =>
@@ -642,20 +707,21 @@ export class ActorWorkspaceService {
       release = resolve;
     });
     const entry: ActivePathLock = {
+      workspaceDir,
       actorId,
       virtualPaths: lockPaths,
       done,
       release,
     };
-    this.pathLocks.push(entry);
+    ActorWorkspaceService.pathLocks.push(entry);
 
     try {
       return await callback();
     } finally {
       release();
-      const index = this.pathLocks.indexOf(entry);
+      const index = ActorWorkspaceService.pathLocks.indexOf(entry);
       if (index >= 0) {
-        this.pathLocks.splice(index, 1);
+        ActorWorkspaceService.pathLocks.splice(index, 1);
       }
     }
   }
@@ -676,6 +742,23 @@ export class ActorWorkspaceService {
       throw new Error("overwrite only supports replacing files.");
     }
     return targetStat;
+  }
+
+  private assertBinaryWriteTarget(
+    stat: Awaited<ReturnType<typeof fs.lstat>> | null,
+    virtualPath: string,
+    overwrite: boolean,
+  ): boolean {
+    if (!stat) {
+      return false;
+    }
+    if (!stat.isFile()) {
+      throw new Error(`path already exists and is not a file: ${virtualPath}`);
+    }
+    if (!overwrite) {
+      throw new Error(`path already exists: ${virtualPath}`);
+    }
+    return true;
   }
 
   private async ensureActorHomeRoot(

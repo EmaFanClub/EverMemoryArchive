@@ -176,6 +176,46 @@ describe("ActorWorkspaceService", () => {
     await expect(fs.readdir(home)).resolves.toEqual([]);
   });
 
+  test("writes binary files and requires explicit overwrite", async () => {
+    const service = new ActorWorkspaceService({ workspaceDir });
+    const content = Buffer.from([0, 255, 1, 254]);
+
+    const written = await service.writeBinaryFile(1, "images/raw.bin", content);
+
+    expect(written).toMatchObject({
+      path: "images/raw.bin",
+      size: content.byteLength,
+      overwritten: false,
+    });
+    expect(written.sha256).toEqual(expect.any(String));
+    await expect(
+      fs.readFile(
+        path.join(workspaceDir, "actor_1", "home", "images", "raw.bin"),
+      ),
+    ).resolves.toEqual(content);
+
+    await expect(
+      service.writeBinaryFile(1, "images/raw.bin", Buffer.from([1])),
+    ).rejects.toThrow(/already exists/);
+
+    const overwritten = await service.writeBinaryFile(
+      1,
+      "images/raw.bin",
+      Buffer.from([2]),
+      { overwrite: true },
+    );
+    expect(overwritten).toMatchObject({
+      path: "images/raw.bin",
+      size: 1,
+      overwritten: true,
+    });
+    await expect(
+      fs.readFile(
+        path.join(workspaceDir, "actor_1", "home", "images", "raw.bin"),
+      ),
+    ).resolves.toEqual(Buffer.from([2]));
+  });
+
   test("serializes writes against ancestor directory deletes", async () => {
     const service = new ActorWorkspaceService({ workspaceDir });
     await service.writeFile(1, "drafts/old.md", {
@@ -207,6 +247,54 @@ describe("ActorWorkspaceService", () => {
     });
     await deleteStarted;
     const writePromise = service.writeFile(1, "drafts/new.md", {
+      mode: "overwrite",
+      content: "new",
+    });
+
+    releaseDelete();
+    try {
+      await Promise.all([deletePromise, writePromise]);
+    } finally {
+      fs.rm = originalRm;
+    }
+
+    await expect(
+      fs.readFile(path.join(draftsPath, "new.md"), "utf-8"),
+    ).resolves.toBe("new");
+  });
+
+  test("serializes mutations across service instances", async () => {
+    const deleteService = new ActorWorkspaceService({ workspaceDir });
+    const writeService = new ActorWorkspaceService({ workspaceDir });
+    await deleteService.writeFile(1, "drafts/old.md", {
+      mode: "overwrite",
+      content: "old",
+    });
+
+    const draftsPath = path.join(workspaceDir, "actor_1", "home", "drafts");
+    let releaseDelete!: () => void;
+    const deleteCanContinue = new Promise<void>((resolve) => {
+      releaseDelete = resolve;
+    });
+    const originalRm = fs.rm;
+    const deleteStarted = new Promise<void>((resolve) => {
+      fs.rm = (async (
+        target: Parameters<typeof fs.rm>[0],
+        options?: Parameters<typeof fs.rm>[1],
+      ) => {
+        if (target === draftsPath) {
+          resolve();
+          await deleteCanContinue;
+        }
+        return originalRm(target, options);
+      }) as typeof fs.rm;
+    });
+
+    const deletePromise = deleteService.deleteFiles(1, ["drafts"], {
+      recursive: true,
+    });
+    await deleteStarted;
+    const writePromise = writeService.writeFile(1, "drafts/new.md", {
       mode: "overwrite",
       content: "new",
     });

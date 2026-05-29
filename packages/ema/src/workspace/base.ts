@@ -53,6 +53,13 @@ export interface WriteFileResult {
   sha256: string;
 }
 
+export interface WriteBinaryFileResult {
+  path: string;
+  size: number;
+  sha256: string;
+  overwritten: boolean;
+}
+
 export interface MkdirResult {
   operation: "mkdir";
   path: string;
