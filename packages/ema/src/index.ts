@@ -23,4 +23,5 @@ export * from "./memory/base";
 export * from "./memory/embedding_client";
 export * from "./token_usage";
 export * from "./trainer";
+export * from "./workspace";
 export type { Tool } from "./tools/base";
