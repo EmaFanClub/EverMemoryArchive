@@ -160,6 +160,87 @@ describe("AgentHubClient", () => {
     ]);
   });
 
+  test("downgrades media when the selected model does not support images", async () => {
+    const client = await createClient(
+      "/tmp/ema-agenthub-text-only-test",
+      createModelConfig({ images: false }),
+    );
+
+    const message = client.adaptMessageToSDK({
+      role: "user",
+      contents: [
+        {
+          type: "inline_data",
+          mimeType: "image/png",
+          data: "aW1hZ2U=",
+          text: "[图片]",
+        },
+        {
+          type: "tool_result",
+          toolCallId: "call-1",
+          name: "file_tool",
+          result: {
+            text: '{"success":true}',
+            images: [
+              {
+                type: "inline_data",
+                mimeType: "image/png",
+                data: "aW1hZ2U=",
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(message.content_items).toEqual([
+      {
+        type: "text",
+        text: "[图片]（image/png）",
+      },
+      {
+        type: "tool_result",
+        text: '{"success":true}',
+        tool_call_id: "call-1",
+      },
+    ]);
+    expect(message.content_items[1]).not.toHaveProperty("images");
+  });
+
+  test("preserves tool result images when the selected model supports images", async () => {
+    const client = await createClient();
+
+    const message = client.adaptMessageToSDK({
+      role: "user",
+      contents: [
+        {
+          type: "tool_result",
+          toolCallId: "call-1",
+          name: "file_tool",
+          result: {
+            text: '{"success":true}',
+            images: [
+              {
+                type: "inline_data",
+                mimeType: "image/png",
+                data: "aW1hZ2U=",
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(message.content_items).toEqual([
+      {
+        type: "tool_result",
+        text: '{"success":true}',
+        images: ["data:image/png;base64,aW1hZ2U="],
+        tool_call_id: "call-1",
+      },
+    ]);
+  });
+
   test("adapts AgentHub response metadata into the message", async () => {
     const client = await createClient();
     const message = client.adaptResponseFromSDK({
@@ -281,6 +362,7 @@ describe("AgentHubClient", () => {
 
 async function createClient(
   dataRoot: string = "/tmp/ema-agenthub-test",
+  modelConfig: LLMModelConfig = createModelConfig(),
 ): Promise<AgentHubClient> {
   await GlobalConfig.load(new MemFs(), {
     bootstrap: createBootstrapConfig({
@@ -289,10 +371,12 @@ async function createClient(
       dataRoot,
     }),
   });
-  return new AgentHubClient(createModelConfig(), new RetryConfig(false));
+  return new AgentHubClient(modelConfig, new RetryConfig(false));
 }
 
-function createModelConfig(): LLMModelConfig {
+function createModelConfig(
+  capabilities: Partial<LLMModelConfig["capabilities"]> = {},
+): LLMModelConfig {
   return {
     model: "gpt-5.5",
     apiKey: "test-key",
@@ -307,6 +391,7 @@ function createModelConfig(): LLMModelConfig {
       ],
       tools: true,
       images: true,
+      ...capabilities,
     },
     requestDefaults: {
       thinkingLevel: ThinkingLevel.MEDIUM,

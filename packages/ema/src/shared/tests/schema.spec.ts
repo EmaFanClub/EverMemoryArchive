@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  collapseContentsForTextOnlyModel,
   collapseContentsToText,
   expandContentsForModel,
   isImageUrlItem,
@@ -71,6 +72,53 @@ describe("expandContentsForModel", () => {
         mimeType: "image/png",
         data: "base64-data",
         text: "[图片]",
+      },
+    ]);
+  });
+});
+
+describe("collapseContentsForTextOnlyModel", () => {
+  test("collapses media content and strips tool result images", () => {
+    expect(
+      collapseContentsForTextOnlyModel([
+        { type: "text", text: "[图片]（image/png）" },
+        {
+          type: "inline_data",
+          mimeType: "image/png",
+          data: "base64-data",
+          text: "[图片]",
+        },
+        {
+          type: "image_url",
+          url: "https://example.test/image.png",
+          text: "[远程图片]",
+        },
+        {
+          type: "tool_result",
+          toolCallId: "call-1",
+          name: "file_tool",
+          result: {
+            text: '{"success":true}',
+            images: [
+              {
+                type: "inline_data",
+                mimeType: "image/jpeg",
+                data: "base64-image",
+              },
+            ],
+          },
+        },
+      ]),
+    ).toEqual([
+      { type: "text", text: "[图片]（image/png）" },
+      { type: "text", text: "[远程图片]（image_url）" },
+      {
+        type: "tool_result",
+        toolCallId: "call-1",
+        name: "file_tool",
+        result: {
+          text: '{"success":true}',
+        },
       },
     ]);
   });

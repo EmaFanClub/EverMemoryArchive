@@ -24,7 +24,11 @@ import type {
   ToolDefinition,
   UsageMetadata,
 } from "./schema";
-import { isImageMime, isSupportedMime } from "./utils";
+import {
+  collapseContentsForTextOnlyModel,
+  isImageMime,
+  isSupportedMime,
+} from "./utils";
 
 /**
  * AgentHub-backed client that adapts EMA schema to AgentHub schema.
@@ -69,11 +73,12 @@ export class AgentHubClient extends LLMClientBase<
    * @returns AgentHub-compatible message.
    */
   adaptMessageToSDK(message: Message): UniMessage {
+    const contents = this.modelConfig.capabilities.images
+      ? message.contents
+      : collapseContentsForTextOnlyModel(message.contents);
     return {
       role: message.role === "model" ? "assistant" : "user",
-      content_items: message.contents.map((content) =>
-        this.adaptContentToSDK(content),
-      ),
+      content_items: contents.map((content) => this.adaptContentToSDK(content)),
       ...this.adaptMessageMetadataToSDK(message.metadata),
     };
   }
@@ -166,9 +171,13 @@ export class AgentHubClient extends LLMClientBase<
         return {
           type: "tool_result",
           text: content.result.text,
-          images: content.result.images?.map((image) =>
-            this.adaptToolResultImageToSDK(image),
-          ),
+          ...(content.result.images?.length
+            ? {
+                images: content.result.images.map((image) =>
+                  this.adaptToolResultImageToSDK(image),
+                ),
+              }
+            : {}),
           tool_call_id: content.toolCallId,
         };
     }

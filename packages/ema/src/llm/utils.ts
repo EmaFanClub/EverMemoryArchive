@@ -156,6 +156,13 @@ export function formatMediaText(content: MediaItem): string {
   return text ? `${text}（${content.mimeType}）` : `（${content.mimeType}）`;
 }
 
+function formatMediaTextItem(content: MediaItem): TextItem {
+  return {
+    type: "text",
+    text: formatMediaText(content),
+  };
+}
+
 /**
  * Collapses multimodal contents into pure text contents for prompt rendering.
  *
@@ -167,11 +174,46 @@ export function collapseContentsToText(contents: InputContent[]): TextItem[] {
     if (content.type === "text") {
       return content;
     }
-    return {
-      type: "text",
-      text: formatMediaText(content),
-    };
+    return formatMediaTextItem(content);
   });
+}
+
+/**
+ * Collapses media payloads before sending history to text-only models.
+ *
+ * @param contents - Message contents to normalize.
+ * @returns Contents that do not carry media payloads.
+ */
+export function collapseContentsForTextOnlyModel(
+  contents: Content[],
+): Content[] {
+  const collapsed: Content[] = [];
+
+  for (const content of contents) {
+    if (isMediaItem(content)) {
+      const textItem = formatMediaTextItem(content);
+      const previous = collapsed[collapsed.length - 1];
+      if (previous?.type === "text" && previous.text === textItem.text) {
+        continue;
+      }
+      collapsed.push(textItem);
+      continue;
+    }
+
+    if (content.type === "tool_result" && content.result.images?.length) {
+      collapsed.push({
+        ...content,
+        result: {
+          text: content.result.text,
+        },
+      });
+      continue;
+    }
+
+    collapsed.push(content);
+  }
+
+  return collapsed;
 }
 
 /**
@@ -188,6 +230,6 @@ export function expandContentsForModel(
     if (content.type === "text") {
       return [content];
     }
-    return [{ type: "text", text: formatMediaText(content) }, content];
+    return [formatMediaTextItem(content), content];
   });
 }
