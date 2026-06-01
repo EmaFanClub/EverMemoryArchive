@@ -8,32 +8,9 @@ import { ActorWorkspaceService } from "../../workspace/actor_workspace";
 import { FileTool } from "../file_tool";
 import type { ToolContext, ToolResult } from "../base";
 
-interface FileToolJsonSchemaVariant {
-  properties?: {
-    operation?: {
-      const?: unknown;
-    };
-  };
-  required?: string[];
-}
-
 function parseContent(result: ToolResult) {
   expect(result.success).toBe(true);
   return JSON.parse(result.content ?? "{}");
-}
-
-function findFileToolSchemaVariant(
-  schema: Record<string, unknown>,
-  operation: string,
-): FileToolJsonSchemaVariant | undefined {
-  const variants = schema.oneOf;
-  if (!Array.isArray(variants)) {
-    return undefined;
-  }
-  return variants.find((item): item is FileToolJsonSchemaVariant => {
-    const variant = item as FileToolJsonSchemaVariant;
-    return variant.properties?.operation?.const === operation;
-  });
 }
 
 describe("FileTool", () => {
@@ -443,18 +420,26 @@ describe("FileTool", () => {
     expect(baseTools.some((item) => item.name === "file_tool")).toBe(true);
   });
 
-  test("keeps defaulted boolean parameters optional in JSON schema", () => {
-    const listSchema = findFileToolSchemaVariant(tool.parameters, "list");
-    const deleteSchema = findFileToolSchemaVariant(tool.parameters, "delete");
-    const moveSchema = findFileToolSchemaVariant(tool.parameters, "move");
+  test("exposes provider-compatible object parameters schema", () => {
+    const params = tool.parameters;
+    const properties = params.properties as Record<string, unknown>;
+    const operation = properties.operation as { enum?: string[] };
 
-    expect(listSchema?.required).not.toContain("recursive");
-    expect(deleteSchema?.required).not.toContain("recursive");
-    expect(deleteSchema?.required).not.toContain("dry_run");
-    expect(moveSchema?.required).not.toContain("overwrite");
-    expect(
-      findFileToolSchemaVariant(tool.parameters, "remove"),
-    ).toBeUndefined();
+    expect(params.type).toBe("object");
+    expect(params.oneOf).toBeUndefined();
+    expect(params.required).toEqual(["operation"]);
+    expect(operation.enum).toEqual([
+      "list",
+      "read",
+      "write",
+      "mkdir",
+      "move",
+      "delete",
+    ]);
+    expect(operation.enum).not.toContain("remove");
+    expect(params.required).not.toContain("recursive");
+    expect(params.required).not.toContain("dry_run");
+    expect(params.required).not.toContain("overwrite");
   });
 
   test("does not expose real filesystem paths in tool errors", async () => {

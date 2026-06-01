@@ -43,6 +43,8 @@ describe("EmaReplyTool", () => {
     expect(tool.description).toContain("唯一方式");
     expect(tool.description).toContain("避免用文字过度解释");
     expect(tool.description).toContain("sticker-skill");
+    expect(tool.description).toContain("不要把下一条消息写成普通文本");
+    expect(tool.description).toContain("普通文本不会发送给对方");
   });
 
   it("should expose required parameters schema", () => {

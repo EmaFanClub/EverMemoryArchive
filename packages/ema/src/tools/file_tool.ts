@@ -65,6 +65,54 @@ const DeleteFileSchema = z
   })
   .strict();
 
+const FileToolParametersSchema = z
+  .object({
+    operation: z
+      .enum(["list", "read", "write", "mkdir", "move", "delete"])
+      .describe("操作类型。不同操作使用不同参数。"),
+    path: z
+      .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(50)])
+      .optional()
+      .describe(
+        "工作区虚拟路径。list/read/write/mkdir 使用字符串；delete 可使用字符串或字符串数组。",
+      ),
+    source_path: z.string().min(1).optional().describe("move 的源路径。"),
+    target_path: z.string().min(1).optional().describe("move 的目标路径。"),
+    mode: z
+      .enum(["overwrite", "append"])
+      .optional()
+      .describe("write 的写入模式。"),
+    content: z.string().optional().describe("write 的 UTF-8 文本内容。"),
+    expected_sha256: z
+      .string()
+      .optional()
+      .describe("write 时用于并发保护的期望文件 SHA-256。"),
+    recursive: z
+      .boolean()
+      .optional()
+      .describe("list/delete 使用；delete 非空目录时需要设为 true。"),
+    dry_run: z.boolean().optional().describe("delete 使用，预览删除结果。"),
+    overwrite: z
+      .boolean()
+      .optional()
+      .describe("move 使用，是否覆盖已存在的目标文件。"),
+    max_entries: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .optional()
+      .describe("list 使用，最多返回多少条。"),
+    max_bytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(256 * 1024)
+      .optional()
+      .describe("read 使用，最多读取多少字节。"),
+  })
+  .strict();
+
 const FileToolSchema = z.discriminatedUnion("operation", [
   ListFileSchema,
   ReadFileSchema,
@@ -96,6 +144,15 @@ const FILE_TOOL_DESCRIPTION = `
 - \`move\`：移动或重命名文件、目录。
 - \`delete\`：删除一个或多个文件、目录。
 
+## 参数
+
+- \`list\`：\`operation\`，可选 \`path\`、\`recursive\`、\`max_entries\`。
+- \`read\`：\`operation\`、\`path\`，可选 \`max_bytes\`。
+- \`write\`：\`operation\`、\`path\`、\`mode\`、\`content\`，可选 \`expected_sha256\`。
+- \`mkdir\`：\`operation\`、\`path\`。
+- \`move\`：\`operation\`、\`source_path\`、\`target_path\`，可选 \`overwrite\`。
+- \`delete\`：\`operation\`、\`path\`，可选 \`recursive\`、\`dry_run\`。
+
 ## 注意事项
 
 1. \`write\` 只支持文本内容，模式为 \`overwrite\` 或 \`append\`。
@@ -116,7 +173,7 @@ export class FileTool extends Tool {
 
   description = FILE_TOOL_DESCRIPTION;
 
-  parameters = FileToolSchema.toJSONSchema();
+  parameters = FileToolParametersSchema.toJSONSchema();
 
   async execute(args: unknown, context?: ToolContext): Promise<ToolResult> {
     let payload: FileToolInput;

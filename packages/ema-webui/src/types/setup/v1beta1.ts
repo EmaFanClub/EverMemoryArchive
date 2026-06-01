@@ -1,9 +1,10 @@
 export type SetupStepId = "llm" | "embedding" | "owner" | "review";
 
 export type LlmModelProvider =
-  | "openai"
   | "google"
+  | "openai"
   | "anthropic"
+  | "deepseek"
   | "zai"
   | "moonshot"
   | "qwen";

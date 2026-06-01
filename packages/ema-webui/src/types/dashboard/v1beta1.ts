@@ -7,9 +7,10 @@ export type ActorRuntimeTransition =
   | null;
 export type EmbeddingProvider = "google";
 export type LlmModelProvider =
-  | "openai"
   | "google"
+  | "openai"
   | "anthropic"
+  | "deepseek"
   | "zai"
   | "moonshot"
   | "qwen";

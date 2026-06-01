@@ -4441,6 +4441,13 @@
   left: 0;
   display: grid;
   gap: 4px;
+  max-height: min(360px, calc(100vh - 160px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: color-mix(in srgb, var(--text-subtle) 62%, transparent)
+    transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
   border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
   border-radius: 18px;
   padding: 6px;
@@ -4448,6 +4455,21 @@
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
   transform-origin: top center;
   animation: llmModelSelectMenuEnter 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.llmModelSelectMenu::-webkit-scrollbar {
+  width: 7px;
+}
+
+.llmModelSelectMenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.llmModelSelectMenu::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--text-subtle) 62%, transparent);
 }
 
 .llmModelSelectGroup {

@@ -29,30 +29,13 @@ export interface LLMModelDefinition {
 
 /** Provider group used by product/UI layers for display and filtering. */
 export type LLMProvider =
-  | "openai"
   | "google"
+  | "openai"
   | "anthropic"
+  | "deepseek"
   | "zai"
   | "moonshot"
   | "qwen";
-
-const FULL_THINKING_LEVELS = [
-  ThinkingLevel.NONE,
-  ThinkingLevel.LOW,
-  ThinkingLevel.MEDIUM,
-  ThinkingLevel.HIGH,
-] as const;
-
-const REQUIRED_THINKING_LEVELS = [
-  ThinkingLevel.LOW,
-  ThinkingLevel.MEDIUM,
-  ThinkingLevel.HIGH,
-] as const;
-
-const ENABLED_OR_DISABLED_THINKING_LEVELS = [
-  ThinkingLevel.NONE,
-  ThinkingLevel.MEDIUM,
-] as const;
 
 /**
  * Supported models and their AgentHub routing/default configuration.
@@ -61,12 +44,80 @@ const ENABLED_OR_DISABLED_THINKING_LEVELS = [
  */
 export const LLM_MODEL_DEFINITIONS = [
   {
+    model: "gemini-3.5-flash",
+    provider: "google",
+    clientType: "gemini-3",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    capabilities: {
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+      ],
+      tools: true,
+      images: true,
+    },
+    requestDefaults: {
+      thinkingLevel: ThinkingLevel.MEDIUM,
+      thinkingSummary: true,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
+    model: "gemini-3.1-pro-preview",
+    provider: "google",
+    clientType: "gemini-3",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    capabilities: {
+      thinkingLevels: [
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+      ],
+      tools: true,
+      images: true,
+    },
+    requestDefaults: {
+      thinkingLevel: ThinkingLevel.MEDIUM,
+      thinkingSummary: true,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
+    model: "gemini-3.1-flash-lite",
+    provider: "google",
+    clientType: "gemini-3",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    capabilities: {
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+      ],
+      tools: true,
+      images: true,
+    },
+    requestDefaults: {
+      thinkingLevel: ThinkingLevel.MEDIUM,
+      thinkingSummary: true,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
     model: "gpt-5.5",
     provider: "openai",
     clientType: "gpt-5.5",
     defaultBaseUrl: "https://api.openai.com/v1",
     capabilities: {
-      thinkingLevels: FULL_THINKING_LEVELS,
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+        ThinkingLevel.XHIGH,
+      ],
       tools: true,
       images: true,
     },
@@ -82,7 +133,13 @@ export const LLM_MODEL_DEFINITIONS = [
     clientType: "gpt-5.4",
     defaultBaseUrl: "https://api.openai.com/v1",
     capabilities: {
-      thinkingLevels: FULL_THINKING_LEVELS,
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+        ThinkingLevel.XHIGH,
+      ],
       tools: true,
       images: true,
     },
@@ -93,12 +150,18 @@ export const LLM_MODEL_DEFINITIONS = [
     },
   },
   {
-    model: "gemini-3.5-flash",
-    provider: "google",
-    clientType: "gemini-3-client",
-    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    model: "gpt-5.4-mini",
+    provider: "openai",
+    clientType: "gpt-5.4",
+    defaultBaseUrl: "https://api.openai.com/v1",
     capabilities: {
-      thinkingLevels: FULL_THINKING_LEVELS,
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+        ThinkingLevel.XHIGH,
+      ],
       tools: true,
       images: true,
     },
@@ -109,12 +172,18 @@ export const LLM_MODEL_DEFINITIONS = [
     },
   },
   {
-    model: "gemini-3.1-pro-preview",
-    provider: "google",
-    clientType: "gemini-3-client",
-    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    model: "gpt-5.4-nano",
+    provider: "openai",
+    clientType: "gpt-5.4",
+    defaultBaseUrl: "https://api.openai.com/v1",
     capabilities: {
-      thinkingLevels: REQUIRED_THINKING_LEVELS,
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+        ThinkingLevel.XHIGH,
+      ],
       tools: true,
       images: true,
     },
@@ -125,12 +194,40 @@ export const LLM_MODEL_DEFINITIONS = [
     },
   },
   {
-    model: "gemini-3.1-flash-lite-preview",
-    provider: "google",
-    clientType: "gemini-3-client",
-    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    model: "claude-opus-4-8",
+    provider: "anthropic",
+    clientType: "claude-4-8",
+    defaultBaseUrl: "https://api.anthropic.com",
     capabilities: {
-      thinkingLevels: FULL_THINKING_LEVELS,
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+        ThinkingLevel.XHIGH,
+      ],
+      tools: true,
+      images: true,
+    },
+    requestDefaults: {
+      thinkingLevel: ThinkingLevel.MEDIUM,
+      thinkingSummary: true,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
+    model: "claude-opus-4-7",
+    provider: "anthropic",
+    clientType: "claude-4-7",
+    defaultBaseUrl: "https://api.anthropic.com",
+    capabilities: {
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+        ThinkingLevel.XHIGH,
+      ],
       tools: true,
       images: true,
     },
@@ -146,7 +243,12 @@ export const LLM_MODEL_DEFINITIONS = [
     clientType: "claude-4-6",
     defaultBaseUrl: "https://api.anthropic.com",
     capabilities: {
-      thinkingLevels: FULL_THINKING_LEVELS,
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.LOW,
+        ThinkingLevel.MEDIUM,
+        ThinkingLevel.HIGH,
+      ],
       tools: true,
       images: true,
     },
@@ -157,14 +259,82 @@ export const LLM_MODEL_DEFINITIONS = [
     },
   },
   {
-    model: "z-ai/glm-5",
+    model: "deepseek-v4-pro",
+    provider: "deepseek",
+    clientType: "deepseek-v4",
+    defaultBaseUrl: "https://api.deepseek.com",
+    capabilities: {
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.HIGH,
+        ThinkingLevel.XHIGH,
+      ],
+      tools: true,
+      images: false,
+    },
+    requestDefaults: {
+      thinkingLevel: ThinkingLevel.HIGH,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
+    model: "deepseek-v4-flash",
+    provider: "deepseek",
+    clientType: "deepseek-v4",
+    defaultBaseUrl: "https://api.deepseek.com",
+    capabilities: {
+      thinkingLevels: [
+        ThinkingLevel.NONE,
+        ThinkingLevel.HIGH,
+        ThinkingLevel.XHIGH,
+      ],
+      tools: true,
+      images: false,
+    },
+    requestDefaults: {
+      thinkingLevel: ThinkingLevel.HIGH,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
+    model: "glm-5.1",
+    provider: "zai",
+    clientType: "glm-5.1",
+    defaultBaseUrl: "https://api.z.ai/api/paas/v4/",
+    capabilities: {
+      thinkingLevels: [ThinkingLevel.NONE, ThinkingLevel.MEDIUM],
+      tools: true,
+      images: false,
+    },
+    requestDefaults: {
+      thinkingLevel: ThinkingLevel.MEDIUM,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
+    model: "glm-5",
     provider: "zai",
     clientType: "glm-5",
     defaultBaseUrl: "https://api.z.ai/api/paas/v4/",
     capabilities: {
-      thinkingLevels: ENABLED_OR_DISABLED_THINKING_LEVELS,
+      thinkingLevels: [ThinkingLevel.NONE, ThinkingLevel.MEDIUM],
       tools: true,
       images: false,
+    },
+    requestDefaults: {
+      thinkingLevel: ThinkingLevel.MEDIUM,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
+    model: "kimi-k2.6",
+    provider: "moonshot",
+    clientType: "kimi-k2.6",
+    defaultBaseUrl: "https://api.moonshot.cn/v1",
+    capabilities: {
+      thinkingLevels: [ThinkingLevel.NONE, ThinkingLevel.MEDIUM],
+      tools: true,
+      images: true,
     },
     requestDefaults: {
       thinkingLevel: ThinkingLevel.MEDIUM,
@@ -177,12 +347,26 @@ export const LLM_MODEL_DEFINITIONS = [
     clientType: "kimi-k2.5",
     defaultBaseUrl: "https://api.moonshot.cn/v1",
     capabilities: {
-      thinkingLevels: ENABLED_OR_DISABLED_THINKING_LEVELS,
+      thinkingLevels: [ThinkingLevel.NONE, ThinkingLevel.MEDIUM],
       tools: true,
       images: true,
     },
     requestDefaults: {
       thinkingLevel: ThinkingLevel.MEDIUM,
+      promptCaching: PromptCaching.ENABLE,
+    },
+  },
+  {
+    model: "Qwen/Qwen3.6-35B-A3B",
+    provider: "qwen",
+    clientType: "openai",
+    defaultBaseUrl: "http://127.0.0.1:8000/v1/",
+    capabilities: {
+      thinkingLevels: [],
+      tools: true,
+      images: false,
+    },
+    requestDefaults: {
       promptCaching: PromptCaching.ENABLE,
     },
   },

@@ -4,6 +4,38 @@ import { PromptCaching, ThinkingLevel } from "../base";
 import { resolveLLMModelConfig, resolveLLMModelDefinition } from "../models";
 
 describe("AgentHub model registry", () => {
+  test("uses AgentHub client routes for updated model presets", () => {
+    expect(resolveLLMModelDefinition("gemini-3.5-flash").clientType).toBe(
+      "gemini-3",
+    );
+    expect(resolveLLMModelDefinition("deepseek-v4-pro").clientType).toBe(
+      "deepseek-v4",
+    );
+    expect(resolveLLMModelDefinition("glm-5.1").clientType).toBe("glm-5.1");
+    expect(resolveLLMModelDefinition("kimi-k2.6").clientType).toBe("kimi-k2.6");
+    expect(resolveLLMModelDefinition("Qwen/Qwen3.6-35B-A3B").clientType).toBe(
+      "openai",
+    );
+  });
+
+  test("exposes model-specific thinking levels from AgentHub mappings", () => {
+    expect(
+      resolveLLMModelDefinition("gpt-5.5").capabilities.thinkingLevels,
+    ).toEqual([
+      ThinkingLevel.NONE,
+      ThinkingLevel.LOW,
+      ThinkingLevel.MEDIUM,
+      ThinkingLevel.HIGH,
+      ThinkingLevel.XHIGH,
+    ]);
+    expect(
+      resolveLLMModelDefinition("deepseek-v4-pro").capabilities.thinkingLevels,
+    ).toEqual([ThinkingLevel.NONE, ThinkingLevel.HIGH, ThinkingLevel.XHIGH]);
+    expect(
+      resolveLLMModelDefinition("glm-5.1").capabilities.thinkingLevels,
+    ).toEqual([ThinkingLevel.NONE, ThinkingLevel.MEDIUM]);
+  });
+
   test("exposes provider metadata from model definitions", () => {
     expect(resolveLLMModelDefinition("gemini-3.1-pro-preview").provider).toBe(
       "google",
@@ -14,18 +46,18 @@ describe("AgentHub model registry", () => {
     );
   });
 
-  test("resolves Gemini 3.1 Flash-Lite Preview to the Gemini 3 client route", () => {
+  test("resolves Gemini 3.1 Flash-Lite to the Gemini 3 client route", () => {
     expect(
       resolveLLMModelConfig({
-        model: "gemini-3.1-flash-lite-preview",
+        model: "gemini-3.1-flash-lite",
         apiKey: "test-key",
         baseUrl: "https://generativelanguage.googleapis.com",
       }),
     ).toEqual({
-      model: "gemini-3.1-flash-lite-preview",
+      model: "gemini-3.1-flash-lite",
       apiKey: "test-key",
       baseUrl: "https://generativelanguage.googleapis.com",
-      clientType: "gemini-3-client",
+      clientType: "gemini-3",
       capabilities: {
         thinkingLevels: [
           ThinkingLevel.NONE,

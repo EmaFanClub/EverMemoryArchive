@@ -73,9 +73,10 @@ interface ModelSelectOption {
 }
 
 const llmProviderLabels: Record<LlmModelProvider, string> = {
-  openai: "OpenAI",
   google: "Google",
+  openai: "OpenAI",
   anthropic: "Anthropic",
+  deepseek: "DeepSeek",
   zai: "Z.ai",
   moonshot: "Moonshot",
   qwen: "Qwen",
@@ -93,6 +94,7 @@ const apiKeyPlaceholders: Record<LlmModelProvider, string> = {
   google: "AIzaSyA7fK...D5eJ 或 Vertex AI 凭据 JSON",
   openai: "sk-u1Kv9xP...ZTyU",
   anthropic: "sk-ant-9xW...G0hJ",
+  deepseek: "sk-...",
   zai: "zai_...",
   moonshot: "sk-...",
   qwen: "本地服务可填写任意占位值",
