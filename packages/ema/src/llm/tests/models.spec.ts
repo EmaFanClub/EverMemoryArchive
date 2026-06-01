@@ -70,7 +70,7 @@ describe("AgentHub model registry", () => {
       model: "qwen3",
       apiKey: "test-key",
       baseUrl: "http://127.0.0.1:8000/v1/",
-      clientType: "qwen3",
+      clientType: "openai",
       capabilities: {
         thinkingLevels: [],
         tools: true,

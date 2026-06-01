@@ -262,6 +262,20 @@ describe("AgentHubClient", () => {
     ).toThrow(
       "AgentHub returned inline_thinking, which is not supported by EMA schema yet.",
     );
+
+    expect(() =>
+      client.adaptResponseFromSDK({
+        role: "assistant",
+        content_items: [
+          {
+            type: "embedding",
+            embedding: [0.1, 0.2],
+          },
+        ],
+      } satisfies UniMessage),
+    ).toThrow(
+      "AgentHub returned embedding content in an assistant response, which EMA does not support.",
+    );
   });
 });
 

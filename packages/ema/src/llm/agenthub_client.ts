@@ -222,6 +222,10 @@ export class AgentHubClient extends LLMClientBase<
         throw new Error(
           "AgentHub returned tool_result in an assistant response, which EMA does not support.",
         );
+      case "embedding":
+        throw new Error(
+          "AgentHub returned embedding content in an assistant response, which EMA does not support.",
+        );
     }
   }
 

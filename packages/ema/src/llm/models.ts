@@ -189,7 +189,7 @@ export const LLM_MODEL_DEFINITIONS = [
   {
     model: "qwen3",
     provider: "qwen",
-    clientType: "qwen3",
+    clientType: "openai",
     defaultBaseUrl: "http://127.0.0.1:8000/v1/",
     capabilities: {
       thinkingLevels: [],
