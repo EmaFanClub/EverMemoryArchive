@@ -181,6 +181,7 @@ const THINKING_LEVEL_LABELS: Record<LlmThinkingLevel, string> = {
   low: "低",
   medium: "中",
   high: "高",
+  xhigh: "极高",
 };
 const LLM_CREDENTIAL_LIMIT = 16_384;
 const DEFAULT_LLM_SETTINGS: LlmSettingsDraft = {

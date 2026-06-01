@@ -17,10 +17,9 @@ const validLlmConfig = {
 } as const;
 
 const validEmbeddingConfig = {
-  provider: "openai",
-  model: "text-embedding-3-small",
-  baseUrl: "https://api.openai.com/v1",
-  apiKey: "sk-test",
+  model: "gemini-embedding-2",
+  baseUrl: "https://generativelanguage.googleapis.com",
+  apiKey: "gemini-key",
 } as const;
 
 function createFixture() {
@@ -101,6 +100,22 @@ describe("SettingsController", () => {
       },
       requestDefaults: {
         thinkingLevel: ThinkingLevel.MEDIUM,
+      },
+    });
+  });
+
+  test("lists AgentHub embedding model options for API clients", () => {
+    const fixture = createFixture();
+
+    expect(fixture.controller.listEmbeddingModels()).toContainEqual({
+      model: "gemini-embedding-2",
+      provider: "google",
+      defaultBaseUrl: "https://generativelanguage.googleapis.com",
+      capabilities: {
+        dimensions: [768, 1536, 3072],
+      },
+      requestDefaults: {
+        dimensions: 3072,
       },
     });
   });

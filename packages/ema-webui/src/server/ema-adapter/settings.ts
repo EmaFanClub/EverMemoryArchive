@@ -6,6 +6,7 @@ import {
   type EffectiveActorSettings,
   type EmbeddingConfig,
   type LLMConfig,
+  resolveEmbeddingModelDefinition,
   resolveLLMModelDefinition,
   type VectorIndexStatus,
   type WebSearchConfig,
@@ -68,11 +69,36 @@ export function toWebEmbeddingConfig(
   config: EmbeddingConfig,
 ): GlobalEmbeddingConfig {
   return {
-    provider: config.provider,
     model: config.model,
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
+    ...(config.dimensions !== undefined
+      ? { dimensions: config.dimensions }
+      : {}),
   };
+}
+
+export function toCoreEmbeddingConfig(
+  config: GlobalEmbeddingConfig,
+): EmbeddingConfig {
+  return {
+    model: config.model.trim(),
+    baseUrl: config.baseUrl.trim(),
+    apiKey: config.apiKey.trim(),
+    ...(config.dimensions !== undefined
+      ? { dimensions: config.dimensions }
+      : {}),
+  };
+}
+
+export function toWebEmbeddingModelProvider(
+  config: Pick<EmbeddingConfig, "model">,
+) {
+  try {
+    return resolveEmbeddingModelDefinition(config.model).provider;
+  } catch {
+    return "unknown";
+  }
 }
 
 export function toWebEmbeddingIndexStatus(

@@ -17,6 +17,7 @@ import {
   initialDraft,
   isStepComplete,
   setupSteps,
+  type EmbeddingModelOption,
   type LlmModelOption,
   type LlmModelProvider,
   type LlmThinkingLevel,
@@ -71,14 +72,6 @@ interface ModelSelectOption {
   group?: string;
 }
 
-const embeddingModelOptions: Record<
-  SetupDraft["embedding"]["provider"],
-  string[]
-> = {
-  google: ["gemini-embedding-001"],
-  openai: ["text-embedding-3-large"],
-};
-
 const llmProviderLabels: Record<LlmModelProvider, string> = {
   openai: "OpenAI",
   google: "Google",
@@ -93,6 +86,7 @@ const thinkingLevelLabels: Record<LlmThinkingLevel, string> = {
   low: "低",
   medium: "中",
   high: "高",
+  xhigh: "极高",
 };
 
 const apiKeyPlaceholders: Record<LlmModelProvider, string> = {
@@ -103,6 +97,7 @@ const apiKeyPlaceholders: Record<LlmModelProvider, string> = {
   moonshot: "sk-...",
   qwen: "本地服务可填写任意占位值",
 };
+const embeddingApiKeyPlaceholder = "AIzaSyA7fK...D5eJ 或 Vertex AI 凭据 JSON";
 
 const accessTokenChars =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -197,12 +192,35 @@ function llmDraftForModel(
   };
 }
 
+function embeddingDraftForModel(
+  option: EmbeddingModelOption,
+  current: SetupDraft["embedding"],
+): SetupDraft["embedding"] {
+  return {
+    model: option.model,
+    baseUrl: option.defaultBaseUrl,
+    apiKey: current.apiKey,
+    ...(option.requestDefaults.dimensions !== undefined
+      ? { dimensions: option.requestDefaults.dimensions }
+      : {}),
+  };
+}
+
 function buildLlmModelSelectOptions(
   options: LlmModelOption[],
 ): ModelSelectOption[] {
   return options.map((option) => ({
     value: option.model,
     group: llmProviderLabels[option.provider],
+  }));
+}
+
+function buildEmbeddingModelSelectOptions(
+  options: EmbeddingModelOption[],
+): ModelSelectOption[] {
+  return options.map((option) => ({
+    value: option.model,
+    group: option.provider === "google" ? "Google" : option.provider,
   }));
 }
 
@@ -443,6 +461,9 @@ export default function SetupPage() {
     createInitialSetupDraft(),
   );
   const [llmModels, setLlmModels] = useState<LlmModelOption[]>([]);
+  const [embeddingModels, setEmbeddingModels] = useState<
+    EmbeddingModelOption[]
+  >([]);
   const [touchedFields, setTouchedFields] = useState<
     Partial<Record<SetupFieldPath, boolean>>
   >({});
@@ -553,6 +574,9 @@ export default function SetupPage() {
   const displayActionHint = trimTerminalPunctuation(actionHint);
   const selectedLlmModel =
     llmModels.find((option) => option.model === draft.llm.model) ?? null;
+  const selectedEmbeddingModel =
+    embeddingModels.find((option) => option.model === draft.embedding.model) ??
+    null;
 
   function scrollStepErrorIntoView() {
     window.requestAnimationFrame(() => {
@@ -596,6 +620,7 @@ export default function SetupPage() {
           return;
         }
         setLlmModels(status.capabilities.llmModels);
+        setEmbeddingModels(status.capabilities.embeddingModels);
         setDraft((current) => {
           const currentOption = status.capabilities.llmModels.find(
             (option) => option.model === current.llm.model,
@@ -603,8 +628,28 @@ export default function SetupPage() {
           const nextOption =
             currentOption ?? status.capabilities.llmModels[0] ?? null;
           if (!nextOption) {
-            return current;
+            const embeddingOption =
+              status.capabilities.embeddingModels.find(
+                (option) => option.model === current.embedding.model,
+              ) ??
+              status.capabilities.embeddingModels[0] ??
+              null;
+            return embeddingOption
+              ? {
+                  ...current,
+                  embedding: embeddingDraftForModel(
+                    embeddingOption,
+                    current.embedding,
+                  ),
+                }
+              : current;
           }
+          const embeddingOption =
+            status.capabilities.embeddingModels.find(
+              (option) => option.model === current.embedding.model,
+            ) ??
+            status.capabilities.embeddingModels[0] ??
+            null;
           return {
             ...current,
             llm: currentOption
@@ -617,6 +662,31 @@ export default function SetupPage() {
                   ),
                 }
               : llmDraftForModel(nextOption, current.llm),
+            ...(embeddingOption
+              ? {
+                  embedding:
+                    embeddingOption.model === current.embedding.model
+                      ? {
+                          ...current.embedding,
+                          baseUrl:
+                            current.embedding.baseUrl ||
+                            embeddingOption.defaultBaseUrl,
+                          ...(current.embedding.dimensions !== undefined
+                            ? { dimensions: current.embedding.dimensions }
+                            : embeddingOption.requestDefaults.dimensions !==
+                                undefined
+                              ? {
+                                  dimensions:
+                                    embeddingOption.requestDefaults.dimensions,
+                                }
+                              : {}),
+                        }
+                      : embeddingDraftForModel(
+                          embeddingOption,
+                          current.embedding,
+                        ),
+                }
+              : {}),
           };
         });
       } catch {
@@ -1058,9 +1128,21 @@ export default function SetupPage() {
                 setDraft(() => {
                   const next = createInitialSetupDraft();
                   const option = llmModels[0] ?? null;
-                  return option
-                    ? { ...next, llm: llmDraftForModel(option, next.llm) }
-                    : next;
+                  const embeddingOption = embeddingModels[0] ?? null;
+                  return {
+                    ...next,
+                    ...(option
+                      ? { llm: llmDraftForModel(option, next.llm) }
+                      : {}),
+                    ...(embeddingOption
+                      ? {
+                          embedding: embeddingDraftForModel(
+                            embeddingOption,
+                            next.embedding,
+                          ),
+                        }
+                      : {}),
+                  };
                 });
                 resetLlmTest();
                 resetEmbeddingTest();
@@ -1228,46 +1310,21 @@ export default function SetupPage() {
       case "embedding":
         return (
           <div className={styles.stack}>
-            <div
-              className={styles.segmentedControl}
-              role="tablist"
-              aria-label="Embedding 服务供应商"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={draft.embedding.provider === "google"}
-                className={`${styles.segmentedTab} ${
-                  draft.embedding.provider === "google"
-                    ? styles.segmentedActive
-                    : ""
-                }`}
-                onClick={() => updateEmbedding(embeddingDefaults.google)}
-              >
-                Google
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={draft.embedding.provider === "openai"}
-                className={`${styles.segmentedTab} ${
-                  draft.embedding.provider === "openai"
-                    ? styles.segmentedActive
-                    : ""
-                }`}
-                onClick={() => updateEmbedding(embeddingDefaults.openai)}
-              >
-                OpenAI
-              </button>
-            </div>
             <div className={styles.formGrid}>
               {renderModelSelectField({
                 path: "embedding.model",
                 value: draft.embedding.model,
-                options: embeddingModelOptions[draft.embedding.provider].map(
-                  (model) => ({ value: model }),
-                ),
-                onChange: (model) => updateEmbedding({ model }),
+                options: buildEmbeddingModelSelectOptions(embeddingModels),
+                onChange: (model) => {
+                  const option = embeddingModels.find(
+                    (candidate) => candidate.model === model,
+                  );
+                  updateEmbedding(
+                    option
+                      ? embeddingDraftForModel(option, draft.embedding)
+                      : { model },
+                  );
+                },
               })}
               <Field
                 label="Base URL"
@@ -1276,7 +1333,8 @@ export default function SetupPage() {
                 <input
                   value={draft.embedding.baseUrl}
                   placeholder={
-                    embeddingDefaults[draft.embedding.provider].baseUrl
+                    selectedEmbeddingModel?.defaultBaseUrl ??
+                    embeddingDefaults.baseUrl
                   }
                   required
                   aria-required="true"
@@ -1292,7 +1350,7 @@ export default function SetupPage() {
               >
                 <input
                   value={draft.embedding.apiKey}
-                  placeholder={apiKeyPlaceholders[draft.embedding.provider]}
+                  placeholder={embeddingApiKeyPlaceholder}
                   autoComplete="off"
                   required
                   aria-required="true"

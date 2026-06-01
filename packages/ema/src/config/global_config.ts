@@ -54,6 +54,7 @@ const RuntimeThinkingLevelSchema = z.enum([
   ThinkingLevel.LOW,
   ThinkingLevel.MEDIUM,
   ThinkingLevel.HIGH,
+  ThinkingLevel.XHIGH,
 ]);
 
 const RuntimeLLMSchema = z
@@ -103,47 +104,13 @@ const RuntimeOrLegacyLLMSchema = z.union([
 
 const RuntimeEmbeddingSchema = z
   .object({
-    provider: z.enum(["openai", "google"]),
     model: z.string(),
     baseUrl: z.string(),
     apiKey: z.string(),
+    dimensions: z.number().int().positive().optional(),
   })
   .strict()
   .transform(trimEmbeddingConfig);
-
-const LegacyOpenAIEmbeddingSchema = z
-  .object({
-    model: z.string(),
-    baseUrl: z.string(),
-    apiKey: z.string(),
-  })
-  .strict();
-
-const LegacyGoogleEmbeddingSchema = z
-  .object({
-    model: z.string(),
-    baseUrl: z.string(),
-    apiKey: z.string(),
-    useVertexAi: z.boolean(),
-    project: z.string(),
-    location: z.string(),
-    credentialsFile: z.string().default(""),
-  })
-  .strict();
-
-const LegacyRuntimeEmbeddingSchema = z
-  .object({
-    provider: z.enum(["openai", "google"]),
-    openai: LegacyOpenAIEmbeddingSchema,
-    google: LegacyGoogleEmbeddingSchema,
-  })
-  .strict()
-  .transform(normalizeLegacyEmbeddingConfig);
-
-const RuntimeOrLegacyEmbeddingSchema = z.union([
-  RuntimeEmbeddingSchema,
-  LegacyRuntimeEmbeddingSchema,
-]);
 
 const GlobalConfigRecordSchema = z
   .object({
@@ -158,7 +125,7 @@ const GlobalConfigRecordSchema = z
       .optional(),
     accessToken: z.string().optional(),
     defaultLlm: RuntimeOrLegacyLLMSchema,
-    defaultEmbedding: RuntimeOrLegacyEmbeddingSchema,
+    defaultEmbedding: RuntimeEmbeddingSchema,
     defaultWebSearch: z.unknown().optional(),
     defaultChannel: z.unknown().optional(),
     createdAt: z.number().optional(),
@@ -423,7 +390,7 @@ export function normalizeLLMConfig(config: unknown): LLMConfig {
 }
 
 export function normalizeEmbeddingConfig(config: unknown): EmbeddingConfig {
-  const result = RuntimeOrLegacyEmbeddingSchema.safeParse(config);
+  const result = RuntimeEmbeddingSchema.safeParse(config);
   if (!result.success) {
     const message = result.error.issues
       .map(
@@ -511,44 +478,13 @@ function normalizeLegacyLlmConfig(config: {
 
 function trimEmbeddingConfig(config: EmbeddingConfig): EmbeddingConfig {
   return {
-    provider: config.provider,
     model: config.model.trim(),
     baseUrl: config.baseUrl.trim(),
     apiKey: config.apiKey.trim(),
+    ...(config.dimensions !== undefined
+      ? { dimensions: config.dimensions }
+      : {}),
   };
-}
-
-function normalizeLegacyEmbeddingConfig(config: {
-  provider: "openai" | "google";
-  openai: {
-    model: string;
-    baseUrl: string;
-    apiKey: string;
-  };
-  google: {
-    model: string;
-    baseUrl: string;
-    apiKey: string;
-    useVertexAi: boolean;
-    credentialsFile: string;
-  };
-}): EmbeddingConfig {
-  if (config.provider === "openai") {
-    return trimEmbeddingConfig({
-      provider: "openai",
-      model: config.openai.model,
-      baseUrl: config.openai.baseUrl,
-      apiKey: config.openai.apiKey,
-    });
-  }
-  return trimEmbeddingConfig({
-    provider: "google",
-    model: config.google.model,
-    baseUrl: config.google.baseUrl,
-    apiKey: config.google.useVertexAi
-      ? config.google.credentialsFile
-      : config.google.apiKey,
-  });
 }
 
 function parseMode(value: string | undefined): "dev" | "prod" | null {

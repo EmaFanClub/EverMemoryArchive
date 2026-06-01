@@ -1,6 +1,7 @@
 import { expect, test, describe, beforeEach, afterEach } from "vitest";
 import {
   CompositeLongTermMemoryDB,
+  createLongTermMemoryTableName,
   createMongo,
   LanceMemoryVectorIndex,
   MongoLongTermMemoryDB,
@@ -55,10 +56,9 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
   let searcher: LanceMemoryVectorIndex;
   const embeddingEngine = new SimpleEmbeddingEngine();
   const embeddingConfig: EmbeddingConfig = {
-    provider: "openai",
-    model: "text-embedding-3-small",
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "sk-test",
+    model: "gemini-embedding-2",
+    baseUrl: "https://generativelanguage.googleapis.com",
+    apiKey: "gemini-key",
   };
   const 绘画 = {
     index0: "绘画",
@@ -160,6 +160,17 @@ describe("LanceMemoryVectorIndex with in-memory LanceDB", () => {
       limit: 10,
     });
     expect(results).toContainEqual(mem11);
+  });
+
+  test("uses safe model and actual dimensions for vector table names", async () => {
+    expect(createLongTermMemoryTableName("Gemini Embedding/2", 3072)).toBe(
+      "gemini_embedding_2_3072",
+    );
+    expect(searcher.getVectorIndexStatus()).toMatchObject({
+      activeFingerprint: "gemini_embedding_2_8",
+      dimensions: 8,
+    });
+    await expect(lance.tableNames()).resolves.toContain("gemini_embedding_2_8");
   });
 
   test("composite DB appends to Mongo when vector index failed", async () => {

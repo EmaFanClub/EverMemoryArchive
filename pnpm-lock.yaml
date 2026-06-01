@@ -52,9 +52,6 @@ importers:
 
   packages/ema:
     dependencies:
-      '@google/genai':
-        specifier: ^1.34.0
-        version: 1.34.0(@modelcontextprotocol/sdk@1.25.2(hono@4.12.23)(zod@4.2.1))
       '@hokify/agenda':
         specifier: ^6.3.0
         version: 6.3.0(patch_hash=106461c8850a7c4fd73b7f49b2d626d14118dc90fcf4ac7195b7f66ae0e8bfc6)
@@ -91,9 +88,6 @@ importers:
       mongodb-memory-server:
         specifier: ^11.0.0
         version: 11.0.0(@aws-sdk/credential-providers@3.974.0)(socks@2.8.7)
-      openai:
-        specifier: ^6.13.0
-        version: 6.13.0(ws@8.18.3)(zod@4.2.1)
       pino:
         specifier: ^10.1.0
         version: 10.1.0
@@ -992,15 +986,6 @@ packages:
 
   '@gerrit0/mini-shiki@3.20.0':
     resolution: {integrity: sha512-Wa57i+bMpK6PGJZ1f2myxo3iO+K/kZikcyvH8NIqNNZhQUbDav7V9LQmWOXhf946mz5c1NZ19WMsGYiDKTryzQ==}
-
-  '@google/genai@1.34.0':
-    resolution: {integrity: sha512-vu53UMPvjmb7PGzlYu6Tzxso8Dfhn+a7eQFaS2uNemVtDZKwzSpJ5+ikqBbXplF7RGB1STcVDqCkPvquiwb2sw==}
-    engines: {node: '>=20.0.0'}
-    peerDependencies:
-      '@modelcontextprotocol/sdk': ^1.24.0
-    peerDependenciesMeta:
-      '@modelcontextprotocol/sdk':
-        optional: true
 
   '@google/genai@1.52.0':
     resolution: {integrity: sha512-gwSvbpiN/17O9TbsqSsE/OzZcpv5Fo4RQjdngGgogtuB9RsyJ8ZHhX5KjHj1bp5N9snN2eK8LDGXSaWW2hof8Q==}
@@ -4017,18 +4002,6 @@ packages:
   oniguruma-to-es@3.1.1:
     resolution: {integrity: sha512-bUH8SDvPkH3ho3dvwJwfonjlQ4R80vjyvrU8YpxuROddv55vAEJrTuCuCVUhhsHbtlD9tGGbaNApGQckXhS8iQ==}
 
-  openai@6.13.0:
-    resolution: {integrity: sha512-yHbMo+EpNGPG3sRrXvmo0LhUPFN4bAURJw3G17bE+ax1G4tcTFCa9ZjvCWh3cvni0aHY0uWlk2IxcsPH4NR9Ow==}
-    hasBin: true
-    peerDependencies:
-      ws: ^8.18.0
-      zod: ^3.25 || ^4.0
-    peerDependenciesMeta:
-      ws:
-        optional: true
-      zod:
-        optional: true
-
   openai@6.37.0:
     resolution: {integrity: sha512-0H5dEGFmmLv6KSd0W1w2nyL8WsLkX6yoLeQpU+dZAOuGcany5qkYQMmj35ZrKgb6yiyYqpUzFOpR8mZQkgqeEQ==}
     hasBin: true
@@ -6413,17 +6386,6 @@ snapshots:
       '@shikijs/themes': 3.20.0
       '@shikijs/types': 3.20.0
       '@shikijs/vscode-textmate': 10.0.2
-
-  '@google/genai@1.34.0(@modelcontextprotocol/sdk@1.25.2(hono@4.12.23)(zod@4.2.1))':
-    dependencies:
-      google-auth-library: 10.5.0
-      ws: 8.18.3
-    optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.25.2(hono@4.12.23)(zod@4.2.1)
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
 
   '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.25.2(hono@4.12.23)(zod@4.2.1))':
     dependencies:
@@ -9933,11 +9895,6 @@ snapshots:
       emoji-regex-xs: 1.0.0
       regex: 6.1.0
       regex-recursion: 6.0.2
-
-  openai@6.13.0(ws@8.18.3)(zod@4.2.1):
-    optionalDependencies:
-      ws: 8.18.3
-      zod: 4.2.1
 
   openai@6.37.0(ws@8.18.3)(zod@4.2.1):
     optionalDependencies:

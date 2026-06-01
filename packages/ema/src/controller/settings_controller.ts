@@ -12,8 +12,13 @@ import { EmbeddingClient } from "../memory/embedding_client";
 import type { UsageMetadata } from "../llm/schema";
 import { isTextItem } from "../llm/utils";
 import { listLLMModelDefinitions } from "../llm/models";
+import {
+  listEmbeddingModelDefinitions,
+  resolveEmbeddingModelConfig,
+} from "../memory/embedding_models";
 import type { Server } from "../server";
 import type {
+  EmbeddingModelOption,
   EffectiveActorSettings,
   EmbeddingProbeResult,
   LlmModelOption,
@@ -38,6 +43,20 @@ export class SettingsController {
         ...(definition.requestDefaults.thinkingLevel !== undefined
           ? { thinkingLevel: definition.requestDefaults.thinkingLevel }
           : {}),
+      },
+    }));
+  }
+
+  listEmbeddingModels(): EmbeddingModelOption[] {
+    return listEmbeddingModelDefinitions().map((definition) => ({
+      model: definition.model,
+      provider: definition.provider,
+      defaultBaseUrl: definition.defaultBaseUrl,
+      capabilities: {
+        dimensions: [...definition.capabilities.dimensions],
+      },
+      requestDefaults: {
+        ...definition.requestDefaults,
       },
     }));
   }
@@ -196,17 +215,17 @@ export class SettingsController {
   async saveGlobalEmbeddingConfig(
     config: EmbeddingConfig,
   ): Promise<SaveGlobalEmbeddingConfigResult> {
-    const invalidMessage = validateEmbeddingProbeConfig(config);
-    if (invalidMessage) {
-      throw new Error(invalidMessage);
+    const prepared = prepareEmbeddingConfig(config);
+    if (!prepared.ok) {
+      throw new Error(prepared.error);
     }
     const record = parseGlobalConfigRecord(await this.requireGlobalConfig());
     await this.server.dbService.globalConfigDB.upsertGlobalConfig({
       ...record,
-      defaultEmbedding: config,
+      defaultEmbedding: prepared.config,
     });
     return {
-      config,
+      config: prepared.config,
       restartRequired: true,
       vectorIndex:
         this.server.dbService.longTermMemoryDB.getVectorIndexStatus(),
@@ -287,12 +306,31 @@ function diagnosticsFromUsage(
 }
 
 function validateEmbeddingProbeConfig(config: EmbeddingConfig): string | null {
-  if (!config.model.trim()) {
-    return "Embedding config is incomplete.";
+  const prepared = prepareEmbeddingConfig(config);
+  return prepared.ok ? null : prepared.error;
+}
+
+function prepareEmbeddingConfig(
+  config: EmbeddingConfig,
+): { ok: true; config: EmbeddingConfig } | { ok: false; error: string } {
+  let normalized: EmbeddingConfig;
+  try {
+    normalized = GlobalConfig.resolveRuntimeEmbeddingConfig(config);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
   }
-  return !config.baseUrl.trim() || !config.apiKey.trim()
-    ? "Embedding config is incomplete."
-    : null;
+  if (!normalized.model.trim()) {
+    return { ok: false, error: "Embedding config is incomplete." };
+  }
+  if (!normalized.baseUrl.trim() || !normalized.apiKey.trim()) {
+    return { ok: false, error: "Embedding config is incomplete." };
+  }
+  try {
+    resolveEmbeddingModelConfig(normalized);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+  return { ok: true, config: normalized };
 }
 
 function errorMessage(error: unknown): string {

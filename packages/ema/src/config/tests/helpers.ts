@@ -20,8 +20,7 @@ export function createTestGlobalConfigRecord(
       apiKey: "",
     },
     defaultEmbedding: {
-      provider: "google",
-      model: "gemini-embedding-001",
+      model: "gemini-embedding-2",
       baseUrl: "https://generativelanguage.googleapis.com",
       apiKey: "",
     },

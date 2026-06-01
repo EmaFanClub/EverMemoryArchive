@@ -3,11 +3,11 @@ import type { MessageReplyRef } from "../channel";
 import type {
   ChannelConfig,
   EmbeddingConfig,
-  EmbeddingProvider,
   GlobalConfigRecord,
   LLMConfig,
   WebSearchConfig,
 } from "../config/index";
+import type { EmbeddingProvider } from "../memory/embedding_models";
 import type { TokenUsageSource, TokenUsageTotals } from "../token_usage/base";
 
 /**

@@ -6,7 +6,6 @@ import type {
 import type { Mongo } from "../mongo";
 import { MongoMemorySearchAdaptor } from "./mongo.long_term_memory";
 import * as lancedb from "@lancedb/lancedb";
-import { createHash } from "node:crypto";
 import {
   Field,
   Int64,
@@ -18,6 +17,10 @@ import {
 
 import { GlobalConfig, type EmbeddingConfig } from "../../config/index";
 import { EmbeddingClient } from "../../memory/embedding_client";
+import {
+  listEmbeddingModelDefinitions,
+  resolveEmbeddingModelConfig,
+} from "../../memory/embedding_models";
 import { Logger } from "../../shared/logger";
 
 /**
@@ -51,7 +54,6 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
   /** index table */
   private indexTable: lancedb.Table | null = null;
   private active: {
-    fingerprint: string;
     tableName: string;
     dimensions: number;
     embeddingEngine: LongTermMemoryEmbeddingEngine;
@@ -168,7 +170,7 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
     const startedAt = Date.now();
     const runtimeConfig = GlobalConfig.resolveRuntimeEmbeddingConfig(config);
     const summary = embeddingConfigSummary(runtimeConfig);
-    let activeFingerprint: string | null = null;
+    let activeTableName: string | null = null;
     let dimensions: number | undefined;
     let indexedMemories = 0;
     this.status = {
@@ -196,26 +198,24 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
         throw new Error("Embedding provider returned an empty vector.");
       }
       dimensions = probe.length;
-      const fingerprint = createEmbeddingConfigFingerprint(
-        runtimeConfig,
+      const tableName = createLongTermMemoryTableName(
+        summary.model,
         dimensions,
       );
-      const tableName = createLongTermMemoryTableName(fingerprint, dimensions);
       this.indexTable = await this.openOrCreateTable(tableName, dimensions);
       this.active = {
-        fingerprint,
         tableName,
         dimensions,
         embeddingEngine,
       };
-      activeFingerprint = fingerprint;
+      activeTableName = tableName;
 
       const indexedIds = await this.listIndexedIds();
       for (const memory of memories) {
         if (typeof memory.id !== "number") {
           this.status = {
             ...this.status,
-            activeFingerprint,
+            activeFingerprint: activeTableName,
             dimensions,
             indexedMemories,
           };
@@ -225,7 +225,7 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
           indexedMemories += 1;
           this.status = {
             ...this.status,
-            activeFingerprint,
+            activeFingerprint: activeTableName,
             dimensions,
             indexedMemories,
           };
@@ -236,7 +236,7 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
         indexedMemories += 1;
         this.status = {
           ...this.status,
-          activeFingerprint,
+          activeFingerprint: activeTableName,
           dimensions,
           indexedMemories,
         };
@@ -244,7 +244,7 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
 
       this.status = {
         state: "ready",
-        activeFingerprint: fingerprint,
+        activeFingerprint: tableName,
         activeProvider: summary.provider,
         activeModel: summary.model,
         dimensions,
@@ -258,7 +258,7 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
       this.active = null;
       this.status = {
         state: indexedMemories > 0 ? "degraded" : "failed",
-        activeFingerprint,
+        activeFingerprint: activeTableName,
         activeProvider: summary.provider,
         activeModel: summary.model,
         ...(typeof dimensions === "number" ? { dimensions } : {}),
@@ -281,15 +281,13 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
     const deletedFromActiveTable = await this.hasActiveTableMemory(id);
     const tableNames = await this.lancedb.tableNames();
     await Promise.all(
-      tableNames
-        .filter((tableName) => tableName.startsWith("long_term_memories_"))
-        .map(async (tableName) => {
-          const table =
-            this.active?.tableName === tableName && this.indexTable
-              ? this.indexTable
-              : await this.lancedb.openTable(tableName);
-          await table.delete(`id = ${id}`);
-        }),
+      tableNames.filter(isLongTermMemoryTableName).map(async (tableName) => {
+        const table =
+          this.active?.tableName === tableName && this.indexTable
+            ? this.indexTable
+            : await this.lancedb.openTable(tableName);
+        await table.delete(`id = ${id}`);
+      }),
     );
     if (deletedFromActiveTable && this.status.totalMemories !== undefined) {
       this.status = {
@@ -311,15 +309,13 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
       await this.countActiveTableActorMemories(actorId);
     const tableNames = await this.lancedb.tableNames();
     await Promise.all(
-      tableNames
-        .filter((tableName) => tableName.startsWith("long_term_memories_"))
-        .map(async (tableName) => {
-          const table =
-            this.active?.tableName === tableName && this.indexTable
-              ? this.indexTable
-              : await this.lancedb.openTable(tableName);
-          await table.delete(`actor_id = ${actorId}`);
-        }),
+      tableNames.filter(isLongTermMemoryTableName).map(async (tableName) => {
+        const table =
+          this.active?.tableName === tableName && this.indexTable
+            ? this.indexTable
+            : await this.lancedb.openTable(tableName);
+        await table.delete(`actor_id = ${actorId}`);
+      }),
     );
     if (deletedFromActiveTable > 0 && this.status.totalMemories !== undefined) {
       this.status = {
@@ -444,33 +440,42 @@ export class LanceMemoryVectorIndex extends MongoMemorySearchAdaptor {
   }
 }
 
-export function createEmbeddingConfigFingerprint(
-  config: EmbeddingConfig,
+export function createLongTermMemoryTableName(
+  model: string,
   dimensions: number,
 ): string {
-  const summary = embeddingConfigSummary(config);
-  return createHash("sha256")
-    .update(JSON.stringify({ ...summary, dimensions }))
-    .digest("hex")
-    .slice(0, 16);
+  return `${createSafeEmbeddingTableModelName(model)}_${dimensions}`;
 }
 
-export function createLongTermMemoryTableName(
-  fingerprint: string,
-  dimensions: number,
-): string {
-  return `long_term_memories_${fingerprint}_${dimensions}`;
+export function createSafeEmbeddingTableModelName(model: string): string {
+  const name = model
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!name) {
+    throw new Error("Embedding model table name is empty.");
+  }
+  return name;
 }
 
 function embeddingConfigSummary(config: EmbeddingConfig): {
-  provider: EmbeddingConfig["provider"];
+  provider: ReturnType<typeof resolveEmbeddingModelConfig>["provider"];
   model: string;
   baseUrl: string;
+  clientType: string;
+  dimensions?: number;
 } {
+  const resolved = resolveEmbeddingModelConfig(config);
   return {
-    provider: config.provider,
-    model: config.model,
-    baseUrl: config.baseUrl,
+    provider: resolved.provider,
+    model: resolved.model,
+    baseUrl: resolved.baseUrl,
+    clientType: resolved.clientType,
+    ...(resolved.dimensions !== undefined
+      ? { dimensions: resolved.dimensions }
+      : {}),
   };
 }
 
@@ -482,9 +487,25 @@ function validateEmbeddingConfig(config: EmbeddingConfig): string | null {
   if (!config.model.trim()) {
     return "Embedding config is incomplete.";
   }
-  return !config.baseUrl.trim() || !config.apiKey.trim()
-    ? "Embedding config is incomplete."
-    : null;
+  if (!config.baseUrl.trim() || !config.apiKey.trim()) {
+    return "Embedding config is incomplete.";
+  }
+  try {
+    resolveEmbeddingModelConfig(config);
+    return null;
+  } catch (error) {
+    return errorMessage(error);
+  }
+}
+
+function isLongTermMemoryTableName(tableName: string): boolean {
+  return listEmbeddingModelDefinitions().some((definition) => {
+    const prefix = `${createSafeEmbeddingTableModelName(definition.model)}_`;
+    const dimensionText = tableName.startsWith(prefix)
+      ? tableName.slice(prefix.length)
+      : "";
+    return /^[1-9]\d*$/u.test(dimensionText);
+  });
 }
 
 function escapeWhereValue(value: string): string {

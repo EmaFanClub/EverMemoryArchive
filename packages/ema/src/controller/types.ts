@@ -15,6 +15,7 @@ import type { VectorIndexStatus } from "../db";
 import type { InputContent } from "../llm/schema";
 import type { ThinkingLevel } from "../llm/base";
 import type { LLMProvider } from "../llm/models";
+import type { EmbeddingProvider } from "../memory/embedding_models";
 import type { MessageReplyRef } from "../channel";
 
 export type ActorRuntimeStatus = "offline" | "sleep" | "online" | "busy";
@@ -98,6 +99,18 @@ export interface LlmModelOption {
   };
   requestDefaults: {
     thinkingLevel?: ThinkingLevel;
+  };
+}
+
+export interface EmbeddingModelOption {
+  model: string;
+  provider: EmbeddingProvider;
+  defaultBaseUrl: string;
+  capabilities: {
+    dimensions: number[];
+  };
+  requestDefaults: {
+    dimensions?: number;
   };
 }
 

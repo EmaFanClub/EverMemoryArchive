@@ -38,6 +38,7 @@ export const fieldLabels: Record<string, string> = {
   "embedding.model": "Embedding 模型名称",
   "embedding.baseUrl": "Embedding Base URL",
   "embedding.apiKey": "Embedding ApiKey",
+  "embedding.dimensions": "Embedding 维度",
   "owner.name": "名称",
   "owner.accessToken": "访问 Token",
   "owner.qq": "QQ 号",

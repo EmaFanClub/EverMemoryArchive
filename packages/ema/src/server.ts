@@ -11,6 +11,7 @@ import { Logger } from "./shared/logger";
 import { EmaBus } from "./bus";
 import { EmaController } from "./controller";
 import { PromptStore } from "./prompts/loader";
+import { resolveEmbeddingModelConfig } from "./memory/embedding_models";
 
 export interface ServerCreateOptions {
   readonly bootstrap?: BootstrapConfig;
@@ -227,8 +228,9 @@ export class Server {
 
   private startLongTermMemoryVectorIndex(): void {
     const config = GlobalConfig.defaultEmbedding;
+    const resolved = resolveEmbeddingModelConfig(config);
     this.logger.info("Long term memory vector index started", {
-      provider: config.provider,
+      provider: resolved.provider,
       model: config.model,
     });
     void this.dbService.longTermMemoryDB

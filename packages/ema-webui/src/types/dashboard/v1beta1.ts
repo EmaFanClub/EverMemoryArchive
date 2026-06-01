@@ -5,7 +5,7 @@ export type ActorRuntimeTransition =
   | "waking"
   | "sleeping"
   | null;
-export type EmbeddingProvider = "google" | "openai";
+export type EmbeddingProvider = "google";
 export type LlmModelProvider =
   | "openai"
   | "google"
@@ -13,7 +13,7 @@ export type LlmModelProvider =
   | "zai"
   | "moonshot"
   | "qwen";
-export type LlmThinkingLevel = "none" | "low" | "medium" | "high";
+export type LlmThinkingLevel = "none" | "low" | "medium" | "high" | "xhigh";
 export type ActorSettingsCheckStatus = "passed" | "failed";
 export type ActorSettingsSaveStatus = "saved" | "failed";
 export type ActorSettingsCheckErrorCode =
@@ -52,6 +52,18 @@ export interface LlmModelOption {
   };
   requestDefaults: {
     thinkingLevel?: LlmThinkingLevel;
+  };
+}
+
+export interface EmbeddingModelOption {
+  model: string;
+  provider: EmbeddingProvider;
+  defaultBaseUrl: string;
+  capabilities: {
+    dimensions: number[];
+  };
+  requestDefaults: {
+    dimensions?: number;
   };
 }
 
@@ -395,10 +407,10 @@ export interface GlobalEmbeddingIndexStatus {
 }
 
 export interface GlobalEmbeddingConfig {
-  provider: EmbeddingProvider;
   model: string;
   baseUrl: string;
   apiKey: string;
+  dimensions?: number;
 }
 
 export interface GlobalSettingsResponse {
@@ -419,6 +431,7 @@ export interface GlobalSettingsResponse {
     llm: ActorLlmConfig;
     llmModels: LlmModelOption[];
     embedding: GlobalEmbeddingConfig;
+    embeddingModels: EmbeddingModelOption[];
     embeddingRestartRequired: boolean;
     embeddingIndex: GlobalEmbeddingIndexStatus;
   };

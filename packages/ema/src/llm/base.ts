@@ -12,6 +12,7 @@ export const ThinkingLevel = {
   LOW: "low" as ThinkingLevel,
   MEDIUM: "medium" as ThinkingLevel,
   HIGH: "high" as ThinkingLevel,
+  XHIGH: "xhigh" as ThinkingLevel,
 } as const;
 
 export type PromptCaching = AgentHubPromptCaching;

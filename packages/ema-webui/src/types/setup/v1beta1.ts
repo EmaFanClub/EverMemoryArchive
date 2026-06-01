@@ -7,8 +7,8 @@ export type LlmModelProvider =
   | "zai"
   | "moonshot"
   | "qwen";
-export type LlmThinkingLevel = "none" | "low" | "medium" | "high";
-export type EmbeddingProvider = "google" | "openai";
+export type LlmThinkingLevel = "none" | "low" | "medium" | "high" | "xhigh";
+export type EmbeddingProvider = "google";
 export type SetupCheckTarget = "llm" | "embedding";
 export type SetupCheckPhase = "step" | "final";
 export type SetupCheckStatus = "passed" | "failed";
@@ -38,10 +38,10 @@ export interface SetupDraft {
     thinkingLevel?: LlmThinkingLevel;
   };
   embedding: {
-    provider: EmbeddingProvider;
     model: string;
     baseUrl: string;
     apiKey: string;
+    dimensions?: number;
   };
   owner: {
     name: string;
@@ -102,6 +102,18 @@ export interface LlmModelOption {
   };
 }
 
+export interface EmbeddingModelOption {
+  model: string;
+  provider: EmbeddingProvider;
+  defaultBaseUrl: string;
+  capabilities: {
+    dimensions: number[];
+  };
+  requestDefaults: {
+    dimensions?: number;
+  };
+}
+
 export interface SetupDryRunRequest {
   draft: SetupDraft;
 }
@@ -154,7 +166,7 @@ export interface SetupStatusResponse {
   recommendedSteps: SetupStepDefinition[];
   capabilities: {
     llmModels: LlmModelOption[];
-    embeddingProviders: EmbeddingProvider[];
+    embeddingModels: EmbeddingModelOption[];
     unsupported: Array<{
       path: string;
       reason: string;
@@ -185,22 +197,10 @@ export const setupSteps: SetupStepDefinition[] = [
   },
 ];
 
-export const embeddingDefaults: Record<
-  EmbeddingProvider,
-  SetupDraft["embedding"]
-> = {
-  google: {
-    provider: "google",
-    model: "gemini-embedding-001",
-    baseUrl: "https://generativelanguage.googleapis.com",
-    apiKey: "",
-  },
-  openai: {
-    provider: "openai",
-    model: "text-embedding-3-large",
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "",
-  },
+export const embeddingDefaults: SetupDraft["embedding"] = {
+  model: "gemini-embedding-2",
+  baseUrl: "https://generativelanguage.googleapis.com",
+  apiKey: "",
 };
 
 export const initialDraft: SetupDraft = {
@@ -209,7 +209,7 @@ export const initialDraft: SetupDraft = {
     baseUrl: "",
     apiKey: "",
   },
-  embedding: embeddingDefaults.google,
+  embedding: embeddingDefaults,
   owner: {
     name: "",
     accessToken: "",
@@ -228,6 +228,7 @@ const thinkingLevels = new Set<LlmThinkingLevel>([
   "low",
   "medium",
   "high",
+  "xhigh",
 ]);
 
 function isHttpUrl(value: string) {
@@ -261,6 +262,12 @@ export function isEmbeddingConfigComplete(embedding: SetupDraft["embedding"]) {
   if (
     !hasRequiredValue(embedding.model) ||
     embedding.model.trim().length > 128
+  ) {
+    return false;
+  }
+  if (
+    embedding.dimensions !== undefined &&
+    (!Number.isInteger(embedding.dimensions) || embedding.dimensions <= 0)
   ) {
     return false;
   }
@@ -392,6 +399,16 @@ export function validateSetupDraft(draft: SetupDraft): SetupValidationIssue[] {
     ) {
       issues.push({
         path: "embedding.apiKey",
+        code: "invalid",
+      });
+    }
+    if (
+      draft.embedding.dimensions !== undefined &&
+      (!Number.isInteger(draft.embedding.dimensions) ||
+        draft.embedding.dimensions <= 0)
+    ) {
+      issues.push({
+        path: "embedding.dimensions",
         code: "invalid",
       });
     }

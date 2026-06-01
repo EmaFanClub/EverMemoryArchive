@@ -300,41 +300,28 @@ describe("GlobalConfig", () => {
     });
   });
 
-  test("normalizes legacy embedding configs when loading global config", async () => {
+  test("normalizes embedding configs when loading global config", async () => {
     await GlobalConfig.load(new MemFs(), {
       bootstrap: createBootstrapConfig({ mode: "dev", mongoKind: "memory" }),
     });
     const record = createTestGlobalConfigRecord();
-    const embeddingCredentialsJson =
-      '{"type":"service_account","project_id":"embedding-p"}';
-    const legacyEmbedding = {
-      provider: "google",
-      openai: {
-        model: "text-embedding-3-large",
-        baseUrl: "https://api.openai.com/v1",
-        apiKey: "sk-embedding",
-      },
-      google: {
-        model: "gemini-embedding-001",
-        baseUrl: " https://generativelanguage.googleapis.com ",
-        apiKey: "google-key",
-        useVertexAi: true,
-        project: "legacy-project",
-        location: "global",
-        credentialsFile: ` ${embeddingCredentialsJson} `,
-      },
+    const embeddingConfig = {
+      model: "gemini-embedding-2",
+      baseUrl: " https://generativelanguage.googleapis.com ",
+      apiKey: " gemini-key ",
+      dimensions: 768,
     };
 
     GlobalConfig.applyRecord({
       ...record,
-      defaultEmbedding: legacyEmbedding as never,
+      defaultEmbedding: embeddingConfig,
     });
 
     expect(GlobalConfig.defaultEmbedding).toEqual({
-      provider: "google",
-      model: "gemini-embedding-001",
+      model: "gemini-embedding-2",
       baseUrl: "https://generativelanguage.googleapis.com",
-      apiKey: embeddingCredentialsJson,
+      apiKey: "gemini-key",
+      dimensions: 768,
     });
   });
 });

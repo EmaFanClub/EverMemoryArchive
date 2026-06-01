@@ -37,30 +37,20 @@ import type {
   GlobalEmbeddingIndexStatus,
   GlobalLlmConfig,
   GlobalSettingsResponse,
+  EmbeddingModelOption,
   LlmModelOption,
   LlmModelProvider,
   LlmThinkingLevel,
 } from "@/types/dashboard/v1beta1";
-import {
-  embeddingDefaults,
-  type EmbeddingProvider,
-} from "@/types/setup/v1beta1";
 
 type DetailTitle = "Web UI" | "QQ号绑定" | "默认LLM服务" | "默认Embedding服务";
 type CheckStatus = "idle" | "testing" | "success" | "error";
-type LegacyOpenAiMode = "responses" | "chat";
 
-interface ServiceProviderFields {
-  mode: LegacyOpenAiMode;
+interface EmbeddingServiceDraft {
   model: string;
   baseUrl: string;
   apiKey: string;
-}
-
-interface ServiceDraft {
-  provider: EmbeddingProvider;
-  google: ServiceProviderFields;
-  openai: ServiceProviderFields;
+  dimensions?: number;
 }
 
 interface LlmServiceDraft {
@@ -77,18 +67,8 @@ interface ToastState {
 }
 
 const COPY_TOAST_DURATION = 1400;
-const EMBEDDING_MODELS: Record<EmbeddingProvider, string[]> = {
-  google: ["gemini-embedding-001"],
-  openai: ["text-embedding-3-large"],
-};
-const EMBEDDING_PROVIDER_LABELS: Record<EmbeddingProvider, string> = {
-  google: "Google",
-  openai: "OpenAI",
-};
-const EMBEDDING_API_KEY_PLACEHOLDERS: Record<EmbeddingProvider, string> = {
-  google: "AIzaSyA7fK...D5eJ 或 Vertex AI 凭据 JSON",
-  openai: "sk-u1Kv9xP...ZTyU",
-};
+const EMBEDDING_API_KEY_PLACEHOLDER =
+  "AIzaSyA7fK...D5eJ 或 Vertex AI 凭据 JSON";
 const LLM_PROVIDER_LABELS: Record<LlmModelProvider, string> = {
   openai: "OpenAI",
   google: "Google",
@@ -110,22 +90,10 @@ const THINKING_LEVEL_LABELS: Record<LlmThinkingLevel, string> = {
   low: "低",
   medium: "中",
   high: "高",
+  xhigh: "极高",
 };
 const VERTEX_CREDENTIALS_JSON_LIMIT = 16_384;
 const LLM_CREDENTIAL_LIMIT = VERTEX_CREDENTIALS_JSON_LIMIT;
-function fieldsFromSetupDefaults(defaults: {
-  mode?: LegacyOpenAiMode;
-  model: string;
-  baseUrl: string;
-  apiKey: string;
-}): ServiceProviderFields {
-  return {
-    mode: defaults.mode ?? "responses",
-    model: defaults.model,
-    baseUrl: defaults.baseUrl,
-    apiKey: defaults.apiKey,
-  };
-}
 
 function valueOrDefault(value: string, fallback: string): string {
   const trimmed = value.trim();
@@ -137,10 +105,10 @@ const DEFAULT_LLM_DRAFT: LlmServiceDraft = {
   baseUrl: "",
   apiKey: "",
 };
-const DEFAULT_EMBEDDING_DRAFT: ServiceDraft = {
-  provider: "google",
-  google: fieldsFromSetupDefaults(embeddingDefaults.google),
-  openai: fieldsFromSetupDefaults(embeddingDefaults.openai),
+const DEFAULT_EMBEDDING_DRAFT: EmbeddingServiceDraft = {
+  model: "gemini-embedding-2",
+  baseUrl: "https://generativelanguage.googleapis.com",
+  apiKey: "",
 };
 const EMPTY_INDEX_STATUS: GlobalEmbeddingIndexStatus = {
   state: "not_started",
@@ -171,20 +139,25 @@ function serviceDraftFromLlmConfig(
 
 function serviceDraftFromEmbeddingConfig(
   config: GlobalEmbeddingConfig,
-): ServiceDraft {
-  const providerFields =
-    config.provider === "openai"
-      ? DEFAULT_EMBEDDING_DRAFT.openai
-      : DEFAULT_EMBEDDING_DRAFT.google;
+  models: EmbeddingModelOption[],
+): EmbeddingServiceDraft {
+  const selected =
+    models.find((option) => option.model === config.model) ?? models[0] ?? null;
   return {
-    ...DEFAULT_EMBEDDING_DRAFT,
-    provider: config.provider,
-    [config.provider]: {
-      ...providerFields,
-      model: valueOrDefault(config.model, providerFields.model),
-      baseUrl: valueOrDefault(config.baseUrl, providerFields.baseUrl),
-      apiKey: valueOrDefault(config.apiKey, providerFields.apiKey),
-    },
+    model: valueOrDefault(
+      config.model,
+      selected?.model ?? DEFAULT_EMBEDDING_DRAFT.model,
+    ),
+    baseUrl: valueOrDefault(
+      config.baseUrl,
+      selected?.defaultBaseUrl ?? DEFAULT_EMBEDDING_DRAFT.baseUrl,
+    ),
+    apiKey: config.apiKey,
+    ...(config.dimensions !== undefined
+      ? { dimensions: config.dimensions }
+      : selected?.requestDefaults.dimensions !== undefined
+        ? { dimensions: selected.requestDefaults.dimensions }
+        : {}),
   };
 }
 
@@ -197,18 +170,21 @@ function llmConfigFromDraft(draft: LlmServiceDraft): GlobalLlmConfig {
   };
 }
 
-function embeddingConfigFromDraft(draft: ServiceDraft): GlobalEmbeddingConfig {
-  const provider = draft.provider === "openai" ? "openai" : "google";
-  const active = draft[provider];
+function embeddingConfigFromDraft(
+  draft: EmbeddingServiceDraft,
+): GlobalEmbeddingConfig {
   return {
-    provider,
-    model: active.model.trim(),
-    baseUrl: active.baseUrl.trim(),
-    apiKey: active.apiKey.trim(),
+    model: draft.model.trim(),
+    baseUrl: draft.baseUrl.trim(),
+    apiKey: draft.apiKey.trim(),
+    ...(draft.dimensions !== undefined ? { dimensions: draft.dimensions } : {}),
   };
 }
 
-function areDraftsEqual(left: ServiceDraft, right: ServiceDraft) {
+function areEmbeddingDraftsEqual(
+  left: EmbeddingServiceDraft,
+  right: EmbeddingServiceDraft,
+) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
@@ -216,30 +192,22 @@ function areLlmDraftsEqual(left: LlmServiceDraft, right: LlmServiceDraft) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function draftSignature(draft: ServiceDraft) {
-  return JSON.stringify(trimServiceDraft(draft));
+function embeddingDraftSignature(draft: EmbeddingServiceDraft) {
+  return JSON.stringify(trimEmbeddingDraft(draft));
 }
 
 function llmDraftSignature(draft: LlmServiceDraft) {
   return JSON.stringify(trimLlmDraft(draft));
 }
 
-function trimServiceFields(
-  fields: ServiceProviderFields,
-): ServiceProviderFields {
+function trimEmbeddingDraft(
+  draft: EmbeddingServiceDraft,
+): EmbeddingServiceDraft {
   return {
-    mode: fields.mode,
-    model: fields.model.trim(),
-    baseUrl: fields.baseUrl.trim(),
-    apiKey: fields.apiKey.trim(),
-  };
-}
-
-function trimServiceDraft(draft: ServiceDraft): ServiceDraft {
-  return {
-    provider: draft.provider,
-    google: trimServiceFields(draft.google),
-    openai: trimServiceFields(draft.openai),
+    model: draft.model.trim(),
+    baseUrl: draft.baseUrl.trim(),
+    apiKey: draft.apiKey.trim(),
+    ...(draft.dimensions !== undefined ? { dimensions: draft.dimensions } : {}),
   };
 }
 
@@ -300,6 +268,20 @@ function llmDraftForModel(
   };
 }
 
+function embeddingDraftForModel(
+  option: EmbeddingModelOption,
+  current: EmbeddingServiceDraft,
+): EmbeddingServiceDraft {
+  return {
+    model: option.model,
+    baseUrl: option.defaultBaseUrl,
+    apiKey: current.apiKey,
+    ...(option.requestDefaults.dimensions !== undefined
+      ? { dimensions: option.requestDefaults.dimensions }
+      : {}),
+  };
+}
+
 function validateLlmDraft(draft: LlmServiceDraft, models: LlmModelOption[]) {
   if (!draft.model.trim()) {
     return localDashboardFeedback("模型未填写", "模型名称是必填项。");
@@ -340,25 +322,45 @@ function validateLlmDraft(draft: LlmServiceDraft, models: LlmModelOption[]) {
   return null;
 }
 
-function validateServiceDraft(draft: ServiceDraft) {
-  const active = draft[draft.provider];
-  if (!active.model.trim()) {
+function validateEmbeddingDraft(
+  draft: EmbeddingServiceDraft,
+  models: EmbeddingModelOption[],
+) {
+  if (!draft.model.trim()) {
     return localDashboardFeedback("模型未填写", "模型名称是必填项。");
   }
+  const selected = models.find((option) => option.model === draft.model.trim());
+  if (!selected) {
+    return localDashboardFeedback(
+      "模型暂不支持",
+      "请从模型列表中选择一个支持的模型。",
+      "UNSUPPORTED",
+    );
+  }
 
-  if (!active.baseUrl.trim() || !isHttpUrlValue(active.baseUrl.trim())) {
+  if (!draft.baseUrl.trim() || !isHttpUrlValue(draft.baseUrl.trim())) {
     return localDashboardFeedback(
       "接口地址格式错误",
       "请填写以 http:// 或 https:// 开头的有效接口地址。",
     );
   }
-  if (!active.apiKey.trim()) {
+  if (!draft.apiKey.trim()) {
     return localDashboardFeedback("ApiKey未填写", "ApiKey 是必填项。");
   }
-  if (active.apiKey.trim().length > VERTEX_CREDENTIALS_JSON_LIMIT) {
+  if (draft.apiKey.trim().length > VERTEX_CREDENTIALS_JSON_LIMIT) {
     return localDashboardFeedback(
       "ApiKey过长",
       `ApiKey 不能超过 ${VERTEX_CREDENTIALS_JSON_LIMIT} 个字符。`,
+    );
+  }
+  if (
+    draft.dimensions !== undefined &&
+    !selected.capabilities.dimensions.includes(draft.dimensions)
+  ) {
+    return localDashboardFeedback(
+      "Embedding 维度暂不支持",
+      "当前模型不支持所选 Embedding 维度。",
+      "UNSUPPORTED",
     );
   }
   return null;
@@ -486,10 +488,10 @@ export function GlobalSettingsPanel() {
   );
   const [llmSaving, setLlmSaving] = useState(false);
   const [llmLastPassed, setLlmLastPassed] = useState<string | null>(null);
-  const [savedEmbedding, setSavedEmbedding] = useState<ServiceDraft>(
+  const [savedEmbedding, setSavedEmbedding] = useState<EmbeddingServiceDraft>(
     DEFAULT_EMBEDDING_DRAFT,
   );
-  const [embeddingDraft, setEmbeddingDraft] = useState<ServiceDraft>(
+  const [embeddingDraft, setEmbeddingDraft] = useState<EmbeddingServiceDraft>(
     DEFAULT_EMBEDDING_DRAFT,
   );
   const [embeddingStatus, setEmbeddingStatus] = useState<CheckStatus>("idle");
@@ -522,6 +524,7 @@ export function GlobalSettingsPanel() {
         );
         const nextEmbedding = serviceDraftFromEmbeddingConfig(
           response.services.embedding,
+          response.services.embeddingModels,
         );
         setSavedLlm(nextLlm);
         setLlmDraft(nextLlm);
@@ -572,7 +575,10 @@ export function GlobalSettingsPanel() {
 
   const userName = settings?.user.name ?? "你";
   const llmDirty = !areLlmDraftsEqual(llmDraft, savedLlm);
-  const embeddingDirty = !areDraftsEqual(embeddingDraft, savedEmbedding);
+  const embeddingDirty = !areEmbeddingDraftsEqual(
+    embeddingDraft,
+    savedEmbedding,
+  );
   const qqDirty = qqDraft.trim() !== savedQq;
   const webuiTokenDirty = Boolean(webuiTokenDraft.trim());
 
@@ -635,7 +641,7 @@ export function GlobalSettingsPanel() {
     setLlmFeedback(null);
   }
 
-  function updateEmbeddingDraft(nextDraft: ServiceDraft) {
+  function updateEmbeddingDraft(nextDraft: EmbeddingServiceDraft) {
     setEmbeddingDraft(nextDraft);
     setEmbeddingStatus("idle");
     setEmbeddingFeedback(null);
@@ -725,13 +731,16 @@ export function GlobalSettingsPanel() {
   }
 
   async function testEmbedding() {
-    const feedback = validateServiceDraft(embeddingDraft);
+    const feedback = validateEmbeddingDraft(
+      embeddingDraft,
+      settings?.services.embeddingModels ?? [],
+    );
     if (feedback) {
       setEmbeddingStatus("error");
       setEmbeddingFeedback(feedback);
       return false;
     }
-    const signature = draftSignature(embeddingDraft);
+    const signature = embeddingDraftSignature(embeddingDraft);
     setEmbeddingStatus("testing");
     setEmbeddingFeedback(null);
     try {
@@ -753,7 +762,7 @@ export function GlobalSettingsPanel() {
 
   async function saveEmbedding() {
     if (!embeddingDirty || embeddingSaving) return;
-    const signature = draftSignature(embeddingDraft);
+    const signature = embeddingDraftSignature(embeddingDraft);
     if (!(embeddingStatus === "success" && embeddingLastPassed === signature)) {
       const ok = await testEmbedding();
       if (!ok) return;
@@ -949,6 +958,7 @@ export function GlobalSettingsPanel() {
           ) : (
             <ServiceDetail
               draft={embeddingDraft}
+              models={settings?.services.embeddingModels ?? []}
               dirty={embeddingDirty}
               status={embeddingStatus}
               feedback={embeddingFeedback}
@@ -1357,6 +1367,7 @@ function LlmServiceDetail({
 
 function ServiceDetail({
   draft,
+  models,
   dirty,
   status,
   feedback,
@@ -1367,51 +1378,28 @@ function ServiceDetail({
   onTestConnection,
   onSave,
 }: {
-  draft: ServiceDraft;
+  draft: EmbeddingServiceDraft;
+  models: EmbeddingModelOption[];
   dirty: boolean;
   status: CheckStatus;
   feedback: DashboardCheckFeedback | null;
   isSaving: boolean;
   embeddingIndex?: GlobalEmbeddingIndexStatus;
   embeddingRestartRequired?: boolean;
-  onDraftChange: (draft: ServiceDraft) => void;
+  onDraftChange: (draft: EmbeddingServiceDraft) => void;
   onTestConnection: () => void | Promise<unknown>;
   onSave: () => void | Promise<void>;
 }) {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
-  const embeddingProvider: EmbeddingProvider =
-    draft.provider === "openai" ? "openai" : "google";
-  const activeFields = draft[draft.provider];
-  const models = EMBEDDING_MODELS[embeddingProvider];
+  const selectedModel =
+    models.find((option) => option.model === draft.model) ?? null;
   const isTesting = status === "testing";
   const indexCard = embeddingIndex
     ? indexStatusCard(embeddingIndex, embeddingRestartRequired, dirty)
     : null;
 
-  function updateDraft(patch: Partial<ServiceDraft>) {
+  function updateDraft(patch: Partial<EmbeddingServiceDraft>) {
     onDraftChange({ ...draft, ...patch });
-  }
-
-  function updateProviderFields(
-    provider: EmbeddingProvider,
-    patch: Partial<ServiceProviderFields>,
-  ) {
-    onDraftChange({
-      ...draft,
-      [provider]: {
-        ...draft[provider],
-        ...patch,
-      },
-    });
-  }
-
-  function updateActiveFields(patch: Partial<ServiceProviderFields>) {
-    updateProviderFields(draft.provider, patch);
-  }
-
-  function switchProvider(provider: EmbeddingProvider) {
-    setModelDropdownOpen(false);
-    updateDraft({ provider });
   }
 
   return (
@@ -1438,31 +1426,6 @@ function ServiceDetail({
           ) : null}
 
           <section className={styles.llmSettingsSection}>
-            <div className={styles.llmSettingsControl}>
-              <span className={styles.llmSettingsControlTitle}>服务提供商</span>
-              <div
-                className={`${styles.llmProviderTabs} ${styles.llmProviderTabsCompact}`}
-                role="tablist"
-              >
-                {(["google", "openai"] as const).map((provider) => (
-                  <button
-                    key={provider}
-                    type="button"
-                    role="tab"
-                    aria-selected={draft.provider === provider}
-                    className={`${styles.llmProviderTab} ${
-                      draft.provider === provider
-                        ? styles.llmProviderTabActive
-                        : ""
-                    }`}
-                    onClick={() => switchProvider(provider)}
-                  >
-                    {EMBEDDING_PROVIDER_LABELS[provider]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className={styles.llmSettingsFields}>
               <label className={styles.llmSettingsField}>
                 <span className={styles.llmSettingsControlTitle}>模型</span>
@@ -1482,9 +1445,7 @@ function ServiceDetail({
                   <button
                     type="button"
                     className={`${styles.llmModelSelectButton} ${
-                      !activeFields.model
-                        ? styles.llmModelSelectPlaceholder
-                        : ""
+                      !draft.model ? styles.llmModelSelectPlaceholder : ""
                     } ${
                       modelDropdownOpen ? styles.llmModelSelectButtonOpen : ""
                     }`}
@@ -1498,7 +1459,7 @@ function ServiceDetail({
                       }
                     }}
                   >
-                    <span>{activeFields.model || "选择模型"}</span>
+                    <span>{draft.model || "选择模型"}</span>
                     <ChevronDown aria-hidden="true" />
                   </button>
                   {modelDropdownOpen ? (
@@ -1509,22 +1470,22 @@ function ServiceDetail({
                     >
                       {models.map((model) => (
                         <button
-                          key={model}
+                          key={model.model}
                           type="button"
                           role="option"
-                          aria-selected={activeFields.model === model}
+                          aria-selected={draft.model === model.model}
                           className={`${styles.llmModelSelectOption} ${
-                            activeFields.model === model
+                            draft.model === model.model
                               ? styles.llmModelSelectOptionActive
                               : ""
                           }`}
                           onClick={() => {
-                            updateActiveFields({ model });
+                            onDraftChange(embeddingDraftForModel(model, draft));
                             setModelDropdownOpen(false);
                           }}
                         >
-                          <span>{model}</span>
-                          {activeFields.model === model ? (
+                          <span>{model.model}</span>
+                          {draft.model === model.model ? (
                             <Check aria-hidden="true" />
                           ) : null}
                         </button>
@@ -1544,19 +1505,18 @@ function ServiceDetail({
 
               <ServiceField
                 title="Base URL"
-                value={activeFields.baseUrl}
+                value={draft.baseUrl}
                 placeholder={
-                  draft.provider === "google"
-                    ? "https://generativelanguage.googleapis.com"
-                    : "https://api.openai.com/v1"
+                  selectedModel?.defaultBaseUrl ??
+                  DEFAULT_EMBEDDING_DRAFT.baseUrl
                 }
-                onChange={(baseUrl) => updateActiveFields({ baseUrl })}
+                onChange={(baseUrl) => updateDraft({ baseUrl })}
               />
               <ServiceField
                 title="ApiKey"
-                value={activeFields.apiKey}
-                placeholder={EMBEDDING_API_KEY_PLACEHOLDERS[draft.provider]}
-                onChange={(apiKey) => updateActiveFields({ apiKey })}
+                value={draft.apiKey}
+                placeholder={EMBEDDING_API_KEY_PLACEHOLDER}
+                onChange={(apiKey) => updateDraft({ apiKey })}
               />
             </div>
           </section>

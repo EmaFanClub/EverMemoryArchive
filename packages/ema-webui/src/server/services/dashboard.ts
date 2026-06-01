@@ -16,8 +16,10 @@ import {
 import {
   toWebEmbeddingConfig,
   toWebEmbeddingIndexStatus,
+  toCoreEmbeddingConfig,
   toCoreLlmConfig,
   toWebLlmConfig,
+  toWebEmbeddingModelProvider,
   toWebLlmModelProvider,
   toWebQqBlockedBy,
   toWebQqConversation,
@@ -214,6 +216,7 @@ export async function buildGlobalSettingsResponse(): Promise<GlobalSettingsRespo
       llm: toWebLlmConfig(record?.defaultLlm ?? runtimeDefaults.llm),
       llmModels: server.controller.settings.listLlmModels(),
       embedding: toWebEmbeddingConfig(expectedEmbedding),
+      embeddingModels: server.controller.settings.listEmbeddingModels(),
       embeddingRestartRequired: !sameJsonValue(
         expectedEmbedding,
         runtimeDefaults.embedding,
@@ -1154,11 +1157,15 @@ function embeddingSaveDiagnostics(
   config: GlobalEmbeddingSaveRequest["config"],
 ): ActorSettingsDiagnostics {
   const selected = selectedEmbeddingConfig(config);
+  const provider = toWebEmbeddingModelProvider(selected);
   return {
-    provider: config.provider,
+    provider,
     model: selected.model,
     endpoint: hostFromUrl(selected.baseUrl),
     credential: credentialDiagnosticValue(selected.apiKey),
+    ...(selected.dimensions !== undefined
+      ? { dimensions: selected.dimensions }
+      : {}),
     storage: "ema-global-config",
   };
 }
@@ -1307,9 +1314,10 @@ export async function runGlobalEmbeddingServiceCheck(
   }
 
   const selected = selectedEmbeddingConfig(config);
+  const provider = toWebEmbeddingModelProvider(selected);
   const probe = await (
     await ensureEmaServer()
-  ).controller.settings.probeEmbeddingConfig(config);
+  ).controller.settings.probeEmbeddingConfig(toCoreEmbeddingConfig(config));
   return createGlobalEmbeddingCheckResponse({
     startedAt,
     ok: probe.ok,
@@ -1321,7 +1329,7 @@ export async function runGlobalEmbeddingServiceCheck(
     errorDetails: probe.ok
       ? undefined
       : {
-          provider: config.provider,
+          provider,
           model: selected.model,
           providerErrorType: probe.unsupported
             ? "unsupported"
@@ -1330,10 +1338,13 @@ export async function runGlobalEmbeddingServiceCheck(
         },
     retryable: !probe.unsupported,
     diagnostics: {
-      provider: config.provider,
+      provider,
       model: selected.model,
       endpoint: hostFromUrl(selected.baseUrl),
       credential: credentialDiagnosticValue(selected.apiKey),
+      ...(selected.dimensions !== undefined
+        ? { dimensions: selected.dimensions }
+        : {}),
       ...(probe.diagnostics ?? {}),
     },
   });
@@ -1482,8 +1493,9 @@ export async function saveGlobalEmbeddingServiceConfig(
 
   try {
     const server = await ensureEmaServer();
-    const result =
-      await server.controller.settings.saveGlobalEmbeddingConfig(config);
+    const result = await server.controller.settings.saveGlobalEmbeddingConfig(
+      toCoreEmbeddingConfig(config),
+    );
     return {
       ...(createSaveResponse({
         target: "embedding",

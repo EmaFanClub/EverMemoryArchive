@@ -2,9 +2,6 @@ import type { LLMConfig } from "../llm/base";
 
 export type { LLMConfig };
 
-/** Supported embedding providers. */
-export type EmbeddingProvider = "openai" | "google";
-
 /** MongoDB configuration resolved before the server can start. */
 export interface MongoConfig {
   readonly kind: "memory" | "remote";
@@ -35,10 +32,10 @@ export interface BootstrapConfig {
 
 /** Complete embedding configuration used at runtime. */
 export interface EmbeddingConfig {
-  readonly provider: EmbeddingProvider;
   readonly model: string;
   readonly baseUrl: string;
   readonly apiKey: string;
+  readonly dimensions?: number;
 }
 
 /** Actor-scoped web search configuration. */

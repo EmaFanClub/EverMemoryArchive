@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  resolveEmbeddingModelDefinition,
   resolveLLMModelDefinition,
   type EmbeddingConfig,
   type GlobalConfigRecord,
@@ -191,12 +192,15 @@ export async function runSetupServiceCheck(
   }
 
   const config = request.config as SetupDraft["embedding"] | undefined;
-  if (!config || !isEmbeddingConfigComplete(config)) {
+  const issues = validationIssuesForCheck("embedding", config);
+  if (!config || issues.length > 0 || !isEmbeddingConfigComplete(config)) {
     return failureFromIssues(
       target,
       phase,
       startedAt,
-      validationIssuesForCheck("embedding", config),
+      issues.length > 0
+        ? issues
+        : validationIssuesForCheck("embedding", config),
     );
   }
 
@@ -209,14 +213,15 @@ export async function runSetupServiceCheck(
     target,
     phase,
     startedAt,
-    provider: config.provider,
+    provider: diagnosticEmbeddingProviderForModel(config.model),
     model: config.model,
     probe,
     diagnostics: {
-      provider: config.provider,
+      provider: diagnosticEmbeddingProviderForModel(config.model),
       model: config.model,
       endpoint: hostFromUrl(config.baseUrl),
       credential: "configured",
+      ...(config.dimensions ? { dimensions: config.dimensions } : {}),
     },
   });
 }
@@ -301,6 +306,14 @@ function diagnosticProviderForModel(model: string) {
   }
 }
 
+function diagnosticEmbeddingProviderForModel(model: string) {
+  try {
+    return resolveEmbeddingModelDefinition(model).provider;
+  } catch {
+    return "unknown";
+  }
+}
+
 function buildLlmConfigForCheck(config: SetupDraft["llm"]): {
   config: LLMConfig;
 } {
@@ -348,7 +361,7 @@ export async function buildSetupStatus(): Promise<SetupStatusResponse> {
     recommendedSteps: setupSteps,
     capabilities: {
       llmModels: server.controller.settings.listLlmModels(),
-      embeddingProviders: ["google", "openai"],
+      embeddingModels: server.controller.settings.listEmbeddingModels(),
       unsupported: [],
     },
   };
@@ -373,7 +386,8 @@ function getSetupInitializationReason(
   if (
     !isLLMConfigComplete(llm) ||
     !isEmbeddingConfigComplete(embedding) ||
-    validateLlmModelConfig(llm).length > 0
+    validateLlmModelConfig(llm).length > 0 ||
+    validateEmbeddingModelConfig(embedding).length > 0
   ) {
     return "CONFIG_INCOMPLETE";
   }
@@ -394,10 +408,12 @@ function setupEmbeddingFromGlobalConfig(
 ): SetupDraft["embedding"] {
   return {
     ...initialDraft.embedding,
-    provider: config.provider,
     model: config.model,
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
+    ...(config.dimensions !== undefined
+      ? { dimensions: config.dimensions }
+      : {}),
   };
 }
 
@@ -442,10 +458,35 @@ function validateLlmModelConfig(
   }
 }
 
+function validateEmbeddingModelConfig(
+  config: SetupDraft["embedding"],
+): SetupValidationIssue[] {
+  if (!config.model.trim()) {
+    return [];
+  }
+
+  try {
+    const definition = resolveEmbeddingModelDefinition(config.model.trim());
+    if (
+      config.dimensions !== undefined &&
+      !definition.capabilities.dimensions.includes(config.dimensions)
+    ) {
+      return [{ path: "embedding.dimensions", code: "unsupported" }];
+    }
+    return [];
+  } catch {
+    return [{ path: "embedding.model", code: "unsupported" }];
+  }
+}
+
 function validateSetupDraftForServer(
   draft: SetupDraft,
 ): SetupValidationIssue[] {
-  return [...validateSetupDraft(draft), ...validateLlmModelConfig(draft.llm)];
+  return [
+    ...validateSetupDraft(draft),
+    ...validateLlmModelConfig(draft.llm),
+    ...validateEmbeddingModelConfig(draft.embedding),
+  ];
 }
 
 export function buildDryRunResponse(draft: SetupDraft): SetupDryRunResponse {
@@ -587,9 +628,11 @@ function toCoreThinkingLevel(
 
 function buildEmbeddingConfig(draft: SetupDraft): EmbeddingConfig {
   return {
-    provider: draft.embedding.provider,
     model: draft.embedding.model.trim(),
     baseUrl: draft.embedding.baseUrl.trim(),
     apiKey: draft.embedding.apiKey.trim(),
+    ...(draft.embedding.dimensions !== undefined
+      ? { dimensions: draft.embedding.dimensions }
+      : {}),
   };
 }
