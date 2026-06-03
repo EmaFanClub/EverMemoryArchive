@@ -20,6 +20,13 @@ import {
 import type { JobHandler } from "../base";
 
 const actorMemoryRollupQueue = new Map<number, Promise<unknown>>();
+const deferredForcedConversationRollups = new Map<
+  number,
+  {
+    job: ConversationRollupTaskData;
+    context: ActorBackgroundRunContext;
+  }
+>();
 
 type SleepTaskSource = "schedule" | "timer";
 type ActorBackgroundTaskName = ActorBackgroundJobData["task"];
@@ -407,11 +414,20 @@ async function runConversationRollupTask(
     context,
   );
   if (!server.memoryManager.tryEnterConversationActivity(job.conversationId)) {
+    const deferred = job.force === true;
+    if (deferred) {
+      deferredForcedConversationRollups.set(job.conversationId, {
+        job,
+        context,
+      });
+    }
     logBackgroundTaskSkipped(
       server,
       logData,
       "already_running",
       {
+        ...(job.force ? { force: true } : {}),
+        ...(deferred ? { deferred: true } : {}),
         ...(job.followUp ? { followUp: true } : {}),
       },
       context,
@@ -520,18 +536,18 @@ async function runConversationRollupTask(
       );
       completed = true;
     }
-    if (!followUpScheduled) {
-      return;
+    if (followUpScheduled) {
+      await runConversationRollupTask(
+        server,
+        {
+          ...job,
+          triggeredAt: latestAt,
+          followUp: true,
+        },
+        context,
+      );
     }
-    await runConversationRollupTask(
-      server,
-      {
-        ...job,
-        triggeredAt: latestAt,
-        followUp: true,
-      },
-      context,
-    );
+    await runDeferredForcedConversationRollup(server, job.conversationId);
   } catch (error) {
     if (startedAt !== null && !completed) {
       logBackgroundTaskFailed(
@@ -545,6 +561,27 @@ async function runConversationRollupTask(
     }
     throw error;
   }
+}
+
+async function runDeferredForcedConversationRollup(
+  server: Server,
+  conversationId: number,
+): Promise<void> {
+  const deferred = deferredForcedConversationRollups.get(conversationId);
+  if (!deferred) {
+    return;
+  }
+  deferredForcedConversationRollups.delete(conversationId);
+  await runConversationRollupTask(
+    server,
+    {
+      ...deferred.job,
+      triggeredAt: Date.now(),
+      force: true,
+      followUp: true,
+    },
+    deferred.context,
+  );
 }
 
 /**
