@@ -253,6 +253,20 @@ describe("Agent helpers", () => {
       systemPrompt: "system prompt",
       messages: [{ role: "user", contents: [{ type: "text", text: "hi" }] }],
       tools: [new KeepSilenceTool()],
+      toolContext: {
+        conversationId: 7,
+        server: {
+          dbService: {
+            conversationDB: {
+              getConversation: vi.fn(async () => ({
+                id: 7,
+                actorId: 1,
+                session: "qq-group-1000",
+              })),
+            },
+          },
+        } as any,
+      },
     });
 
     expect(keepSilenceEvents).toEqual([

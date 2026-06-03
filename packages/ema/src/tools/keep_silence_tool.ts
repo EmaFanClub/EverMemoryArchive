@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { resolveSession } from "../channel";
 import { Tool } from "./base";
 import type { ToolResult, ToolContext } from "./base";
 import { normalizeThinkText } from "./utils";
@@ -16,7 +17,7 @@ const KeepSilenceSchema = z
       .boolean()
       .optional()
       .describe(
-        "仅在群聊中使用。为 true 时表示暂时不再关注当前群聊，后续普通群消息不再叫醒你。",
+        "仅在当前会话是群聊时使用。为 true 时表示停止关注当前群聊：当前群聊队列转为 inactive，并清理该群聊 focus；后续普通群消息不再叫醒你。",
       ),
   })
   .strict();
@@ -31,7 +32,7 @@ const KEEP_SILENCE_TOOL_DESCRIPTION = `
 
 此工具用于结束当前轮次且不向外发送消息。
 
-它主要用于本轮不发送任何消息时，留下这次选择不说话的 think，形成可追溯的判断依据。已经调用 \`ema_reply\` 后，通常不需要再调用本工具；只有当还有一段独立、重要、未写入 \`ema_reply.think\`，并且会影响未来判断的内容必须保留时，才在完成其他工具后调用。
+它主要用于本轮不发送任何消息时，留下这次选择不说话的 think，形成可追溯的判断依据。已经调用 \`ema_reply\` 后，通常不需要再调用本工具；只有当还有一段独立、重要、未写入 \`ema_reply.think\`，并且会影响未来判断的内容必须保留时，才在完成其他工具后调用。群聊中已经回复完毕但需要停止关注当前群聊时，也可以在 \`ema_reply\` 成功后调用本工具并设置 \`stop_following_group=true\`。
 
 ## think
 
@@ -57,9 +58,9 @@ const KEEP_SILENCE_TOOL_DESCRIPTION = `
 2. 如果需要向外发送消息，应使用 \`ema_reply\`，不要使用本工具。
 3. 如果还需要安排日程、更新记忆或执行其他工具，必须先完成这些操作，再调用本工具。
 4. 不要用本工具代替后续安排。当前轮次里不继续发消息，不等于放弃之后的关注、提醒或整理。
-5. 在群聊中，如果你判断当前讨论暂时不需要继续关注，可以设置 \`stop_following_group=true\`；这只影响当前群聊，不影响私聊、日程或其他群聊。
-6. 在 focus 心跳中，调用本工具只表示这一次不发言，不会结束关注；只有已经删除对应 focus 日程时，才表示这条关注已经结束。
-7. 已经通过 \`ema_reply\` 发送了本轮需要说的话后，通常直接结束本轮，不要把本工具作为固定收尾。
+5. \`stop_following_group=true\` 只用于当前会话是群聊时，表示停止关注当前群聊，而不是普通的本轮沉默。调用后当前群聊会转为不关注状态，并清理这个群聊的 focus；后续普通群消息不再叫醒你，直到有人 @你、回复你、提到你的名字或出现 system 消息。
+6. 在 focus 心跳中，普通调用本工具只表示这一次不发言，不会结束关注；如果当前会话是群聊且调用 \`stop_following_group=true\`，则表示停止关注当前群聊，并会清理这个群聊的 focus。
+7. 已经通过 \`ema_reply\` 发送了本轮需要说的话后，通常直接结束本轮，不要把本工具作为固定收尾。例外是当前会话是群聊，并且你判断回复后也不需要继续关注这个群聊时，可以调用 \`stop_following_group=true\`。
 `;
 
 export class KeepSilenceTool extends Tool {
@@ -88,6 +89,16 @@ export class KeepSilenceTool extends Tool {
             "Invalid structured reply: think must not be empty after normalization.",
         };
       }
+      if (payload.stop_following_group) {
+        const validationError =
+          await this.validateStopFollowingGroupContext(context);
+        if (validationError) {
+          return {
+            success: false,
+            content: validationError,
+          };
+        }
+      }
       return {
         success: true,
         content: payload.think,
@@ -98,5 +109,24 @@ export class KeepSilenceTool extends Tool {
         content: `Invalid structured reply: ${(err as Error).message}`,
       };
     }
+  }
+
+  private async validateStopFollowingGroupContext(
+    context?: ToolContext,
+  ): Promise<string | null> {
+    if (!context?.server || typeof context.conversationId !== "number") {
+      return "Invalid structured reply: stop_following_group requires a current group conversation.";
+    }
+    const conversation =
+      await context.server.dbService.conversationDB.getConversation(
+        context.conversationId,
+      );
+    const sessionInfo = conversation
+      ? resolveSession(conversation.session)
+      : null;
+    if (sessionInfo?.type !== "group") {
+      return "Invalid structured reply: stop_following_group requires a current group conversation.";
+    }
+    return null;
   }
 }

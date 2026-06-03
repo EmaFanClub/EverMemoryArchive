@@ -37,6 +37,7 @@ export class ActorWorker {
   private queue: ActorInput[] = [];
   private currentRunPromise: Promise<void> | null = null;
   private processingQueue = false;
+  private agentEventChain: Promise<void> = Promise.resolve();
   private readonly agentEventTasks = new Set<Promise<void>>();
   private readonly tokenUsageWrites = new Set<Promise<void>>();
 
@@ -109,7 +110,7 @@ export class ActorWorker {
       if (eventName === "emaReplyReceived") {
         this.agent.events.on("emaReplyReceived", (content) => {
           this.trackAgentEventTask(
-            this.handleEmaReplyReceived(content),
+            () => this.handleEmaReplyReceived(content),
             "handle ema reply",
           );
         });
@@ -117,7 +118,7 @@ export class ActorWorker {
       if (eventName === "keepSilenceReceived") {
         this.agent.events.on("keepSilenceReceived", (content) => {
           this.trackAgentEventTask(
-            this.handleKeepSilenceReceived(content),
+            () => this.handleKeepSilenceReceived(content),
             "handle keep silence",
           );
         });
@@ -196,10 +197,15 @@ export class ActorWorker {
     });
   }
 
-  private trackAgentEventTask(task: Promise<void>, label: string): void {
-    const tracked = task.finally(() => {
+  private trackAgentEventTask(
+    taskFactory: () => Promise<void>,
+    label: string,
+  ): void {
+    const run = this.agentEventChain.catch(() => undefined).then(taskFactory);
+    const tracked = run.finally(() => {
       this.agentEventTasks.delete(tracked);
     });
+    this.agentEventChain = tracked.catch(() => undefined);
     this.agentEventTasks.add(tracked);
     void tracked.catch((error) => {
       this.logger.error(`Failed to ${label}:`, error);

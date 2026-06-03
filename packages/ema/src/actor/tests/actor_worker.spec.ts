@@ -175,4 +175,107 @@ describe("ActorWorker token usage context", () => {
       expect.any(Number),
     );
   });
+
+  test("serializes ema_reply before later stop-following silence", async () => {
+    const conversationId = 42;
+    const session = buildSession("qq", "group", "1000");
+    let nextMsgId = 6;
+    const server = {
+      dbService: {
+        conversationDB: {
+          getConversation: vi.fn(async () => ({
+            id: conversationId,
+            actorId: 1,
+            session,
+          })),
+        },
+        conversationMessageDB: {
+          reserveMessageId: vi.fn(async () => {
+            nextMsgId += 1;
+            return nextMsgId;
+          }),
+        },
+        getActorLLMConfig: vi.fn(async () => ({
+          model: "gpt-5.5",
+          apiKey: "test",
+          baseUrl: "https://example.com",
+        })),
+        tokenUsageDB: {
+          createTokenUsageRecord: vi.fn(async () => 1),
+        },
+      },
+      controller: {
+        chat: {
+          publishConversationMessage: vi.fn(async () => undefined),
+        },
+      },
+      memoryManager: {
+        getOwnerUid: vi.fn(async () => "owner"),
+        buildSystemPromptForChat: vi.fn(async () => "system prompt"),
+        persistChatMessage: vi.fn(async (message) => {
+          if (message.kind === "chat") {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+        }),
+        addToBuffer: vi.fn(async () => undefined),
+      },
+    };
+    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
+      async function (this: Agent) {
+        this.events.emit("emaReplyReceived", {
+          reply: {
+            kind: "text",
+            content: "好，那我先不盯着这个群了",
+            think: "已经简单回应，后续等有人明确叫我再参与。",
+          },
+        });
+        this.events.emit("keepSilenceReceived", {
+          think: "已经简单回应，后续等有人明确叫我再参与。",
+          stopFollowingGroup: true,
+        });
+        this.events.emit("runFinished", {
+          ok: true,
+          msg: "done",
+        });
+      },
+    );
+
+    const worker = await ActorWorker.create(1, conversationId, server as any);
+    const events: string[] = [];
+    worker.events.on("actorResponsed", () => {
+      events.push("actorResponsed");
+    });
+    worker.events.on("keepSilenceReceived", () => {
+      events.push("keepSilenceReceived");
+    });
+    worker.events.on("workFinished", () => {
+      events.push("workFinished");
+    });
+
+    await worker.work({
+      kind: "system",
+      conversationId,
+      inputs: [{ type: "text", text: "hi" }],
+    });
+
+    expect(events).toEqual([
+      "actorResponsed",
+      "keepSilenceReceived",
+      "workFinished",
+    ]);
+    expect(server.memoryManager.persistChatMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        kind: "chat",
+        msgId: 7,
+      }),
+    );
+    expect(server.memoryManager.persistChatMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        kind: "keep_silence",
+        msgId: 8,
+      }),
+    );
+  });
 });

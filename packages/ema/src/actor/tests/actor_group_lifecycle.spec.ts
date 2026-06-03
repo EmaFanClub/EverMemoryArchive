@@ -4,6 +4,15 @@ const { runActorBackgroundJob } = vi.hoisted(() => ({
   runActorBackgroundJob: vi.fn(async () => {}),
 }));
 
+const { actorLogger } = vi.hoisted(() => ({
+  actorLogger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 vi.mock("../../scheduler/jobs/actor.job", () => ({
   runActorBackgroundJob,
 }));
@@ -11,12 +20,7 @@ vi.mock("../../scheduler/jobs/actor.job", () => ({
 vi.mock("../../shared/logger", () => ({
   Logger: class Logger {
     static create() {
-      return {
-        debug() {},
-        info() {},
-        warn() {},
-        error() {},
-      };
+      return actorLogger;
     }
   },
 }));
@@ -65,6 +69,10 @@ function createActor(session: string = buildSession("qq", "group", "1000")) {
 describe("Actor group active lifecycle", () => {
   beforeEach(() => {
     runActorBackgroundJob.mockClear();
+    actorLogger.debug.mockClear();
+    actorLogger.info.mockClear();
+    actorLogger.warn.mockClear();
+    actorLogger.error.mockClear();
   });
 
   afterEach(() => {
@@ -84,6 +92,14 @@ describe("Actor group active lifecycle", () => {
     expect(actor.sessionManager.getActivityState(conversationId)).toBe(
       "inactive",
     );
+    expect(actorLogger.info).toHaveBeenCalledWith(
+      "Group conversation deactivated",
+      {
+        conversationId,
+        session: buildSession("qq", "group", "1000"),
+        reason: "keep_silence",
+      },
+    );
     expect(runActorBackgroundJob).not.toHaveBeenCalled();
   });
 
@@ -101,6 +117,14 @@ describe("Actor group active lifecycle", () => {
     expect(actor.sessionManager.getActivityState(conversationId)).toBe(
       "inactive",
     );
+    expect(actorLogger.info).toHaveBeenCalledWith(
+      "Group conversation deactivated",
+      {
+        conversationId,
+        session: buildSession("qq", "group", "1000"),
+        reason: "keep_silence",
+      },
+    );
     expect(server.promptStore.loadTaskPrompt).toHaveBeenCalledWith(
       "conversation-rollup",
     );
@@ -113,6 +137,50 @@ describe("Actor group active lifecycle", () => {
         prompt: "conversation-rollup prompt",
         addition: {
           reason: "keep_silence",
+          force: true,
+        },
+      },
+      expect.any(Number),
+    );
+  });
+
+  test("stops following active groups and removes their focus schedule", async () => {
+    const conversationId = 7;
+    const { actor, server, actorScheduler } = createActor();
+    actor.sessionManager.activateConversation(conversationId);
+    (actor as any).groupSegmentsWithReply.add(conversationId);
+
+    await (actor as any).closeGroupConversationActivity(
+      conversationId,
+      "stop_following_group",
+    );
+
+    expect(actor.sessionManager.getActivityState(conversationId)).toBe(
+      "inactive",
+    );
+    expect(actorLogger.info).toHaveBeenCalledWith(
+      "Group conversation deactivated",
+      {
+        conversationId,
+        session: buildSession("qq", "group", "1000"),
+        reason: "stop_following_group",
+      },
+    );
+    expect(actorScheduler.deleteFocusByConversation).toHaveBeenCalledWith(
+      conversationId,
+    );
+    expect(server.promptStore.loadTaskPrompt).toHaveBeenCalledWith(
+      "conversation-rollup",
+    );
+    expect(runActorBackgroundJob).toHaveBeenCalledWith(
+      server,
+      {
+        actorId: 1,
+        conversationId,
+        task: "conversation_rollup",
+        prompt: "conversation-rollup prompt",
+        addition: {
+          reason: "stop_following_group",
           force: true,
         },
       },
@@ -149,6 +217,14 @@ describe("Actor group active lifecycle", () => {
     expect(actor.sessionManager.getActivityState(conversationId)).toBe(
       "inactive",
     );
+    expect(actorLogger.info).toHaveBeenCalledWith(
+      "Group conversation deactivated",
+      {
+        conversationId,
+        session: buildSession("qq", "group", "1000"),
+        reason: "sleep_timer",
+      },
+    );
   });
 
   test("stops idle active group conversations and removes their focus schedule", async () => {
@@ -171,6 +247,14 @@ describe("Actor group active lifecycle", () => {
 
     expect(actor.sessionManager.getActivityState(conversationId)).toBe(
       "inactive",
+    );
+    expect(actorLogger.info).toHaveBeenCalledWith(
+      "Group conversation deactivated",
+      {
+        conversationId,
+        session: buildSession("qq", "group", "1000"),
+        reason: "idle_timeout",
+      },
     );
     expect(actorScheduler.deleteFocusByConversation).toHaveBeenCalledWith(
       conversationId,

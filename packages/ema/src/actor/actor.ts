@@ -4,6 +4,7 @@ import type { Server } from "../server";
 import { formatTimestamp, parseTimestamp } from "../shared/utils";
 import type { ActorRecurringScheduleItem } from "../scheduler";
 import {
+  buildSession,
   resolveSession,
   type ChannelEvent,
   type ChannelSessionInfo,
@@ -25,6 +26,12 @@ import { HeartbeatTimer } from "./timer";
 const DEFAULT_SLEEP_QUIET_PERIOD_MS = 5 * 60_000;
 const GROUP_ACTIVE_IDLE_TIMEOUT_MS = 5 * 60_000;
 const SCHEDULE_TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
+
+type GroupConversationActivationReason =
+  | "system"
+  | "mention"
+  | "reply"
+  | "actor_name";
 
 export class Actor {
   readonly sessionManager: SessionManager;
@@ -326,8 +333,18 @@ export class Actor {
       this.refreshGroupConversationIdleTimer(conversationId);
       return false;
     }
-    if (await this.isSpecialGroupInput(conversationId, input)) {
+    const activationReason = await this.resolveGroupActivationReason(
+      conversationId,
+      input,
+    );
+    if (activationReason) {
       this.sessionManager.activateConversation(conversationId);
+      this.logger.info(
+        "Group conversation activated",
+        await this.buildGroupConversationLogData(conversationId, {
+          reason: activationReason,
+        }),
+      );
       this.refreshGroupConversationIdleTimer(conversationId);
       return false;
     }
@@ -356,33 +373,58 @@ export class Actor {
     return sessionInfo;
   }
 
-  private async isSpecialGroupInput(
+  private async buildGroupConversationLogData(
+    conversationId: number,
+    data: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
+    const sessionInfo = await this.getConversationSessionInfo(conversationId);
+    return {
+      conversationId,
+      ...(sessionInfo
+        ? {
+            session: buildSession(
+              sessionInfo.channel,
+              sessionInfo.type,
+              sessionInfo.uid,
+            ),
+          }
+        : {}),
+      ...data,
+    };
+  }
+
+  private async resolveGroupActivationReason(
     conversationId: number,
     input: ActorInput,
-  ): Promise<boolean> {
+  ): Promise<GroupConversationActivationReason | null> {
     if (input.kind === "system") {
-      return true;
+      return "system";
     }
     if (
       input.inputs.some(
         (item) => item.type === "text" && item.text.includes("@(YOU)"),
       )
     ) {
-      return true;
+      return "mention";
     }
     if (await this.repliesToActorMessage(conversationId, input)) {
-      return true;
+      return "reply";
     }
     const displayName = await this.getActorDisplayName();
     if (!displayName) {
-      return false;
+      return null;
     }
     const normalizedDisplayName = displayName.toLowerCase();
-    return input.inputs.some(
-      (item) =>
-        item.type === "text" &&
-        item.text.toLowerCase().includes(normalizedDisplayName),
-    );
+    if (
+      input.inputs.some(
+        (item) =>
+          item.type === "text" &&
+          item.text.toLowerCase().includes(normalizedDisplayName),
+      )
+    ) {
+      return "actor_name";
+    }
+    return null;
   }
 
   private async repliesToActorMessage(
@@ -580,7 +622,10 @@ export class Actor {
         return;
       }
       this.runDetached(
-        this.closeGroupConversationActivity(conversationId, "keep_silence"),
+        this.closeGroupConversationActivity(
+          conversationId,
+          "stop_following_group",
+        ),
         `stop following group conversation ${conversationId}`,
       );
     });
@@ -791,6 +836,10 @@ export class Actor {
       return;
     }
     this.sessionManager.deactivateConversation(conversationId);
+    this.logger.info(
+      "Group conversation deactivated",
+      await this.buildGroupConversationLogData(conversationId, { reason }),
+    );
     this.clearGroupConversationIdleTimer(conversationId);
     await this.deleteGroupFocusScheduleIfNeeded(conversationId, reason);
     const shouldRollup = this.groupSegmentsWithReply.delete(conversationId);
@@ -879,7 +928,7 @@ export class Actor {
     conversationId: number,
     reason: string,
   ): Promise<void> {
-    if (reason !== "idle_timeout") {
+    if (!shouldDeleteGroupFocusOnDeactivate(reason)) {
       return;
     }
     try {
@@ -914,6 +963,10 @@ function isInvalidConversationError(
     message === `Invalid session on conversation ${conversationId}.` ||
     message === `Invalid actor on conversation ${conversationId}.`
   );
+}
+
+function shouldDeleteGroupFocusOnDeactivate(reason: string): boolean {
+  return reason === "stop_following_group" || reason === "idle_timeout";
 }
 
 function shouldBootInitWake(

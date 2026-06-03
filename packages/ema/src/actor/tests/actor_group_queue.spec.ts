@@ -1,14 +1,18 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+const { actorLogger } = vi.hoisted(() => ({
+  actorLogger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 vi.mock("../../shared/logger", () => ({
   Logger: class Logger {
     static create() {
-      return {
-        debug() {},
-        info() {},
-        warn() {},
-        error() {},
-      };
+      return actorLogger;
     }
   },
 }));
@@ -91,6 +95,13 @@ function createActorForSession(
 }
 
 describe("Actor group queue routing", () => {
+  beforeEach(() => {
+    actorLogger.debug.mockClear();
+    actorLogger.info.mockClear();
+    actorLogger.warn.mockClear();
+    actorLogger.error.mockClear();
+  });
+
   test("buffers inactive ordinary group messages without enqueueing them", async () => {
     const conversationId = 7;
     const { actor, server } = createActorForSession(
@@ -127,6 +138,14 @@ describe("Actor group queue routing", () => {
       "active",
     );
     expect(actor.sessionManager.tryPop(conversationId, 0)).toEqual(input);
+    expect(actorLogger.info).toHaveBeenCalledWith(
+      "Group conversation activated",
+      {
+        conversationId,
+        session: buildSession("qq", "group", "1000"),
+        reason: "mention",
+      },
+    );
   });
 
   test("keeps active group conversations enqueueing ordinary messages", async () => {
@@ -209,6 +228,14 @@ describe("Actor group queue routing", () => {
       "active",
     );
     expect(actor.sessionManager.tryPop(conversationId, 0)).toEqual(input);
+    expect(actorLogger.info).toHaveBeenCalledWith(
+      "Group conversation activated",
+      {
+        conversationId,
+        session: buildSession("qq", "group", "1000"),
+        reason: "reply",
+      },
+    );
   });
 
   test("activates inactive group conversations for actor name mentions", async () => {
@@ -224,6 +251,14 @@ describe("Actor group queue routing", () => {
       "active",
     );
     expect(actor.sessionManager.tryPop(conversationId, 0)).toEqual(input);
+    expect(actorLogger.info).toHaveBeenCalledWith(
+      "Group conversation activated",
+      {
+        conversationId,
+        session: buildSession("qq", "group", "1000"),
+        reason: "actor_name",
+      },
+    );
   });
 
   test("activates inactive group conversations for system messages", async () => {
@@ -246,6 +281,14 @@ describe("Actor group queue routing", () => {
       "active",
     );
     expect(actor.sessionManager.tryPop(conversationId, 0)).toEqual(input);
+    expect(actorLogger.info).toHaveBeenCalledWith(
+      "Group conversation activated",
+      {
+        conversationId,
+        session: buildSession("qq", "group", "1000"),
+        reason: "system",
+      },
+    );
   });
 
   test("does not apply inactive routing to private conversations", async () => {
