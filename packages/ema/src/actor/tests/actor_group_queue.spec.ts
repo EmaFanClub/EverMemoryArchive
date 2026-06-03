@@ -145,6 +145,40 @@ describe("Actor group queue routing", () => {
     expect(actor.sessionManager.tryPop(conversationId, 1)).toEqual(ordinary);
   });
 
+  test("preserves inactive background messages when a later special message activates", async () => {
+    const conversationId = 7;
+    const { actor, server } = createActorForSession(
+      buildSession("qq", "group", "1000"),
+    );
+    const firstBackground = createChatInput(conversationId, 1, "背景一");
+    const secondBackground = createChatInput(conversationId, 2, "背景二");
+    const mention = createChatInput(conversationId, 3, "@(YOU) 艾玛看一下");
+
+    await actor.enqueueActorInput(conversationId, firstBackground);
+    await actor.enqueueActorInput(conversationId, secondBackground);
+    await actor.enqueueActorInput(conversationId, mention);
+
+    expect(server.memoryManager.addToBuffer).toHaveBeenCalledTimes(2);
+    expect(server.memoryManager.addToBuffer).toHaveBeenNthCalledWith(
+      1,
+      conversationId,
+      1,
+      false,
+      firstBackground.time,
+    );
+    expect(server.memoryManager.addToBuffer).toHaveBeenNthCalledWith(
+      2,
+      conversationId,
+      2,
+      false,
+      secondBackground.time,
+    );
+    expect(actor.sessionManager.getActivityState(conversationId)).toBe(
+      "active",
+    );
+    expect(actor.sessionManager.tryPop(conversationId, 0)).toEqual(mention);
+  });
+
   test("activates inactive group conversations for replies to actor messages", async () => {
     const conversationId = 7;
     const actorMessage: ConversationMessageEntity = {

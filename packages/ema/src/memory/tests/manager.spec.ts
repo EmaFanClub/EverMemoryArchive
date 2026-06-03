@@ -8,6 +8,7 @@ import { MemoryManager } from "../manager";
 import { ActorWorkspaceService } from "../../workspace/actor_workspace";
 import type { ActorChatResponse } from "../../actor";
 import type { ConversationMessageEntity } from "../../db";
+import { buildSession } from "../../channel";
 
 describe("MemoryManager", () => {
   let workspaceDir: string;
@@ -168,6 +169,125 @@ describe("MemoryManager", () => {
     const state = await manager.getPendingConversationWindowState(7, 5000);
 
     expect(state).toEqual({ count: 2, lastPendingId: 4 });
+  });
+
+  test("loads inactive group context in prompts without counting it as pending", async () => {
+    const conversationId = 7;
+    const records: ConversationMessageEntity[] = [
+      {
+        id: 1,
+        conversationId,
+        actorId: 1,
+        msgId: 1,
+        buffered: true,
+        activityTarget: false,
+        message: {
+          kind: "user",
+          uid: "user-1",
+          name: "alice",
+          contents: [{ type: "text", text: "背景消息 1" }],
+        },
+        createdAt: 1000,
+      },
+      {
+        id: 2,
+        conversationId,
+        actorId: 1,
+        msgId: 2,
+        buffered: true,
+        activityTarget: false,
+        message: {
+          kind: "user",
+          uid: "user-2",
+          name: "bob",
+          contents: [{ type: "text", text: "背景消息 2" }],
+        },
+        createdAt: 2000,
+      },
+      {
+        id: 3,
+        conversationId,
+        actorId: 1,
+        msgId: 3,
+        buffered: true,
+        activityTarget: true,
+        message: {
+          kind: "user",
+          uid: "user-3",
+          name: "carol",
+          contents: [{ type: "text", text: "@(YOU) 艾玛看一下" }],
+        },
+        createdAt: 3000,
+      },
+    ];
+    const conversation = {
+      id: conversationId,
+      actorId: 1,
+      name: "测试群",
+      session: buildSession("qq", "group", "1000"),
+      allowProactive: false,
+    };
+    const loadSystemPrompt = vi.fn(
+      async (_name: string, variables: Record<string, string>) =>
+        variables.CONVERSATION_WINDOW,
+    );
+    const manager = new MemoryManager(
+      {
+        dbService: {
+          actorDB: {
+            getActor: vi.fn(async () => ({ id: 1, roleId: 2 })),
+          },
+          roleDB: {
+            getRole: vi.fn(async () => ({
+              id: 2,
+              name: "艾玛",
+              prompt: "role prompt",
+            })),
+          },
+          personalityDB: {
+            getPersonality: vi.fn(async () => null),
+          },
+          conversationDB: {
+            getConversation: vi.fn(async () => conversation),
+            listConversations: vi.fn(async () => [conversation]),
+          },
+          conversationMessageDB: {
+            listConversationMessages: vi.fn(async () => records),
+          },
+          shortTermMemoryDB: {
+            listShortTermMemories: vi.fn(async () => []),
+          },
+          userOwnActorDB: {
+            getActorOwner: vi.fn(async () => null),
+          },
+          externalIdentityBindingDB: {
+            listExternalIdentityBindings: vi.fn(async () => []),
+          },
+        },
+        promptStore: {
+          loadSystemPrompt,
+        },
+      } as any,
+      workspace,
+    );
+
+    const prompt = await manager.buildSystemPromptForChat(1, conversationId);
+    const pending = await manager.getPendingConversationWindowState(
+      conversationId,
+      4000,
+    );
+
+    expect(prompt).toContain("背景消息 1");
+    expect(prompt).toContain("背景消息 2");
+    expect(prompt).toContain("@(YOU) 艾玛看一下");
+    expect(pending).toEqual({ count: 1, lastPendingId: 3 });
+    expect(loadSystemPrompt).toHaveBeenCalledWith(
+      "foreground",
+      expect.objectContaining({
+        CONVERSATION_WINDOW: expect.stringContaining("背景消息 1"),
+        SESSION_TYPE: "group",
+      }),
+    );
   });
 
   test("marks buffered messages with activity target intent", async () => {
