@@ -286,6 +286,38 @@ describe("ActorScheduler", () => {
     });
   });
 
+  test("deletes focus schedules for one conversation without deleting other schedules", async () => {
+    const actorScheduler = new ActorScheduler(scheduler, 1);
+    const now = Date.now();
+
+    const created = await actorScheduler.add([
+      {
+        task: "focus",
+        conversationId: 12,
+      },
+      {
+        task: "focus",
+        conversationId: 13,
+      },
+      {
+        type: "once",
+        task: "chat",
+        runAt: now + 60_000,
+        conversationId: 12,
+        prompt: "稍后主动打招呼。",
+      },
+    ]);
+
+    const deleted = await actorScheduler.deleteFocusByConversation(12);
+
+    expect(deleted.deletedIds).toEqual([created.added[0].id]);
+    const listed = await actorScheduler.list(now);
+    expect(listed.focused).toHaveLength(1);
+    expect(listed.focused[0].conversationId).toBe(13);
+    expect(listed.upcoming).toHaveLength(1);
+    expect(listed.upcoming[0].id).toBe(created.added[2].id);
+  });
+
   test("schedules focus first heartbeat five minutes later", async () => {
     const actorScheduler = new ActorScheduler(scheduler, 1);
     const start = Date.now();

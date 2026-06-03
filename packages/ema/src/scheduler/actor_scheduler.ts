@@ -441,6 +441,42 @@ export class ActorScheduler {
     return { deletedIds };
   }
 
+  /**
+   * Deletes the recurring focus schedule for one conversation.
+   * @param conversationId - Conversation whose focus heartbeat should stop.
+   * @returns Deleted schedule ids.
+   */
+  async deleteFocusByConversation(
+    conversationId: number,
+  ): Promise<{ deletedIds: JobId[] }> {
+    if (typeof conversationId !== "number") {
+      throw new Error("conversationId must be a number.");
+    }
+    const jobs = await this.scheduler.listJobs({
+      "data.actorId": this.actorId,
+      "data.task": "focus",
+      "data.conversationId": conversationId,
+    });
+    const deletedIds: JobId[] = [];
+    for (const job of jobs) {
+      const item = this.toScheduleItem(job);
+      if (
+        !item ||
+        item.type !== "every" ||
+        item.task !== "focus" ||
+        item.conversationId !== conversationId
+      ) {
+        continue;
+      }
+      const removed = await this.scheduler.cancel(item.id);
+      if (!removed) {
+        throw new Error(`Failed to delete schedule ${item.id}.`);
+      }
+      deletedIds.push(item.id);
+    }
+    return { deletedIds };
+  }
+
   private async getOwnedScheduleItem(id: JobId): Promise<ActorScheduleItem> {
     const job = await this.scheduler.getJob(id);
     const item = this.toScheduleItem(job);

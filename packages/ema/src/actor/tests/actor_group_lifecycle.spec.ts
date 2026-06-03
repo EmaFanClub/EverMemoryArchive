@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const { runActorBackgroundJob } = vi.hoisted(() => ({
   runActorBackgroundJob: vi.fn(async () => {}),
@@ -24,7 +24,14 @@ vi.mock("../../shared/logger", () => ({
 import { buildSession } from "../../channel";
 import { Actor } from "../actor";
 
+const GROUP_ACTIVE_IDLE_TIMEOUT_MS = 5 * 60_000;
+
 function createActor(session: string = buildSession("qq", "group", "1000")) {
+  const actorScheduler = {
+    deleteFocusByConversation: vi.fn(async () => ({
+      deletedIds: ["focus-1"],
+    })),
+  };
   const server = {
     dbService: {
       conversationDB: {
@@ -46,16 +53,22 @@ function createActor(session: string = buildSession("qq", "group", "1000")) {
         publishStatus: vi.fn(async () => undefined),
       },
     },
+    getActorScheduler: vi.fn(() => actorScheduler),
   };
   return {
     actor: new (Actor as any)(1, server) as Actor,
     server,
+    actorScheduler,
   };
 }
 
 describe("Actor group active lifecycle", () => {
   beforeEach(() => {
     runActorBackgroundJob.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("deactivates active groups without final rollup when the segment has no reply", async () => {
@@ -135,6 +148,49 @@ describe("Actor group active lifecycle", () => {
     });
     expect(actor.sessionManager.getActivityState(conversationId)).toBe(
       "inactive",
+    );
+  });
+
+  test("stops idle active group conversations and removes their focus schedule", async () => {
+    vi.useFakeTimers();
+    const conversationId = 7;
+    const { actor, server, actorScheduler } = createActor();
+    actor.sessionManager.activateConversation(conversationId);
+    (actor as any).groupSegmentsWithReply.add(conversationId);
+
+    (actor as any).refreshGroupConversationIdleTimer(conversationId);
+    await vi.advanceTimersByTimeAsync(GROUP_ACTIVE_IDLE_TIMEOUT_MS - 1);
+
+    expect(actor.sessionManager.getActivityState(conversationId)).toBe(
+      "active",
+    );
+    expect(runActorBackgroundJob).not.toHaveBeenCalled();
+    expect(actorScheduler.deleteFocusByConversation).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(actor.sessionManager.getActivityState(conversationId)).toBe(
+      "inactive",
+    );
+    expect(actorScheduler.deleteFocusByConversation).toHaveBeenCalledWith(
+      conversationId,
+    );
+    expect(server.promptStore.loadTaskPrompt).toHaveBeenCalledWith(
+      "conversation-rollup",
+    );
+    expect(runActorBackgroundJob).toHaveBeenCalledWith(
+      server,
+      {
+        actorId: 1,
+        conversationId,
+        task: "conversation_rollup",
+        prompt: "conversation-rollup prompt",
+        addition: {
+          reason: "idle_timeout",
+          force: true,
+        },
+      },
+      expect.any(Number),
     );
   });
 });

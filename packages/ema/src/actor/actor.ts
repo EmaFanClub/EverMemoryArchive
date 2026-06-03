@@ -23,6 +23,7 @@ import {
 import { HeartbeatTimer } from "./timer";
 
 const DEFAULT_SLEEP_QUIET_PERIOD_MS = 5 * 60_000;
+const GROUP_ACTIVE_IDLE_TIMEOUT_MS = 5 * 60_000;
 const SCHEDULE_TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
 
 export class Actor {
@@ -42,6 +43,11 @@ export class Actor {
     number,
     ChannelSessionInfo | null
   >();
+  private readonly groupConversationIdleTimers = new Map<
+    number,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly groupConversationLastActivityAt = new Map<number, number>();
   private readonly enqueueChains = new Map<number, Promise<void>>();
   private readonly groupSegmentsWithReply = new Set<number>();
   private readonly closingGroupConversations = new Map<number, Promise<void>>();
@@ -317,10 +323,12 @@ export class Actor {
       return false;
     }
     if (this.sessionManager.getActivityState(conversationId) === "active") {
+      this.refreshGroupConversationIdleTimer(conversationId);
       return false;
     }
     if (await this.isSpecialGroupInput(conversationId, input)) {
       this.sessionManager.activateConversation(conversationId);
+      this.refreshGroupConversationIdleTimer(conversationId);
       return false;
     }
     return input.kind === "chat";
@@ -537,6 +545,7 @@ export class Actor {
       }
       const droppedInputs =
         this.sessionManager.dropConversation(conversationId);
+      this.clearGroupConversationIdleTimer(conversationId);
       this.logger.warn("Conversation queue dropped", {
         conversationId,
         droppedInputs,
@@ -552,9 +561,11 @@ export class Actor {
     });
     this.publishConversationTyping(conversationId, true);
     this.publishRuntimeStatus("conversation:acquired");
+    const isGroupSession = resolveSession(worker.session)?.type === "group";
     worker.events.on("actorResponsed", (event) => {
-      if (resolveSession(worker.session)?.type === "group") {
+      if (isGroupSession) {
         this.groupSegmentsWithReply.add(conversationId);
+        this.refreshGroupConversationIdleTimer(conversationId);
       }
       this.runDetached(
         this.server.gateway.dispatchActorResponse(event.response),
@@ -562,6 +573,9 @@ export class Actor {
       );
     });
     worker.events.on("keepSilenceReceived", (event) => {
+      if (isGroupSession) {
+        this.refreshGroupConversationIdleTimer(conversationId);
+      }
       if (!event.stopFollowingGroup) {
         return;
       }
@@ -681,6 +695,7 @@ export class Actor {
     this.stopSleepTimer();
     this.bootInitPromise = null;
     await this.closeAllActiveGroupConversations("dispose");
+    this.clearAllGroupConversationIdleTimers();
     this.conversationSessionInfo.clear();
     this.enqueueChains.clear();
     this.groupSegmentsWithReply.clear();
@@ -761,13 +776,23 @@ export class Actor {
     reason: string,
   ): Promise<void> {
     if (!(await this.isGroupConversation(conversationId))) {
+      this.clearGroupConversationIdleTimer(conversationId);
       return;
     }
     if (this.sessionManager.getActivityState(conversationId) !== "active") {
       this.groupSegmentsWithReply.delete(conversationId);
+      this.clearGroupConversationIdleTimer(conversationId);
+      return;
+    }
+    if (
+      reason === "idle_timeout" &&
+      !this.isGroupConversationIdleExpired(conversationId)
+    ) {
       return;
     }
     this.sessionManager.deactivateConversation(conversationId);
+    this.clearGroupConversationIdleTimer(conversationId);
+    await this.deleteGroupFocusScheduleIfNeeded(conversationId, reason);
     const shouldRollup = this.groupSegmentsWithReply.delete(conversationId);
     if (!shouldRollup) {
       this.logger.debug("Group conversation deactivated without final rollup", {
@@ -799,6 +824,83 @@ export class Actor {
       },
       Date.now(),
     );
+  }
+
+  private refreshGroupConversationIdleTimer(conversationId: number): void {
+    this.clearGroupConversationIdleTimer(conversationId);
+    this.groupConversationLastActivityAt.set(conversationId, Date.now());
+    const timer = setTimeout(() => {
+      this.groupConversationIdleTimers.delete(conversationId);
+      this.runDetached(
+        this.handleGroupConversationIdleTimeout(conversationId),
+        `stop idle group conversation ${conversationId}`,
+      );
+    }, GROUP_ACTIVE_IDLE_TIMEOUT_MS);
+    timer.unref?.();
+    this.groupConversationIdleTimers.set(conversationId, timer);
+  }
+
+  private clearGroupConversationIdleTimer(conversationId: number): void {
+    const timer = this.groupConversationIdleTimers.get(conversationId);
+    if (timer) {
+      clearTimeout(timer);
+      this.groupConversationIdleTimers.delete(conversationId);
+    }
+    this.groupConversationLastActivityAt.delete(conversationId);
+  }
+
+  private clearAllGroupConversationIdleTimers(): void {
+    for (const timer of this.groupConversationIdleTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.groupConversationIdleTimers.clear();
+    this.groupConversationLastActivityAt.clear();
+  }
+
+  private async handleGroupConversationIdleTimeout(
+    conversationId: number,
+  ): Promise<void> {
+    if (this.sessionManager.getActivityState(conversationId) !== "active") {
+      return;
+    }
+    await this.closeGroupConversationActivity(conversationId, "idle_timeout");
+  }
+
+  private isGroupConversationIdleExpired(conversationId: number): boolean {
+    const lastActivityAt =
+      this.groupConversationLastActivityAt.get(conversationId);
+    return (
+      typeof lastActivityAt === "number" &&
+      Date.now() - lastActivityAt >= GROUP_ACTIVE_IDLE_TIMEOUT_MS
+    );
+  }
+
+  private async deleteGroupFocusScheduleIfNeeded(
+    conversationId: number,
+    reason: string,
+  ): Promise<void> {
+    if (reason !== "idle_timeout") {
+      return;
+    }
+    try {
+      const result = await this.server
+        .getActorScheduler(this.actorId)
+        .deleteFocusByConversation(conversationId);
+      if (result.deletedIds.length === 0) {
+        return;
+      }
+      this.logger.info("Group conversation focus schedule deleted", {
+        conversationId,
+        reason,
+        deletedIds: result.deletedIds,
+      });
+    } catch (error) {
+      this.logger.warn("Failed to delete group conversation focus schedule", {
+        conversationId,
+        reason,
+        error,
+      });
+    }
   }
 }
 
