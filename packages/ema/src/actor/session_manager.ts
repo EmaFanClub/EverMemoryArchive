@@ -48,6 +48,20 @@ export class SessionManager {
     return this.queues.get(conversationId)?.tryPop(now) ?? null;
   }
 
+  listQueuedInputs(conversationId: number): ActorInput[] {
+    return this.queues.get(conversationId)?.snapshot() ?? [];
+  }
+
+  drainConversationQueue(conversationId: number): ActorInput[] {
+    const queue = this.queues.get(conversationId);
+    if (!queue) {
+      return [];
+    }
+    const inputs = queue.drain();
+    this.queues.delete(conversationId);
+    return inputs;
+  }
+
   pickNextConversationId(now: number = Date.now()): number | null {
     let selectedConversationId: number | null = null;
     let selectedPriority = 0;

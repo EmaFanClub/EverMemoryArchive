@@ -94,8 +94,12 @@ export class SessionQueue<T> {
     return this.items.length;
   }
 
-  dispose(): number {
-    const dropped = this.items.length;
+  snapshot(): T[] {
+    return [...this.items];
+  }
+
+  drain(): T[] {
+    const drained = this.snapshot();
     this.items.length = 0;
     this.dequeueTimestamps.length = 0;
     this.locked = false;
@@ -103,6 +107,12 @@ export class SessionQueue<T> {
       clearTimeout(this.unlockTimer);
       this.unlockTimer = null;
     }
+    return drained;
+  }
+
+  dispose(): number {
+    const dropped = this.items.length;
+    this.drain();
     this.unlockedListeners.clear();
     this.eventListeners.clear();
     return dropped;

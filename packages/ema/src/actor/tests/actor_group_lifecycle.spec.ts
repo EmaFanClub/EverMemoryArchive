@@ -27,8 +27,29 @@ vi.mock("../../shared/logger", () => ({
 
 import { buildSession } from "../../channel";
 import { Actor } from "../actor";
+import type { ActorChatInput } from "../base";
 
 const GROUP_ACTIVE_IDLE_TIMEOUT_MS = 5 * 60_000;
+
+function createChatInput(
+  conversationId: number,
+  msgId: number,
+  text: string,
+): ActorChatInput {
+  return {
+    kind: "chat",
+    conversationId,
+    msgId,
+    speaker: {
+      session: buildSession("qq", "group", "1000"),
+      uid: "user-1",
+      name: "alice",
+    },
+    channelMessageId: `channel-${msgId}`,
+    inputs: [{ type: "text", text }],
+    time: 1000 + msgId,
+  };
+}
 
 function createActor(session: string = buildSession("qq", "group", "1000")) {
   const actorScheduler = {
@@ -45,6 +66,12 @@ function createActor(session: string = buildSession("qq", "group", "1000")) {
           session,
         })),
       },
+      actorDB: {
+        getActor: vi.fn(async () => ({ id: 1, roleId: 2 })),
+      },
+      roleDB: {
+        getRole: vi.fn(async () => ({ id: 2, name: "艾玛" })),
+      },
     },
     promptStore: {
       loadTaskPrompt: vi.fn(async (name: string) => `${name} prompt`),
@@ -58,6 +85,9 @@ function createActor(session: string = buildSession("qq", "group", "1000")) {
       },
     },
     getActorScheduler: vi.fn(() => actorScheduler),
+    memoryManager: {
+      addToBuffer: vi.fn(async () => undefined),
+    },
   };
   return {
     actor: new (Actor as any)(1, server) as Actor,
@@ -186,6 +216,89 @@ describe("Actor group active lifecycle", () => {
       },
       expect.any(Number),
     );
+  });
+
+  test("buffers ordinary queued group messages when stop-following exits", async () => {
+    const conversationId = 7;
+    const { actor, server } = createActor();
+    const first = createChatInput(conversationId, 21, "普通残余一");
+    const second = createChatInput(conversationId, 22, "普通残余二");
+    actor.sessionManager.activateConversation(conversationId);
+    actor.sessionManager.enqueue(conversationId, first);
+    actor.sessionManager.enqueue(conversationId, second);
+
+    await (actor as any).closeGroupConversationActivity(
+      conversationId,
+      "stop_following_group",
+    );
+
+    expect(actor.sessionManager.getActivityState(conversationId)).toBe(
+      "inactive",
+    );
+    expect(actor.sessionManager.tryPop(conversationId, 0)).toBeNull();
+    expect(server.memoryManager.addToBuffer).toHaveBeenCalledTimes(2);
+    expect(server.memoryManager.addToBuffer).toHaveBeenNthCalledWith(
+      1,
+      conversationId,
+      first.msgId,
+      false,
+      first.time,
+    );
+    expect(server.memoryManager.addToBuffer).toHaveBeenNthCalledWith(
+      2,
+      conversationId,
+      second.msgId,
+      false,
+      second.time,
+    );
+  });
+
+  test("keeps active queued group messages when stop-following sees a special input", async () => {
+    const conversationId = 7;
+    const { actor, server, actorScheduler } = createActor();
+    const ordinary = createChatInput(conversationId, 21, "普通残余");
+    const mention = createChatInput(conversationId, 22, "@(YOU) 还有这个");
+    actor.sessionManager.activateConversation(conversationId);
+    (actor as any).groupSegmentsWithReply.add(conversationId);
+    actor.sessionManager.enqueue(conversationId, ordinary);
+    actor.sessionManager.enqueue(conversationId, mention);
+
+    await (actor as any).closeGroupConversationActivity(
+      conversationId,
+      "stop_following_group",
+    );
+
+    expect(actor.sessionManager.getActivityState(conversationId)).toBe(
+      "active",
+    );
+    expect(actor.sessionManager.tryPop(conversationId, 0)).toEqual(ordinary);
+    expect(actor.sessionManager.tryPop(conversationId, 1)).toEqual(mention);
+    expect(server.memoryManager.addToBuffer).not.toHaveBeenCalled();
+    expect(actorScheduler.deleteFocusByConversation).not.toHaveBeenCalled();
+    expect(runActorBackgroundJob).not.toHaveBeenCalled();
+  });
+
+  test("drops queued group messages when idle timeout exits", async () => {
+    const conversationId = 7;
+    const { actor, server } = createActor();
+    const residual = createChatInput(conversationId, 21, "闲置时残余");
+    actor.sessionManager.activateConversation(conversationId);
+    actor.sessionManager.enqueue(conversationId, residual);
+    (actor as any).groupConversationLastActivityAt.set(
+      conversationId,
+      Date.now() - GROUP_ACTIVE_IDLE_TIMEOUT_MS,
+    );
+
+    await (actor as any).closeGroupConversationActivity(
+      conversationId,
+      "idle_timeout",
+    );
+
+    expect(actor.sessionManager.getActivityState(conversationId)).toBe(
+      "inactive",
+    );
+    expect(actor.sessionManager.tryPop(conversationId, 0)).toBeNull();
+    expect(server.memoryManager.addToBuffer).not.toHaveBeenCalled();
   });
 
   test("cleans active group segments before timer sleep", async () => {

@@ -835,6 +835,30 @@ export class Actor {
     ) {
       return;
     }
+    if (
+      reason === "stop_following_group" &&
+      (await this.hasQueuedGroupActivationInput(conversationId))
+    ) {
+      this.logger.info(
+        "Group conversation kept active",
+        await this.buildGroupConversationLogData(conversationId, {
+          reason,
+          queuedInputs:
+            this.sessionManager.listQueuedInputs(conversationId).length,
+        }),
+      );
+      return;
+    }
+    const residualInputs = this.drainGroupQueueForDeactivate(
+      conversationId,
+      reason,
+    );
+    if (reason === "stop_following_group") {
+      await this.bufferInactiveGroupResidualInputs(
+        conversationId,
+        residualInputs,
+      );
+    }
     this.sessionManager.deactivateConversation(conversationId);
     this.logger.info(
       "Group conversation deactivated",
@@ -851,6 +875,53 @@ export class Actor {
       return;
     }
     await this.runFinalConversationRollup(conversationId, reason);
+  }
+
+  private async hasQueuedGroupActivationInput(
+    conversationId: number,
+  ): Promise<boolean> {
+    const inputs = this.sessionManager.listQueuedInputs(conversationId);
+    for (const input of inputs) {
+      if (await this.resolveGroupActivationReason(conversationId, input)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private drainGroupQueueForDeactivate(
+    conversationId: number,
+    reason: string,
+  ): ActorInput[] {
+    if (!shouldDrainGroupQueueOnDeactivate(reason)) {
+      return [];
+    }
+    const inputs = this.sessionManager.drainConversationQueue(conversationId);
+    if (inputs.length > 0) {
+      this.logger.debug("Group conversation queued inputs drained", {
+        conversationId,
+        reason,
+        inputCount: inputs.length,
+      });
+    }
+    return inputs;
+  }
+
+  private async bufferInactiveGroupResidualInputs(
+    conversationId: number,
+    inputs: ActorInput[],
+  ): Promise<void> {
+    for (const input of inputs) {
+      if (input.kind !== "chat") {
+        continue;
+      }
+      await this.server.memoryManager.addToBuffer(
+        conversationId,
+        input.msgId,
+        false,
+        input.time,
+      );
+    }
   }
 
   private async runFinalConversationRollup(
@@ -967,6 +1038,15 @@ function isInvalidConversationError(
 
 function shouldDeleteGroupFocusOnDeactivate(reason: string): boolean {
   return reason === "stop_following_group" || reason === "idle_timeout";
+}
+
+function shouldDrainGroupQueueOnDeactivate(reason: string): boolean {
+  return (
+    reason === "stop_following_group" ||
+    reason === "idle_timeout" ||
+    reason === "sleep_timer" ||
+    reason === "dispose"
+  );
 }
 
 function shouldBootInitWake(
