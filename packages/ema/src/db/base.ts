@@ -584,6 +584,11 @@ export interface ConversationMessageEntity extends Entity {
    */
   buffered?: boolean;
   /**
+   * Whether this buffered message was observed or produced by the actor and
+   * should count toward conversation rollup.
+   */
+  activityTarget?: boolean;
+  /**
    * The date and time this message was consumed by a conversation-activity update.
    */
   activityProcessedAt?: DbDate;
@@ -705,11 +710,13 @@ export interface ConversationMessageDB {
    * rebuilt recent-history prompts.
    * @param conversationId - The conversation ID of the target messages
    * @param msgIds - Actor-scoped msgIds to update
+   * @param activityTarget - Whether these messages should count toward rollup
    * @returns Promise resolving to the number of updated rows
    */
   markConversationMessagesBuffered(
     conversationId: number,
     msgIds: number[],
+    activityTarget?: boolean,
   ): Promise<number>;
 
   /**

@@ -36,6 +36,12 @@ import type { EmaReply } from "../tools/ema_reply_tool";
 import { formatImageReplyMediaText } from "../tools/ema_reply_tool";
 import { ActorWorkspaceService } from "../workspace/actor_workspace";
 
+function isConversationActivityTarget(
+  message: ConversationMessageEntity,
+): boolean {
+  return message.activityTarget !== false;
+}
+
 /**
  * Memory manager implementation backed by database interfaces.
  */
@@ -644,7 +650,11 @@ export class MemoryManager implements BufferStorage, ActorMemory {
     conversationId: number,
     triggeredAt: number,
     count: number = this.bufferWindowSize,
-  ): Promise<{ messages: BufferMessage[]; msgIds: number[] }> {
+  ): Promise<{
+    messages: BufferMessage[];
+    msgIds: number[];
+    activityTargetMsgIds: number[];
+  }> {
     const records = await this.getBufferedConversationWindowEntities(
       conversationId,
       triggeredAt,
@@ -656,6 +666,9 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         records,
       ),
       msgIds: records.map((item) => item.msgId),
+      activityTargetMsgIds: records
+        .filter(isConversationActivityTarget)
+        .map((item) => item.msgId),
     };
   }
 
@@ -676,7 +689,9 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       count,
     );
     const pendingRecords = records.filter(
-      (item) => typeof item.activityProcessedAt !== "number",
+      (item) =>
+        isConversationActivityTarget(item) &&
+        typeof item.activityProcessedAt !== "number",
     );
     return {
       count: pendingRecords.length,
@@ -928,8 +943,12 @@ export class MemoryManager implements BufferStorage, ActorMemory {
       await this.server.dbService.conversationMessageDB.markConversationMessagesBuffered(
         conversationId,
         [msgId],
+        triggerActivityTick,
       );
     if (updated === 0) {
+      return;
+    }
+    if (!triggerActivityTick) {
       return;
     }
 
@@ -940,7 +959,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         effectiveTriggeredAt,
       )
     ).count;
-    if (!triggerActivityTick || pendingCount < this.diaryUpdateEvery) {
+    if (pendingCount < this.diaryUpdateEvery) {
       return;
     }
 

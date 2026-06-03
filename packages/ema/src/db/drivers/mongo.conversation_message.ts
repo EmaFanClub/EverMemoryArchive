@@ -219,6 +219,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
   async markConversationMessagesBuffered(
     conversationId: number,
     msgIds: number[],
+    activityTarget: boolean = true,
   ): Promise<number> {
     if (typeof conversationId !== "number") {
       throw new Error("conversationId must be a number");
@@ -228,6 +229,9 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     }
     if (msgIds.some((id) => typeof id !== "number")) {
       throw new Error("msgIds must contain only numbers");
+    }
+    if (typeof activityTarget !== "boolean") {
+      throw new Error("activityTarget must be a boolean");
     }
     if (msgIds.length === 0) {
       return 0;
@@ -243,6 +247,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       {
         $set: {
           buffered: true,
+          activityTarget,
         },
       },
     );
@@ -276,6 +281,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       {
         conversationId,
         msgId: { $in: msgIds },
+        activityTarget: { $ne: false },
       },
       {
         $set: {
@@ -334,6 +340,7 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
     await collection.createIndex({
       conversationId: 1,
       buffered: 1,
+      activityTarget: 1,
       activityProcessedAt: 1,
       createdAt: -1,
     });

@@ -304,7 +304,9 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
       buffered: true,
       sort: "asc",
     });
-    expect(visible).toEqual([{ ...second, buffered: true }]);
+    expect(visible).toEqual([
+      { ...second, buffered: true, activityTarget: true },
+    ]);
 
     const pending = await db.listConversationMessages({
       conversationId: 1,
@@ -312,6 +314,37 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
       sort: "asc",
     });
     expect(pending).toEqual([first]);
+  });
+
+  test("should mark buffered messages as non-activity targets", async () => {
+    const stored = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      buffered: false,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "background" }],
+      },
+      createdAt: Date.now(),
+    });
+
+    const updated = await db.markConversationMessagesBuffered(
+      1,
+      [stored.msgId],
+      false,
+    );
+    expect(updated).toBe(1);
+
+    const visible = await db.listConversationMessages({
+      conversationId: 1,
+      buffered: true,
+      sort: "asc",
+    });
+    expect(visible).toEqual([
+      { ...stored, buffered: true, activityTarget: false },
+    ]);
   });
 
   test("should mark selected messages as activity processed", async () => {
@@ -338,19 +371,34 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
       },
       createdAt: Date.now(),
     });
+    const background = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      buffered: true,
+      activityTarget: false,
+      message: {
+        kind: "user",
+        uid: "user-1",
+        name: "alice",
+        contents: [{ type: "text", text: "background" }],
+      },
+      createdAt: Date.now(),
+    });
 
     const processedAt = Date.now();
     const updated = await db.markConversationMessagesActivityProcessed(
       1,
-      [first.msgId, second.msgId],
+      [first.msgId, second.msgId, background.msgId],
       processedAt,
     );
     expect(updated).toBe(2);
 
     const firstRow = await db.getConversationMessage(first.id);
     const secondRow = await db.getConversationMessage(second.id);
+    const backgroundRow = await db.getConversationMessage(background.id);
     expect(firstRow?.activityProcessedAt).toBe(processedAt);
     expect(secondRow?.activityProcessedAt).toBe(processedAt);
+    expect(backgroundRow?.activityProcessedAt).toBeUndefined();
   });
 
   test("should list messages filtered by conversationId", async () => {

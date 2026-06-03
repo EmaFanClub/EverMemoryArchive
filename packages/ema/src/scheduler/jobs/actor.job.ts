@@ -598,7 +598,7 @@ async function runConversationRollupTaskOnce(
     processedMessageCount =
       await server.memoryManager.markConversationMessagesActivityProcessed(
         job.conversationId,
-        bufferSnapshot.msgIds,
+        bufferSnapshot.activityTargetMsgIds,
         job.triggeredAt,
       );
     await runThresholdMemoryRollupWhenNeeded(

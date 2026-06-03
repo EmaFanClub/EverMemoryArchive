@@ -57,7 +57,11 @@ type FakeMemoryManager = {
     conversationId: number,
     triggeredAt: number,
     count?: number,
-  ) => Promise<{ messages: []; msgIds: number[] }>;
+  ) => Promise<{
+    messages: [];
+    msgIds: number[];
+    activityTargetMsgIds: number[];
+  }>;
   markConversationMessagesActivityProcessed: (
     conversationId: number,
     msgIds: number[],
@@ -237,6 +241,7 @@ function createFakeServer(
         return {
           messages: [],
           msgIds: snapshot.map((item) => item.msgId),
+          activityTargetMsgIds: snapshot.map((item) => item.msgId),
         };
       },
       async markConversationMessagesActivityProcessed(

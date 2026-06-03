@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { MemoryManager } from "../manager";
 import { ActorWorkspaceService } from "../../workspace/actor_workspace";
 import type { ActorChatResponse } from "../../actor";
+import type { ConversationMessageEntity } from "../../db";
 
 describe("MemoryManager", () => {
   let workspaceDir: string;
@@ -88,5 +89,118 @@ describe("MemoryManager", () => {
       createdAt: 1000,
       msgId: 9,
     });
+  });
+
+  test("counts only activity target buffered messages as pending", async () => {
+    const records: ConversationMessageEntity[] = [
+      {
+        id: 4,
+        conversationId: 7,
+        actorId: 1,
+        msgId: 4,
+        buffered: true,
+        activityTarget: true,
+        message: {
+          kind: "user",
+          uid: "user-1",
+          name: "alice",
+          contents: [{ type: "text", text: "target" }],
+        },
+        createdAt: 4000,
+      },
+      {
+        id: 3,
+        conversationId: 7,
+        actorId: 1,
+        msgId: 3,
+        buffered: true,
+        activityTarget: true,
+        activityProcessedAt: 3000,
+        message: {
+          kind: "user",
+          uid: "user-1",
+          name: "alice",
+          contents: [{ type: "text", text: "processed" }],
+        },
+        createdAt: 3000,
+      },
+      {
+        id: 2,
+        conversationId: 7,
+        actorId: 1,
+        msgId: 2,
+        buffered: true,
+        activityTarget: false,
+        message: {
+          kind: "user",
+          uid: "user-1",
+          name: "alice",
+          contents: [{ type: "text", text: "background" }],
+        },
+        createdAt: 2000,
+      },
+      {
+        id: 1,
+        conversationId: 7,
+        actorId: 1,
+        msgId: 1,
+        buffered: true,
+        message: {
+          kind: "user",
+          uid: "user-1",
+          name: "alice",
+          contents: [{ type: "text", text: "legacy" }],
+        },
+        createdAt: 1000,
+      },
+    ];
+    const manager = new MemoryManager(
+      {
+        dbService: {
+          conversationMessageDB: {
+            listConversationMessages: vi.fn(async () => records),
+          },
+        },
+      } as any,
+      workspace,
+    );
+
+    const state = await manager.getPendingConversationWindowState(7, 5000);
+
+    expect(state).toEqual({ count: 2, lastPendingId: 4 });
+  });
+
+  test("marks buffered messages with activity target intent", async () => {
+    const markConversationMessagesBuffered = vi.fn(async () => 1);
+    const listConversationMessages = vi.fn(async () => []);
+    const manager = new MemoryManager(
+      {
+        dbService: {
+          conversationMessageDB: {
+            markConversationMessagesBuffered,
+            listConversationMessages,
+          },
+        },
+      } as any,
+      workspace,
+    );
+
+    await manager.addToBuffer(7, 9, false, 1000);
+
+    expect(markConversationMessagesBuffered).toHaveBeenCalledWith(
+      7,
+      [9],
+      false,
+    );
+    expect(listConversationMessages).not.toHaveBeenCalled();
+
+    await manager.addToBuffer(7, 10, true, 2000);
+
+    expect(markConversationMessagesBuffered).toHaveBeenLastCalledWith(
+      7,
+      [10],
+      true,
+    );
+    expect(listConversationMessages).toHaveBeenCalledTimes(1);
   });
 });
