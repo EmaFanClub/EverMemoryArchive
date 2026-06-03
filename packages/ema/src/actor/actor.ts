@@ -43,6 +43,8 @@ export class Actor {
     ChannelSessionInfo | null
   >();
   private readonly enqueueChains = new Map<number, Promise<void>>();
+  private readonly groupSegmentsWithReply = new Set<number>();
+  private readonly closingGroupConversations = new Map<number, Promise<void>>();
   private actorDisplayNamePromise: Promise<string> | null = null;
   private readonly logger: Logger;
 
@@ -483,6 +485,7 @@ export class Actor {
     if (this.status !== "awake") {
       return;
     }
+    await this.closeAllActiveGroupConversations("sleep_timer");
     await runActorBackgroundJob(
       this.server,
       {
@@ -550,9 +553,21 @@ export class Actor {
     this.publishConversationTyping(conversationId, true);
     this.publishRuntimeStatus("conversation:acquired");
     worker.events.on("actorResponsed", (event) => {
+      if (resolveSession(worker.session)?.type === "group") {
+        this.groupSegmentsWithReply.add(conversationId);
+      }
       this.runDetached(
         this.server.gateway.dispatchActorResponse(event.response),
         `send reply for conversation ${conversationId}`,
+      );
+    });
+    worker.events.on("keepSilenceReceived", (event) => {
+      if (!event.stopFollowingGroup) {
+        return;
+      }
+      this.runDetached(
+        this.closeGroupConversationActivity(conversationId, "keep_silence"),
+        `stop following group conversation ${conversationId}`,
       );
     });
     worker.events.on("workFinished", (event) => {
@@ -641,6 +656,7 @@ export class Actor {
     const session = this.currentWorker?.session;
     if (this.currentWorker) {
       this.currentWorker.events.removeAllListeners("actorResponsed");
+      this.currentWorker.events.removeAllListeners("keepSilenceReceived");
       this.currentWorker.events.removeAllListeners("workFinished");
     }
     this.currentWorker = null;
@@ -664,8 +680,11 @@ export class Actor {
   async dispose(): Promise<void> {
     this.stopSleepTimer();
     this.bootInitPromise = null;
+    await this.closeAllActiveGroupConversations("dispose");
     this.conversationSessionInfo.clear();
     this.enqueueChains.clear();
+    this.groupSegmentsWithReply.clear();
+    this.closingGroupConversations.clear();
     this.sessionManager.clear();
     this.releaseConversation();
     this.status = "sleep";
@@ -698,6 +717,88 @@ export class Actor {
           error: error instanceof Error ? error.message : String(error),
         });
       });
+  }
+
+  private closeAllActiveGroupConversations(reason: string): Promise<void> {
+    const tasks = this.sessionManager
+      .listActiveConversationIds()
+      .map(async (conversationId) => {
+        try {
+          await this.closeGroupConversationActivity(conversationId, reason);
+        } catch (error) {
+          this.logger.error("Failed to close active group conversation:", {
+            conversationId,
+            reason,
+            error,
+          });
+        }
+      });
+    return Promise.all(tasks).then(() => undefined);
+  }
+
+  private closeGroupConversationActivity(
+    conversationId: number,
+    reason: string,
+  ): Promise<void> {
+    const existing = this.closingGroupConversations.get(conversationId);
+    if (existing) {
+      return existing;
+    }
+    const task = this.closeGroupConversationActivityOnce(
+      conversationId,
+      reason,
+    ).finally(() => {
+      if (this.closingGroupConversations.get(conversationId) === task) {
+        this.closingGroupConversations.delete(conversationId);
+      }
+    });
+    this.closingGroupConversations.set(conversationId, task);
+    return task;
+  }
+
+  private async closeGroupConversationActivityOnce(
+    conversationId: number,
+    reason: string,
+  ): Promise<void> {
+    if (!(await this.isGroupConversation(conversationId))) {
+      return;
+    }
+    if (this.sessionManager.getActivityState(conversationId) !== "active") {
+      this.groupSegmentsWithReply.delete(conversationId);
+      return;
+    }
+    this.sessionManager.deactivateConversation(conversationId);
+    const shouldRollup = this.groupSegmentsWithReply.delete(conversationId);
+    if (!shouldRollup) {
+      this.logger.debug("Group conversation deactivated without final rollup", {
+        conversationId,
+        reason,
+      });
+      return;
+    }
+    await this.runFinalConversationRollup(conversationId, reason);
+  }
+
+  private async runFinalConversationRollup(
+    conversationId: number,
+    reason: string,
+  ): Promise<void> {
+    await runActorBackgroundJob(
+      this.server,
+      {
+        actorId: this.actorId,
+        conversationId,
+        task: "conversation_rollup",
+        prompt: await this.server.promptStore.loadTaskPrompt(
+          "conversation-rollup",
+        ),
+        addition: {
+          reason,
+          force: true,
+        },
+      },
+      Date.now(),
+    );
   }
 }
 

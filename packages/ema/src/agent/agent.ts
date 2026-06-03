@@ -278,6 +278,9 @@ export class Agent {
           if (toolName === "keep_silence" && result.content) {
             this.events.emit("keepSilenceReceived", {
               think: result.content,
+              ...(getBooleanToolArgument(callArgs, "stop_following_group")
+                ? { stopFollowingGroup: true }
+                : {}),
             });
             this.contextManager.addModelMessage({
               role: "model",
@@ -407,4 +410,11 @@ export class Agent {
       usageMetadata,
     });
   }
+}
+
+function getBooleanToolArgument(args: unknown, key: string): boolean {
+  if (!args || typeof args !== "object" || Array.isArray(args)) {
+    return false;
+  }
+  return (args as Record<string, unknown>)[key] === true;
 }

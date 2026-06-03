@@ -166,7 +166,7 @@ export class ActorTrainer {
           await this.server.memoryManager.addToBuffer(
             conversationId,
             message.msgId,
-            false,
+            true,
             input.timestamp,
           );
           messageCount = message.msgId;
@@ -256,6 +256,10 @@ export class ActorTrainer {
               prompt: await this.server.promptStore.loadTaskPrompt(
                 "conversation-rollup",
               ),
+              addition: {
+                reason: "training_dayend",
+                force: true,
+              },
             },
             lastMessageTimestamp,
             backgroundRunOptions(),

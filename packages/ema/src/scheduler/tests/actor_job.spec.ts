@@ -571,6 +571,46 @@ describe("actor background job lifecycle logs", () => {
     });
   });
 
+  test("forced conversation rollup runs below threshold and marks messages processed without activity", async () => {
+    const bufferedMessages = createBufferedMessages(1, 3, 1000);
+    const server = createFakeServer(bufferedMessages);
+    const runWithStateSpy = vi
+      .spyOn(Agent.prototype, "runWithState")
+      .mockImplementation(async () => undefined);
+
+    await runActorBackgroundJob(
+      server as any,
+      {
+        ...conversationRollupJob(),
+        addition: { reason: "keep_silence", force: true },
+      },
+      2000,
+    );
+
+    expect(runWithStateSpy).toHaveBeenCalledTimes(1);
+    expect(
+      bufferedMessages.every(
+        (item) => typeof item.activityProcessedAt === "number",
+      ),
+    ).toBe(true);
+    expectInfoLog(server, "Actor background task started", {
+      actorId: 1,
+      task: "conversation_rollup",
+      conversationId: 1,
+      pendingCount: 3,
+      threshold: 20,
+      force: true,
+    });
+    expectInfoLog(server, "Actor background task completed", {
+      actorId: 1,
+      task: "conversation_rollup",
+      conversationId: 1,
+      activityAdded: false,
+      processedMessageCount: 3,
+      force: true,
+    });
+  });
+
   test("background jobs are skipped when the actor is disabled", async () => {
     const server = createFakeServer(createBufferedMessages(1, 20, 1000));
     server.dbService.actorDB.getActor = vi.fn(async () => ({

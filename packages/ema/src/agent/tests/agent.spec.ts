@@ -223,4 +223,43 @@ describe("Agent helpers", () => {
     ).toBe(false);
     expect(checkCompleteMessages(messages)).toBe(true);
   });
+
+  test("passes keep_silence group stop-following requests through the event", async () => {
+    const generate = vi.fn().mockResolvedValueOnce({
+      role: "model",
+      contents: [
+        {
+          type: "tool_call",
+          toolCallId: "call-1",
+          name: "keep_silence",
+          arguments: {
+            think: "这个群聊暂时不用继续跟进，等有人明确叫我时再参与。",
+            stop_following_group: true,
+          },
+        },
+      ],
+    });
+    const llm = {
+      setRetryCallback: vi.fn(),
+      generate,
+    } as unknown as LLMClient;
+    const agent = new Agent(llm);
+    const keepSilenceEvents: unknown[] = [];
+    (agent.events as any).on("keepSilenceReceived", (event: unknown) => {
+      keepSilenceEvents.push(event);
+    });
+
+    await agent.runWithState({
+      systemPrompt: "system prompt",
+      messages: [{ role: "user", contents: [{ type: "text", text: "hi" }] }],
+      tools: [new KeepSilenceTool()],
+    });
+
+    expect(keepSilenceEvents).toEqual([
+      {
+        think: "这个群聊暂时不用继续跟进，等有人明确叫我时再参与。",
+        stopFollowingGroup: true,
+      },
+    ]);
+  });
 });

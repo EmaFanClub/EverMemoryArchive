@@ -91,4 +91,88 @@ describe("ActorWorker token usage context", () => {
       totalTokens: 10,
     });
   });
+
+  test("persists keep_silence and emits stop-following before finishing work", async () => {
+    const conversationId = 42;
+    const session = buildSession("qq", "group", "1000");
+    const server = {
+      dbService: {
+        conversationDB: {
+          getConversation: vi.fn(async () => ({
+            id: conversationId,
+            actorId: 1,
+            session,
+          })),
+        },
+        conversationMessageDB: {
+          reserveMessageId: vi.fn(async () => 7),
+        },
+        getActorLLMConfig: vi.fn(async () => ({
+          model: "gpt-5.5",
+          apiKey: "test",
+          baseUrl: "https://example.com",
+        })),
+        tokenUsageDB: {
+          createTokenUsageRecord: vi.fn(async () => 1),
+        },
+      },
+      memoryManager: {
+        getOwnerUid: vi.fn(async () => "owner"),
+        buildSystemPromptForChat: vi.fn(async () => "system prompt"),
+        persistChatMessage: vi.fn(async () => undefined),
+        addToBuffer: vi.fn(async () => undefined),
+      },
+    };
+    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
+      async function (this: Agent) {
+        this.events.emit("keepSilenceReceived", {
+          think: "暂时不再关注这个群聊。",
+          stopFollowingGroup: true,
+        });
+        this.events.emit("runFinished", {
+          ok: true,
+          msg: "keep_silence",
+        });
+      },
+    );
+
+    const worker = await ActorWorker.create(1, conversationId, server as any);
+    const events: string[] = [];
+    worker.events.on("keepSilenceReceived", (event) => {
+      events.push("keepSilenceReceived");
+      expect(event.stopFollowingGroup).toBe(true);
+      expect(event.response).toMatchObject({
+        kind: "keep_silence",
+        actorId: 1,
+        conversationId,
+        msgId: 7,
+        session,
+        think: "暂时不再关注这个群聊。",
+      });
+    });
+    worker.events.on("workFinished", () => {
+      events.push("workFinished");
+    });
+
+    await worker.work({
+      kind: "system",
+      conversationId,
+      inputs: [{ type: "text", text: "hi" }],
+    });
+
+    expect(events).toEqual(["keepSilenceReceived", "workFinished"]);
+    expect(server.memoryManager.persistChatMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "keep_silence",
+        msgId: 7,
+        think: "暂时不再关注这个群聊。",
+      }),
+    );
+    expect(server.memoryManager.addToBuffer).toHaveBeenCalledWith(
+      conversationId,
+      7,
+      true,
+      expect.any(Number),
+    );
+  });
 });

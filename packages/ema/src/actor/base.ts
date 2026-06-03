@@ -47,6 +47,11 @@ export interface ActorResponsedEvent {
   response: ActorChatResponse;
 }
 
+export interface ActorKeepSilenceReceivedEvent {
+  response: ActorKeepSilenceResponse;
+  stopFollowingGroup?: boolean;
+}
+
 export interface WorkFinishedEvent {
   ok: boolean;
   msg: string;
@@ -55,6 +60,7 @@ export interface WorkFinishedEvent {
 
 export interface ActorWorkerEventMap {
   actorResponsed: [ActorResponsedEvent];
+  keepSilenceReceived: [ActorKeepSilenceReceivedEvent];
   workFinished: [WorkFinishedEvent];
 }
 
@@ -68,6 +74,7 @@ export const ActorWorkerEventNames: Record<
   ActorWorkerEventName
 > = {
   actorResponsed: "actorResponsed",
+  keepSilenceReceived: "keepSilenceReceived",
   workFinished: "workFinished",
 };
 

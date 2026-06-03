@@ -1,6 +1,12 @@
 import { EventEmitter } from "node:events";
 import { Agent, AgentEventNames, checkCompleteMessages } from "../agent";
-import type { AgentEvent, AgentEventName, AgentState } from "../agent";
+import type {
+  AgentEvent,
+  AgentEventName,
+  AgentState,
+  EmaReplyReceivedEvent,
+  KeepSilenceReceivedEvent,
+} from "../agent";
 import type { Server } from "../server";
 import { formatTraceTimestamp, Logger } from "../shared/logger";
 import { LLMClient } from "../llm";
@@ -31,6 +37,7 @@ export class ActorWorker {
   private queue: ActorInput[] = [];
   private currentRunPromise: Promise<void> | null = null;
   private processingQueue = false;
+  private readonly agentEventTasks = new Set<Promise<void>>();
   private readonly tokenUsageWrites = new Set<Promise<void>>();
 
   private constructor(
@@ -100,62 +107,18 @@ export class ActorWorker {
   ) {
     for (const eventName of events) {
       if (eventName === "emaReplyReceived") {
-        this.agent.events.on("emaReplyReceived", async (content) => {
-          const reply = content.reply;
-          if (reply.kind === "text" && reply.content.trim().length === 0) {
-            return;
-          }
-          const msgId =
-            await this.server.dbService.conversationMessageDB.reserveMessageId(
-              this.actorId,
-            );
-          const response: ActorChatResponse = {
-            kind: "chat",
-            actorId: this.actorId,
-            conversationId: this.conversationId,
-            msgId,
-            session: this.session,
-            ema_reply: reply,
-            time: Date.now(),
-          };
-          await this.server.memoryManager.persistChatMessage(response);
-          await this.server.controller.chat.publishConversationMessage(
-            this.conversationId,
-            msgId,
+        this.agent.events.on("emaReplyReceived", (content) => {
+          this.trackAgentEventTask(
+            this.handleEmaReplyReceived(content),
+            "handle ema reply",
           );
-          await this.server.memoryManager.addToBuffer(
-            this.conversationId,
-            msgId,
-            true,
-            response.time,
-          );
-          const outboundResponse = await this.buildOutboundResponse(response);
-          this.emitEvent("actorResponsed", {
-            response: outboundResponse,
-          });
         });
       }
       if (eventName === "keepSilenceReceived") {
-        this.agent.events.on("keepSilenceReceived", async (content) => {
-          const msgId =
-            await this.server.dbService.conversationMessageDB.reserveMessageId(
-              this.actorId,
-            );
-          const response: ActorKeepSilenceResponse = {
-            kind: "keep_silence",
-            actorId: this.actorId,
-            conversationId: this.conversationId,
-            msgId,
-            session: this.session,
-            think: content.think,
-            time: Date.now(),
-          };
-          await this.server.memoryManager.persistChatMessage(response);
-          await this.server.memoryManager.addToBuffer(
-            this.conversationId,
-            msgId,
-            true,
-            response.time,
+        this.agent.events.on("keepSilenceReceived", (content) => {
+          this.trackAgentEventTask(
+            this.handleKeepSilenceReceived(content),
+            "handle keep silence",
           );
         });
       }
@@ -165,6 +128,89 @@ export class ActorWorker {
         });
       }
     }
+  }
+
+  private async handleEmaReplyReceived(
+    content: EmaReplyReceivedEvent,
+  ): Promise<void> {
+    const reply = content.reply;
+    if (reply.kind === "text" && reply.content.trim().length === 0) {
+      return;
+    }
+    const msgId =
+      await this.server.dbService.conversationMessageDB.reserveMessageId(
+        this.actorId,
+      );
+    const response: ActorChatResponse = {
+      kind: "chat",
+      actorId: this.actorId,
+      conversationId: this.conversationId,
+      msgId,
+      session: this.session,
+      ema_reply: reply,
+      time: Date.now(),
+    };
+    await this.server.memoryManager.persistChatMessage(response);
+    await this.server.controller.chat.publishConversationMessage(
+      this.conversationId,
+      msgId,
+    );
+    await this.server.memoryManager.addToBuffer(
+      this.conversationId,
+      msgId,
+      true,
+      response.time,
+    );
+    const outboundResponse = await this.buildOutboundResponse(response);
+    this.emitEvent("actorResponsed", {
+      response: outboundResponse,
+    });
+  }
+
+  private async handleKeepSilenceReceived(
+    content: KeepSilenceReceivedEvent,
+  ): Promise<void> {
+    const msgId =
+      await this.server.dbService.conversationMessageDB.reserveMessageId(
+        this.actorId,
+      );
+    const response: ActorKeepSilenceResponse = {
+      kind: "keep_silence",
+      actorId: this.actorId,
+      conversationId: this.conversationId,
+      msgId,
+      session: this.session,
+      think: content.think,
+      time: Date.now(),
+    };
+    await this.server.memoryManager.persistChatMessage(response);
+    await this.server.memoryManager.addToBuffer(
+      this.conversationId,
+      msgId,
+      true,
+      response.time,
+    );
+    this.emitEvent("keepSilenceReceived", {
+      response,
+      ...(content.stopFollowingGroup ? { stopFollowingGroup: true } : {}),
+    });
+  }
+
+  private trackAgentEventTask(task: Promise<void>, label: string): void {
+    const tracked = task.finally(() => {
+      this.agentEventTasks.delete(tracked);
+    });
+    this.agentEventTasks.add(tracked);
+    void tracked.catch((error) => {
+      this.logger.error(`Failed to ${label}:`, error);
+    });
+  }
+
+  private async flushAgentEventTasks(): Promise<void> {
+    if (this.agentEventTasks.size === 0) {
+      return;
+    }
+    await Promise.all(Array.from(this.agentEventTasks));
   }
 
   private trackTokenUsageWrite(event: AgentEvent<"llmUsageReceived">): void {
@@ -323,6 +369,7 @@ export class ActorWorker {
         try {
           await this.currentRunPromise;
         } finally {
+          await this.flushAgentEventTasks();
           await this.flushTokenUsageWrites();
           this.currentRunPromise = null;
           if (

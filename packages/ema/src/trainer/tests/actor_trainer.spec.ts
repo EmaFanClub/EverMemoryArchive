@@ -7,6 +7,9 @@ import { MemFs } from "../../shared/fs";
 import { createMongo, DBService, type Mongo } from "../../db";
 import { parseTimestamp } from "../../shared/utils";
 import { Logger } from "../../shared/logger";
+import { MemoryManager } from "../../memory/manager";
+import { Agent } from "../../agent";
+import { loadTestGlobalConfig } from "../../config/tests/helpers";
 
 describe("ActorTrainer", () => {
   let mongo: Mongo;
@@ -302,6 +305,72 @@ describe("ActorTrainer", () => {
         checkpointDir: ".ema/trainer",
       }),
     ).rejects.toThrow("Actor already has a training conversation");
+  });
+
+  test("training replay messages remain activity targets for rollup", async () => {
+    await loadTestGlobalConfig(new MemFs());
+    server.dbService = DBService.createSync(new MemFs(), mongo, lance);
+    (server.dbService as any).getActorLLMConfig = vi.fn(async () => ({
+      model: "gpt-5.5",
+      apiKey: "test",
+      baseUrl: "https://example.com",
+    }));
+    server.memoryManager = new MemoryManager(server);
+    server.promptStore = {
+      loadTaskPrompt: vi.fn(async (name: string) => `${name} prompt`),
+      loadSystemPrompt: vi.fn(async () => "system prompt"),
+    } as any;
+    const roleId = await server.dbService.roleDB.upsertRole({
+      name: "亚托莉",
+      prompt: "role book",
+    });
+    const actorId = await server.dbService.actorDB.upsertActor({
+      roleId,
+      enabled: false,
+    });
+    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
+      async (state) => {
+        if (state.toolContext?.data?.task === "conversation_rollup") {
+          state.toolContext.data.activityAdded = true;
+        }
+      },
+    );
+    const trainer = new ActorTrainer(server, new MemFs());
+
+    const result = await trainer.train({
+      actorId,
+      characterName: "亚托莉",
+      dataset: {
+        description: "dataset",
+        inputs: [
+          {
+            name: "夏生",
+            time: "2024-01-01 10:00:00",
+            content: "早上好。",
+          },
+          {
+            name: "亚托莉",
+            time: "2024-01-01 10:01:00",
+            content: "早上好，夏生。",
+          },
+        ],
+      },
+      bufferWindowSize: 30,
+      diaryUpdateEvery: 20,
+      checkpointDir: ".ema/trainer",
+    });
+
+    const rows =
+      await server.dbService.conversationMessageDB.listConversationMessages({
+        conversationId: result.conversationId,
+        limit: 10,
+      });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((item) => item.buffered === true)).toBe(true);
+    expect(rows.every((item) => item.activityTarget === true)).toBe(true);
+    expect(
+      rows.every((item) => typeof item.activityProcessedAt === "number"),
+    ).toBe(true);
   });
 
   test("checks existing actor messages with one actor-scoped query", async () => {

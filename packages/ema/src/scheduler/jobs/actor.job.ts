@@ -83,6 +83,7 @@ interface ConversationRollupTaskData {
   conversationId: number;
   prompt: string;
   triggeredAt: number;
+  force?: boolean;
   followUp?: boolean;
 }
 
@@ -242,6 +243,7 @@ export async function runActorBackgroundJob(
             conversationId: job.conversationId,
             prompt: job.prompt ?? "",
             triggeredAt,
+            force: isForceConversationRollup(job.addition),
           },
           context,
         );
@@ -445,6 +447,22 @@ async function runConversationRollupTask(
           {
             pendingCount: pendingBefore.count,
             threshold,
+            ...(job.force ? { force: true } : {}),
+            ...(job.followUp ? { followUp: true } : {}),
+          },
+          context,
+        );
+        runResult = await runConversationRollupTaskOnce(server, job, context);
+        didConsumePending = runResult.processedMessageCount > 0;
+      } else if (job.force && pendingBefore.count > 0) {
+        ranOnce = true;
+        startedAt = logBackgroundTaskStarted(
+          server,
+          logData,
+          {
+            pendingCount: pendingBefore.count,
+            threshold,
+            force: true,
             ...(job.followUp ? { followUp: true } : {}),
           },
           context,
@@ -479,6 +497,7 @@ async function runConversationRollupTask(
           pendingAfter: pendingAfter.count,
           threshold,
           followUpScheduled,
+          ...(job.force ? { force: true } : {}),
           ...(job.followUp ? { followUp: true } : {}),
         },
         context,
@@ -494,6 +513,7 @@ async function runConversationRollupTask(
           pendingBefore: pendingBefore.count,
           pendingAfter: pendingAfter.count,
           followUpScheduled,
+          ...(job.force ? { force: true } : {}),
           ...(job.followUp ? { followUp: true } : {}),
         },
         context,
@@ -594,13 +614,15 @@ async function runConversationRollupTaskOnce(
   await runBackgroundAgentWithState(server, agent, agentState);
   const activityAdded = agentState.toolContext?.data?.activityAdded === true;
   let processedMessageCount = 0;
-  if (activityAdded) {
+  if (activityAdded || job.force) {
     processedMessageCount =
       await server.memoryManager.markConversationMessagesActivityProcessed(
         job.conversationId,
         bufferSnapshot.activityTargetMsgIds,
         job.triggeredAt,
       );
+  }
+  if (activityAdded) {
     await runThresholdMemoryRollupWhenNeeded(
       server,
       job.actorId,
@@ -1561,6 +1583,12 @@ function shouldScheduleFollowUp(
 
 function isThresholdTriggered(addition?: Record<string, unknown>): boolean {
   return addition?.source === "threshold" || addition?.reason === "threshold";
+}
+
+function isForceConversationRollup(
+  addition?: Record<string, unknown>,
+): boolean {
+  return addition?.force === true;
 }
 
 function stripInternalSleepSource(

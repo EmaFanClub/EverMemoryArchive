@@ -24,7 +24,9 @@ describe("KeepSilenceTool", () => {
 
     expect(params.type).toBe("object");
     expect(params.properties).toHaveProperty("think");
+    expect(params.properties).toHaveProperty("stop_following_group");
     expect(params.required).toContain("think");
+    expect(params.required).not.toContain("stop_following_group");
   });
 
   it("returns think as the internal content", async () => {
@@ -48,6 +50,18 @@ describe("KeepSilenceTool", () => {
     expect(result.content).toBe("先观察 不要追发 如果对方继续问 再重新参与");
   });
 
+  it("accepts the group stop-following flag", async () => {
+    const result = await tool.execute({
+      think: "这个群聊暂时没有需要继续跟进的信息，等再次明确叫我时再参与。",
+      stop_following_group: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.content).toBe(
+      "这个群聊暂时没有需要继续跟进的信息，等再次明确叫我时再参与。",
+    );
+  });
+
   it("rejects think that becomes empty after normalization", async () => {
     const result = await tool.execute({ think: "\\n\n\r\n" });
 
@@ -57,6 +71,16 @@ describe("KeepSilenceTool", () => {
 
   it("rejects empty think", async () => {
     const result = await tool.execute({ think: "" });
+
+    expect(result.success).toBe(false);
+    expect(result.content).toContain("Invalid structured reply");
+  });
+
+  it("rejects unknown parameters", async () => {
+    const result = await tool.execute({
+      think: "先停住。",
+      stop_following: true,
+    });
 
     expect(result.success).toBe(false);
     expect(result.content).toContain("Invalid structured reply");

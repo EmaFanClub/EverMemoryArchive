@@ -20,6 +20,7 @@ export interface EmaReplyReceivedEvent {
 /* Emitted when the keep_silence tool is called successfully. */
 export interface KeepSilenceReceivedEvent {
   think: string;
+  stopFollowingGroup?: boolean;
 }
 
 export interface LlmUsageReceivedEvent {

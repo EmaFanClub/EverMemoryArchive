@@ -38,6 +38,12 @@ export class SessionManager {
     this.activityStates.set(conversationId, "inactive");
   }
 
+  listActiveConversationIds(): number[] {
+    return Array.from(this.activityStates.entries())
+      .filter(([, state]) => state === "active")
+      .map(([conversationId]) => conversationId);
+  }
+
   tryPop(conversationId: number, now: number = Date.now()): ActorInput | null {
     return this.queues.get(conversationId)?.tryPop(now) ?? null;
   }
