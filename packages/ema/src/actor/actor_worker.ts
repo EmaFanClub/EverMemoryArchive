@@ -212,11 +212,24 @@ export class ActorWorker {
     });
   }
 
-  private async flushAgentEventTasks(): Promise<void> {
+  private async flushAgentEventTasks(): Promise<unknown | null> {
     if (this.agentEventTasks.size === 0) {
-      return;
+      return null;
     }
-    await Promise.all(Array.from(this.agentEventTasks));
+    const results = await Promise.allSettled(Array.from(this.agentEventTasks));
+    const failures = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failures.length === 0) {
+      return null;
+    }
+    if (failures.length === 1) {
+      return failures[0]!.reason;
+    }
+    return new AggregateError(
+      failures.map((failure) => failure.reason),
+      `${failures.length} agent event tasks failed.`,
+    );
   }
 
   private trackTokenUsageWrite(event: AgentEvent<"llmUsageReceived">): void {
@@ -372,10 +385,14 @@ export class ActorWorker {
         }
         this.setStatus("running");
         this.currentRunPromise = this.agent.runWithState(this.agentState);
+        let runError: unknown = null;
+        let agentEventError: unknown = null;
         try {
           await this.currentRunPromise;
+        } catch (error) {
+          runError = error;
         } finally {
-          await this.flushAgentEventTasks();
+          agentEventError = await this.flushAgentEventTasks();
           await this.flushTokenUsageWrites();
           this.currentRunPromise = null;
           if (
@@ -384,13 +401,19 @@ export class ActorWorker {
           ) {
             this.agentState = null;
           }
-          if (this.queue.length === 0) {
-            this.setStatus("idle");
-            this.events.emit("workFinished", {
-              ok: true,
-              msg: "work finished",
-            });
-          }
+        }
+        if (runError) {
+          throw runError;
+        }
+        if (agentEventError) {
+          throw agentEventError;
+        }
+        if (this.queue.length === 0) {
+          this.setStatus("idle");
+          this.events.emit("workFinished", {
+            ok: true,
+            msg: "work finished",
+          });
         }
       }
     } catch (error) {

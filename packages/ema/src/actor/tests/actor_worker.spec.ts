@@ -176,6 +176,101 @@ describe("ActorWorker token usage context", () => {
     );
   });
 
+  test("flushes token usage writes before reporting failed agent events", async () => {
+    const conversationId = 42;
+    const session = buildSession("qq", "group", "1000");
+    let resolveTokenUsageWrite: (() => void) | undefined;
+    const tokenUsageWrite = new Promise<void>((resolve) => {
+      resolveTokenUsageWrite = resolve;
+    });
+    const server = {
+      dbService: {
+        conversationDB: {
+          getConversation: vi.fn(async () => ({
+            id: conversationId,
+            actorId: 1,
+            session,
+          })),
+        },
+        conversationMessageDB: {
+          reserveMessageId: vi.fn(async () => 7),
+        },
+        getActorLLMConfig: vi.fn(async () => ({
+          model: "gpt-5.5",
+          apiKey: "test",
+          baseUrl: "https://example.com",
+        })),
+        tokenUsageDB: {
+          createTokenUsageRecord: vi.fn(async () => tokenUsageWrite),
+        },
+      },
+      controller: {
+        chat: {
+          publishConversationMessage: vi.fn(async () => undefined),
+        },
+      },
+      memoryManager: {
+        getOwnerUid: vi.fn(async () => "owner"),
+        buildSystemPromptForChat: vi.fn(async () => "system prompt"),
+        persistChatMessage: vi.fn(async () => {
+          throw new Error("persist failed");
+        }),
+        addToBuffer: vi.fn(async () => undefined),
+      },
+    };
+    vi.spyOn(Agent.prototype, "runWithState").mockImplementation(
+      async function (this: Agent, state) {
+        this.events.emit("llmUsageReceived", {
+          createdAt: 1000,
+          model: "gpt-5.5",
+          usageContext: state.usageContext!,
+          usageMetadata: {
+            cachedTokens: 1,
+            promptTokens: 2,
+            thoughtTokens: 3,
+            responseTokens: 4,
+          },
+        });
+        this.events.emit("emaReplyReceived", {
+          reply: {
+            kind: "text",
+            content: "hello",
+            think: "尝试回复。",
+          },
+        });
+      },
+    );
+
+    const worker = await ActorWorker.create(1, conversationId, server as any);
+    const workFinishedEvents: Array<{ ok: boolean; msg: string }> = [];
+    worker.events.on("workFinished", (event) => {
+      workFinishedEvents.push(event);
+    });
+
+    const work = worker.work({
+      kind: "system",
+      conversationId,
+      inputs: [{ type: "text", text: "hi" }],
+    });
+    await vi.waitFor(() => {
+      expect(
+        server.dbService.tokenUsageDB.createTokenUsageRecord,
+      ).toHaveBeenCalled();
+    });
+    await Promise.resolve();
+
+    expect(workFinishedEvents).toEqual([]);
+    resolveTokenUsageWrite?.();
+    await expect(work).rejects.toThrow("persist failed");
+
+    expect(workFinishedEvents).toEqual([
+      expect.objectContaining({
+        ok: false,
+        msg: "persist failed",
+      }),
+    ]);
+  });
+
   test("serializes ema_reply before later stop-following silence", async () => {
     const conversationId = 42;
     const session = buildSession("qq", "group", "1000");
