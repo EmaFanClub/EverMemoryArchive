@@ -248,4 +248,16 @@ describe("SessionManager", () => {
     expect(manager.pickNextConversationId(0)).toBe(3);
     expect(manager.tryPop(2, 0)).toBeNull();
   });
+
+  test("tracks conversation activity state separately from queue items", () => {
+    const manager = new SessionManager(() => {});
+
+    expect(manager.getActivityState(2)).toBe("inactive");
+
+    manager.activateConversation(2);
+    expect(manager.getActivityState(2)).toBe("active");
+
+    manager.deactivateConversation(2);
+    expect(manager.getActivityState(2)).toBe("inactive");
+  });
 });

@@ -6,9 +6,11 @@ import {
 } from "./session_queue";
 
 export type SessionManagerQueueEvent = SessionQueueEvent;
+export type SessionActivityState = "inactive" | "active";
 
 export class SessionManager {
   private readonly queues = new Map<number, SessionQueue<ActorInput>>();
+  private readonly activityStates = new Map<number, SessionActivityState>();
 
   constructor(
     private readonly onQueueUnlocked: (conversationId: number) => void,
@@ -22,6 +24,18 @@ export class SessionManager {
   enqueue(conversationId: number, input: ActorInput): void {
     const queue = this.getOrCreateQueue(conversationId);
     queue.push(input);
+  }
+
+  getActivityState(conversationId: number): SessionActivityState {
+    return this.activityStates.get(conversationId) ?? "inactive";
+  }
+
+  activateConversation(conversationId: number): void {
+    this.activityStates.set(conversationId, "active");
+  }
+
+  deactivateConversation(conversationId: number): void {
+    this.activityStates.set(conversationId, "inactive");
   }
 
   tryPop(conversationId: number, now: number = Date.now()): ActorInput | null {
@@ -48,6 +62,7 @@ export class SessionManager {
     }
     const dropped = queue.dispose();
     this.queues.delete(conversationId);
+    this.activityStates.delete(conversationId);
     return dropped;
   }
 
@@ -56,6 +71,7 @@ export class SessionManager {
       queue.dispose();
     }
     this.queues.clear();
+    this.activityStates.clear();
   }
 
   private getOrCreateQueue(conversationId: number): SessionQueue<ActorInput> {

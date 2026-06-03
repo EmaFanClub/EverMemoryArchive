@@ -3,7 +3,11 @@ import { runActorBackgroundJob } from "../scheduler/jobs/actor.job";
 import type { Server } from "../server";
 import { formatTimestamp, parseTimestamp } from "../shared/utils";
 import type { ActorRecurringScheduleItem } from "../scheduler";
-import type { ChannelEvent } from "../channel";
+import {
+  resolveSession,
+  type ChannelEvent,
+  type ChannelSessionInfo,
+} from "../channel";
 import type {
   ActorChatInput,
   ActorInput,
@@ -34,6 +38,12 @@ export class Actor {
   private status: ActorStatus = "sleep";
   private transition: ActorTransition = null;
   private dayDate: string | null = null;
+  private readonly conversationSessionInfo = new Map<
+    number,
+    ChannelSessionInfo | null
+  >();
+  private readonly enqueueChains = new Map<number, Promise<void>>();
+  private actorDisplayNamePromise: Promise<string> | null = null;
   private readonly logger: Logger;
 
   private constructor(
@@ -241,8 +251,43 @@ export class Actor {
     conversationId: number,
     input: ActorInput,
   ): Promise<void> {
+    const previous =
+      this.enqueueChains.get(conversationId) ?? Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(() => this.enqueueActorInputSerial(conversationId, input));
+    const stored = run
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.enqueueChains.get(conversationId) === stored) {
+          this.enqueueChains.delete(conversationId);
+        }
+      });
+    this.enqueueChains.set(conversationId, stored);
+    return run;
+  }
+
+  private async enqueueActorInputSerial(
+    conversationId: number,
+    input: ActorInput,
+  ): Promise<void> {
     if (input.kind === "chat") {
       await this.server.memoryManager.persistChatMessage(input);
+    }
+    if (await this.shouldBufferGroupInputWithoutQueue(conversationId, input)) {
+      if (input.kind === "chat") {
+        await this.server.memoryManager.addToBuffer(
+          conversationId,
+          input.msgId,
+          false,
+          input.time,
+        );
+      }
+      this.logger.debug("Actor input buffered without enqueue", {
+        conversationId,
+        kind: input.kind,
+      });
+      return;
     }
     this.sessionManager.enqueue(conversationId, input);
     this.logger.debug("Actor input enqueued", {
@@ -260,6 +305,112 @@ export class Actor {
     if (this.currentConversationId === conversationId) {
       this.pumpHeldQueue();
     }
+  }
+
+  private async shouldBufferGroupInputWithoutQueue(
+    conversationId: number,
+    input: ActorInput,
+  ): Promise<boolean> {
+    if (!(await this.isGroupConversation(conversationId))) {
+      return false;
+    }
+    if (this.sessionManager.getActivityState(conversationId) === "active") {
+      return false;
+    }
+    if (await this.isSpecialGroupInput(conversationId, input)) {
+      this.sessionManager.activateConversation(conversationId);
+      return false;
+    }
+    return input.kind === "chat";
+  }
+
+  private async isGroupConversation(conversationId: number): Promise<boolean> {
+    const sessionInfo = await this.getConversationSessionInfo(conversationId);
+    return sessionInfo?.type === "group";
+  }
+
+  private async getConversationSessionInfo(
+    conversationId: number,
+  ): Promise<ChannelSessionInfo | null> {
+    if (this.conversationSessionInfo.has(conversationId)) {
+      return this.conversationSessionInfo.get(conversationId) ?? null;
+    }
+    const conversation =
+      await this.server.dbService.conversationDB.getConversation(
+        conversationId,
+      );
+    const sessionInfo = conversation
+      ? resolveSession(conversation.session)
+      : null;
+    this.conversationSessionInfo.set(conversationId, sessionInfo);
+    return sessionInfo;
+  }
+
+  private async isSpecialGroupInput(
+    conversationId: number,
+    input: ActorInput,
+  ): Promise<boolean> {
+    if (input.kind === "system") {
+      return true;
+    }
+    if (
+      input.inputs.some(
+        (item) => item.type === "text" && item.text.includes("@(YOU)"),
+      )
+    ) {
+      return true;
+    }
+    if (await this.repliesToActorMessage(conversationId, input)) {
+      return true;
+    }
+    const displayName = await this.getActorDisplayName();
+    if (!displayName) {
+      return false;
+    }
+    const normalizedDisplayName = displayName.toLowerCase();
+    return input.inputs.some(
+      (item) =>
+        item.type === "text" &&
+        item.text.toLowerCase().includes(normalizedDisplayName),
+    );
+  }
+
+  private async repliesToActorMessage(
+    conversationId: number,
+    input: ActorChatInput,
+  ): Promise<boolean> {
+    if (!input.replyTo) {
+      return false;
+    }
+    const rows =
+      await this.server.dbService.conversationMessageDB.listConversationMessages(
+        input.replyTo.kind === "msg"
+          ? {
+              conversationId,
+              msgIds: [input.replyTo.msgId],
+              limit: 1,
+            }
+          : {
+              conversationId,
+              channelMessageId: input.replyTo.channelMessageId,
+              limit: 1,
+            },
+      );
+    return rows[0]?.message.kind === "actor";
+  }
+
+  private getActorDisplayName(): Promise<string> {
+    this.actorDisplayNamePromise ??= this.loadActorDisplayName();
+    return this.actorDisplayNamePromise;
+  }
+
+  private async loadActorDisplayName(): Promise<string> {
+    const actor = await this.server.dbService.actorDB.getActor(this.actorId);
+    if (!actor) {
+      return "";
+    }
+    const role = await this.server.dbService.roleDB.getRole(actor.roleId);
+    return role?.name.trim() ?? "";
   }
 
   private async runBootInit(): Promise<void> {
@@ -513,6 +664,8 @@ export class Actor {
   async dispose(): Promise<void> {
     this.stopSleepTimer();
     this.bootInitPromise = null;
+    this.conversationSessionInfo.clear();
+    this.enqueueChains.clear();
     this.sessionManager.clear();
     this.releaseConversation();
     this.status = "sleep";
