@@ -19,8 +19,7 @@ import type {
   ActorScheduleItem,
   ActorScheduleListResult,
 } from "../scheduler/actor_scheduler";
-import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
-import { stickerIdToInlineData } from "../skills/sticker-skill/utils";
+import { ActorStickerStore } from "../stickers";
 import { MEDIA_INLINE_LIMIT_BYTES } from "../channel/utils";
 import {
   buildPromptFromBufferMessage,
@@ -77,6 +76,9 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   constructor(
     private readonly server: Server,
     private readonly workspace: ActorWorkspaceService = new ActorWorkspaceService(),
+    private readonly stickerStore: ActorStickerStore = new ActorStickerStore({
+      workspace,
+    }),
   ) {}
 
   private async getBasePromptValues(actorId: number): Promise<{
@@ -818,7 +820,7 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         })(),
         contents:
           message.ema_reply.kind === "sticker"
-            ? await this.buildStickerReplyContents(message.ema_reply)
+            ? await this.buildStickerReplyContents(actorId, message.ema_reply)
             : message.ema_reply.kind === "image"
               ? await this.buildImageReplyContents(actorId, message.ema_reply)
               : [
@@ -887,14 +889,20 @@ export class MemoryManager implements BufferStorage, ActorMemory {
   }
 
   private async buildStickerReplyContents(
+    actorId: number,
     reply: EmaReply,
   ): Promise<InputContent[]> {
+    await this.stickerStore.ensureActorStickerPacks(actorId);
     const mentionContents = (reply.mention_uids ?? []).map((uid) => ({
       type: "text" as const,
       text: `@(${uid})`,
     }));
-    const stickerText = await formatStickerDisplayText(reply.content);
+    const stickerText = await this.formatStickerDisplayText(
+      actorId,
+      reply.content,
+    );
     const inlineContents = await this.buildStickerInlineContents(
+      actorId,
       reply.content,
       stickerText,
     );
@@ -910,12 +918,19 @@ export class MemoryManager implements BufferStorage, ActorMemory {
    * @returns Inline image contents, or an empty list when the asset cannot be resolved.
    */
   private async buildStickerInlineContents(
+    actorId: number,
     stickerId: string,
     stickerText: string,
   ): Promise<InlineDataItem[]> {
     try {
       return [
-        { ...(await stickerIdToInlineData(stickerId)), text: stickerText },
+        {
+          ...(await this.stickerStore.stickerIdToInlineData(
+            actorId,
+            stickerId,
+          )),
+          text: stickerText,
+        },
       ];
     } catch (error) {
       this.logger.warn(
@@ -923,6 +938,20 @@ export class MemoryManager implements BufferStorage, ActorMemory {
         error,
       );
       return [];
+    }
+  }
+
+  private async formatStickerDisplayText(
+    actorId: number,
+    stickerId: string,
+  ): Promise<string> {
+    try {
+      return await this.stickerStore.formatStickerDisplayText(
+        actorId,
+        stickerId,
+      );
+    } catch {
+      return `[表情：未知表情,id=${stickerId}]`;
     }
   }
 

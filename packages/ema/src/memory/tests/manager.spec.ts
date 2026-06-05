@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { MemoryManager } from "../manager";
+import { ActorStickerStore } from "../../stickers";
 import { ActorWorkspaceService } from "../../workspace/actor_workspace";
 import type { ActorChatResponse } from "../../actor";
 import type { ConversationMessageEntity } from "../../db";
@@ -13,10 +14,12 @@ import { buildSession } from "../../channel";
 describe("MemoryManager", () => {
   let workspaceDir: string;
   let workspace: ActorWorkspaceService;
+  let stickerStore: ActorStickerStore;
 
   beforeEach(async () => {
     workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "ema-memory-"));
     workspace = new ActorWorkspaceService({ workspaceDir });
+    stickerStore = new ActorStickerStore({ workspace });
   });
 
   afterEach(async () => {
@@ -49,6 +52,7 @@ describe("MemoryManager", () => {
         },
       } as any,
       workspace,
+      stickerStore,
     );
     const response: ActorChatResponse = {
       kind: "chat",
@@ -86,6 +90,86 @@ describe("MemoryManager", () => {
           },
         ],
         think: "这张图是对刚才问题的直接回应。",
+      },
+      createdAt: 1000,
+      msgId: 9,
+    });
+  });
+
+  test("persists sticker replies using the actor-scoped store", async () => {
+    const actorOneImage = Buffer.from("actor-one-sticker");
+    const actorTwoImage = Buffer.from("actor-two-sticker");
+    await stickerStore.createCollectedSticker(1, "shared", "一号", "一号表情", {
+      type: "inline_data",
+      mimeType: "image/png",
+      data: actorOneImage.toString("base64"),
+    });
+    await stickerStore.createCollectedSticker(2, "shared", "二号", "二号表情", {
+      type: "inline_data",
+      mimeType: "image/png",
+      data: actorTwoImage.toString("base64"),
+    });
+    const addConversationMessage = vi.fn(async () => undefined);
+    const manager = new MemoryManager(
+      {
+        dbService: {
+          conversationDB: {
+            getConversation: vi.fn(async () => ({
+              id: 7,
+              actorId: 2,
+              session: "web-chat-owner",
+            })),
+          },
+          actorDB: {
+            getActor: vi.fn(async () => ({ id: 2, roleId: 2 })),
+          },
+          roleDB: {
+            getRole: vi.fn(async () => ({ id: 2, name: "艾玛" })),
+          },
+          conversationMessageDB: {
+            addConversationMessage,
+          },
+        },
+      } as any,
+      workspace,
+      stickerStore,
+    );
+    const response: ActorChatResponse = {
+      kind: "chat",
+      actorId: 2,
+      conversationId: 7,
+      msgId: 9,
+      session: "web-chat-owner",
+      ema_reply: {
+        kind: "sticker",
+        think: "表情更贴切。",
+        content: "shared",
+        mention_uids: ["owner"],
+      },
+      time: 1000,
+    };
+
+    await manager.persistChatMessage(response);
+
+    expect(addConversationMessage).toHaveBeenCalledWith({
+      conversationId: 7,
+      actorId: 2,
+      channelMessageId: "7:9",
+      buffered: false,
+      message: {
+        kind: "actor",
+        msgId: 9,
+        name: "艾玛",
+        contents: [
+          { type: "text", text: "@(owner)" },
+          {
+            type: "inline_data",
+            mimeType: "image/png",
+            data: actorTwoImage.toString("base64"),
+            text: "[表情：收藏/二号,id=shared]",
+          },
+        ],
+        think: "表情更贴切。",
       },
       createdAt: 1000,
       msgId: 9,

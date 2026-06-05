@@ -13,6 +13,7 @@ import type {
   MkdirResult,
   ReadImageDataFileResult,
   MovePathResult,
+  ResolvedActorStickerRoot,
   ReadFileResult,
   ResolvedWorkspacePath,
   ResolveWorkspacePathOptions,
@@ -59,7 +60,36 @@ export class ActorWorkspaceService {
 
   getActorHomeRoot(actorId: number): string {
     this.assertActorId(actorId);
-    return path.join(this.getWorkspaceDir(), `actor_${actorId}`, "home");
+    return path.join(this.getActorRoot(actorId), "home");
+  }
+
+  getActorRoot(actorId: number): string {
+    this.assertActorId(actorId);
+    return path.join(this.getWorkspaceDir(), `actor_${actorId}`);
+  }
+
+  getActorStickerRoot(actorId: number): string {
+    this.assertActorId(actorId);
+    return path.join(this.getActorRoot(actorId), "stickers");
+  }
+
+  async ensureActorStickerRoot(
+    actorId: number,
+  ): Promise<ResolvedActorStickerRoot> {
+    const actorRoot = await this.ensureActorRoot(actorId);
+    const stickerRoot = this.getActorStickerRoot(actorId);
+    await this.ensureDirectoryWithoutSymlink(
+      stickerRoot,
+      false,
+      "actor sticker root",
+    );
+
+    return {
+      actorId,
+      actorRoot,
+      stickerRoot,
+      stickerRootReal: await fs.realpath(stickerRoot),
+    };
   }
 
   async resolvePath(
@@ -804,17 +834,8 @@ export class ActorWorkspaceService {
   private async ensureActorHomeRoot(
     actorId: number,
   ): Promise<{ homeRoot: string; homeRootReal: string }> {
-    const workspaceDir = this.getWorkspaceDir();
-    await this.ensureDirectoryWithoutSymlink(
-      workspaceDir,
-      true,
-      "workspace root",
-    );
-
-    const actorRoot = path.join(workspaceDir, `actor_${actorId}`);
-    await this.ensureDirectoryWithoutSymlink(actorRoot, false, "actor root");
-
-    const homeRoot = path.join(actorRoot, "home");
+    const actorRoot = await this.ensureActorRoot(actorId);
+    const homeRoot = this.getActorHomeRoot(actorId);
     await this.ensureDirectoryWithoutSymlink(
       homeRoot,
       false,
@@ -825,6 +846,20 @@ export class ActorWorkspaceService {
       homeRoot,
       homeRootReal: await fs.realpath(homeRoot),
     };
+  }
+
+  private async ensureActorRoot(actorId: number): Promise<string> {
+    this.assertActorId(actorId);
+    const workspaceDir = this.getWorkspaceDir();
+    await this.ensureDirectoryWithoutSymlink(
+      workspaceDir,
+      true,
+      "workspace root",
+    );
+
+    const actorRoot = this.getActorRoot(actorId);
+    await this.ensureDirectoryWithoutSymlink(actorRoot, false, "actor root");
+    return actorRoot;
   }
 
   private async ensureDirectoryWithoutSymlink(

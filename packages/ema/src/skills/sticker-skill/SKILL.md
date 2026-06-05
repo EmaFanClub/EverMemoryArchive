@@ -17,13 +17,25 @@ description: 该技能用于查看可用表情包，并在聊天中选择合适�
 
 真正发送表情包时，仍然必须调用 `ema_reply`，并将 `kind` 填为 `sticker`、`content` 填为表情包 id。
 
-## 可用表情包
+## 查询可用表情
 
-{AVAILABLE_STICKERS}
+选择表情前，先调用 `exec_skill(sticker-skill, { action: "list" })` 查询当前 actor 可用的表情包列表。列表结果会按包名展示 sticker id、名称和说明。不要依赖其他 actor 的表情列表，也不要假设不同 actor 拥有相同表情。
 
 ## 支持的模式
 
-### 1. `preview`
+### 1. `list`
+
+列出当前 actor 可用表情。
+
+参数：
+
+- `action`: `"list"`
+
+返回：
+
+- `content`: markdown 格式的当前 actor 表情包列表
+
+### 2. `preview`
 
 预览某个表情的原图。
 
@@ -38,7 +50,7 @@ description: 该技能用于查看可用表情包，并在聊天中选择合适�
 - `content`: 该表情的文字说明
 - `parts`: 该表情的原图
 
-### 2. `update`
+### 3. `update`
 
 修改某个表情包的名称和描述。
 
@@ -50,14 +62,14 @@ description: 该技能用于查看可用表情包，并在聊天中选择合适�
 - `name`: 新名称
 - `description`: 新描述
 
-### 3. `create`
+### 4. `create`
 
 把当前会话某条消息中的图片收藏为新表情。
 
 参数：
 
 - `action`: `"create"`
-- `id`: 新表情包 id，全局唯一
+- `id`: 新表情包 id，当前 actor 唯一
 - `name`: 新表情包名称
 - `description`: 新表情包描述
 - `msg_id`: 来源消息的 msg_id

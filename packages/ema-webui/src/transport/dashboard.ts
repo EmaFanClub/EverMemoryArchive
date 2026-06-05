@@ -20,6 +20,10 @@ import type {
   ActorQQConversationPatchRequest,
   ActorQQSaveResponse,
   ActorSettingsResponse,
+  ActorStickerListResponse,
+  ActorStickerPackPatchRequest,
+  ActorStickerPatchRequest,
+  ActorStickerMutationResponse,
   ActorTrainingClearResponse,
   ActorTrainingStartResponse,
   ActorTokenUsageSummaryResponse,
@@ -166,6 +170,124 @@ export function getActorTokenUsage(
     {
       method: "GET",
       ...init,
+    },
+  );
+}
+
+export function getActorStickers(actorId: string) {
+  return fetchJson<ActorStickerListResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers`,
+    {
+      method: "GET",
+    },
+  );
+}
+
+export function importActorStickerPack(actorId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return fetchJson<ActorStickerMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers/import`,
+    {
+      method: "POST",
+      body: form,
+    },
+  );
+}
+
+export async function exportActorStickerPack(
+  actorId: string,
+  packDirName: string,
+) {
+  const response = await fetch(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers/${encodeURIComponent(packDirName)}/export`,
+    {
+      method: "GET",
+    },
+  );
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok) {
+    const payload = contentType.includes("application/json")
+      ? await response.json().catch(() => null)
+      : await response.text().catch(() => "");
+    throw new Error(
+      extractMessage(payload) || `${response.status} ${response.statusText}`,
+    );
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName:
+      fileNameFromContentDisposition(
+        response.headers.get("content-disposition"),
+      ) ?? "stickers.emapack",
+  };
+}
+
+export function deleteActorStickerPack(actorId: string, packDirName: string) {
+  return fetchJson<ActorStickerMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers/${encodeURIComponent(packDirName)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export function patchActorStickerPack(
+  actorId: string,
+  packDirName: string,
+  patch: ActorStickerPackPatchRequest,
+) {
+  return fetchJson<ActorStickerMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers/${encodeURIComponent(packDirName)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+  );
+}
+
+function fileNameFromContentDisposition(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const encoded = value.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return encoded;
+    }
+  }
+  return value.match(/filename="([^"]+)"/i)?.[1] ?? null;
+}
+
+export function patchActorSticker(
+  actorId: string,
+  packDirName: string,
+  stickerId: string,
+  patch: ActorStickerPatchRequest,
+) {
+  return fetchJson<ActorStickerMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers/${encodeURIComponent(packDirName)}/items/${encodeURIComponent(stickerId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+  );
+}
+
+export function deleteActorSticker(
+  actorId: string,
+  packDirName: string,
+  stickerId: string,
+) {
+  return fetchJson<ActorStickerMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers/${encodeURIComponent(packDirName)}/items/${encodeURIComponent(stickerId)}`,
+    {
+      method: "DELETE",
     },
   );
 }

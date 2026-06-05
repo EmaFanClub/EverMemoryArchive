@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { MEDIA_INLINE_LIMIT_BYTES } from "../channel/utils";
-import { getStickerById } from "../skills/sticker-skill/pack";
+import { ActorStickerStore } from "../stickers";
 import { ActorWorkspaceService } from "../workspace/actor_workspace";
 import { Tool } from "./base";
 import type { ToolResult, ToolContext } from "./base";
@@ -44,7 +44,7 @@ const EMA_REPLY_TOOL_DESCRIPTION = `
 
 当 \`kind\` 为 \`text\` 时，\`content\` 填文本内容；当 \`kind\` 为 \`sticker\` 时，\`content\` 必须填写合法的表情包 id；当 \`kind\` 为 \`image\` 时，\`content\` 填私人工作区中的图片虚拟路径。
 
-\`kind="sticker"\` 适合情绪回应、接梗、轻量冒泡、回应表情包，或避免用文字过度解释。若不知道可用表情 id，先读取 \`sticker-skill\` 查看可用表情，再用 \`ema_reply(kind="sticker")\` 发送。
+\`kind="sticker"\` 适合情绪回应、接梗、轻量冒泡、回应表情包，或避免用文字过度解释。若不知道可用表情 id，先调用 \`exec_skill(sticker-skill, { action: "list" })\` 查看当前 actor 可用表情，再用 \`ema_reply(kind="sticker")\` 发送。
 
 \`kind="image"\` 适合发送已经保存到工作区中的图片。图片路径必须来自 \`file_tool\` 或 \`save_file\` 返回的虚拟路径。如果还需要补充文字，请在图片发送成功后再次调用 \`ema_reply(kind="text")\`。
 
@@ -91,10 +91,15 @@ const EMA_REPLY_TOOL_DESCRIPTION = `
 /** Tool that enforces JSON output matching the EmaReply shape. */
 export class EmaReplyTool extends Tool {
   private readonly workspace: ActorWorkspaceService;
+  private readonly stickerStore: ActorStickerStore;
 
-  constructor(workspace: ActorWorkspaceService = new ActorWorkspaceService()) {
+  constructor(
+    workspace: ActorWorkspaceService = new ActorWorkspaceService(),
+    stickerStore: ActorStickerStore = new ActorStickerStore({ workspace }),
+  ) {
     super();
     this.workspace = workspace;
+    this.stickerStore = stickerStore;
   }
 
   /** Returns the unique tool name. */
@@ -129,11 +134,14 @@ export class EmaReplyTool extends Tool {
           payload.content = payload.content.replaceAll("\\n", "\n");
           break;
         case "sticker":
-          if (!(await getStickerById(payload.content))) {
-            return {
-              success: false,
-              content: `Unknown sticker id: ${payload.content}. Use get_skill to inspect sticker-skill first.`,
-            };
+          {
+            const contextError = await this.validateStickerReply(
+              payload,
+              context,
+            );
+            if (contextError) {
+              return contextError;
+            }
           }
           break;
         case "image": {
@@ -188,6 +196,42 @@ export class EmaReplyTool extends Tool {
         content: `Invalid image reply: ${sanitizeFileErrorMessage(error)}`,
       };
     }
+  }
+
+  private async validateStickerReply(
+    payload: EmaReply,
+    context?: ToolContext,
+  ): Promise<ToolResult | null> {
+    if (typeof context?.actorId !== "number") {
+      return {
+        success: false,
+        content: "Invalid structured reply: missing actorId for sticker reply.",
+      };
+    }
+
+    let exists: boolean;
+    try {
+      await this.stickerStore.ensureActorStickerPacks(context.actorId);
+      exists = Boolean(
+        await this.stickerStore.getStickerById(
+          context.actorId,
+          payload.content,
+        ),
+      );
+    } catch (error) {
+      return {
+        success: false,
+        content: `Failed to validate sticker reply: ${sanitizeFileErrorMessage(error)}`,
+      };
+    }
+
+    if (!exists) {
+      return {
+        success: false,
+        content: `Unknown sticker id: ${payload.content}. Use exec_skill(sticker-skill, { action: "list" }) to inspect current actor stickers first.`,
+      };
+    }
+    return null;
   }
 }
 

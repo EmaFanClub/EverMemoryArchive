@@ -1,6 +1,5 @@
 import { MEDIA_INLINE_LIMIT_BYTES } from "../channel/utils";
-import { formatStickerDisplayText } from "../skills/sticker-skill/pack";
-import { stickerIdToBase64 } from "../skills/sticker-skill/utils";
+import { ActorStickerStore } from "../stickers";
 import { formatImageReplyMediaText } from "../tools/ema_reply_tool";
 import { ActorWorkspaceService } from "../workspace/actor_workspace";
 import type { ActorChatResponse } from "./base";
@@ -11,6 +10,7 @@ interface OutboundResponseLogger {
 
 interface BuildOutboundActorChatResponseOptions {
   workspace?: ActorWorkspaceService;
+  stickerStore?: ActorStickerStore;
   logger?: OutboundResponseLogger;
 }
 
@@ -19,7 +19,7 @@ export async function buildOutboundActorChatResponse(
   options: BuildOutboundActorChatResponseOptions = {},
 ): Promise<ActorChatResponse> {
   if (response.ema_reply.kind === "sticker") {
-    return await buildStickerOutboundResponse(response, options.logger);
+    return await buildStickerOutboundResponse(response, options);
   }
   if (response.ema_reply.kind === "image") {
     return await buildImageOutboundResponse(response, options);
@@ -29,18 +29,27 @@ export async function buildOutboundActorChatResponse(
 
 async function buildStickerOutboundResponse(
   response: ActorChatResponse,
-  logger?: OutboundResponseLogger,
+  options: BuildOutboundActorChatResponseOptions,
 ): Promise<ActorChatResponse> {
+  const stickerStore =
+    options.stickerStore ??
+    new ActorStickerStore(
+      options.workspace ? { workspace: options.workspace } : {},
+    );
   try {
+    await stickerStore.ensureActorStickerPacks(response.actorId);
     return {
       ...response,
       ema_reply: {
         ...response.ema_reply,
-        content: await stickerIdToBase64(response.ema_reply.content),
+        content: await stickerStore.stickerIdToBase64(
+          response.actorId,
+          response.ema_reply.content,
+        ),
       },
     };
   } catch (error) {
-    logger?.warn(
+    options.logger?.warn(
       `Failed to resolve sticker '${response.ema_reply.content}', falling back to text proxy.`,
       error,
     );
@@ -49,9 +58,25 @@ async function buildStickerOutboundResponse(
       ema_reply: {
         ...response.ema_reply,
         kind: "text",
-        content: await formatStickerDisplayText(response.ema_reply.content),
+        content: await formatStickerFallbackText(
+          stickerStore,
+          response.actorId,
+          response.ema_reply.content,
+        ),
       },
     };
+  }
+}
+
+async function formatStickerFallbackText(
+  stickerStore: ActorStickerStore,
+  actorId: number,
+  id: string,
+): Promise<string> {
+  try {
+    return await stickerStore.formatStickerDisplayText(actorId, id);
+  } catch {
+    return `[表情：未知表情,id=${id}]`;
   }
 }
 

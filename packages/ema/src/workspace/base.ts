@@ -14,6 +14,13 @@ export interface ResolvedWorkspacePath {
   homeRootReal: string;
 }
 
+export interface ResolvedActorStickerRoot {
+  actorId: number;
+  actorRoot: string;
+  stickerRoot: string;
+  stickerRootReal: string;
+}
+
 export interface ResolveWorkspacePathOptions {
   allowRoot?: boolean;
   mustExist?: boolean;

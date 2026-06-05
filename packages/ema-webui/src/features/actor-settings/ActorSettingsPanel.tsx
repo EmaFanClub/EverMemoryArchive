@@ -10,6 +10,7 @@ import {
   type ChangeEvent as ReactChangeEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import {
   Activity,
   Bot,
@@ -18,6 +19,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock3,
+  Download,
   Globe,
   GraduationCap,
   Info,
@@ -38,6 +40,7 @@ import {
   Terminal,
   Trash2,
   Unlink,
+  Upload,
   User,
   Users,
   X,
@@ -49,8 +52,15 @@ import {
   createActorQqConversation,
   deleteActor,
   deleteActorQqConversation,
+  deleteActorSticker,
+  deleteActorStickerPack,
+  exportActorStickerPack,
   getActorConversation,
   getActorSettings,
+  getActorStickers,
+  importActorStickerPack,
+  patchActorSticker,
+  patchActorStickerPack,
   patchActorConversation,
   patchActorQqConversation,
   runActorLlmCheck,
@@ -82,6 +92,9 @@ import type {
   ActorRuntimeTransition,
   ActorSettingsSnapshot,
   ActorSummary,
+  ActorStickerItem,
+  ActorStickerListResponse,
+  ActorStickerPack,
   ActorTrainingUiState,
   ActorWebSearchConfig,
   LlmModelOption,
@@ -151,6 +164,26 @@ interface QqConversationEditorState {
   draft: QqConversationDraft;
   original?: QqConversationDraft;
   validation: ReturnType<typeof validateQqConversationDraft>;
+}
+
+interface StickerMetadataEditorState {
+  packDirName: string;
+  sticker: ActorStickerItem;
+  id: string;
+  name: string;
+  description: string;
+  validation: string | null;
+}
+
+interface StickerPackNameEditorState {
+  pack: ActorStickerPack;
+  name: string;
+  validation: string | null;
+}
+
+interface StickerDeleteItemTarget {
+  pack: ActorStickerPack;
+  sticker: ActorStickerItem;
 }
 
 const useIsomorphicLayoutEffect =
@@ -448,6 +481,27 @@ function formatSecretStatus(value: string) {
 
 function messageFromError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isSafeStickerId(value: string) {
+  return (
+    value !== "." &&
+    value !== ".." &&
+    !value.includes("/") &&
+    !value.includes("\\") &&
+    !value.includes("\0")
+  );
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function buildGlobalLlmSummaryRows(
@@ -2348,7 +2402,12 @@ export function ActorSettingsPanel({
               onCancelClose={() => setQqUnsavedDialogVisible(false)}
               onDiscardAndClose={discardQqChangesAndClose}
             />
-          ) : ["表情包", "微信", "Telegram"].includes(detailTitle) ? (
+          ) : detailTitle === "表情包" ? (
+            <ActorStickerSettingsDetail
+              actorId={actorId}
+              onToast={showSettingsToast}
+            />
+          ) : ["微信", "Telegram"].includes(detailTitle) ? (
             <ActorComingSoonSettingsDetail />
           ) : null}
         </div>
@@ -3528,6 +3587,655 @@ function ActorSearchSettingsDetail({
   );
 }
 
+function ActorStickerSettingsDetail({
+  actorId,
+  onToast,
+}: {
+  actorId: string;
+  onToast: (message: string, kind: SettingsToastState["kind"]) => void;
+}) {
+  const [stickers, setStickers] = useState<ActorStickerListResponse | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [importErrorMessage, setImportErrorMessage] = useState<string | null>(
+    null,
+  );
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ActorStickerPack | null>(
+    null,
+  );
+  const [deleteItemTarget, setDeleteItemTarget] =
+    useState<StickerDeleteItemTarget | null>(null);
+  const [packEditorState, setPackEditorState] =
+    useState<StickerPackNameEditorState | null>(null);
+  const [editorState, setEditorState] =
+    useState<StickerMetadataEditorState | null>(null);
+  const [expandedPackDirNames, setExpandedPackDirNames] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const loadRunRef = useRef(0);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const totalStickerCount =
+    stickers?.packs.reduce((sum, pack) => sum + pack.stickerCount, 0) ?? 0;
+
+  const loadStickers = useCallback(async () => {
+    const runId = ++loadRunRef.current;
+    setLoading(true);
+    setErrorMessage(null);
+    setImportErrorMessage(null);
+
+    try {
+      const response = await getActorStickers(actorId);
+      if (runId !== loadRunRef.current) {
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(response.error?.message ?? "sticker load failed");
+      }
+      setStickers(response);
+    } catch (error) {
+      if (runId !== loadRunRef.current) {
+        return;
+      }
+      setErrorMessage(messageFromError(error));
+    } finally {
+      if (runId === loadRunRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [actorId]);
+
+  useEffect(() => {
+    setExpandedPackDirNames(new Set());
+    void loadStickers();
+  }, [loadStickers]);
+
+  function togglePackExpanded(packDirName: string) {
+    setExpandedPackDirNames((current) => {
+      const next = new Set(current);
+      if (next.has(packDirName)) {
+        next.delete(packDirName);
+      } else {
+        next.add(packDirName);
+      }
+      return next;
+    });
+  }
+
+  function replacePack(pack: ActorStickerPack) {
+    setStickers((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        packs: current.packs.map((item) =>
+          item.dirName === pack.dirName ? pack : item,
+        ),
+      };
+    });
+  }
+
+  async function importPack(file: File) {
+    if (savingKey !== null) {
+      return;
+    }
+    const key = "import";
+    setSavingKey(key);
+    setImportErrorMessage(null);
+    try {
+      const response = await importActorStickerPack(actorId, file);
+      if (!response.ok) {
+        throw new Error(response.error?.message ?? "import failed");
+      }
+      await loadStickers();
+      onToast("已导入表情包", "success");
+    } catch (error) {
+      setImportErrorMessage(messageFromError(error) || "导入失败");
+    } finally {
+      setSavingKey((current) => (current === key ? null : current));
+    }
+  }
+
+  async function exportPack(pack: ActorStickerPack) {
+    if (savingKey !== null) {
+      return;
+    }
+    const key = `export:${pack.dirName}`;
+    setSavingKey(key);
+    try {
+      const result = await exportActorStickerPack(actorId, pack.dirName);
+      downloadBlob(result.blob, result.fileName);
+      onToast("已导出表情包", "success");
+    } catch (error) {
+      onToast(messageFromError(error) || "导出失败", "error");
+    } finally {
+      setSavingKey((current) => (current === key ? null : current));
+    }
+  }
+
+  function handleImportFileChange(event: ReactChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (file) {
+      void importPack(file);
+    }
+  }
+
+  async function deletePack(pack: ActorStickerPack) {
+    if (savingKey !== null) {
+      return;
+    }
+    const key = `delete:${pack.dirName}`;
+    setSavingKey(key);
+    try {
+      const response = await deleteActorStickerPack(actorId, pack.dirName);
+      if (!response.ok) {
+        throw new Error(response.error?.message ?? "delete failed");
+      }
+      await loadStickers();
+      setDeleteTarget(null);
+      onToast("已删除表情包", "success");
+    } catch (error) {
+      onToast(messageFromError(error) || "删除失败", "error");
+    } finally {
+      setSavingKey((current) => (current === key ? null : current));
+    }
+  }
+
+  function openPackNameEditor(pack: ActorStickerPack) {
+    if (savingKey !== null || pack.dirName === "收藏") {
+      return;
+    }
+    setPackEditorState({
+      pack,
+      name: pack.name,
+      validation: null,
+    });
+  }
+
+  function updatePackNameEditor(name: string) {
+    setPackEditorState((current) =>
+      current
+        ? {
+            ...current,
+            name,
+            validation: null,
+          }
+        : current,
+    );
+  }
+
+  async function savePackNameEditor() {
+    if (!packEditorState || savingKey !== null) {
+      return;
+    }
+
+    const name = packEditorState.name.trim();
+    if (!name) {
+      setPackEditorState({
+        ...packEditorState,
+        validation: "表情包名称不能为空",
+      });
+      return;
+    }
+    if (name === packEditorState.pack.name) {
+      return;
+    }
+
+    const key = `edit-pack:${packEditorState.pack.dirName}`;
+    setSavingKey(key);
+    try {
+      const response = await patchActorStickerPack(
+        actorId,
+        packEditorState.pack.dirName,
+        { name },
+      );
+      if (!response.ok || !response.pack) {
+        throw new Error(response.error?.message ?? "save failed");
+      }
+      replacePack(response.pack);
+      setPackEditorState(null);
+      onToast("已修改表情包名称", "success");
+    } catch (error) {
+      setPackEditorState((current) =>
+        current?.pack.dirName === packEditorState.pack.dirName
+          ? {
+              ...current,
+              validation: messageFromError(error) || "保存失败",
+            }
+          : current,
+      );
+    } finally {
+      setSavingKey((current) => (current === key ? null : current));
+    }
+  }
+
+  function openMetadataEditor(
+    pack: ActorStickerPack,
+    sticker: ActorStickerItem,
+  ) {
+    if (savingKey !== null) {
+      return;
+    }
+    setEditorState({
+      packDirName: pack.dirName,
+      sticker,
+      id: sticker.id,
+      name: sticker.name,
+      description: sticker.description,
+      validation: null,
+    });
+  }
+
+  function updateMetadataEditor(
+    patch: Partial<
+      Pick<StickerMetadataEditorState, "id" | "name" | "description">
+    >,
+  ) {
+    setEditorState((current) =>
+      current
+        ? {
+            ...current,
+            ...patch,
+            validation: null,
+          }
+        : current,
+    );
+  }
+
+  async function saveMetadataEditor() {
+    if (!editorState || savingKey !== null) {
+      return;
+    }
+
+    const id = editorState.id.trim();
+    const name = editorState.name.trim();
+    const description = editorState.description.trim();
+    if (!id || !name || !description) {
+      setEditorState({
+        ...editorState,
+        validation: "id、名称和说明不能为空",
+      });
+      return;
+    }
+    if (!isSafeStickerId(id)) {
+      setEditorState({
+        ...editorState,
+        validation: "id 不能包含路径分隔符，也不能是 . 或 ..",
+      });
+      return;
+    }
+
+    const key = `edit:${editorState.packDirName}:${editorState.sticker.id}`;
+    setSavingKey(key);
+    try {
+      const response = await patchActorSticker(
+        actorId,
+        editorState.packDirName,
+        editorState.sticker.id,
+        { id, name, description },
+      );
+      if (!response.ok || !response.pack) {
+        throw new Error(response.error?.message ?? "save failed");
+      }
+      replacePack(response.pack);
+      setEditorState(null);
+      onToast("保存成功", "success");
+    } catch (error) {
+      setEditorState((current) =>
+        current?.packDirName === editorState.packDirName &&
+        current.sticker.id === editorState.sticker.id
+          ? {
+              ...current,
+              validation: messageFromError(error) || "保存失败",
+            }
+          : current,
+      );
+    } finally {
+      setSavingKey((current) => (current === key ? null : current));
+    }
+  }
+
+  async function deleteStickerItem(target: StickerDeleteItemTarget) {
+    if (savingKey !== null) {
+      return;
+    }
+    const key = `delete-item:${target.pack.dirName}:${target.sticker.id}`;
+    setSavingKey(key);
+    try {
+      const response = await deleteActorSticker(
+        actorId,
+        target.pack.dirName,
+        target.sticker.id,
+      );
+      if (!response.ok || !response.pack) {
+        throw new Error(response.error?.message ?? "delete failed");
+      }
+      replacePack(response.pack);
+      setDeleteItemTarget(null);
+      onToast("已删除表情", "success");
+    } catch (error) {
+      onToast(messageFromError(error) || "删除失败", "error");
+    } finally {
+      setSavingKey((current) => (current === key ? null : current));
+    }
+  }
+
+  const isSaving = savingKey !== null;
+
+  return (
+    <>
+      <div className={styles.llmSettingsBody} aria-busy={loading}>
+        <div className={styles.llmSettingsContent}>
+          <section className={styles.stickerSummary} aria-label="表情包概览">
+            <div>
+              <span>表情包</span>
+              <strong>{stickers?.packs.length ?? 0}</strong>
+            </div>
+            <div>
+              <span>表情</span>
+              <strong>{totalStickerCount}</strong>
+            </div>
+            <button
+              type="button"
+              className={styles.qqConversationAddButton}
+              disabled={loading || isSaving}
+              onClick={() => importInputRef.current?.click()}
+            >
+              {savingKey === "import" ? (
+                <LoaderCircle aria-hidden="true" />
+              ) : (
+                <Upload aria-hidden="true" />
+              )}
+              <span>{savingKey === "import" ? "导入中" : "导入"}</span>
+            </button>
+            <button
+              type="button"
+              className={styles.qqConversationAddButton}
+              disabled={loading || isSaving}
+              onClick={() => {
+                void loadStickers();
+              }}
+            >
+              {loading ? (
+                <LoaderCircle aria-hidden="true" />
+              ) : (
+                <Clock3 aria-hidden="true" />
+              )}
+              <span>{loading ? "刷新中" : "刷新"}</span>
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".emapack,application/octet-stream"
+              hidden
+              onChange={handleImportFileChange}
+            />
+          </section>
+
+          {errorMessage ? (
+            <section
+              className={`${styles.settingsInfoCard} ${styles.settingsInfoCardError}`}
+              role="alert"
+            >
+              <X aria-hidden="true" />
+              <span>
+                <strong>读取失败</strong>
+                <small>{errorMessage}</small>
+              </span>
+            </section>
+          ) : null}
+
+          {importErrorMessage ? (
+            <section
+              className={`${styles.settingsInfoCard} ${styles.settingsInfoCardError}`}
+              role="alert"
+            >
+              <X aria-hidden="true" />
+              <span>
+                <strong>导入失败</strong>
+                <small>{importErrorMessage}</small>
+              </span>
+            </section>
+          ) : null}
+
+          {loading && !stickers ? (
+            <div className={styles.qqConversationEmpty}>
+              <span>正在读取表情包</span>
+            </div>
+          ) : null}
+
+          {stickers && stickers.packs.length > 0 ? (
+            <section
+              className={styles.stickerPackList}
+              aria-label="已安装表情包"
+            >
+              {stickers.packs.map((pack) => (
+                <ActorStickerPackCard
+                  key={pack.dirName}
+                  pack={pack}
+                  isSaving={isSaving}
+                  expanded={expandedPackDirNames.has(pack.dirName)}
+                  onToggleExpanded={togglePackExpanded}
+                  onDeletePack={setDeleteTarget}
+                  onExportPack={(stickerPack) => {
+                    void exportPack(stickerPack);
+                  }}
+                  onEditPack={openPackNameEditor}
+                  onDeleteSticker={(stickerPack, sticker) =>
+                    setDeleteItemTarget({ pack: stickerPack, sticker })
+                  }
+                  onEdit={openMetadataEditor}
+                />
+              ))}
+            </section>
+          ) : stickers && !loading ? (
+            <div className={styles.qqConversationEmpty}>
+              <span>没有已安装表情包</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {editorState ? (
+        <StickerMetadataEditorDialog
+          state={editorState}
+          isSaving={
+            savingKey ===
+            `edit:${editorState.packDirName}:${editorState.sticker.id}`
+          }
+          onChange={updateMetadataEditor}
+          onCancel={() => setEditorState(null)}
+          onConfirm={() => {
+            void saveMetadataEditor();
+          }}
+        />
+      ) : null}
+
+      {packEditorState ? (
+        <StickerPackNameEditorDialog
+          state={packEditorState}
+          isSaving={savingKey === `edit-pack:${packEditorState.pack.dirName}`}
+          onChange={updatePackNameEditor}
+          onCancel={() => setPackEditorState(null)}
+          onConfirm={() => {
+            void savePackNameEditor();
+          }}
+        />
+      ) : null}
+
+      {deleteTarget ? (
+        <StickerDeletePackDialog
+          pack={deleteTarget}
+          isSaving={savingKey === `delete:${deleteTarget.dirName}`}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            void deletePack(deleteTarget);
+          }}
+        />
+      ) : null}
+
+      {deleteItemTarget ? (
+        <StickerDeleteItemDialog
+          target={deleteItemTarget}
+          isSaving={
+            savingKey ===
+            `delete-item:${deleteItemTarget.pack.dirName}:${deleteItemTarget.sticker.id}`
+          }
+          onCancel={() => setDeleteItemTarget(null)}
+          onConfirm={() => {
+            void deleteStickerItem(deleteItemTarget);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function ActorStickerPackCard({
+  pack,
+  isSaving,
+  expanded,
+  onToggleExpanded,
+  onDeletePack,
+  onExportPack,
+  onEditPack,
+  onDeleteSticker,
+  onEdit,
+}: {
+  pack: ActorStickerPack;
+  isSaving: boolean;
+  expanded: boolean;
+  onToggleExpanded: (packDirName: string) => void;
+  onDeletePack: (pack: ActorStickerPack) => void;
+  onExportPack: (pack: ActorStickerPack) => void;
+  onEditPack: (pack: ActorStickerPack) => void;
+  onDeleteSticker: (pack: ActorStickerPack, sticker: ActorStickerItem) => void;
+  onEdit: (pack: ActorStickerPack, sticker: ActorStickerItem) => void;
+}) {
+  const isCollectionPack = pack.dirName === "收藏";
+
+  return (
+    <article className={styles.stickerPackCard}>
+      <div className={styles.stickerPackHeader}>
+        <button
+          type="button"
+          className={styles.stickerPackToggleButton}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "折叠" : "展开"} ${pack.name}`}
+          onClick={() => onToggleExpanded(pack.dirName)}
+        >
+          {expanded ? (
+            <ChevronDown aria-hidden="true" />
+          ) : (
+            <ChevronRight aria-hidden="true" />
+          )}
+          <span className={styles.stickerPackTitle}>
+            <strong>{pack.name}</strong>
+            <span>{pack.stickerCount} 个表情</span>
+          </span>
+        </button>
+        <div className={styles.stickerPackActions}>
+          {isCollectionPack ? null : (
+            <button
+              type="button"
+              className={styles.stickerPackEditButton}
+              aria-label={`修改 ${pack.name} 名称`}
+              disabled={isSaving}
+              onClick={() => onEditPack(pack)}
+            >
+              <Pencil aria-hidden="true" />
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.stickerPackExportButton}
+            aria-label={`导出 ${pack.name}`}
+            disabled={isSaving}
+            onClick={() => onExportPack(pack)}
+          >
+            <Download aria-hidden="true" />
+          </button>
+          {isCollectionPack ? null : (
+            <button
+              type="button"
+              className={styles.stickerPackDeleteButton}
+              aria-label={`删除 ${pack.name}`}
+              disabled={isSaving}
+              onClick={() => onDeletePack(pack)}
+            >
+              <Trash2 aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {expanded && pack.stickers.length > 0 ? (
+        <div className={styles.stickerItemList}>
+          {pack.stickers.map((sticker) => (
+            <div key={sticker.id} className={styles.stickerItem}>
+              <button
+                type="button"
+                className={styles.stickerItemEditButton}
+                disabled={isSaving}
+                onClick={() => onEdit(pack, sticker)}
+              >
+                <StickerPreviewThumb sticker={sticker} />
+                <span className={styles.stickerItemText}>
+                  <strong>{sticker.name}</strong>
+                  <span>{sticker.description}</span>
+                  <code>{sticker.id}</code>
+                </span>
+                <Pencil aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className={styles.stickerItemDeleteButton}
+                aria-label={`删除 ${sticker.name}`}
+                disabled={isSaving}
+                onClick={() => onDeleteSticker(pack, sticker)}
+              >
+                <Trash2 aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : expanded ? (
+        <div className={styles.stickerPackEmpty}>
+          <span>暂无表情</span>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function StickerPreviewThumb({ sticker }: { sticker: ActorStickerItem }) {
+  const [failed, setFailed] = useState(false);
+  const previewUrl = sticker.previewUrl;
+
+  return (
+    <span className={styles.stickerPreview}>
+      {previewUrl && !failed ? (
+        <Image
+          src={previewUrl}
+          alt=""
+          width={42}
+          height={42}
+          loading="lazy"
+          unoptimized
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <Smile aria-hidden="true" />
+      )}
+    </span>
+  );
+}
+
 function ActorQqSettingsDetail({
   actorId,
   savedSettings,
@@ -4457,7 +5165,12 @@ function QqConversationEditorDialog({
                 : "私聊会话会对应一个 QQ 号"}
             </p>
           </div>
-          <button type="button" aria-label="关闭" onClick={onCancel}>
+          <button
+            type="button"
+            aria-label="关闭"
+            disabled={isSaving}
+            onClick={onCancel}
+          >
             <X aria-hidden="true" />
           </button>
         </div>
@@ -4607,6 +5320,289 @@ function QqDeleteConversationDialog({
       <div className={styles.llmUnsavedDialog}>
         <h4>删除会话？</h4>
         <p>确定删除「{formatQqSessionId(conversation)}」吗？</p>
+        <div className={styles.llmUnsavedActions}>
+          <button type="button" disabled={isSaving} onClick={onCancel}>
+            取消
+          </button>
+          <button
+            type="button"
+            className={styles.llmUnsavedDangerButton}
+            disabled={isSaving}
+            onClick={onConfirm}
+          >
+            {isSaving ? "删除中" : "删除"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StickerMetadataEditorDialog({
+  state,
+  isSaving,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  state: StickerMetadataEditorState;
+  isSaving: boolean;
+  onChange: (
+    patch: Partial<
+      Pick<StickerMetadataEditorState, "id" | "name" | "description">
+    >,
+  ) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const trimmedId = state.id.trim();
+  const trimmedName = state.name.trim();
+  const trimmedDescription = state.description.trim();
+  const hasChanges =
+    trimmedId !== state.sticker.id ||
+    trimmedName !== state.sticker.name ||
+    trimmedDescription !== state.sticker.description;
+  const hasBasicInvalid =
+    !trimmedId ||
+    !isSafeStickerId(trimmedId) ||
+    !trimmedName ||
+    !trimmedDescription;
+  const saveDisabled = isSaving || !hasChanges || hasBasicInvalid;
+  const idInvalid = Boolean(!trimmedId || !isSafeStickerId(trimmedId));
+  const nameInvalid = Boolean(!trimmedName);
+  const descriptionInvalid = Boolean(!trimmedDescription);
+
+  return (
+    <div className={styles.qqDialogOverlay} role="dialog" aria-modal="true">
+      <div className={styles.qqDialog}>
+        <div className={styles.qqDialogHeader}>
+          <div>
+            <h4>编辑表情</h4>
+            <p>{state.sticker.name}</p>
+          </div>
+          <button
+            type="button"
+            aria-label="关闭"
+            disabled={isSaving}
+            onClick={onCancel}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className={styles.qqDialogBody}>
+          <label
+            className={`${styles.llmSettingsField} ${
+              idInvalid ? styles.llmSettingsFieldInvalid : ""
+            }`}
+          >
+            <span className={styles.llmSettingsControlTitle}>id</span>
+            <input
+              type="text"
+              aria-invalid={idInvalid ? true : undefined}
+              value={state.id}
+              disabled={isSaving}
+              onChange={(event) => onChange({ id: event.currentTarget.value })}
+            />
+          </label>
+
+          <label
+            className={`${styles.llmSettingsField} ${
+              nameInvalid ? styles.llmSettingsFieldInvalid : ""
+            }`}
+          >
+            <span className={styles.llmSettingsControlTitle}>名称</span>
+            <input
+              type="text"
+              aria-invalid={nameInvalid ? true : undefined}
+              value={state.name}
+              disabled={isSaving}
+              onChange={(event) =>
+                onChange({ name: event.currentTarget.value })
+              }
+            />
+          </label>
+
+          <label
+            className={`${styles.llmSettingsField} ${
+              descriptionInvalid ? styles.llmSettingsFieldInvalid : ""
+            }`}
+          >
+            <span className={styles.llmSettingsControlTitle}>说明</span>
+            <textarea
+              className={styles.qqConversationTextarea}
+              aria-invalid={descriptionInvalid ? true : undefined}
+              value={state.description}
+              disabled={isSaving}
+              rows={3}
+              onChange={(event) =>
+                onChange({ description: event.currentTarget.value })
+              }
+            />
+          </label>
+
+          {state.validation ? (
+            <section
+              className={`${styles.settingsInfoCard} ${styles.settingsInfoCardError}`}
+              role="alert"
+            >
+              <X aria-hidden="true" />
+              <span>
+                <strong>保存失败</strong>
+                <small>{state.validation}</small>
+              </span>
+            </section>
+          ) : null}
+        </div>
+
+        <div className={styles.qqDialogActions}>
+          <button type="button" disabled={isSaving} onClick={onCancel}>
+            取消
+          </button>
+          <button type="button" disabled={saveDisabled} onClick={onConfirm}>
+            {isSaving ? <LoaderCircle aria-hidden="true" /> : null}
+            <span>{isSaving ? "保存中" : "保存"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StickerPackNameEditorDialog({
+  state,
+  isSaving,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  state: StickerPackNameEditorState;
+  isSaving: boolean;
+  onChange: (name: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const name = state.name.trim();
+  const saveDisabled = isSaving || !name || name === state.pack.name;
+  const nameInvalid = Boolean(!name);
+
+  return (
+    <div className={styles.qqDialogOverlay} role="dialog" aria-modal="true">
+      <div className={styles.qqDialog}>
+        <div className={styles.qqDialogHeader}>
+          <div>
+            <h4>修改表情包名称</h4>
+            <p>{state.pack.name}</p>
+          </div>
+          <button
+            type="button"
+            aria-label="关闭"
+            disabled={isSaving}
+            onClick={onCancel}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className={styles.qqDialogBody}>
+          <label
+            className={`${styles.llmSettingsField} ${
+              nameInvalid ? styles.llmSettingsFieldInvalid : ""
+            }`}
+          >
+            <span className={styles.llmSettingsControlTitle}>名称</span>
+            <input
+              type="text"
+              value={state.name}
+              aria-invalid={nameInvalid ? true : undefined}
+              disabled={isSaving}
+              onChange={(event) => onChange(event.currentTarget.value)}
+            />
+          </label>
+
+          {state.validation ? (
+            <section
+              className={`${styles.settingsInfoCard} ${styles.settingsInfoCardError}`}
+              role="alert"
+            >
+              <X aria-hidden="true" />
+              <span>
+                <strong>保存失败</strong>
+                <small>{state.validation}</small>
+              </span>
+            </section>
+          ) : null}
+        </div>
+
+        <div className={styles.qqDialogActions}>
+          <button type="button" disabled={isSaving} onClick={onCancel}>
+            取消
+          </button>
+          <button type="button" disabled={saveDisabled} onClick={onConfirm}>
+            {isSaving ? <LoaderCircle aria-hidden="true" /> : null}
+            <span>{isSaving ? "保存中" : "保存"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StickerDeletePackDialog({
+  pack,
+  isSaving,
+  onCancel,
+  onConfirm,
+}: {
+  pack: ActorStickerPack;
+  isSaving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className={styles.llmUnsavedOverlay} role="alertdialog">
+      <div className={styles.llmUnsavedDialog}>
+        <h4>删除表情包？</h4>
+        <p>
+          确定删除当前角色本地的「{pack.name}」吗？这会移除其中{" "}
+          {pack.stickerCount} 个表情文件，不影响其他角色。
+        </p>
+        <div className={styles.llmUnsavedActions}>
+          <button type="button" disabled={isSaving} onClick={onCancel}>
+            取消
+          </button>
+          <button
+            type="button"
+            className={styles.llmUnsavedDangerButton}
+            disabled={isSaving}
+            onClick={onConfirm}
+          >
+            {isSaving ? "删除中" : "删除"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StickerDeleteItemDialog({
+  target,
+  isSaving,
+  onCancel,
+  onConfirm,
+}: {
+  target: StickerDeleteItemTarget;
+  isSaving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className={styles.llmUnsavedOverlay} role="alertdialog">
+      <div className={styles.llmUnsavedDialog}>
+        <h4>删除表情？</h4>
+        <p>
+          确定删除「{target.sticker.name}」吗？这会移除当前角色本地的表情文件。
+        </p>
         <div className={styles.llmUnsavedActions}>
           <button type="button" disabled={isSaving} onClick={onCancel}>
             取消

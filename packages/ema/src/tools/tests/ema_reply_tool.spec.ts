@@ -4,34 +4,42 @@ import path from "node:path";
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
+import { ActorStickerStore } from "../../stickers";
 import { ActorWorkspaceService } from "../../workspace/actor_workspace";
 import { EmaReplyTool } from "../ema_reply_tool";
 import type { ToolContext } from "../base";
 
-vi.mock("../../skills/sticker-skill/pack", () => ({
-  getStickerById: vi.fn(async (id: string) =>
-    id === "test_sticker_1"
-      ? {
-          id: "test_sticker_1",
-          name: "测试表情",
-          description: "用于测试",
-          file: "test.png",
-          pack: "测试表情包",
-          packDirName: "test-pack",
-          packDirPath: "/mock/stickers/test-pack",
-          filePath: "/mock/stickers/test-pack/test.png",
-        }
-      : null,
-  ),
-}));
+const TEST_IMAGE = Buffer.from("fake-sticker");
 
 describe("EmaReplyTool", () => {
   let tool: EmaReplyTool;
   let workspaceDir: string;
+  let workspace: ActorWorkspaceService;
+  let stickerStore: ActorStickerStore;
 
   beforeEach(async () => {
     workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "ema-reply-"));
-    tool = new EmaReplyTool();
+    workspace = new ActorWorkspaceService({ workspaceDir });
+    stickerStore = new ActorStickerStore({ workspace });
+    await stickerStore.ensureActorStickerPacks(1);
+    await stickerStore.ensureActorStickerPacks(2);
+    await stickerStore.createCollectedSticker(1, "wave", "挥手", "打招呼", {
+      type: "inline_data",
+      mimeType: "image/png",
+      data: TEST_IMAGE.toString("base64"),
+    });
+    await stickerStore.createCollectedSticker(
+      2,
+      "actor_two_only",
+      "二号专属",
+      "只在二号可用",
+      {
+        type: "inline_data",
+        mimeType: "image/png",
+        data: TEST_IMAGE.toString("base64"),
+      },
+    );
+    tool = new EmaReplyTool(workspace, stickerStore);
   });
 
   afterEach(async () => {
@@ -122,40 +130,69 @@ describe("EmaReplyTool", () => {
   });
 
   it("accepts sticker replies with valid sticker ids", async () => {
-    const result = await tool.execute({
-      kind: "sticker",
-      think: "发个比心更贴切",
-      content: "test_sticker_1",
-    });
+    const result = await tool.execute(
+      {
+        kind: "sticker",
+        think: "发个比心更贴切",
+        content: "wave",
+      },
+      { actorId: 1 },
+    );
 
     expect(result.success).toBe(true);
     expect(JSON.parse(result.content as string)).toMatchObject({
       kind: "sticker",
-      content: "test_sticker_1",
+      content: "wave",
     });
   });
 
-  it("rejects unknown sticker ids", async () => {
+  it("rejects sticker replies without actor context", async () => {
     const result = await tool.execute({
       kind: "sticker",
       think: "试试看",
-      content: "missing_sticker",
+      content: "wave",
     });
+
+    expect(result.success).toBe(false);
+    expect(result.content).toContain("actorId");
+  });
+
+  it("rejects unknown sticker ids", async () => {
+    const result = await tool.execute(
+      {
+        kind: "sticker",
+        think: "试试看",
+        content: "missing_sticker",
+      },
+      { actorId: 1 },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.content).toContain("Unknown sticker id");
+  });
+
+  it("rejects stickers that only exist for another actor", async () => {
+    const result = await tool.execute(
+      {
+        kind: "sticker",
+        think: "试试看",
+        content: "actor_two_only",
+      },
+      { actorId: 1 },
+    );
 
     expect(result.success).toBe(false);
     expect(result.content).toContain("Unknown sticker id");
   });
 
   it("accepts image replies from the actor workspace", async () => {
-    const workspace = new ActorWorkspaceService({ workspaceDir });
     await workspace.writeBinaryFile(1, "images/cat.png", Buffer.from("image"));
-    const imageTool = new EmaReplyTool(workspace);
     const context: ToolContext = {
       actorId: 1,
       server: {} as ToolContext["server"],
     };
 
-    const result = await imageTool.execute(
+    const result = await tool.execute(
       {
         kind: "image",
         think: "这张图能直接回应对方的问题",
@@ -173,11 +210,9 @@ describe("EmaReplyTool", () => {
   });
 
   it("rejects caption because follow-up text should use another text reply", async () => {
-    const workspace = new ActorWorkspaceService({ workspaceDir });
     await workspace.writeBinaryFile(1, "images/cat.png", Buffer.from("image"));
-    const imageTool = new EmaReplyTool(workspace);
 
-    const result = await imageTool.execute(
+    const result = await tool.execute(
       {
         kind: "image",
         content: "images/cat.png",
@@ -204,14 +239,12 @@ describe("EmaReplyTool", () => {
   });
 
   it("rejects non-image workspace paths for image replies", async () => {
-    const workspace = new ActorWorkspaceService({ workspaceDir });
     await workspace.writeFile(1, "notes/cat.txt", {
       mode: "overwrite",
       content: "not an image",
     });
-    const imageTool = new EmaReplyTool(workspace);
 
-    const result = await imageTool.execute(
+    const result = await tool.execute(
       {
         kind: "image",
         content: "notes/cat.txt",

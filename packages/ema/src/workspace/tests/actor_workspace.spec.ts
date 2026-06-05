@@ -58,6 +58,37 @@ describe("ActorWorkspaceService", () => {
     ).resolves.toMatchObject({ isDirectory: expect.any(Function) });
   });
 
+  test("keeps sticker storage outside the model-visible actor home", async () => {
+    const service = new ActorWorkspaceService({ workspaceDir });
+
+    await service.ensureActorStickerRoot(7);
+    await fs.writeFile(
+      path.join(service.getActorStickerRoot(7), "hidden.txt"),
+      "hidden",
+      "utf-8",
+    );
+    await service.writeFile(7, "visible.txt", {
+      mode: "overwrite",
+      content: "visible",
+    });
+
+    expect(service.getActorRoot(7)).toBe(path.join(workspaceDir, "actor_7"));
+    expect(service.getActorHomeRoot(7)).toBe(
+      path.join(workspaceDir, "actor_7", "home"),
+    );
+    expect(service.getActorStickerRoot(7)).toBe(
+      path.join(workspaceDir, "actor_7", "stickers"),
+    );
+    await expect(service.listFiles(7, ".")).resolves.toMatchObject({
+      entries: [
+        expect.objectContaining({
+          path: "visible.txt",
+          type: "file",
+        }),
+      ],
+    });
+  });
+
   test("rejects existing symlink targets", async () => {
     const service = new ActorWorkspaceService({ workspaceDir });
     const home = path.join(workspaceDir, "actor_1", "home");

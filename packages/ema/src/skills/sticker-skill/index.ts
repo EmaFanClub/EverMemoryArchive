@@ -4,18 +4,13 @@ import type { ToolContext, ToolResult } from "../../tools/base";
 import type { ConversationMessageEntity } from "../../db/base";
 import type { ImageMIME, InlineDataItem } from "../../llm/schema";
 import { isImageMime } from "../../llm/utils";
-import {
-  buildAvailableStickersMarkdown,
-  formatStickerDisplayText,
-  getStickerById,
-  getStickerInPack,
-  getStickerPack,
-} from "./pack";
-import {
-  createCollectedSticker,
-  stickerPackIdToInlineData,
-  updateStickerMetadata,
-} from "./utils";
+import { ActorStickerStore, type ResolvedStickerPack } from "../../stickers";
+
+const ListStickersSchema = z
+  .object({
+    action: z.literal("list").describe("列出当前角色可用表情包"),
+  })
+  .strict();
 
 const PreviewStickerSchema = z
   .object({
@@ -38,7 +33,7 @@ const UpdateStickerSchema = z
 const CreateStickerSchema = z
   .object({
     action: z.literal("create").describe("把聊天记录中的图片收藏为新表情包"),
-    id: z.string().min(1).describe("新表情包的 id，全局唯一"),
+    id: z.string().min(1).describe("新表情包的 id，当前角色唯一"),
     name: z.string().min(1).describe("新表情包的名称"),
     description: z.string().min(1).describe("新表情包的描述"),
     msg_id: z.number().int().positive().describe("来源消息的 msg_id"),
@@ -51,6 +46,7 @@ const CreateStickerSchema = z
   .strict();
 
 const StickerSkillSchema = z.discriminatedUnion("action", [
+  ListStickersSchema,
   PreviewStickerSchema,
   UpdateStickerSchema,
   CreateStickerSchema,
@@ -76,20 +72,25 @@ export default class StickerSkill extends Skill {
 
   parameters = StickerSkillSchema.toJSONSchema();
 
-  /**
-   * Loads the skill playbook and injects the currently available sticker list.
-   * @returns Sticker skill playbook markdown.
-   */
-  override async getPlaybook(): Promise<string> {
-    const base = await super.getPlaybook();
-    return base.replaceAll(
-      "{AVAILABLE_STICKERS}",
-      await buildAvailableStickersMarkdown(),
-    );
+  constructor(
+    skillsDir: string,
+    name: string,
+    private readonly stickerStore: ActorStickerStore = new ActorStickerStore(),
+  ) {
+    super(skillsDir, name);
   }
 
   /**
-   * Executes preview, update, or create sticker operations.
+   * Loads the static skill playbook. Actor-specific sticker inventory is listed
+   * through the list action so get_skill output is stable across actors.
+   * @returns Sticker skill playbook markdown.
+   */
+  override async getPlaybook(): Promise<string> {
+    return await super.getPlaybook();
+  }
+
+  /**
+   * Executes list, preview, update, or create sticker operations.
    * @param args - Skill input.
    * @param context - Tool context containing server and conversation scope when needed.
    * @returns Operation result.
@@ -105,51 +106,96 @@ export default class StickerSkill extends Skill {
       };
     }
 
-    if (payload.action === "preview") {
-      const pack = await getStickerPack(payload.pack);
-      if (!pack) {
-        return {
-          success: false,
-          content: `Sticker pack '${payload.pack}' does not exist.`,
-        };
-      }
-      const sticker = await getStickerInPack(payload.pack, payload.id);
-      if (!sticker) {
-        return {
-          success: false,
-          content: `Sticker '${payload.id}' does not exist in pack '${payload.pack}'.`,
-        };
-      }
+    const actorId = context?.actorId;
+    if (typeof actorId !== "number") {
       return {
-        success: true,
-        content: await formatStickerDisplayText(sticker.id),
-        images: [await stickerPackIdToInlineData(pack.pack, sticker.id)],
+        success: false,
+        content: "Missing actorId in skill context.",
       };
     }
 
+    if (payload.action === "list") {
+      try {
+        await this.stickerStore.ensureActorStickerPacks(actorId);
+        return {
+          success: true,
+          content: formatAvailableStickersMarkdown(
+            await this.stickerStore.listStickerPacks(actorId),
+          ),
+        };
+      } catch (error) {
+        return {
+          success: false,
+          content: `Failed to list stickers: ${(error as Error).message}`,
+        };
+      }
+    }
+
+    if (payload.action === "preview") {
+      try {
+        await this.stickerStore.ensureActorStickerPacks(actorId);
+        const pack = await this.stickerStore.getStickerPack(
+          actorId,
+          payload.pack,
+        );
+        if (!pack) {
+          return {
+            success: false,
+            content: `Sticker pack '${payload.pack}' does not exist.`,
+          };
+        }
+        const sticker = await this.stickerStore.getStickerInPack(
+          actorId,
+          payload.pack,
+          payload.id,
+        );
+        if (!sticker) {
+          return {
+            success: false,
+            content: `Sticker '${payload.id}' does not exist in pack '${payload.pack}'.`,
+          };
+        }
+        return {
+          success: true,
+          content: await this.stickerStore.formatStickerDisplayText(
+            actorId,
+            sticker.id,
+          ),
+          images: [
+            await this.stickerStore.stickerIdToInlineData(actorId, sticker.id),
+          ],
+        };
+      } catch (error) {
+        return {
+          success: false,
+          content: `Failed to preview sticker: ${(error as Error).message}`,
+        };
+      }
+    }
+
     if (payload.action === "update") {
-      if (!(await getStickerPack(payload.pack))) {
+      try {
+        await this.stickerStore.ensureActorStickerPacks(actorId);
+        await this.stickerStore.updateStickerMetadata(
+          actorId,
+          payload.pack,
+          payload.id,
+          payload.name,
+          payload.description,
+        );
+        return {
+          success: true,
+          content: await this.stickerStore.formatStickerDisplayText(
+            actorId,
+            payload.id,
+          ),
+        };
+      } catch (error) {
         return {
           success: false,
-          content: `Sticker pack '${payload.pack}' does not exist.`,
+          content: `Failed to update sticker: ${(error as Error).message}`,
         };
       }
-      if (!(await getStickerInPack(payload.pack, payload.id))) {
-        return {
-          success: false,
-          content: `Sticker '${payload.id}' does not exist in pack '${payload.pack}'.`,
-        };
-      }
-      await updateStickerMetadata(
-        payload.pack,
-        payload.id,
-        payload.name,
-        payload.description,
-      );
-      return {
-        success: true,
-        content: await formatStickerDisplayText(payload.id),
-      };
     }
 
     const server = context?.server;
@@ -164,12 +210,6 @@ export default class StickerSkill extends Skill {
       return {
         success: false,
         content: "Missing conversationId in skill context.",
-      };
-    }
-    if (await getStickerById(payload.id)) {
-      return {
-        success: false,
-        content: `Sticker id '${payload.id}' already exists.`,
       };
     }
 
@@ -194,16 +234,44 @@ export default class StickerSkill extends Skill {
         content: `Message ${payload.msg_id} does not have image #${payload.idx}.`,
       };
     }
-    await createCollectedSticker(
-      payload.id,
-      payload.name,
-      payload.description,
-      image,
-    );
-    return {
-      success: true,
-      content: await formatStickerDisplayText(payload.id),
-      images: [image],
-    };
+    try {
+      await this.stickerStore.createCollectedSticker(
+        actorId,
+        payload.id,
+        payload.name,
+        payload.description,
+        image,
+      );
+      return {
+        success: true,
+        content: await this.stickerStore.formatStickerDisplayText(
+          actorId,
+          payload.id,
+        ),
+        images: [image],
+      };
+    } catch (error) {
+      return {
+        success: false,
+        content: `Failed to create sticker: ${(error as Error).message}`,
+      };
+    }
   }
+}
+
+function formatAvailableStickersMarkdown(packs: ResolvedStickerPack[]): string {
+  if (packs.length === 0) {
+    return "- None.";
+  }
+  return packs
+    .map((pack) =>
+      [
+        `- ${pack.pack}`,
+        ...pack.stickers.map(
+          (item) =>
+            `  - id: \`${item.id}\`｜名称：${item.name}｜说明：${item.description}`,
+        ),
+      ].join("\n"),
+    )
+    .join("\n\n");
 }

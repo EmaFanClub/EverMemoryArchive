@@ -590,6 +590,67 @@ export interface ActorWebSearchSaveResponse {
   };
 }
 
+export interface ActorStickerItem {
+  id: string;
+  name: string;
+  description: string;
+  file: string;
+  previewUrl?: string;
+  previewDataUrl?: string;
+}
+
+export interface ActorStickerPack {
+  dirName: string;
+  name: string;
+  stickerCount: number;
+  stickers: ActorStickerItem[];
+}
+
+export type ActorStickerMutationErrorCode =
+  | "INVALID_ACTOR"
+  | "ACTOR_NOT_FOUND"
+  | "INVALID_CONFIG"
+  | "STICKER_ID_CONFLICT"
+  | "STICKER_NOT_FOUND"
+  | "STICKER_STORE_FAILED";
+
+export interface ActorStickerListResponse {
+  apiVersion: "v1beta1";
+  ok: boolean;
+  actorId: string;
+  packs: ActorStickerPack[];
+  error?: {
+    code: ActorStickerMutationErrorCode;
+    retryable: boolean;
+    message: string;
+  };
+}
+
+export interface ActorStickerPatchRequest {
+  requestId?: string;
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface ActorStickerPackPatchRequest {
+  requestId?: string;
+  name: string;
+}
+
+export interface ActorStickerMutationResponse {
+  apiVersion: "v1beta1";
+  ok: boolean;
+  actorId: string;
+  pack?: ActorStickerPack;
+  packDirName?: string;
+  error?: {
+    code: ActorStickerMutationErrorCode;
+    retryable: boolean;
+    message: string;
+  };
+}
+
 /** Actor-scoped QQ channel config DTO mirrored from EMA's ChannelConfig.qq. */
 export type ActorQQConversationType = "chat" | "group";
 

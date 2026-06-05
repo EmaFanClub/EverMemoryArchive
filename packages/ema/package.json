@@ -22,6 +22,7 @@
     "dayjs": "^1.11.19",
     "env-paths": "^3.0.0",
     "js-tiktoken": "^1.0.21",
+    "jszip": "^3.10.1",
     "mongodb": "^7.0.0",
     "mongodb-agenda": "npm:mongodb@4.17.2",
     "mongodb-memory-server": "^11.0.0",

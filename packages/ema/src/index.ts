@@ -25,4 +25,5 @@ export * from "./memory/embedding_models";
 export * from "./token_usage";
 export * from "./trainer";
 export * from "./workspace";
+export * from "./stickers";
 export type { Tool } from "./tools/base";
