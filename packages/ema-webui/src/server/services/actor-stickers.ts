@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import {
   ActorStickerStore,
   GlobalConfig,
+  StickerIdConflictError,
   getStickerImageMimeTypeFromFileName,
   type ResolvedStickerPack,
 } from "ema";
@@ -409,6 +410,9 @@ function stickerPreviewErrorMessage(
 }
 
 function classifyStickerError(error: unknown): ActorStickerMutationErrorCode {
+  if (error instanceof StickerIdConflictError) {
+    return "STICKER_ID_CONFLICT";
+  }
   const message = messageFromError(error).toLowerCase();
   if (message.includes("invalid actor id")) {
     return "INVALID_ACTOR";

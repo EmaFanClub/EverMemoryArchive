@@ -61,6 +61,22 @@ describe("StickerSkill", () => {
     expect(result.content).not.toContain("名称：挥手");
   });
 
+  test("list sanitizes store errors before returning them", async () => {
+    const badPackDir = path.join(workspaceDir, "actor_1", "stickers", "bad");
+    await fs.mkdir(badPackDir, { recursive: true });
+    await fs.writeFile(
+      path.join(badPackDir, "pack.json"),
+      JSON.stringify({ stickers: [] }, null, 2) + "\n",
+      "utf-8",
+    );
+
+    const result = await skill.execute({ action: "list" }, { actorId: 1 });
+
+    expect(result.success).toBe(false);
+    expect(result.content).toContain("[path]");
+    expect(result.content).not.toContain(workspaceDir);
+  });
+
   test("list requires actor context", async () => {
     const result = await skill.execute({ action: "list" });
 

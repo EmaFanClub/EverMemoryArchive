@@ -464,7 +464,7 @@ describe("actor sticker service", () => {
     });
   });
 
-  test("maps imported sticker id conflicts to 409 with conflict id", async () => {
+  test("maps imported sticker id conflicts to 409 with conflict ids", async () => {
     await buildActorStickerListResponse("1");
     await writeActorPack(1, "custom-pack", "自定义包", [
       {
@@ -472,6 +472,12 @@ describe("actor sticker service", () => {
         name: "已有",
         description: "已有表情",
         file: "wave.png",
+      },
+      {
+        id: "smile",
+        name: "已有笑脸",
+        description: "另一个已有表情",
+        file: "smile.png",
       },
     ]);
     const archive = await buildEmaPack({
@@ -482,6 +488,13 @@ describe("actor sticker service", () => {
           name: "冲突",
           description: "重复 id",
           file: "stickers/wave.png",
+          data: TEST_IMAGE,
+        },
+        {
+          id: "smile",
+          name: "笑脸冲突",
+          description: "第二个重复 id",
+          file: "stickers/smile.png",
           data: TEST_IMAGE,
         },
       ],
@@ -499,6 +512,7 @@ describe("actor sticker service", () => {
       },
     });
     expect(response.error?.message).toContain("wave");
+    expect(response.error?.message).toContain("smile");
     expect(actorStickerHttpStatus(response)).toBe(409);
   });
 

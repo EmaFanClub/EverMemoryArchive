@@ -126,7 +126,7 @@ export default class StickerSkill extends Skill {
       } catch (error) {
         return {
           success: false,
-          content: `Failed to list stickers: ${(error as Error).message}`,
+          content: `Failed to list stickers: ${messageFromError(error)}`,
         };
       }
     }
@@ -168,7 +168,7 @@ export default class StickerSkill extends Skill {
       } catch (error) {
         return {
           success: false,
-          content: `Failed to preview sticker: ${(error as Error).message}`,
+          content: `Failed to preview sticker: ${messageFromError(error)}`,
         };
       }
     }
@@ -193,7 +193,7 @@ export default class StickerSkill extends Skill {
       } catch (error) {
         return {
           success: false,
-          content: `Failed to update sticker: ${(error as Error).message}`,
+          content: `Failed to update sticker: ${messageFromError(error)}`,
         };
       }
     }
@@ -253,7 +253,7 @@ export default class StickerSkill extends Skill {
     } catch (error) {
       return {
         success: false,
-        content: `Failed to create sticker: ${(error as Error).message}`,
+        content: `Failed to create sticker: ${messageFromError(error)}`,
       };
     }
   }
@@ -274,4 +274,12 @@ function formatAvailableStickersMarkdown(packs: ResolvedStickerPack[]): string {
       ].join("\n"),
     )
     .join("\n\n");
+}
+
+function messageFromError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(
+    /(?:[A-Za-z]:)?[\\/](?:[^\\/ \t\r\n"'`]+[\\/])*[^\\/ \t\r\n"'`]+/g,
+    "[path]",
+  );
 }
