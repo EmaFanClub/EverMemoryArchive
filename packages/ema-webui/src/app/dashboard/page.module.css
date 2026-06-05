@@ -4253,6 +4253,147 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 7%, transparent);
 }
 
+.stickerUploadControl {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 62%, transparent);
+  border-radius: 18px;
+  padding: 8px 10px 8px 8px;
+  background: color-mix(in srgb, var(--surface-inset) 58%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.stickerUploadControl:hover {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 34%, transparent);
+}
+
+.stickerUploadControl:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-raised) 26%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.stickerUploadControlDisabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.stickerUploadControlDisabled:hover {
+  border-color: color-mix(in srgb, var(--border-strong) 62%, transparent);
+  background: color-mix(in srgb, var(--surface-inset) 58%, transparent);
+}
+
+.llmSettingsFieldInvalid .stickerUploadControl {
+  border-color: color-mix(in srgb, var(--danger) 46%, var(--border-strong));
+  background: color-mix(in srgb, var(--danger-soft) 28%, var(--surface-inset));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.llmSettingsFieldInvalid .stickerUploadControl:focus-within {
+  border-color: color-mix(in srgb, var(--danger) 58%, var(--border-strong));
+  background: color-mix(in srgb, var(--danger-soft) 34%, var(--surface-raised));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 13%, transparent);
+}
+
+.stickerUploadPreview {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 54%, transparent);
+}
+
+.stickerUploadPreview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.stickerUploadPreview svg {
+  width: 19px;
+  height: 19px;
+  color: var(--text-subtle);
+  stroke-width: 2.2;
+}
+
+.stickerUploadText {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.stickerUploadText strong,
+.stickerUploadText small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stickerUploadText strong {
+  color: var(--text);
+  font-size: 0.83rem;
+  font-weight: 720;
+  letter-spacing: -0.012em;
+  line-height: 1;
+}
+
+.stickerUploadText small {
+  color: var(--text-subtle);
+  font-size: 0.69rem;
+  font-weight: 620;
+  line-height: 1;
+}
+
+.stickerUploadAction {
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: color-mix(in srgb, var(--surface-raised) 70%, transparent);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.stickerUploadControl:hover .stickerUploadAction,
+.stickerUploadControl:focus-within .stickerUploadAction {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.stickerUploadInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.stickerUploadInput:disabled {
+  cursor: not-allowed;
+}
+
 .qqDialogActions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4385,7 +4526,7 @@
 
 .stickerSummary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   align-items: center;
   gap: 8px;
   border-radius: 16px;
@@ -4397,6 +4538,7 @@
 
 .stickerSummary > div {
   display: grid;
+  grid-column: span 3;
   min-width: 0;
   min-height: 48px;
   align-content: center;
@@ -4419,6 +4561,20 @@
   font-size: 1.05rem;
   font-weight: 760;
   line-height: 1;
+}
+
+.stickerSummary > .qqConversationAddButton {
+  grid-column: span 2;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 0.7rem;
+}
+
+.stickerSummary > .qqConversationAddButton svg {
+  width: 13px;
+  height: 13px;
 }
 
 .stickerPackList {
@@ -4529,6 +4685,10 @@
 }
 
 .stickerPackHeader .stickerPackEditButton:hover {
+  color: var(--accent);
+}
+
+.stickerPackHeader .stickerPackAddButton:hover {
   color: var(--accent);
 }
 

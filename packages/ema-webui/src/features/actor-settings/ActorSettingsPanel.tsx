@@ -50,6 +50,8 @@ import styles from "@/app/dashboard/page.module.css";
 import {
   clearActorTraining,
   createActorQqConversation,
+  createActorSticker,
+  createActorStickerPack,
   deleteActor,
   deleteActorQqConversation,
   deleteActorSticker,
@@ -175,6 +177,22 @@ interface StickerMetadataEditorState {
   validation: string | null;
 }
 
+interface StickerCreateEditorState {
+  pack: ActorStickerPack;
+  id: string;
+  name: string;
+  description: string;
+  file: File | null;
+  previewUrl: string | null;
+  validation: string | null;
+}
+
+interface StickerPackCreateEditorState {
+  name: string;
+  touched: boolean;
+  validation: string | null;
+}
+
 interface StickerPackNameEditorState {
   pack: ActorStickerPack;
   name: string;
@@ -191,6 +209,8 @@ const useIsomorphicLayoutEffect =
 const MESSAGE_SCROLLBAR_IDLE_DELAY = 3000;
 const MESSAGE_SCROLLBAR_MIN_THUMB_HEIGHT = 32;
 const COPY_TOAST_DURATION = 1400;
+const MAX_STICKER_IMAGE_BYTES = 5 * 1024 * 1024;
+const STICKER_ID_HINT = "只能包含数字、大小写字母和下划线";
 const DEFAULT_WEB_CHAT_SESSION = "web-chat-1";
 
 const LLM_PROVIDER_LABELS: Record<LlmModelProvider, string> = {
@@ -484,13 +504,17 @@ function messageFromError(error: unknown) {
 }
 
 function isSafeStickerId(value: string) {
-  return (
-    value !== "." &&
-    value !== ".." &&
-    !value.includes("/") &&
-    !value.includes("\\") &&
-    !value.includes("\0")
-  );
+  return /^[A-Za-z0-9_]+$/.test(value);
+}
+
+function formatStickerFileSize(size: number): string {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -3608,6 +3632,10 @@ function ActorStickerSettingsDetail({
   );
   const [deleteItemTarget, setDeleteItemTarget] =
     useState<StickerDeleteItemTarget | null>(null);
+  const [packCreateState, setPackCreateState] =
+    useState<StickerPackCreateEditorState | null>(null);
+  const [stickerCreateState, setStickerCreateState] =
+    useState<StickerCreateEditorState | null>(null);
   const [packEditorState, setPackEditorState] =
     useState<StickerPackNameEditorState | null>(null);
   const [editorState, setEditorState] =
@@ -3725,6 +3753,69 @@ function ActorStickerSettingsDetail({
     }
   }
 
+  function openPackCreateEditor() {
+    if (savingKey !== null) {
+      return;
+    }
+    setPackCreateState({
+      name: "",
+      touched: false,
+      validation: null,
+    });
+  }
+
+  function updatePackCreateEditor(name: string) {
+    setPackCreateState((current) =>
+      current
+        ? {
+            ...current,
+            name,
+            touched: true,
+            validation: null,
+          }
+        : current,
+    );
+  }
+
+  async function savePackCreateEditor() {
+    if (!packCreateState || savingKey !== null) {
+      return;
+    }
+
+    const name = packCreateState.name.trim();
+    if (!name) {
+      setPackCreateState({
+        ...packCreateState,
+        touched: true,
+        validation: "表情包名称不能为空",
+      });
+      return;
+    }
+
+    const key = "create-pack";
+    setSavingKey(key);
+    try {
+      const response = await createActorStickerPack(actorId, { name });
+      if (!response.ok) {
+        throw new Error(response.error?.message ?? "create failed");
+      }
+      await loadStickers();
+      setPackCreateState(null);
+      onToast("已创建表情包", "success");
+    } catch (error) {
+      setPackCreateState((current) =>
+        current
+          ? {
+              ...current,
+              validation: messageFromError(error) || "创建失败",
+            }
+          : current,
+      );
+    } finally {
+      setSavingKey((current) => (current === key ? null : current));
+    }
+  }
+
   async function deletePack(pack: ActorStickerPack) {
     if (savingKey !== null) {
       return;
@@ -3814,6 +3905,113 @@ function ActorStickerSettingsDetail({
     }
   }
 
+  function openStickerCreateEditor(pack: ActorStickerPack) {
+    if (savingKey !== null) {
+      return;
+    }
+    setStickerCreateState({
+      pack,
+      id: "",
+      name: "",
+      description: "",
+      file: null,
+      previewUrl: null,
+      validation: null,
+    });
+  }
+
+  function updateStickerCreateEditor(
+    patch: Partial<
+      Pick<
+        StickerCreateEditorState,
+        "id" | "name" | "description" | "file" | "previewUrl"
+      >
+    >,
+  ) {
+    setStickerCreateState((current) =>
+      current
+        ? {
+            ...current,
+            ...patch,
+            validation: null,
+          }
+        : current,
+    );
+  }
+
+  async function saveStickerCreateEditor() {
+    if (!stickerCreateState || savingKey !== null) {
+      return;
+    }
+
+    const id = stickerCreateState.id.trim();
+    const name = stickerCreateState.name.trim();
+    const description = stickerCreateState.description.trim();
+    if (!stickerCreateState.file || !id || !name || !description) {
+      setStickerCreateState({
+        ...stickerCreateState,
+        validation: "图片、id、名称和说明不能为空",
+      });
+      return;
+    }
+    if (!stickerCreateState.file.type.startsWith("image/")) {
+      setStickerCreateState({
+        ...stickerCreateState,
+        validation: "请选择图片文件",
+      });
+      return;
+    }
+    if (stickerCreateState.file.size > MAX_STICKER_IMAGE_BYTES) {
+      setStickerCreateState({
+        ...stickerCreateState,
+        validation: `图片不能超过 ${formatStickerFileSize(
+          MAX_STICKER_IMAGE_BYTES,
+        )}`,
+      });
+      return;
+    }
+    if (!isSafeStickerId(id)) {
+      setStickerCreateState({
+        ...stickerCreateState,
+        validation: `id ${STICKER_ID_HINT}`,
+      });
+      return;
+    }
+
+    const key = `create-sticker:${stickerCreateState.pack.dirName}`;
+    setSavingKey(key);
+    try {
+      const response = await createActorSticker(
+        actorId,
+        stickerCreateState.pack.dirName,
+        { id, name, description },
+        stickerCreateState.file,
+      );
+      if (!response.ok || !response.pack) {
+        throw new Error(response.error?.message ?? "create failed");
+      }
+      replacePack(response.pack);
+      setExpandedPackDirNames((current) => {
+        const next = new Set(current);
+        next.add(response.pack!.dirName);
+        return next;
+      });
+      setStickerCreateState(null);
+      onToast("已添加表情", "success");
+    } catch (error) {
+      setStickerCreateState((current) =>
+        current?.pack.dirName === stickerCreateState.pack.dirName
+          ? {
+              ...current,
+              validation: messageFromError(error) || "添加失败",
+            }
+          : current,
+      );
+    } finally {
+      setSavingKey((current) => (current === key ? null : current));
+    }
+  }
+
   function openMetadataEditor(
     pack: ActorStickerPack,
     sticker: ActorStickerItem,
@@ -3865,7 +4063,7 @@ function ActorStickerSettingsDetail({
     if (!isSafeStickerId(id)) {
       setEditorState({
         ...editorState,
-        validation: "id 不能包含路径分隔符，也不能是 . 或 ..",
+        validation: `id ${STICKER_ID_HINT}`,
       });
       return;
     }
@@ -3940,6 +4138,19 @@ function ActorStickerSettingsDetail({
               <span>表情</span>
               <strong>{totalStickerCount}</strong>
             </div>
+            <button
+              type="button"
+              className={styles.qqConversationAddButton}
+              disabled={loading || isSaving}
+              onClick={openPackCreateEditor}
+            >
+              {savingKey === "create-pack" ? (
+                <LoaderCircle aria-hidden="true" />
+              ) : (
+                <Plus aria-hidden="true" />
+              )}
+              <span>{savingKey === "create-pack" ? "创建中" : "新建"}</span>
+            </button>
             <button
               type="button"
               className={styles.qqConversationAddButton}
@@ -4025,6 +4236,7 @@ function ActorStickerSettingsDetail({
                   onExportPack={(stickerPack) => {
                     void exportPack(stickerPack);
                   }}
+                  onAddSticker={openStickerCreateEditor}
                   onEditPack={openPackNameEditor}
                   onDeleteSticker={(stickerPack, sticker) =>
                     setDeleteItemTarget({ pack: stickerPack, sticker })
@@ -4052,6 +4264,32 @@ function ActorStickerSettingsDetail({
           onCancel={() => setEditorState(null)}
           onConfirm={() => {
             void saveMetadataEditor();
+          }}
+        />
+      ) : null}
+
+      {stickerCreateState ? (
+        <StickerCreateEditorDialog
+          state={stickerCreateState}
+          isSaving={
+            savingKey === `create-sticker:${stickerCreateState.pack.dirName}`
+          }
+          onChange={updateStickerCreateEditor}
+          onCancel={() => setStickerCreateState(null)}
+          onConfirm={() => {
+            void saveStickerCreateEditor();
+          }}
+        />
+      ) : null}
+
+      {packCreateState ? (
+        <StickerPackCreateEditorDialog
+          state={packCreateState}
+          isSaving={savingKey === "create-pack"}
+          onChange={updatePackCreateEditor}
+          onCancel={() => setPackCreateState(null)}
+          onConfirm={() => {
+            void savePackCreateEditor();
           }}
         />
       ) : null}
@@ -4103,6 +4341,7 @@ function ActorStickerPackCard({
   onToggleExpanded,
   onDeletePack,
   onExportPack,
+  onAddSticker,
   onEditPack,
   onDeleteSticker,
   onEdit,
@@ -4113,6 +4352,7 @@ function ActorStickerPackCard({
   onToggleExpanded: (packDirName: string) => void;
   onDeletePack: (pack: ActorStickerPack) => void;
   onExportPack: (pack: ActorStickerPack) => void;
+  onAddSticker: (pack: ActorStickerPack) => void;
   onEditPack: (pack: ActorStickerPack) => void;
   onDeleteSticker: (pack: ActorStickerPack, sticker: ActorStickerItem) => void;
   onEdit: (pack: ActorStickerPack, sticker: ActorStickerItem) => void;
@@ -4140,6 +4380,15 @@ function ActorStickerPackCard({
           </span>
         </button>
         <div className={styles.stickerPackActions}>
+          <button
+            type="button"
+            className={styles.stickerPackAddButton}
+            aria-label={`添加表情到 ${pack.name}`}
+            disabled={isSaving}
+            onClick={() => onAddSticker(pack)}
+          >
+            <Plus aria-hidden="true" />
+          </button>
           {isCollectionPack ? null : (
             <button
               type="button"
@@ -5399,11 +5648,23 @@ function StickerMetadataEditorDialog({
             <span className={styles.llmSettingsControlTitle}>id</span>
             <input
               type="text"
+              pattern="[A-Za-z0-9_]+"
+              placeholder="id仅可包含数字、字母和下划线，全局唯一"
               aria-invalid={idInvalid ? true : undefined}
+              aria-describedby={idInvalid ? "sticker-edit-id-hint" : undefined}
               value={state.id}
               disabled={isSaving}
               onChange={(event) => onChange({ id: event.currentTarget.value })}
             />
+            {idInvalid ? (
+              <p
+                id="sticker-edit-id-hint"
+                className={styles.searchSettingsFieldHint}
+                role="alert"
+              >
+                {STICKER_ID_HINT}
+              </p>
+            ) : null}
           </label>
 
           <label
@@ -5414,6 +5675,7 @@ function StickerMetadataEditorDialog({
             <span className={styles.llmSettingsControlTitle}>名称</span>
             <input
               type="text"
+              placeholder="简洁描述表情"
               aria-invalid={nameInvalid ? true : undefined}
               value={state.name}
               disabled={isSaving}
@@ -5431,6 +5693,7 @@ function StickerMetadataEditorDialog({
             <span className={styles.llmSettingsControlTitle}>说明</span>
             <textarea
               className={styles.qqConversationTextarea}
+              placeholder="可以描述表情细节、使用场景等信息"
               aria-invalid={descriptionInvalid ? true : undefined}
               value={state.description}
               disabled={isSaving}
@@ -5462,6 +5725,307 @@ function StickerMetadataEditorDialog({
           <button type="button" disabled={saveDisabled} onClick={onConfirm}>
             {isSaving ? <LoaderCircle aria-hidden="true" /> : null}
             <span>{isSaving ? "保存中" : "保存"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StickerCreateEditorDialog({
+  state,
+  isSaving,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  state: StickerCreateEditorState;
+  isSaving: boolean;
+  onChange: (
+    patch: Partial<
+      Pick<
+        StickerCreateEditorState,
+        "id" | "name" | "description" | "file" | "previewUrl"
+      >
+    >,
+  ) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const trimmedId = state.id.trim();
+  const trimmedName = state.name.trim();
+  const trimmedDescription = state.description.trim();
+  const showInvalid = Boolean(state.validation);
+  const fileTooLarge = Boolean(
+    state.file && state.file.size > MAX_STICKER_IMAGE_BYTES,
+  );
+  const fileInvalid = showInvalid && (!state.file || fileTooLarge);
+  const idInvalid =
+    Boolean(trimmedId && !isSafeStickerId(trimmedId)) ||
+    (showInvalid && !trimmedId);
+  const nameInvalid = showInvalid && !trimmedName;
+  const descriptionInvalid = showInvalid && !trimmedDescription;
+  const saveDisabled =
+    isSaving ||
+    !state.file ||
+    !trimmedId ||
+    !isSafeStickerId(trimmedId) ||
+    !trimmedName ||
+    !trimmedDescription;
+
+  useEffect(() => {
+    const previewUrl = state.previewUrl;
+    if (!previewUrl) {
+      return undefined;
+    }
+
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [state.previewUrl]);
+
+  function handleFileChange(event: ReactChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0] ?? null;
+    if (!file) {
+      onChange({ file: null, previewUrl: null });
+      return;
+    }
+
+    onChange({
+      file,
+      previewUrl: URL.createObjectURL(file),
+    });
+    event.currentTarget.value = "";
+  }
+
+  return (
+    <div className={styles.qqDialogOverlay} role="dialog" aria-modal="true">
+      <div className={styles.qqDialog}>
+        <div className={styles.qqDialogHeader}>
+          <div>
+            <h4>添加表情</h4>
+            <p>{state.pack.name}</p>
+          </div>
+          <button
+            type="button"
+            aria-label="关闭"
+            disabled={isSaving}
+            onClick={onCancel}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className={styles.qqDialogBody}>
+          <label
+            className={`${styles.llmSettingsField} ${
+              fileInvalid ? styles.llmSettingsFieldInvalid : ""
+            }`}
+          >
+            <span className={styles.llmSettingsControlTitle}>图片</span>
+            <span
+              className={`${styles.stickerUploadControl} ${
+                isSaving ? styles.stickerUploadControlDisabled : ""
+              }`}
+            >
+              <span className={styles.stickerUploadPreview}>
+                {state.previewUrl ? (
+                  <Image
+                    src={state.previewUrl}
+                    alt=""
+                    width={46}
+                    height={46}
+                    unoptimized
+                  />
+                ) : (
+                  <Upload aria-hidden="true" />
+                )}
+              </span>
+              <span className={styles.stickerUploadText}>
+                <strong>{state.file ? state.file.name : "选择图片"}</strong>
+                <small>
+                  {state.file
+                    ? formatStickerFileSize(state.file.size)
+                    : "未选择"}
+                </small>
+              </span>
+              <span className={styles.stickerUploadAction}>
+                {state.file ? "更换" : "选择"}
+              </span>
+              <input
+                className={styles.stickerUploadInput}
+                type="file"
+                accept="image/*"
+                aria-invalid={fileInvalid ? true : undefined}
+                disabled={isSaving}
+                onChange={handleFileChange}
+              />
+            </span>
+          </label>
+
+          <label
+            className={`${styles.llmSettingsField} ${
+              idInvalid ? styles.llmSettingsFieldInvalid : ""
+            }`}
+          >
+            <span className={styles.llmSettingsControlTitle}>id</span>
+            <input
+              type="text"
+              pattern="[A-Za-z0-9_]+"
+              placeholder="id仅可包含数字、字母和下划线，全局唯一"
+              aria-invalid={idInvalid ? true : undefined}
+              aria-describedby={
+                idInvalid ? "sticker-create-id-hint" : undefined
+              }
+              value={state.id}
+              disabled={isSaving}
+              onChange={(event) => onChange({ id: event.currentTarget.value })}
+            />
+            {idInvalid ? (
+              <p
+                id="sticker-create-id-hint"
+                className={styles.searchSettingsFieldHint}
+                role="alert"
+              >
+                {STICKER_ID_HINT}
+              </p>
+            ) : null}
+          </label>
+
+          <label
+            className={`${styles.llmSettingsField} ${
+              nameInvalid ? styles.llmSettingsFieldInvalid : ""
+            }`}
+          >
+            <span className={styles.llmSettingsControlTitle}>名称</span>
+            <input
+              type="text"
+              placeholder="简洁描述表情"
+              aria-invalid={nameInvalid ? true : undefined}
+              value={state.name}
+              disabled={isSaving}
+              onChange={(event) =>
+                onChange({ name: event.currentTarget.value })
+              }
+            />
+          </label>
+
+          <label
+            className={`${styles.llmSettingsField} ${
+              descriptionInvalid ? styles.llmSettingsFieldInvalid : ""
+            }`}
+          >
+            <span className={styles.llmSettingsControlTitle}>说明</span>
+            <textarea
+              className={styles.qqConversationTextarea}
+              placeholder="可以描述表情细节、使用场景等信息"
+              aria-invalid={descriptionInvalid ? true : undefined}
+              value={state.description}
+              disabled={isSaving}
+              rows={3}
+              onChange={(event) =>
+                onChange({ description: event.currentTarget.value })
+              }
+            />
+          </label>
+
+          {state.validation ? (
+            <section
+              className={`${styles.settingsInfoCard} ${styles.settingsInfoCardError}`}
+              role="alert"
+            >
+              <X aria-hidden="true" />
+              <span>
+                <strong>添加失败</strong>
+                <small>{state.validation}</small>
+              </span>
+            </section>
+          ) : null}
+        </div>
+
+        <div className={styles.qqDialogActions}>
+          <button type="button" disabled={isSaving} onClick={onCancel}>
+            取消
+          </button>
+          <button type="button" disabled={saveDisabled} onClick={onConfirm}>
+            {isSaving ? <LoaderCircle aria-hidden="true" /> : null}
+            <span>{isSaving ? "添加中" : "添加"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StickerPackCreateEditorDialog({
+  state,
+  isSaving,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  state: StickerPackCreateEditorState;
+  isSaving: boolean;
+  onChange: (name: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const name = state.name.trim();
+  const saveDisabled = isSaving || !name;
+  const nameInvalid = state.touched && !name;
+
+  return (
+    <div className={styles.qqDialogOverlay} role="dialog" aria-modal="true">
+      <div className={styles.qqDialog}>
+        <div className={styles.qqDialogHeader}>
+          <div>
+            <h4>新建表情包</h4>
+          </div>
+          <button
+            type="button"
+            aria-label="关闭"
+            disabled={isSaving}
+            onClick={onCancel}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className={styles.qqDialogBody}>
+          <label
+            className={`${styles.llmSettingsField} ${
+              nameInvalid ? styles.llmSettingsFieldInvalid : ""
+            }`}
+          >
+            <span className={styles.llmSettingsControlTitle}>名称</span>
+            <input
+              type="text"
+              value={state.name}
+              aria-invalid={nameInvalid ? true : undefined}
+              disabled={isSaving}
+              onChange={(event) => onChange(event.currentTarget.value)}
+            />
+          </label>
+
+          {state.validation ? (
+            <section
+              className={`${styles.settingsInfoCard} ${styles.settingsInfoCardError}`}
+              role="alert"
+            >
+              <X aria-hidden="true" />
+              <span>
+                <strong>创建失败</strong>
+                <small>{state.validation}</small>
+              </span>
+            </section>
+          ) : null}
+        </div>
+
+        <div className={styles.qqDialogActions}>
+          <button type="button" disabled={isSaving} onClick={onCancel}>
+            取消
+          </button>
+          <button type="button" disabled={saveDisabled} onClick={onConfirm}>
+            {isSaving ? <LoaderCircle aria-hidden="true" /> : null}
+            <span>{isSaving ? "创建中" : "创建"}</span>
           </button>
         </div>
       </div>

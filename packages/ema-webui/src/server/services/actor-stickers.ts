@@ -8,6 +8,7 @@ import {
   StickerIdConflictError,
   getStickerImageMimeTypeFromFileName,
   type ResolvedStickerPack,
+  type StickerInlineData,
 } from "ema";
 
 import { toCoreActorId } from "@/server/ema-adapter/ids";
@@ -22,6 +23,18 @@ import type {
 } from "@/types/dashboard/v1beta1";
 
 const API_VERSION = "v1beta1" as const;
+
+export interface ActorStickerPackCreateInput {
+  name?: string | null;
+}
+
+export interface ActorStickerCreateInput {
+  id?: string | null;
+  name?: string | null;
+  description?: string | null;
+  contentType: string;
+  buffer: Buffer;
+}
 
 export async function buildActorStickerListResponse(
   actorId: string,
@@ -95,6 +108,39 @@ export async function updateActorStickerPackService(
       packDirName,
       name,
     );
+
+    return {
+      apiVersion: API_VERSION,
+      ok: true,
+      actorId,
+      pack: await toWebStickerPack(actorId, result.pack),
+      packDirName: result.pack.dirName,
+    };
+  } catch (error) {
+    return actorStickerMutationError(
+      actorId,
+      classifyStickerError(error),
+      messageFromError(error),
+    );
+  }
+}
+
+export async function createActorStickerPackService(
+  actorId: string,
+  request: ActorStickerPackCreateInput | null | undefined,
+): Promise<ActorStickerMutationResponse> {
+  const name = request?.name?.trim() ?? "";
+  if (!name) {
+    return actorStickerMutationError(
+      actorId,
+      "INVALID_CONFIG",
+      "name is required.",
+    );
+  }
+
+  try {
+    const { coreActorId, store } = await getActorStickerContext(actorId);
+    const result = await store.createStickerPack(coreActorId, name);
 
     return {
       apiVersion: API_VERSION,
@@ -200,6 +246,54 @@ export async function updateActorStickerService(
       actorId,
       pack: await toWebStickerPack(actorId, result.pack),
       packDirName,
+    };
+  } catch (error) {
+    return actorStickerMutationError(
+      actorId,
+      classifyStickerError(error),
+      messageFromError(error),
+    );
+  }
+}
+
+export async function createActorStickerService(
+  actorId: string,
+  packDirName: string,
+  input: ActorStickerCreateInput,
+): Promise<ActorStickerMutationResponse> {
+  const id = input.id?.trim() ?? "";
+  const name = input.name?.trim() ?? "";
+  const description = input.description?.trim() ?? "";
+  if (!id || !name || !description) {
+    return actorStickerMutationError(
+      actorId,
+      "INVALID_CONFIG",
+      "id, name and description are required.",
+    );
+  }
+
+  try {
+    const { coreActorId, store } = await getActorStickerContext(actorId);
+    const inline: StickerInlineData = {
+      type: "inline_data",
+      mimeType: input.contentType as StickerInlineData["mimeType"],
+      data: input.buffer.toString("base64"),
+    };
+    const result = await store.createSticker(
+      coreActorId,
+      packDirName,
+      id,
+      name,
+      description,
+      inline,
+    );
+
+    return {
+      apiVersion: API_VERSION,
+      ok: true,
+      actorId,
+      pack: await toWebStickerPack(actorId, result.pack),
+      packDirName: result.pack.dirName,
     };
   } catch (error) {
     return actorStickerMutationError(
@@ -442,6 +536,8 @@ function classifyStickerError(error: unknown): ActorStickerMutationErrorCode {
     message.includes("cannot be imported") ||
     message.includes(".emapack") ||
     message.includes("unsupported emapack") ||
+    message.includes("only image media") ||
+    message.includes("unsupported image mime") ||
     message.includes("unsupported sticker image") ||
     message.includes("too large") ||
     message.includes("too many entries")

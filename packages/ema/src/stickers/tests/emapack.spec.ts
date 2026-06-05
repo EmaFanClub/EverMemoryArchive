@@ -98,6 +98,25 @@ describe("emapack", () => {
     await expect(parseEmaPack(archive)).rejects.toThrow(/missing.png.*missing/);
   });
 
+  test("rejects sticker ids outside letters numbers and underscores", async () => {
+    const archive = await buildRawEmaPack({
+      pack: { name: "坏包" },
+      stickers: [
+        {
+          id: "bad-id",
+          name: "非法",
+          description: "非法 id",
+          file: "stickers/bad.png",
+          data: TEST_IMAGE,
+        },
+      ],
+    });
+
+    await expect(parseEmaPack(archive)).rejects.toThrow(
+      /letters, numbers, and underscores/,
+    );
+  });
+
   test("rejects archives whose total sticker payload is too large", async () => {
     const archive = await buildRawEmaPack({
       pack: { name: "大包" },

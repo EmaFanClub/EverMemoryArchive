@@ -312,6 +312,144 @@ describe("ActorStickerStore", () => {
     ).rejects.toThrow(/already exists/);
   });
 
+  test("rejects sticker ids outside letters numbers and underscores", async () => {
+    await expect(
+      store.createCollectedSticker(1, "bad-id", "非法", "非法 id", {
+        type: "inline_data",
+        mimeType: "image/png",
+        data: TEST_IMAGE.toString("base64"),
+      }),
+    ).rejects.toThrow(/letters, numbers, and underscores/);
+
+    await store.createCollectedSticker(1, "wave", "挥手", "打招呼", {
+      type: "inline_data",
+      mimeType: "image/png",
+      data: TEST_IMAGE.toString("base64"),
+    });
+    await expect(
+      store.updateSticker(1, "收藏", "wave", "bad-id", "非法", "非法 id"),
+    ).rejects.toThrow(/letters, numbers, and underscores/);
+  });
+
+  test("rejects sticker ids outside letters numbers and underscores from pack json", async () => {
+    await writePack(
+      path.join(workspaceDir, "actor_1", "stickers"),
+      "bad-pack",
+      "坏包",
+      [
+        {
+          id: "bad-id",
+          name: "非法",
+          description: "非法 id",
+          file: "bad.png",
+        },
+      ],
+    );
+
+    await expect(store.listStickerPacks(1)).rejects.toThrow(
+      /letters, numbers, and underscores/,
+    );
+  });
+
+  test("creates empty custom sticker packs", async () => {
+    await expect(store.createStickerPack(1, "自定义包")).resolves.toMatchObject(
+      {
+        pack: {
+          dirName: "自定义包",
+          pack: "自定义包",
+          stickers: [],
+        },
+      },
+    );
+
+    await expect(store.getStickerPack(1, "自定义包")).resolves.toMatchObject({
+      dirName: "自定义包",
+      stickers: [],
+    });
+    await expect(
+      fs.readFile(
+        path.join(workspaceDir, "actor_1", "stickers", "自定义包", "pack.json"),
+        "utf-8",
+      ),
+    ).resolves.toContain('"stickers": []');
+  });
+
+  test("rejects duplicate custom sticker pack names", async () => {
+    await store.createStickerPack(1, "自定义包");
+
+    await expect(store.createStickerPack(1, "自定义包")).rejects.toThrow(
+      /already used/,
+    );
+    await expect(store.createStickerPack(1, "收藏")).rejects.toThrow(
+      /already used/,
+    );
+  });
+
+  test("adds image stickers to collection and custom packs", async () => {
+    await store.createStickerPack(1, "自定义包");
+
+    await expect(
+      store.createSticker(1, "自定义包", "custom", "自定义图", "自定义表情", {
+        type: "inline_data",
+        mimeType: "image/png",
+        data: TEST_IMAGE.toString("base64"),
+      }),
+    ).resolves.toMatchObject({
+      pack: {
+        dirName: "自定义包",
+        stickers: [
+          {
+            id: "custom",
+            name: "自定义图",
+            description: "自定义表情",
+            file: "custom.png",
+          },
+        ],
+      },
+      sticker: {
+        id: "custom",
+      },
+    });
+    await expect(
+      store.createSticker(1, "收藏", "saved", "收藏图", "收藏表情", {
+        type: "inline_data",
+        mimeType: "image/png",
+        data: TEST_IMAGE.toString("base64"),
+      }),
+    ).resolves.toMatchObject({
+      pack: {
+        dirName: "收藏",
+      },
+      sticker: {
+        id: "saved",
+      },
+    });
+
+    await expect(store.getStickerById(1, "custom")).resolves.toMatchObject({
+      pack: "自定义包",
+    });
+    await expect(store.getStickerById(1, "saved")).resolves.toMatchObject({
+      pack: "收藏",
+    });
+  });
+
+  test("rejects added sticker id conflicts across packs", async () => {
+    await store.createStickerPack(1, "自定义包");
+    await store.createCollectedSticker(1, "wave", "挥手", "收藏表情", {
+      type: "inline_data",
+      mimeType: "image/png",
+      data: TEST_IMAGE.toString("base64"),
+    });
+
+    await expect(
+      store.createSticker(1, "自定义包", "wave", "冲突", "重复 id", {
+        type: "inline_data",
+        mimeType: "image/png",
+        data: TEST_IMAGE.toString("base64"),
+      }),
+    ).rejects.toThrow(/already exists/);
+  });
+
   test("deletes a sticker item from collection pack", async () => {
     await store.createCollectedSticker(1, "wave", "挥手", "打招呼", {
       type: "inline_data",
@@ -511,7 +649,7 @@ describe("ActorStickerStore", () => {
     });
   });
 
-  test("imports exported collection backups as ordinary suffixed packs", async () => {
+  test("imports exported collection backups into the system collection pack", async () => {
     await store.createCollectedSticker(1, "wave", "挥手", "收藏表情", {
       type: "inline_data",
       mimeType: "image/png",
@@ -525,8 +663,8 @@ describe("ActorStickerStore", () => {
     });
 
     expect(imported.pack).toMatchObject({
-      dirName: "收藏-2",
-      pack: "收藏 (2)",
+      dirName: "收藏",
+      pack: "收藏",
       stickers: [
         {
           id: "wave",
@@ -538,8 +676,42 @@ describe("ActorStickerStore", () => {
     });
     await expect(store.getStickerPack(2, "收藏")).resolves.toMatchObject({
       dirName: "收藏",
-      stickers: [],
+      stickers: [
+        {
+          id: "wave",
+          name: "挥手",
+          description: "收藏表情",
+          file: "wave.png",
+        },
+      ],
     });
+  });
+
+  test("rejects collection backup imports whose sticker ids already exist", async () => {
+    await store.createCollectedSticker(1, "wave", "挥手", "已有表情", {
+      type: "inline_data",
+      mimeType: "image/png",
+      data: TEST_IMAGE.toString("base64"),
+    });
+    const archive = await buildEmaPack({
+      pack: { name: "收藏" },
+      stickers: [
+        {
+          id: "wave",
+          name: "冲突",
+          description: "重复 id",
+          file: "stickers/wave.png",
+          data: TEST_IMAGE,
+        },
+      ],
+    });
+
+    await expect(
+      store.importStickerPack(1, {
+        fileName: "collection.emapack",
+        buffer: archive,
+      }),
+    ).rejects.toThrow(/wave.*already exists/);
   });
 
   test("does not list leftover import temp directories as packs", async () => {

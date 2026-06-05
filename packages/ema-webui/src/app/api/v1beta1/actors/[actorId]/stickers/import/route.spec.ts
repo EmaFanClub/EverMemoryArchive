@@ -65,4 +65,24 @@ describe("actor sticker pack import route", () => {
     expect(response.status).toBe(400);
     expect(importActorStickerPackService).not.toHaveBeenCalled();
   });
+
+  test("returns a parse error when the upload body cannot be parsed", async () => {
+    const response = await POST(
+      {
+        formData: vi.fn().mockRejectedValue(new Error("too large")),
+      } as unknown as Request,
+      {
+        params: Promise.resolve({ actorId: "1" }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: {
+        message: "Sticker pack archive is too large or invalid.",
+      },
+    });
+    expect(importActorStickerPackService).not.toHaveBeenCalled();
+  });
 });

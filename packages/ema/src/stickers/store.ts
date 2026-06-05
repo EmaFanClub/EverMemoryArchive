@@ -6,6 +6,8 @@ import type { InlineDataItem } from "../llm/schema";
 import { ActorWorkspaceService } from "../workspace";
 import {
   type CreateCollectedStickerResult,
+  type CreateStickerPackResult,
+  type CreateStickerResult,
   type DeleteStickerResult,
   type DeleteStickerPackResult,
   type ExportStickerPackResult,
@@ -24,10 +26,12 @@ import {
 import {
   buildEmaPack,
   getStickerImageMimeTypeFromFileName,
+  type ParsedEmaSticker,
   parseEmaPack,
 } from "./emapack";
 
 const COLLECTION_PACK_NAME = "收藏";
+const STICKER_ID_PATTERN = /^[A-Za-z0-9_]+$/;
 
 export interface ActorStickerStoreOptions {
   workspace?: ActorWorkspaceService;
@@ -227,6 +231,41 @@ export class ActorStickerStore {
     });
   }
 
+  async createStickerPack(
+    actorId: number,
+    name: string,
+  ): Promise<CreateStickerPackResult> {
+    const packName = assertString(name, "name");
+
+    return await this.withActorStickerLock(actorId, async () => {
+      const { stickerRoot } =
+        await this.workspace.ensureActorStickerRoot(actorId);
+      await this.ensureCollectionPackInRoot(stickerRoot);
+      const existingPacks = await this.listStickerPacks(actorId);
+      if (existingPacks.some((pack) => pack.pack === packName)) {
+        throw new Error(`Sticker pack name '${packName}' is already used.`);
+      }
+
+      const dirName = toSafePackDirName(packName);
+      const dirPath = path.join(stickerRoot, dirName);
+      assertInside(stickerRoot, dirPath, "Sticker pack path is outside actor.");
+      if (await pathExists(dirPath)) {
+        throw new Error(`Sticker pack path '${dirName}' is already used.`);
+      }
+
+      await fs.mkdir(dirPath);
+      try {
+        await writePackJson(path.join(dirPath, "pack.json"), packName, []);
+        return {
+          pack: await this.readPack(stickerRoot, dirName),
+        };
+      } catch (error) {
+        await fs.rm(dirPath, { recursive: true, force: true });
+        throw error;
+      }
+    });
+  }
+
   async updateSticker(
     actorId: number,
     packDirName: string,
@@ -240,7 +279,7 @@ export class ActorStickerStore {
       "packDirName",
     );
     const currentId = assertString(currentStickerId, "stickerId");
-    const nextStickerId = assertPathSegment(assertString(nextId, "id"), "id");
+    const nextStickerId = assertStickerId(assertString(nextId, "id"), "id");
     const nextName = assertString(name, "name");
     const nextDescription = assertString(description, "description");
 
@@ -299,7 +338,29 @@ export class ActorStickerStore {
     description: string,
     inline: InlineDataItem,
   ): Promise<CreateCollectedStickerResult> {
-    const stickerId = assertPathSegment(assertString(id, "id"), "id");
+    return await this.createSticker(
+      actorId,
+      COLLECTION_PACK_NAME,
+      id,
+      name,
+      description,
+      inline,
+    );
+  }
+
+  async createSticker(
+    actorId: number,
+    packDirName: string,
+    id: string,
+    name: string,
+    description: string,
+    inline: InlineDataItem,
+  ): Promise<CreateStickerResult> {
+    const dirName = assertPathSegment(
+      assertString(packDirName, "packDirName"),
+      "packDirName",
+    );
+    const stickerId = assertStickerId(assertString(id, "id"), "id");
     const stickerName = assertString(name, "name");
     const stickerDescription = assertString(description, "description");
     if (!inline.mimeType.startsWith("image/")) {
@@ -310,7 +371,12 @@ export class ActorStickerStore {
       if (await this.getStickerById(actorId, stickerId)) {
         throw new Error(`Sticker id '${stickerId}' already exists.`);
       }
-      const pack = await this.ensureCollectionPack(actorId);
+      const { stickerRoot } =
+        await this.workspace.ensureActorStickerRoot(actorId);
+      const pack =
+        dirName === COLLECTION_PACK_NAME
+          ? await this.ensureCollectionPackInRoot(stickerRoot)
+          : await this.readPack(stickerRoot, dirName);
       const fileName = await this.nextAvailableStickerFileName(
         pack,
         stickerId,
@@ -408,6 +474,15 @@ export class ActorStickerStore {
         throw new StickerIdConflictError([...new Set(conflicts)]);
       }
 
+      if (importedPackName === COLLECTION_PACK_NAME) {
+        return {
+          pack: await this.importIntoCollectionPack(
+            stickerRoot,
+            parsed.stickers,
+          ),
+        };
+      }
+
       const identity = await this.nextImportedPackIdentity(
         stickerRoot,
         existingPacks,
@@ -464,6 +539,59 @@ export class ActorStickerStore {
         pack: await this.readPack(stickerRoot, identity.dirName),
       };
     });
+  }
+
+  private async importIntoCollectionPack(
+    stickerRoot: string,
+    importedStickers: ParsedEmaSticker[],
+  ): Promise<ResolvedStickerPack> {
+    const pack = await this.readPack(stickerRoot, COLLECTION_PACK_NAME);
+    const stickers = pack.stickers.map(({ id, name, description, file }) => ({
+      id,
+      name,
+      description,
+      file,
+    }));
+    const usedFileNames = new Set(stickers.map((sticker) => sticker.file));
+    const writtenFilePaths: string[] = [];
+
+    try {
+      for (const sticker of importedStickers) {
+        const stickerFileName = await nextAvailableImportedStickerFileName(
+          pack.dirPath,
+          assertPathSegment(
+            path.posix.basename(sticker.file),
+            `Sticker file for '${sticker.id}'`,
+          ),
+          usedFileNames,
+        );
+        const stickerFilePath = path.join(pack.dirPath, stickerFileName);
+        assertInside(
+          pack.dirPath,
+          stickerFilePath,
+          "Sticker file path is outside collection pack.",
+        );
+        await writeFileAtomic(stickerFilePath, sticker.data);
+        writtenFilePaths.push(stickerFilePath);
+        stickers.push({
+          id: sticker.id,
+          name: sticker.name,
+          description: sticker.description,
+          file: stickerFileName,
+        });
+      }
+
+      await writePackJson(pack.packFilePath, pack.pack, stickers);
+    } catch (error) {
+      await Promise.all(
+        writtenFilePaths.map((filePath) =>
+          fs.rm(filePath, { force: true }).catch(() => undefined),
+        ),
+      );
+      throw error;
+    }
+
+    return await this.readPack(stickerRoot, COLLECTION_PACK_NAME);
   }
 
   async exportStickerPack(
@@ -714,7 +842,10 @@ export class ActorStickerStore {
       }
       const item = value as Partial<StickerDefinition>;
       const sticker = {
-        id: assertString(item.id, `${packFilePath}:stickers[${index}].id`),
+        id: assertStickerId(
+          assertString(item.id, `${packFilePath}:stickers[${index}].id`),
+          `${packFilePath}:stickers[${index}].id`,
+        ),
         name: assertString(
           item.name,
           `${packFilePath}:stickers[${index}].name`,
@@ -841,6 +972,15 @@ function assertPathSegment(value: string, field: string): string {
   return value;
 }
 
+function assertStickerId(value: string, field: string): string {
+  if (!STICKER_ID_PATTERN.test(value)) {
+    throw new Error(
+      `${field} must contain only letters, numbers, and underscores.`,
+    );
+  }
+  return value;
+}
+
 function toSafePackDirName(packName: string): string {
   const safeName = packName
     .trim()
@@ -867,6 +1007,28 @@ function nextUniqueFileName(fileName: string, usedFileNames: Set<string>) {
   for (let index = 0; ; index += 1) {
     const candidate = index === 0 ? fileName : `${stem}-${index + 1}${ext}`;
     if (!usedFileNames.has(candidate)) {
+      usedFileNames.add(candidate);
+      return candidate;
+    }
+  }
+}
+
+async function nextAvailableImportedStickerFileName(
+  packDirPath: string,
+  fileName: string,
+  usedFileNames: Set<string>,
+): Promise<string> {
+  const ext = path.extname(fileName);
+  const stem = ext ? fileName.slice(0, -ext.length) : fileName;
+  for (let index = 0; ; index += 1) {
+    const candidate = index === 0 ? fileName : `${stem}-${index + 1}${ext}`;
+    if (usedFileNames.has(candidate)) {
+      continue;
+    }
+
+    const filePath = path.join(packDirPath, candidate);
+    assertInside(packDirPath, filePath, "Sticker file path is outside pack.");
+    if (!(await pathExists(filePath))) {
       usedFileNames.add(candidate);
       return candidate;
     }

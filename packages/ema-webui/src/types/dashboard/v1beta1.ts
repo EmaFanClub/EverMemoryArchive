@@ -638,6 +638,18 @@ export interface ActorStickerPackPatchRequest {
   name: string;
 }
 
+export interface ActorStickerPackCreateRequest {
+  requestId?: string;
+  name: string;
+}
+
+export interface ActorStickerCreateRequest {
+  requestId?: string;
+  id: string;
+  name: string;
+  description: string;
+}
+
 export interface ActorStickerMutationResponse {
   apiVersion: "v1beta1";
   ok: boolean;

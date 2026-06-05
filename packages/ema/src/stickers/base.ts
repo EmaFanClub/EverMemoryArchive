@@ -37,6 +37,15 @@ export interface UpdateStickerPackResult {
   pack: ResolvedStickerPack;
 }
 
+export interface CreateStickerPackResult {
+  pack: ResolvedStickerPack;
+}
+
+export interface CreateStickerResult {
+  pack: ResolvedStickerPack;
+  sticker: ResolvedStickerDefinition;
+}
+
 export interface CreateCollectedStickerResult {
   pack: ResolvedStickerPack;
   sticker: ResolvedStickerDefinition;

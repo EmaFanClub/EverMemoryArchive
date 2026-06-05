@@ -17,6 +17,8 @@ import { buildEmaPack } from "ema";
 import {
   actorStickerHttpStatus,
   buildActorStickerListResponse,
+  createActorStickerPackService,
+  createActorStickerService,
   deleteActorStickerPackService,
   deleteActorStickerService,
   exportActorStickerPackService,
@@ -215,6 +217,39 @@ describe("actor sticker service", () => {
     expect(actorStickerHttpStatus(response)).toBe(400);
   });
 
+  test("creates an empty custom sticker pack", async () => {
+    const response = await createActorStickerPackService("1", {
+      name: "自定义包",
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      packDirName: "自定义包",
+      pack: {
+        dirName: "自定义包",
+        name: "自定义包",
+        stickerCount: 0,
+        stickers: [],
+      },
+    });
+  });
+
+  test("rejects duplicate custom sticker pack creation", async () => {
+    await createActorStickerPackService("1", { name: "自定义包" });
+
+    const response = await createActorStickerPackService("1", {
+      name: "自定义包",
+    });
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_CONFIG",
+      },
+    });
+    expect(actorStickerHttpStatus(response)).toBe(400);
+  });
+
   test("updates sticker id and metadata in one actor pack", async () => {
     await buildActorStickerListResponse("1");
     await writeActorPack(1, "custom-pack", "自定义包", [
@@ -397,6 +432,34 @@ describe("actor sticker service", () => {
       },
     });
     expect(actorStickerHttpStatus(missingSticker)).toBe(404);
+  });
+
+  test("adds an image sticker to the collection pack", async () => {
+    await buildActorStickerListResponse("1");
+
+    const response = await createActorStickerService("1", "收藏", {
+      id: "uploaded",
+      name: "上传图",
+      description: "上传表情",
+      fileName: "uploaded.png",
+      contentType: "image/png",
+      buffer: TEST_IMAGE,
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      packDirName: "收藏",
+      pack: {
+        dirName: "收藏",
+        stickers: [
+          {
+            id: "uploaded",
+            name: "上传图",
+            description: "上传表情",
+          },
+        ],
+      },
+    });
   });
 
   test("does not expose local paths when sticker preview loading fails", async () => {

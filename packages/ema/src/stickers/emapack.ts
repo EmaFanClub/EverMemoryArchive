@@ -9,8 +9,9 @@ export const EMAPACK_FORMAT = "ema.sticker-pack";
 export const EMAPACK_VERSION = 1;
 export const EMAPACK_MAX_ARCHIVE_BYTES = 32 * 1024 * 1024;
 export const EMAPACK_MAX_ENTRIES = 512;
-export const EMAPACK_MAX_STICKER_BYTES = 8 * 1024 * 1024;
+export const EMAPACK_MAX_STICKER_BYTES = 5 * 1024 * 1024;
 export const EMAPACK_MAX_TOTAL_STICKER_BYTES = 64 * 1024 * 1024;
+const STICKER_ID_PATTERN = /^[A-Za-z0-9_]+$/;
 
 export interface EmaStickerPackManifest {
   format: typeof EMAPACK_FORMAT;
@@ -202,7 +203,7 @@ function parseManifest(value: unknown): EmaStickerPackManifest {
     }
     const stickerRecord = item as Partial<StickerDefinition>;
     const sticker = {
-      id: assertPathSegment(
+      id: assertStickerId(
         assertString(stickerRecord.id, `emapack.json:stickers[${index}].id`),
         `emapack.json:stickers[${index}].id`,
       ),
@@ -291,6 +292,15 @@ function assertPathSegment(value: string, field: string): string {
     value.includes("\0")
   ) {
     throw new Error(`${field} must be a safe path segment.`);
+  }
+  return value;
+}
+
+function assertStickerId(value: string, field: string): string {
+  if (!STICKER_ID_PATTERN.test(value)) {
+    throw new Error(
+      `${field} must contain only letters, numbers, and underscores.`,
+    );
   }
   return value;
 }

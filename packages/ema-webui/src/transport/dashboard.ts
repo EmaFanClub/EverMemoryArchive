@@ -20,7 +20,9 @@ import type {
   ActorQQConversationPatchRequest,
   ActorQQSaveResponse,
   ActorSettingsResponse,
+  ActorStickerCreateRequest,
   ActorStickerListResponse,
+  ActorStickerPackCreateRequest,
   ActorStickerPackPatchRequest,
   ActorStickerPatchRequest,
   ActorStickerMutationResponse,
@@ -183,11 +185,45 @@ export function getActorStickers(actorId: string) {
   );
 }
 
+export function createActorStickerPack(
+  actorId: string,
+  request: ActorStickerPackCreateRequest,
+) {
+  return fetchJson<ActorStickerMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    },
+  );
+}
+
 export function importActorStickerPack(actorId: string, file: File) {
   const form = new FormData();
   form.append("file", file);
   return fetchJson<ActorStickerMutationResponse>(
     `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers/import`,
+    {
+      method: "POST",
+      body: form,
+    },
+  );
+}
+
+export function createActorSticker(
+  actorId: string,
+  packDirName: string,
+  request: ActorStickerCreateRequest,
+  file: File,
+) {
+  const form = new FormData();
+  form.append("id", request.id);
+  form.append("name", request.name);
+  form.append("description", request.description);
+  form.append("file", file);
+  return fetchJson<ActorStickerMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/stickers/${encodeURIComponent(packDirName)}/items`,
     {
       method: "POST",
       body: form,
