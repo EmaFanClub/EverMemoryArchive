@@ -31,11 +31,15 @@
     "release:preflight": "node scripts/release-preflight.mjs",
     "release:changelog": "node scripts/generate-changelog.mjs",
     "draft-release": "node scripts/draft-release.mjs",
+    "openspec:list": "openspec list",
+    "openspec:status": "openspec status",
+    "openspec:validate": "node scripts/validate-openspec.mjs",
     "format": "prettier --write \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\"",
     "format:check": "prettier --check \"{packages,scripts}/**/*.{js,jsx,ts,tsx,json,css}\""
   },
   "packageManager": "pnpm@10.16.1",
   "devDependencies": {
+    "@fission-ai/openspec": "1.4.1",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^20.11.17",
     "cross-spawn": "^7.0.6",

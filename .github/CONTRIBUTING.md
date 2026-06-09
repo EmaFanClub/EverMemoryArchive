@@ -45,6 +45,18 @@ git commit -m "feat: implement login functionality"
 git push origin <type>/<description>
 ```
 
+#### OpenSpec for Requirement Changes
+
+For non-documentation behavior changes, create and validate an OpenSpec change before implementation:
+
+```bash
+pnpm exec openspec new change <change-name>
+pnpm exec openspec status --change <change-name>
+pnpm openspec:validate
+```
+
+OpenSpec project artifacts live under `openspec/` and should be committed with the related work. Keep `.codex/` local; it may contain personal tool state and generated Codex skills and must not be committed.
+
 #### 3. Create Pull Request
 
 1. Go to the GitHub repository
@@ -86,6 +98,7 @@ Use the following prefixes to standardize commit messages:
 - `chore:` Build/tooling related changes
 
 Examples:
+
 ```
 feat: implement user registration feature
 fix: resolve login verification code expiration issue
@@ -141,6 +154,18 @@ git commit -m "feat: 实现登录功能"
 git push origin <type>/<description>
 ```
 
+#### 需求变更使用 OpenSpec
+
+对于非纯文档的行为变更，开发前应先创建并校验 OpenSpec change：
+
+```bash
+pnpm exec openspec new change <change-name>
+pnpm exec openspec status --change <change-name>
+pnpm openspec:validate
+```
+
+OpenSpec 项目级产物保存在 `openspec/` 下，并应随相关改动提交。`.codex/` 保持本地化，可能包含个人工具状态和生成的 Codex skills，不应提交到仓库。
+
 #### 3. 创建Pull Request
 
 1. 登录GitHub仓库
@@ -182,6 +207,7 @@ git push origin <type>/<description>
 - `chore:` 构建/工具相关
 
 示例：
+
 ```
 feat: 实现用户注册功能
 fix: 修复登录验证码过期问题
