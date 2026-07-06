@@ -58,6 +58,40 @@ describe("MongoConversationMessageDB with in-memory MongoDB", () => {
     expect(retrievedMessage).toEqual(stored);
   });
 
+  test("should exclude keep_silence messages when listing messages", async () => {
+    const visible = await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      message: {
+        kind: "actor",
+        name: "EMA",
+        contents: [{ type: "text", text: "Visible reply" }],
+      },
+      createdAt: 1000,
+    });
+    await db.addConversationMessage({
+      conversationId: 1,
+      actorId: 1,
+      message: {
+        kind: "actor",
+        name: "EMA",
+        contents: [],
+        think: "No reply needed.",
+        keep_silence: true,
+      },
+      createdAt: 2000,
+    });
+
+    const messages = await db.listConversationMessages({
+      conversationId: 1,
+      sort: "desc",
+      limit: 1,
+      excludeKeepSilence: true,
+    });
+
+    expect(messages).toEqual([visible]);
+  });
+
   test("should assign actor-scoped msgIds sequentially", async () => {
     const first = await db.addConversationMessage({
       conversationId: 1,

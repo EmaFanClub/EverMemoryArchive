@@ -100,6 +100,14 @@ export class MongoConversationMessageDB implements ConversationMessageDB {
       }
       filter.buffered = req.buffered ? { $ne: false } : false;
     }
+    if (req.excludeKeepSilence !== undefined) {
+      if (typeof req.excludeKeepSilence !== "boolean") {
+        throw new Error("excludeKeepSilence must be a boolean");
+      }
+      if (req.excludeKeepSilence) {
+        filter["message.keep_silence"] = { $ne: true };
+      }
+    }
 
     let cursor = collection.find(filter);
     if (req.sort) {

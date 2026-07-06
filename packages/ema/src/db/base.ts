@@ -789,6 +789,10 @@ export interface ListConversationMessagesRequest {
    * where the field is absent.
    */
   buffered?: boolean;
+  /**
+   * Exclude hidden keep_silence actor messages from the result set.
+   */
+  excludeKeepSilence?: boolean;
 }
 
 /**

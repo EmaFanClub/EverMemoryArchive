@@ -323,6 +323,7 @@ export class ActorController {
           conversationId: conversation.id,
           sort: "desc",
           limit: 1,
+          excludeKeepSilence: true,
         },
       );
     const message = latest[0];

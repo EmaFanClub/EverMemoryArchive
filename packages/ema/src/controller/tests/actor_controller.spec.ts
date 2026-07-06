@@ -140,6 +140,7 @@ describe("ActorController", () => {
       conversationId: 11,
       sort: "desc",
       limit: 1,
+      excludeKeepSilence: true,
     });
     expect(actors[0]?.latestPreview).toEqual({
       text: "web preview",
@@ -149,6 +150,78 @@ describe("ActorController", () => {
       startMinutes: 11 * 60,
       endMinutes: 19 * 60,
     });
+  });
+
+  test("skips hidden keep_silence messages when building actor list previews", async () => {
+    const { controller, server } = createFixture();
+    const visible = {
+      id: 101,
+      conversationId: 11,
+      actorId: 1,
+      msgId: 10,
+      message: {
+        kind: "actor",
+        name: "小绿",
+        contents: [{ type: "text", text: "web preview" }],
+      },
+      createdAt: 1000,
+    };
+    server.dbService.conversationMessageDB.listConversationMessages.mockImplementationOnce(
+      async (req) =>
+        req.excludeKeepSilence
+          ? [visible]
+          : [
+              {
+                id: 102,
+                conversationId: 11,
+                actorId: 1,
+                msgId: 11,
+                message: {
+                  kind: "actor",
+                  name: "小绿",
+                  contents: [],
+                  think: "这轮不需要继续回复。",
+                  keep_silence: true,
+                },
+                createdAt: 1100,
+              },
+              visible,
+            ],
+    );
+
+    const actors = await controller.listForUser(1);
+
+    expect(
+      server.dbService.conversationMessageDB.listConversationMessages,
+    ).toHaveBeenCalledWith({
+      conversationId: 11,
+      sort: "desc",
+      limit: 1,
+      excludeKeepSilence: true,
+    });
+    expect(actors[0]?.latestPreview).toEqual({
+      text: "web preview",
+      time: 1000,
+    });
+  });
+
+  test("omits actor list previews when there are no visible messages", async () => {
+    const { controller, server } = createFixture();
+    server.dbService.conversationMessageDB.listConversationMessages.mockResolvedValueOnce(
+      [],
+    );
+
+    const actors = await controller.listForUser(1);
+
+    expect(
+      server.dbService.conversationMessageDB.listConversationMessages,
+    ).toHaveBeenCalledWith({
+      conversationId: 11,
+      sort: "desc",
+      limit: 1,
+      excludeKeepSilence: true,
+    });
+    expect(actors[0]?.latestPreview).toBeUndefined();
   });
 
   test("soft deletes a pending training actor and publishes an event", async () => {
