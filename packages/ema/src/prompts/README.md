@@ -27,7 +27,7 @@ prompts/
 │   │   后台执行使用的 system prompt 模板
 │   └── partials/
 │       ├── preamble.md
-│       │   基础身份和存在形式
+│       │   基础身份、存在形式和目标（主线/支线）
 │       ├── system.md
 │       │   系统原则、工具和技能使用规则
 │       ├── world.md
