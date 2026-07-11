@@ -187,6 +187,109 @@ export interface ActorTokenUsageSummaryResponse {
   trendByDay: ActorTokenUsageDaySummary[];
 }
 
+export type ActorScheduleTask =
+  | "chat"
+  | "activity"
+  | "wake"
+  | "sleep"
+  | "focus";
+export type ActorScheduleGroupId =
+  | "overdue"
+  | "upcoming"
+  | "recurring"
+  | "focused";
+export type ActorScheduleType = "once" | "every";
+
+export interface ActorScheduleListItem {
+  id: string;
+  type: ActorScheduleType;
+  task: ActorScheduleTask;
+  editable: boolean;
+  conversationId?: string;
+  session?: string;
+  summary?: string;
+  prompt: string;
+  runAt?: string;
+  nextRunAt?: string | null;
+  interval?: string | number;
+  lastRunAt?: string | null;
+}
+
+export interface ActorScheduleListResponse {
+  apiVersion: "v1beta1";
+  actorId: string;
+  groups: Record<ActorScheduleGroupId, ActorScheduleListItem[]>;
+}
+
+export interface ActorSchedulePatchRequest {
+  requestId?: string;
+  summary?: string;
+  prompt?: string;
+  runAt?: string;
+}
+
+export type ActorScheduleMutationErrorCode =
+  | "INVALID_SCHEDULE"
+  | "SCHEDULE_NOT_FOUND"
+  | "UNSUPPORTED_FIELD"
+  | "SCHEDULE_DELETE_FAILED"
+  | "SCHEDULE_UPDATE_FAILED";
+
+export interface ActorScheduleMutationResponse {
+  apiVersion: "v1beta1";
+  ok: boolean;
+  actorId: string;
+  schedule?: ActorScheduleListItem;
+  error?: {
+    code: ActorScheduleMutationErrorCode;
+    retryable: boolean;
+    message: string;
+  };
+}
+
+export type ActorMemoryKind = "year" | "month" | "day" | "activity";
+
+export interface ActorMemoryListItem {
+  id: string;
+  kind: ActorMemoryKind;
+  date: string;
+  dayDate?: string;
+  maxLength: number;
+  memory: string;
+  createdAt?: number;
+  updatedAt?: number;
+  processedAt?: number;
+}
+
+export interface ActorMemoryListResponse {
+  apiVersion: "v1beta1";
+  actorId: string;
+  groups: Record<ActorMemoryKind, ActorMemoryListItem[]>;
+}
+
+export interface ActorMemoryPatchRequest {
+  requestId?: string;
+  memory: string;
+}
+
+export type ActorMemoryMutationErrorCode =
+  | "INVALID_MEMORY"
+  | "MEMORY_NOT_FOUND"
+  | "MEMORY_DELETE_FAILED"
+  | "MEMORY_UPDATE_FAILED";
+
+export interface ActorMemoryMutationResponse {
+  apiVersion: "v1beta1";
+  ok: boolean;
+  actorId: string;
+  memory?: ActorMemoryListItem;
+  error?: {
+    code: ActorMemoryMutationErrorCode;
+    retryable: boolean;
+    message: string;
+  };
+}
+
 export interface ActorActivityState {
   enabled: boolean;
   status: ActorRuntimeStatus;
