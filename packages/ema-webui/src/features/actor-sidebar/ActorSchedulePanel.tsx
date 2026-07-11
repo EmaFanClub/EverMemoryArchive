@@ -93,6 +93,7 @@ export function ActorSchedulePanel({ actorId }: { actorId: string }) {
       const previous = current[id] ?? {
         summary: "",
         prompt: "",
+        runAt: "",
         error: null,
       };
       return {
