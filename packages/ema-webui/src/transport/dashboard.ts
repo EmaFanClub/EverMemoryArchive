@@ -1,5 +1,8 @@
 import type {
   ActorActivityUpdateResponse,
+  ActorMemoryListResponse,
+  ActorMemoryMutationResponse,
+  ActorMemoryPatchRequest,
   ActorConversationMutationResponse,
   ActorConversationPatchRequest,
   ActorConversationResponse,
@@ -19,6 +22,9 @@ import type {
   ActorQQConversationMutationResponse,
   ActorQQConversationPatchRequest,
   ActorQQSaveResponse,
+  ActorScheduleListResponse,
+  ActorScheduleMutationResponse,
+  ActorSchedulePatchRequest,
   ActorSettingsResponse,
   ActorStickerCreateRequest,
   ActorStickerListResponse,
@@ -172,6 +178,74 @@ export function getActorTokenUsage(
     {
       method: "GET",
       ...init,
+    },
+  );
+}
+
+export function getActorSchedules(actorId: string, init?: RequestInit) {
+  return fetchJson<ActorScheduleListResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/schedules`,
+    {
+      method: "GET",
+      ...init,
+    },
+  );
+}
+
+export function patchActorSchedule(
+  actorId: string,
+  scheduleId: string,
+  patch: ActorSchedulePatchRequest,
+) {
+  return fetchJson<ActorScheduleMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/schedules/${encodeURIComponent(scheduleId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+  );
+}
+
+export function deleteActorSchedule(actorId: string, scheduleId: string) {
+  return fetchJson<ActorScheduleMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/schedules/${encodeURIComponent(scheduleId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export function getActorMemories(actorId: string, init?: RequestInit) {
+  return fetchJson<ActorMemoryListResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/memories`,
+    {
+      method: "GET",
+      ...init,
+    },
+  );
+}
+
+export function patchActorMemory(
+  actorId: string,
+  memoryId: string,
+  patch: ActorMemoryPatchRequest,
+) {
+  return fetchJson<ActorMemoryMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/memories/${encodeURIComponent(memoryId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+  );
+}
+
+export function deleteActorMemory(actorId: string, memoryId: string) {
+  return fetchJson<ActorMemoryMutationResponse>(
+    `/api/v1beta1/actors/${encodeURIComponent(actorId)}/memories/${encodeURIComponent(memoryId)}`,
+    {
+      method: "DELETE",
     },
   );
 }

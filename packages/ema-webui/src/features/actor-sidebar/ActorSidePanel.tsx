@@ -14,6 +14,8 @@ import {
 import styles from "@/app/dashboard/page.module.css";
 import type { ActorSummary } from "@/types/dashboard/v1beta1";
 
+import { ActorMemoryPanel } from "./ActorMemoryPanel";
+import { ActorSchedulePanel } from "./ActorSchedulePanel";
 import { ActorTokenUsageStats } from "./ActorTokenUsageStats";
 
 const SLEEP_AXIS_MINUTES = 24 * 60;
@@ -105,6 +107,8 @@ export function ActorSidePanel({
           renderSettings()
         ) : resolvedActiveTab === "schedule" ? (
           <ActorSchedulePreview actor={actor} />
+        ) : resolvedActiveTab === "memory" ? (
+          <ActorMemoryPanel actorId={actor.id} />
         ) : resolvedActiveTab === "stats" ? (
           <ActorTokenUsageStats actor={actor} />
         ) : (
@@ -122,10 +126,7 @@ function ActorSchedulePreview({ actor }: { actor: ActorSummary }) {
   return (
     <div className={styles.actorSchedulePanel}>
       <ActorSleepSchedulePreview schedule={actor.sleepSchedule} />
-      <div className={styles.actorInfoComingSoon}>
-        <span>日程</span>
-        <strong>Coming soon</strong>
-      </div>
+      <ActorSchedulePanel actorId={actor.id} />
     </div>
   );
 }
