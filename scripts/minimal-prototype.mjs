@@ -9,7 +9,7 @@
  * 4. Penguin channel as output (dispatches to `penguin org channel send`)
  *
  * Usage:
- *   node scripts/minimal-prototype.mjs [--channel <id>] [--read-latest] [--prompt <text>] [--dry-run]
+ *   node scripts/minimal-prototype.mjs [--channel <id>] [--read-latest] [--prompt <text>] [--dispatch] [--dry-run]
  */
 
 import { execFileSync } from "node:child_process";
@@ -52,11 +52,12 @@ function parseArgs() {
 
 function fetchLatestChannelMessage(channel) {
   try {
-    const raw = execFileSync("penguin", ["org", "channel", "tail", "--channel", channel, "-n", "1", "--json"], {
+    const raw = execFileSync("penguin", ["org", "channel", "tail", "--channel", channel, "-n", "5", "--json"], {
       encoding: "utf8",
     });
     const parsed = JSON.parse(raw);
-    const msg = parsed.messages && parsed.messages[0];
+    const msgs = (parsed.messages || []).filter((m) => m.sender !== "system");
+    const msg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
     if (!msg) return null;
     return normalizeChannelMessage({ ...msg, channelId: channel });
   } catch (err) {
@@ -67,34 +68,31 @@ function fetchLatestChannelMessage(channel) {
 
 async function runLlm(prompt, systemPrompt) {
   try {
-    // Run minimal LLM turn via penguin run
     const out = execFileSync(
       "penguin",
       [
         "run",
+        "--agent-id",
+        "ema_minimal",
+        "--workspace",
+        "/tmp/ema-minimal-workspace",
         "-m",
-        `${systemPrompt}\n\nUser request: ${prompt}`,
+        prompt,
         "--approve",
         "allow-all",
         "--timeout",
-        "25s",
+        "45s",
+        "--json",
       ],
-      { encoding: "utf8", timeout: 30000 }
+      { encoding: "utf8", timeout: 60000 }
     );
-    // Extract the final assistant reply text (filter out headers/stats)
-    const lines = out.split("\n");
-    const cleanLines = lines.filter((line) => {
-      if (line.startsWith("PenguinHarness run")) return false;
-      if (line.startsWith("Agent:")) return false;
-      if (line.startsWith("Workspace:")) return false;
-      if (line.startsWith("Model:")) return false;
-      if (line.startsWith("Server:")) return false;
-      if (line.startsWith("[stats]")) return false;
-      if (line.startsWith("**") && line.endsWith("**")) return false;
-      return true;
-    });
-    return cleanLines.join("\n").trim();
+    const parsed = JSON.parse(out);
+    if (parsed && parsed.text) {
+      return parsed.text.trim();
+    }
+    return String(out).trim();
   } catch (err) {
+    console.error(`[LLM Invocation Warning]: ${err.message}`);
     return `[Minimal Prototype Fallback] Processed prompt "${prompt}" without memory or personality.`;
   }
 }
@@ -110,12 +108,18 @@ async function main() {
   const opts = parseArgs();
   console.log("=== Minimal EMA Prototype Runner ===");
   console.log(`Channel: ${opts.channel}`);
+  console.log(`Dispatch: ${opts.dispatch}`);
   console.log(`Dry Run: ${opts.dryRun}`);
 
   let inputMessage = null;
   if (opts.readLatest) {
     console.log(`Reading latest message from channel ${opts.channel}...`);
     inputMessage = fetchLatestChannelMessage(opts.channel);
+    if (inputMessage) {
+      console.log(`Found latest channel message from ${inputMessage.sender}: "${inputMessage.text}"`);
+    } else {
+      console.log(`No user message found in channel ${opts.channel}.`);
+    }
   }
 
   if (!inputMessage) {
