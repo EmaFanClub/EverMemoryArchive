@@ -2,10 +2,16 @@
  * @prism-shadow/ema - Minimal Variant Specification & Runner
  *
  * Characteristics:
- * 1. Zero Personality: Purely functional, neutral system prompt.
+ * 1. Zero Personality: Purely functional, neutral system prompt without persona or emotional tone.
  * 2. Zero Memory: EverMemoryArchive retrieval, indexing, and storage bypassed.
- * 3. Penguin Channel Input: Ingests normalized channel events / messages.
- * 4. Penguin Channel Output: Formats and dispatches completions back to the channel.
+ *    (Harness session transcript accumulates turn continuity for user visibility;
+ *    EMA cognitive storage, embeddings, vector search, and consolidation remain fully bypassed).
+ * 3. Penguin Channel Input: Watch bridge ingesting messages into the persistent
+ *    `ema_minimal` session. Polls the channel, filters for human senders (`user:*`),
+ *    and deduplicates message IDs. Rejects `agent:*` and `system` senders to prevent reply loops.
+ * 4. Penguin Channel Output: Formats and dispatches completions back to the channel
+ *    on behalf of the operating employee agent (the session that runs the runner),
+ *    never the server owner.
  *
  * Identity & Channel Dispatch Specification:
  * - Channel output is dispatched on behalf of the operating employee agent
@@ -86,6 +92,83 @@ export function normalizeChannelMessage(raw: {
     text: (raw.text || "").trim(),
     timestamp: raw.time || new Date().toISOString(),
   };
+}
+
+/**
+ * Evaluates whether an incoming channel message should be processed by the watch loop.
+ *
+ * Rules:
+ * 1. Sender must start with "user:" (humans only). Messages from "agent:" and "system"
+ *    are rejected to prevent reply loops.
+ * 2. Message ID must not be present in `seenIds` (deduplication).
+ */
+export function isEligibleChannelMessage(
+  msg: { id?: string; sender?: string },
+  seenIds: Set<string> | string[]
+): boolean {
+  if (!msg.id) return false;
+  const seenSet = seenIds instanceof Set ? seenIds : new Set(seenIds);
+  if (seenSet.has(msg.id)) return false;
+  if (!msg.sender || !msg.sender.startsWith("user:")) return false;
+  return true;
+}
+
+/**
+ * Filters a list of raw channel messages down to eligible, unseen human messages.
+ */
+export function filterNewUserMessages(
+  rawMessages: Array<{
+    id?: string;
+    sender?: string;
+    text?: string;
+    time?: string;
+    channel?: string;
+    channelId?: string;
+  }>,
+  seenIds: Set<string> | string[],
+  channelId?: string
+): MinimalChannelMessage[] {
+  const seenSet = seenIds instanceof Set ? seenIds : new Set(seenIds);
+  const eligible: MinimalChannelMessage[] = [];
+  for (const raw of rawMessages) {
+    if (isEligibleChannelMessage(raw, seenSet)) {
+      eligible.push(
+        normalizeChannelMessage({
+          ...raw,
+          channelId: channelId || raw.channelId || raw.channel,
+        })
+      );
+    }
+  }
+  return eligible;
+}
+
+/**
+ * Parses duration strings (e.g. "4h", "30m", "45s", "1000") into milliseconds.
+ * Defaults to 4 hours (14,400,000 ms) if empty or invalid.
+ */
+export function parseWatchDuration(raw?: string | number): number {
+  if (typeof raw === "number" && !isNaN(raw)) return Math.max(0, raw);
+  if (!raw || typeof raw !== "string") return 4 * 60 * 60 * 1000;
+  const str = raw.trim();
+  const match = str.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)?$/i);
+  if (!match) return 4 * 60 * 60 * 1000;
+  const num = parseFloat(match[1]);
+  const unit = (match[2] || "ms").toLowerCase();
+  switch (unit) {
+    case "ms":
+      return Math.round(num);
+    case "s":
+      return Math.round(num * 1000);
+    case "m":
+      return Math.round(num * 60 * 1000);
+    case "h":
+      return Math.round(num * 60 * 60 * 1000);
+    case "d":
+      return Math.round(num * 24 * 60 * 60 * 1000);
+    default:
+      return Math.round(num);
+  }
 }
 
 /**
