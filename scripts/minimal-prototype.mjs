@@ -8,6 +8,11 @@
  * 3. Penguin channel as input (reads from `penguin org channel tail`)
  * 4. Penguin channel as output (dispatches to `penguin org channel send`)
  *
+ * Identity & Channel Dispatch:
+ * - Channel output is dispatched on behalf of the operating employee agent
+ *   (the session that runs the runner), never the server owner.
+ * - Refuses to dispatch when PENGUIN_AGENT_ID is unset.
+ *
  * Usage:
  *   node scripts/minimal-prototype.mjs [--channel <id>] [--read-latest] [--prompt <text>] [--dispatch] [--dry-run]
  */
@@ -18,6 +23,7 @@ import {
   DEFAULT_MINIMAL_SYSTEM_PROMPT,
   normalizeChannelMessage,
   executeMinimalTurn,
+  assertAgentIdentity,
 } from "../packages/ema/dist/index.js";
 
 function parseArgs() {
@@ -52,9 +58,14 @@ function parseArgs() {
 
 function fetchLatestChannelMessage(channel) {
   try {
-    const raw = execFileSync("penguin", ["org", "channel", "tail", "--channel", channel, "-n", "5", "--json"], {
-      encoding: "utf8",
-    });
+    const raw = execFileSync(
+      "penguin",
+      ["org", "channel", "tail", "--channel", channel, "-n", "5", "--json"],
+      {
+        encoding: "utf8",
+        env: process.env,
+      }
+    );
     const parsed = JSON.parse(raw);
     const msgs = (parsed.messages || []).filter((m) => m.sender !== "system");
     const msg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
@@ -68,6 +79,7 @@ function fetchLatestChannelMessage(channel) {
 
 async function runLlm(prompt, systemPrompt) {
   try {
+    // Pure text completion: --approve deny-all prevents any tool execution
     const out = execFileSync(
       "penguin",
       [
@@ -77,14 +89,14 @@ async function runLlm(prompt, systemPrompt) {
         "--workspace",
         "/tmp/ema-minimal-workspace",
         "-m",
-        prompt,
+        `${systemPrompt}\n\nUser request: ${prompt}`,
         "--approve",
-        "allow-all",
+        "deny-all",
         "--timeout",
         "45s",
         "--json",
       ],
-      { encoding: "utf8", timeout: 60000 }
+      { encoding: "utf8", timeout: 60000, env: process.env }
     );
     const parsed = JSON.parse(out);
     if (parsed && parsed.text) {
@@ -98,9 +110,11 @@ async function runLlm(prompt, systemPrompt) {
 }
 
 async function dispatchToChannel(channel, message) {
-  console.log(`[Dispatching to ${channel}]:\n${message}`);
+  const agentId = assertAgentIdentity(process.env);
+  console.log(`[Dispatching to ${channel} as ${agentId}]:\n${message}`);
   execFileSync("penguin", ["org", "channel", "send", "--channel", channel, "-m", message], {
     encoding: "utf8",
+    env: process.env,
   });
 }
 
@@ -110,6 +124,17 @@ async function main() {
   console.log(`Channel: ${opts.channel}`);
   console.log(`Dispatch: ${opts.dispatch}`);
   console.log(`Dry Run: ${opts.dryRun}`);
+
+  // Guard: if dispatching, require explicit agent identity
+  if (opts.dispatch && !opts.dryRun) {
+    try {
+      const agentId = assertAgentIdentity(process.env);
+      console.log(`Verified operating agent identity: ${agentId}`);
+    } catch (err) {
+      console.error(`[Error] ${err.message}`);
+      process.exit(1);
+    }
+  }
 
   let inputMessage = null;
   if (opts.readLatest) {
@@ -146,13 +171,18 @@ async function main() {
         console.log(`[Dry-Run Dispatch Simulated] Would post to ${channel}:\n${message}`);
       }
     },
+    env: process.env,
   });
 
   console.log("\n=== Turn Result ===");
   console.log(`Memory Accessed: ${turnResult.memoryAccessed}`);
   console.log(`Personality Applied: ${turnResult.personalityApplied}`);
+  console.log(`Dispatched Agent ID: ${turnResult.dispatchedAgentId || "none"}`);
   console.log(`Generated Response:\n${turnResult.response}`);
   console.log(`Formatted Output Message:\n${turnResult.outputMessage}`);
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error(`[Fatal Error]: ${err.message}`);
+  process.exit(1);
+});

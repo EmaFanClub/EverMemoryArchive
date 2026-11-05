@@ -3,6 +3,7 @@ import {
   DEFAULT_MINIMAL_SYSTEM_PROMPT,
   normalizeChannelMessage,
   executeMinimalTurn,
+  assertAgentIdentity,
   type MinimalChannelMessage,
 } from "../src/minimal.js";
 
@@ -32,7 +33,26 @@ describe("Minimal EMA Prototype Variant", () => {
     expect(msg.timestamp).toBe("2026-11-05T10:00:00.000Z");
   });
 
-  it("executes minimal turn without memory or personality, calling invoker and dispatcher", async () => {
+  describe("assertAgentIdentity Guard", () => {
+    it("returns agentId when PENGUIN_AGENT_ID is present and trimmed", () => {
+      const id = assertAgentIdentity({ PENGUIN_AGENT_ID: " emafanclub_ema_dev " });
+      expect(id).toBe("emafanclub_ema_dev");
+    });
+
+    it("throws clear error when PENGUIN_AGENT_ID is unset", () => {
+      expect(() => assertAgentIdentity({})).toThrow(
+        "refusing to dispatch without an agent identity; channel send would run as the server owner"
+      );
+    });
+
+    it("throws clear error when PENGUIN_AGENT_ID is empty or whitespace", () => {
+      expect(() => assertAgentIdentity({ PENGUIN_AGENT_ID: "   " })).toThrow(
+        "refusing to dispatch without an agent identity; channel send would run as the server owner"
+      );
+    });
+  });
+
+  it("executes minimal turn without memory or personality, verifying agent identity on dispatch", async () => {
     const msg: MinimalChannelMessage = {
       id: "msg-1",
       sender: "user:admin",
@@ -47,11 +67,13 @@ describe("Minimal EMA Prototype Variant", () => {
     const result = await executeMinimalTurn(msg, {
       llmInvoker: mockInvoker,
       channelDispatcher: mockDispatcher,
+      env: { PENGUIN_AGENT_ID: "emafanclub_ema_dev" },
     });
 
     // Invariants
     expect(result.memoryAccessed).toBe(false);
     expect(result.personalityApplied).toBe(false);
+    expect(result.dispatchedAgentId).toBe("emafanclub_ema_dev");
 
     // Prompt & Invoker
     expect(mockInvoker).toHaveBeenCalledTimes(1);
@@ -67,5 +89,27 @@ describe("Minimal EMA Prototype Variant", () => {
     expect(result.response).toBe("Pong! Minimal prototype is operational.");
     expect(result.outputMessage).toBe("@user:admin Pong! Minimal prototype is operational.");
     expect(result.outputChannel).toBe("ch_ema_dev");
+  });
+
+  it("refuses to dispatch in executeMinimalTurn when agent identity is missing", async () => {
+    const msg: MinimalChannelMessage = {
+      id: "msg-2",
+      sender: "user:admin",
+      channel: "ch_ema_dev",
+      text: "Testing dispatch rejection",
+    };
+
+    const mockDispatcher = vi.fn();
+
+    await expect(
+      executeMinimalTurn(msg, {
+        channelDispatcher: mockDispatcher,
+        env: {}, // Missing PENGUIN_AGENT_ID
+      })
+    ).rejects.toThrow(
+      "refusing to dispatch without an agent identity; channel send would run as the server owner"
+    );
+
+    expect(mockDispatcher).not.toHaveBeenCalled();
   });
 });
