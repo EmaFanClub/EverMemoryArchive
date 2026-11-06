@@ -1,0 +1,23 @@
+{
+  "name": "ema-workspace",
+  "version": "1.0.0-next.1",
+  "description": "EverMemoryArchive represents Ema Fan Club's initiative to imbue agents with continuously evolving personalities via long-term memory mechanisms.",
+  "author": "Ema Fan Club",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "scripts": {
+    "build": "pnpm --recursive run build",
+    "typecheck": "pnpm --recursive run typecheck",
+    "test": "pnpm --recursive run test",
+    "format": "prettier --write \"packages/**/*.{js,jsx,ts,tsx,json,css,md}\" \"*.json\" \"*.md\"",
+    "format:check": "prettier --check \"packages/**/*.{js,jsx,ts,tsx,json,css,md}\" \"*.json\" \"*.md\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "prettier": "^3.5.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

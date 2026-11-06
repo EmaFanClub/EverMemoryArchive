@@ -1,0 +1,29 @@
+{
+  "name": "@prism-shadow/ema",
+  "version": "0.1.0",
+  "description": "EverMemoryArchive core system prompt configuration for creating EMA companion agents or installing personality features into existing Penguin agents.",
+  "author": "Ema Fan Club",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./prompts": {
+      "types": "./dist/prompts/index.d.ts",
+      "default": "./dist/prompts/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}

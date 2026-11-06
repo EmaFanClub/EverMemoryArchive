@@ -1,0 +1,32 @@
+{
+  "name": "@prism-shadow/use-ema",
+  "version": "0.1.0",
+  "description": "Penguin Workbench guiding users to create lifelong AI companions using EverMemoryArchive (@prism-shadow/ema).",
+  "author": "Ema Fan Club",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/module.js",
+  "types": "./dist/module.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/module.d.ts",
+      "default": "./dist/module.js"
+    },
+    "./manifest": "./manifest.json"
+  },
+  "files": [
+    "manifest.json",
+    "module.ts",
+    "dist",
+    "ui",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prism-shadow/ema": "workspace:*"
+  }
+}

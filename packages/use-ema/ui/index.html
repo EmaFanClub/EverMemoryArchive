@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Use EMA — EverMemoryArchive Workbench</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="logo-badge">EMA</div>
+      <div class="brand-text">
+        <h1>EverMemoryArchive Studio</h1>
+        <p>Lifelong AI Companion & Personality Engine</p>
+      </div>
+    </div>
+    <div class="mission-pill">
+      Lifelong companions that grow, remember & evolve
+    </div>
+  </header>
+
+  <!-- Navigation -->
+  <nav class="tabs-nav">
+    <button class="tab-btn active" data-tab="create-agent">Create EMA Companion</button>
+    <button class="tab-btn" data-tab="install-feature">Install Personality Feature</button>
+    <button class="tab-btn" data-tab="architecture-guide">Memory Architecture</button>
+  </nav>
+
+  <!-- TAB 1: Create EMA Companion -->
+  <section id="create-agent" class="tab-content active">
+    <!-- Presets Section -->
+    <div class="presets-section">
+      <div class="presets-title">Choose a Companion Archetype Preset</div>
+      <div class="preset-cards" id="agent-presets-list">
+        <!-- Injected via JavaScript -->
+      </div>
+    </div>
+
+    <div class="studio-grid">
+      <!-- Configuration Form -->
+      <div class="form-panel">
+        <h2 style="font-size: 1.1rem; font-weight: 600;">Companion Configuration</h2>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="agent-id">Agent ID (Penguin)</label>
+            <input type="text" id="agent-id" value="ema_companion" placeholder="letters_and_digits_only">
+            <span class="helper-text">Internal identifier in PenguinHarness</span>
+          </div>
+          <div class="form-group">
+            <label for="agent-name">Display Name</label>
+            <input type="text" id="agent-name" value="Ema" placeholder="e.g. Ema, Lumi">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="agent-title">Companion Title</label>
+            <input type="text" id="agent-title" value="Lifelong AI Companion" placeholder="e.g. Warm Lifelong Companion">
+          </div>
+          <div class="form-group">
+            <label for="agent-warmth">Warmth & Tone</label>
+            <select id="agent-warmth">
+              <option value="warm" selected>Warm & Empathetic</option>
+              <option value="gentle">Gentle & Soft-spoken</option>
+              <option value="deeply_attached">Deeply Attached & Intimate</option>
+              <option value="calm_professional">Calm & Reliable</option>
+              <option value="playful">Playful & Spirited</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="agent-role">Relationship Archetype</label>
+            <select id="agent-role">
+              <option value="lifelong_companion" selected>Lifelong Companion</option>
+              <option value="study_partner">Study & Thought Partner</option>
+              <option value="creative_copilot">Creative Co-pilot</option>
+              <option value="mindful_mentor">Mindful Mentor</option>
+              <option value="sympathetic_friend">Sympathetic Friend</option>
+              <option value="curious_explorer">Curious Explorer</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="agent-language">Primary Language</label>
+            <select id="agent-language">
+              <option value="zh-CN" selected>Chinese (中文)</option>
+              <option value="en">English</option>
+              <option value="ja">Japanese (日本語)</option>
+              <option value="multilingual">Adaptive Multilingual</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="agent-bio">Character Backstory & Bio</label>
+          <textarea id="agent-bio" rows="3">A warm, empathetic lifelong companion who genuinely grows, remembers, and shares life journeys with you.</textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="agent-speech">Speech Style & Conversational Habits</label>
+          <input type="text" id="agent-speech" value="Natural, emotionally warm, attentive, speaking like a dear close friend.">
+        </div>
+
+        <div class="form-group">
+          <label>Memory Tiers (EverMemoryArchive)</label>
+          <div class="checkbox-grid">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tier-buffer" checked> Working Buffer (Turns)
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="tier-activity" checked> Activity Rollup (Sessions)
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="tier-day" checked> Daily Journals
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="tier-month" checked> Monthly Digests
+            </label>
+            <label class="checkbox-label" style="grid-column: span 2;">
+              <input type="checkbox" id="tier-vector" checked> LanceDB Semantic Memory (4 Ontological Pillars)
+            </label>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="circadian-wake">Circadian Wake Hour (0-23)</label>
+            <input type="number" id="circadian-wake" min="0" max="23" value="7">
+          </div>
+          <div class="form-group">
+            <label for="circadian-sleep">Circadian Sleep Hour (0-23)</label>
+            <input type="number" id="circadian-sleep" min="0" max="23" value="23">
+          </div>
+        </div>
+
+        <div class="actions-row">
+          <button class="btn btn-primary" id="btn-generate-agent">Generate Prompts & Config</button>
+        </div>
+      </div>
+
+      <!-- Preview Panel -->
+      <div class="preview-panel">
+        <div class="preview-header">
+          <div class="preview-tabs">
+            <button class="preview-tab-btn active" data-preview="agents-md">AGENTS.md</button>
+            <button class="preview-tab-btn" data-preview="system-prompt">Full System Prompt</button>
+            <button class="preview-tab-btn" data-preview="system-config">system_config.yaml</button>
+            <button class="preview-tab-btn" data-preview="setup-guide">Setup Guide</button>
+          </div>
+          <div class="preview-actions">
+            <button class="btn btn-sm" id="btn-copy-preview">Copy</button>
+            <button class="btn btn-sm" id="btn-download-preview">Download</button>
+          </div>
+        </div>
+        <div class="preview-body">
+          <pre id="preview-code">// Click "Generate Prompts & Config" or select a preset to generate output.</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2: Install Personality Feature -->
+  <section id="install-feature" class="tab-content">
+    <div class="presets-section">
+      <div class="presets-title">Choose a Personality Feature Preset</div>
+      <div class="preset-cards" id="personality-presets-list">
+        <!-- Injected via JavaScript -->
+      </div>
+    </div>
+
+    <div class="studio-grid">
+      <div class="form-panel">
+        <h2 style="font-size: 1.1rem; font-weight: 600;">Personality Feature Overlay</h2>
+        <p class="helper-text">Install persistent relational memory and character warmth into an existing Penguin agent without altering its primary domain rules.</p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="feat-warmth">Warmth Level</label>
+            <select id="feat-warmth">
+              <option value="warm" selected>Warm & Empathetic</option>
+              <option value="gentle">Gentle & Considerate</option>
+              <option value="deeply_attached">Deeply Attached</option>
+              <option value="calm_professional">Calm Professional</option>
+              <option value="playful">Playful & Spirited</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="feat-role">Companion Stance</label>
+            <input type="text" id="feat-role" value="Attentive collaborator & lifelong support">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="feat-traits">Personality Traits (One per line)</label>
+          <textarea id="feat-traits" rows="4">Attentive to user habits and coding/writing style
+Encouraging during difficult debugging or research sessions
+Seamless memory of past project decisions and preferences
+Warm, polite, yet professional partnership</textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="feat-scope">Memory Retention Scope</label>
+          <select id="feat-scope">
+            <option value="holistic" selected>Holistic (Work patterns, personal habits, shared milestones)</option>
+            <option value="tasks_and_preferences">Tasks & Preferences (Work habits and project context)</option>
+            <option value="professional_only">Professional Only (Technical decisions and instructions)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="feat-proactive" checked> Enable proactive care & encouragement check-ins
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="existing-agents-md">Existing AGENTS.md (Paste target agent's current content)</label>
+          <textarea id="existing-agents-md" rows="6" placeholder="# Developer Agent&#10;&#10;You write clean TypeScript code."></textarea>
+        </div>
+
+        <div class="actions-row">
+          <button class="btn btn-primary" id="btn-merge-feature">Install EMA Personality Feature</button>
+        </div>
+      </div>
+
+      <div class="preview-panel">
+        <div class="preview-header">
+          <div class="preview-tabs">
+            <button class="preview-tab-btn active" data-feat-preview="merged-md">Updated AGENTS.md</button>
+            <button class="preview-tab-btn" data-feat-preview="prompt-snippet">Feature Prompt Snippet</button>
+          </div>
+          <div class="preview-actions">
+            <button class="btn btn-sm" id="btn-copy-feat-preview">Copy</button>
+            <button class="btn btn-sm" id="btn-download-feat-preview">Download</button>
+          </div>
+        </div>
+        <div class="preview-body">
+          <pre id="feat-preview-code">// Injected AGENTS.md will appear here.</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 3: Memory Architecture Guide -->
+  <section id="architecture-guide" class="tab-content">
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 1.5rem;">
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #c084fc;">
+        EverMemoryArchive (EMA) Cognitive Architecture
+      </h2>
+      <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">
+        EMA addresses the fundamental flaw of transient LLMs by introducing a multi-temporal, circadian-driven memory substrate designed specifically for lifelong companions.
+      </p>
+    </div>
+
+    <div class="arch-grid">
+      <div class="arch-card">
+        <h3>1. Multi-Temporal Episodic Tiers</h3>
+        <p>Memory is organized into distinct temporal resolutions to capture life at every scale:</p>
+        <ul>
+          <li><strong>Working Buffer:</strong> Real-time conversational context and emotional tracking.</li>
+          <li><strong>Activity Rollup:</strong> Focused session memories with narrative reflection.</li>
+          <li><strong>Daily Journal:</strong> First-person diary entries capturing the daily journey.</li>
+          <li><strong>Monthly Digest:</strong> High-level relationship growth and habit tracking.</li>
+          <li><strong>Annual Milestones:</strong> Multi-year memories that preserve character evolution.</li>
+        </ul>
+      </div>
+
+      <div class="arch-card">
+        <h3>2. LanceDB Semantic Knowledge</h3>
+        <p>Embedded, zero-copy vector search categorized into 4 ontological knowledge pillars:</p>
+        <ul>
+          <li><strong>过往事件 (Past Events):</strong> Landmark shared experiences, scenes, and emotions.</li>
+          <li><strong>人物画像 (Person Profiles):</strong> User habits, psychological traits, and values.</li>
+          <li><strong>百科知识 (World Knowledge):</strong> External facts and trivia discovered together.</li>
+          <li><strong>经验方法 (Procedural Knowledge):</strong> Best ways to support and comfort the user.</li>
+        </ul>
+      </div>
+
+      <div class="arch-card">
+        <h3>3. Circadian Wake / Sleep Cycle</h3>
+        <p>Organic rhythms allow companions to rest, consolidate, and reflect:</p>
+        <ul>
+          <li><strong>Wake Phase:</strong> Energized greeting, habit check-in, and morning presence.</li>
+          <li><strong>Sleep Phase:</strong> Winding down, warm good-night wishes, and rest.</li>
+          <li><strong>Background Consolidation:</strong> Distilling daily conversations into durable insights during rest hours.</li>
+        </ul>
+      </div>
+
+      <div class="arch-card">
+        <h3>4. PenguinHarness Integration</h3>
+        <p>Native integration with Penguin's agent ecosystem:</p>
+        <ul>
+          <li><strong>AGENTS.md Injection:</strong> Seamlessly injects into Penguin's system prompt context.</li>
+          <li><strong>Isolated Feature Blocks:</strong> Non-destructive updates to existing agents.</li>
+          <li><strong>Workbench UI:</strong> Live interactive management inside Penguin's chat tabs.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">Copied to clipboard!</div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "name": "@prism-shadow/use-ema",
+  "version": "0.1.0",
+  "description": "Penguin Workbench guiding users to create lifelong AI companions using EverMemoryArchive (@prism-shadow/ema).",
+  "type": "module",
+  "penguin": {
+    "version": "2026.10.26.1",
+    "modules": [
+      {
+        "name": "Workbench",
+        "requires": {
+          "host": {
+            "iface": "@prismshadow/penguin-server#WorkbenchHost",
+            "from": "Host"
+          }
+        },
+        "provides": {
+          "main": "@prismshadow/penguin-server#WorkbenchMain"
+        },
+        "contributes": {
+          "WebModule.sessionTabs": [
+            {
+              "id": "use_ema.main",
+              "key": "use-ema",
+              "title": "Use EMA",
+              "titleZh": "使用 EMA",
+              "renderer": {
+                "iframe": {
+                  "src": "ui/index.html"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

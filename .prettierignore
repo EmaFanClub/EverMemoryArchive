@@ -1,0 +1,7 @@
+node_modules
+dist
+build
+.build
+.harness
+coverage
+pnpm-lock.yaml
