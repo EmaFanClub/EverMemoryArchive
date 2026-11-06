@@ -14,10 +14,10 @@
  *
  * Usage:
  *   # Single-shot mode:
- *   node scripts/minimal-prototype.mjs [--channel <id>] [--read-latest] [--prompt <text>] [--dispatch] [--dry-run]
+ *   node tests/scenarios/prototype/minimal/minimal-prototype.mjs [--channel <id>] [--read-latest] [--prompt <text>] [--dispatch] [--dry-run]
  *
  *   # Watcher mode:
- *   node scripts/minimal-prototype.mjs --channel <id> --watch [--session <session_id>] [--watch-for <duration>]
+ *   node tests/scenarios/prototype/minimal/minimal-prototype.mjs --channel <id> --watch [--session <session_id>] [--watch-for <duration>]
  */
 
 import { execFileSync } from "node:child_process";
@@ -30,7 +30,7 @@ import {
   assertAgentIdentity,
   filterNewUserMessages,
   parseWatchDuration,
-} from "../packages/ema/dist/index.js";
+} from "../../../../packages/ema/dist/index.js";
 
 const DEFAULT_SESSION_ID = "session-2026-11-05-10-19-24-d6815237";
 const DEFAULT_STATE_FILE = "/tmp/ema-minimal-workspace/seen-messages.json";
