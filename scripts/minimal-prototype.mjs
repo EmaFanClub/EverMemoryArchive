@@ -1,0 +1,1 @@
+../tests/scenarios/prototype/minimal/minimal-prototype.mjs
