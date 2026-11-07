@@ -9,6 +9,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 import {
   EmaWorld,
   type EmaCtx,
@@ -25,7 +26,9 @@ export interface PenguinChannelWorldOptions {
   channels?: string[];
   /** Polling interval in ms (default: 5000) */
   pollInterval?: number;
-  /** Deduplication state file path */
+  /** SQLite database path for persistent seen state (defaults to /tmp/ema-minimal-workspace/ema-state.sqlite) */
+  dbPath?: string;
+  /** Legacy alias for dbPath or JSON migration source */
   stateFile?: string;
   /** Custom channel fetcher for testing or alternative transports */
   channelFetcher?: (channel: string, limit?: number) => RawChannelMessage[];
@@ -47,7 +50,8 @@ export interface RawChannelMessage {
 export class PenguinChannelWorld extends EmaWorld {
   private channels: string[];
   private pollInterval: number;
-  private stateFile?: string;
+  private dbPath?: string;
+  private legacyStateFile?: string;
   private channelFetcher: (channel: string, limit?: number) => RawChannelMessage[];
   private channelSender: (channel: string, text: string) => Promise<void> | void;
   private env: Record<string, string | undefined>;
@@ -56,12 +60,31 @@ export class PenguinChannelWorld extends EmaWorld {
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   private active = false;
 
+  private db: DatabaseSync | null = null;
+  private insertSeenStmt: StatementSync | null = null;
+  private selectAllSeenStmt: StatementSync | null = null;
+
   constructor(options: PenguinChannelWorldOptions = {}) {
     super();
     this.channels = options.channels ?? ["ch_ema_minimal_test"];
     this.pollInterval = options.pollInterval ?? 5000;
-    this.stateFile = options.stateFile;
     this.env = options.env ?? process.env;
+
+    // Resolve SQLite database path
+    if (options.dbPath) {
+      this.dbPath = options.dbPath;
+    } else if (options.stateFile) {
+      if (options.stateFile.endsWith(".sqlite") || options.stateFile.endsWith(".db")) {
+        this.dbPath = options.stateFile;
+      } else if (options.stateFile.endsWith(".json")) {
+        this.legacyStateFile = options.stateFile;
+        this.dbPath = `${options.stateFile.replace(/\.json$/, "")}.sqlite`;
+      } else {
+        this.dbPath = options.stateFile;
+      }
+    } else {
+      this.dbPath = "/tmp/ema-minimal-workspace/ema-state.sqlite";
+    }
 
     this.channelFetcher =
       options.channelFetcher ??
@@ -91,34 +114,82 @@ export class PenguinChannelWorld extends EmaWorld {
         });
       });
 
+    this.initSqlite();
     this.loadState();
   }
 
-  private loadState(): void {
-    if (!this.stateFile) return;
+  private initSqlite(): void {
+    if (!this.dbPath) return;
     try {
-      if (fs.existsSync(this.stateFile)) {
-        const raw = fs.readFileSync(this.stateFile, "utf8");
-        const list = JSON.parse(raw);
-        if (Array.isArray(list)) {
-          this.seenIds = new Set(list);
+      if (this.dbPath !== ":memory:") {
+        const dir = path.dirname(this.dbPath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
         }
       }
+      this.db = new DatabaseSync(this.dbPath);
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS seen_messages (
+          id TEXT PRIMARY KEY,
+          channel TEXT,
+          timestamp INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS world_state (
+          key TEXT PRIMARY KEY,
+          value TEXT,
+          updated_at INTEGER
+        );
+      `);
+      this.insertSeenStmt = this.db.prepare(
+        "INSERT OR IGNORE INTO seen_messages (id, channel, timestamp) VALUES (?, ?, ?)"
+      );
+      this.selectAllSeenStmt = this.db.prepare(
+        "SELECT id FROM seen_messages"
+      );
     } catch (err) {
-      console.error("[PenguinChannelWorld] Failed to load seen state:", err);
+      console.error("[PenguinChannelWorld] Failed to initialize SQLite database:", err);
     }
   }
 
-  private saveState(): void {
-    if (!this.stateFile) return;
+  private loadState(): void {
+    if (!this.db || !this.selectAllSeenStmt) return;
     try {
-      const dir = path.dirname(this.stateFile);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      // 1. Load seen IDs from SQLite
+      const rows = this.selectAllSeenStmt.all() as Array<{ id: string }>;
+      for (const row of rows) {
+        if (row && typeof row.id === "string") {
+          this.seenIds.add(row.id);
+        }
       }
-      fs.writeFileSync(this.stateFile, JSON.stringify([...this.seenIds], null, 2), "utf8");
+
+      // 2. Backward compatibility migration from legacy JSON file if present
+      if (this.legacyStateFile && fs.existsSync(this.legacyStateFile)) {
+        try {
+          const raw = fs.readFileSync(this.legacyStateFile, "utf8");
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            for (const id of list) {
+              if (typeof id === "string" && !this.seenIds.has(id)) {
+                this.seenIds.add(id);
+                this.saveState(id, "legacy-migration");
+              }
+            }
+          }
+        } catch (migrationErr) {
+          console.error("[PenguinChannelWorld] Failed to migrate legacy JSON state to SQLite:", migrationErr);
+        }
+      }
     } catch (err) {
-      console.error("[PenguinChannelWorld] Failed to save seen state:", err);
+      console.error("[PenguinChannelWorld] Failed to load state from SQLite:", err);
+    }
+  }
+
+  private saveState(id: string, channel: string): void {
+    if (!this.db || !this.insertSeenStmt) return;
+    try {
+      this.insertSeenStmt.run(id, channel, Date.now());
+    } catch (err) {
+      console.error("[PenguinChannelWorld] Failed to save seen message to SQLite:", err);
     }
   }
 
@@ -187,7 +258,7 @@ export class PenguinChannelWorld extends EmaWorld {
           }
 
           this.seenIds.add(id);
-          this.saveState();
+          this.saveState(id, channel);
 
           const input: EmaInput = {
             id,

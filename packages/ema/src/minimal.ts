@@ -259,7 +259,13 @@ export function createMinimalPrototype(
 ): MinimalPrototypeInstance {
   const env = options.env ?? process.env;
   const router = new SimpleEmaRouter();
-  const inputBatcher = new SimpleEmaInputBatcher(options.batcherOptions);
+  const dbPath = options.stateFile ?? "/tmp/ema-minimal-workspace/ema-state.sqlite";
+  const sqlitePath = dbPath.endsWith(".json") ? `${dbPath.replace(/\.json$/, "")}.sqlite` : dbPath;
+
+  const inputBatcher = new SimpleEmaInputBatcher({
+    dbPath: sqlitePath,
+    ...options.batcherOptions,
+  });
 
   const worldsMap = new Map<string, PenguinChannelWorld>();
   const registry: EmaWorldRegistry = {
@@ -322,6 +328,7 @@ export function createMinimalPrototype(
     const formattedReply = `${mention}${response}`.trim();
 
     channelWorld.interact(ctx, actor, targetChannel, "reply", formattedReply);
+    inputBatcher.markCompleted(batch.map((b) => b.id));
   });
 
   const worldHandle = channelWorld.start(ctx);

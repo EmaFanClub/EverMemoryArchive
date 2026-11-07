@@ -85,12 +85,17 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       expect(xml).toContain("</Input>");
     });
 
-    it("coalesces burst inputs within debounce window", async () => {
-      const batcher = new SimpleEmaInputBatcher({ debounceMs: 50, maxWaitMs: 200 });
+    it("coalesces burst inputs within debounce window using sqlite queue", async () => {
+      const batcher = new SimpleEmaInputBatcher({
+        dbPath: ":memory:",
+        debounceMs: 50,
+        maxWaitMs: 200,
+      });
       const batches: unknown[][] = [];
 
       batcher.onBatch((batch) => {
         batches.push([...batch]);
+        batcher.markCompleted(batch.map((b) => b.id));
       });
 
       batcher.push({
@@ -126,7 +131,7 @@ describe("Minimal Prototype - World & Router Architecture", () => {
   describe("PenguinChannelWorld", () => {
     it("mounts routes, lists parts, and serves message lookups", async () => {
       const router = new SimpleEmaRouter();
-      const batcher = new SimpleEmaInputBatcher();
+      const batcher = new SimpleEmaInputBatcher({ dbPath: ":memory:" });
       const mockEnv = { PENGUIN_AGENT_ID: "emafanclub_ema_dev" };
 
       const mockFetcher = vi.fn().mockReturnValue([
@@ -151,6 +156,7 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       const channelWorld = new PenguinChannelWorld({
         channels: ["ch_ema_minimal_test", "default_channel"],
         pollInterval: 10000,
+        dbPath: ":memory:",
         channelFetcher: mockFetcher,
         channelSender: mockSender,
         env: mockEnv,
@@ -226,6 +232,7 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       const proto = createMinimalPrototype({
         channels: ["ch_ema_minimal_test"],
         pollInterval: 10000,
+        stateFile: ":memory:",
         batcherOptions: { debounceMs: 20, maxWaitMs: 100 },
         env: mockEnv,
         channelFetcher: () => [
