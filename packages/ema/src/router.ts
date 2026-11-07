@@ -1,11 +1,11 @@
 /**
  * @prism-shadow/ema - SimpleEmaRouter
  *
- * HTTP radix-tree resource router for EMA Worlds powered by find-my-way.
+ * Web-standard HTTP resource router for EMA Worlds powered by Hono.
  * Conforms to EmaRouter interface from RFC-0001.
  */
 
-import FindMyWay, { type Instance, type HTTPVersion } from "find-my-way";
+import { Hono, type Context } from "hono";
 import type {
   EmaRouter,
   EmaRouteHandler,
@@ -14,24 +14,29 @@ import type {
   Disposable,
 } from "./interfaces.js";
 
-interface RouteStore {
+interface RouteRegistration {
+  readonly id: string;
   readonly prefix: string;
   readonly handler: EmaRouteHandler;
   readonly description?: string;
-  readonly isWildcard?: boolean;
-}
-
-interface FindMyWayRoute {
-  readonly method: string;
-  readonly path: string;
-  readonly store?: RouteStore;
+  readonly patterns: readonly string[];
 }
 
 export class SimpleEmaRouter implements EmaRouter {
-  private router: Instance<HTTPVersion.V1> = FindMyWay<HTTPVersion.V1>({
-    ignoreTrailingSlash: true,
-    ignoreDuplicateSlashes: true,
-  });
+  private registrations: RouteRegistration[] = [];
+  private honoApp: Hono = new Hono();
+  private nextId = 1;
+
+  constructor() {
+    this.rebuildHonoApp();
+  }
+
+  /**
+   * The underlying Hono instance, supporting Web Standard Fetch and Penguin plugin route binding.
+   */
+  get app(): Hono {
+    return this.honoApp;
+  }
 
   /**
    * Mounts a handler under a path prefix (e.g. `/world/channel` or `/world/channel/messages/:id`).
@@ -41,75 +46,118 @@ export class SimpleEmaRouter implements EmaRouter {
     handler: EmaRouteHandler,
     description?: string
   ): Disposable {
-    const path = pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`;
-    const clean = path.replace(/\/+$/, "") || "/";
-    const store: RouteStore = { prefix: path, handler, description };
+    const normalized = pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`;
+    const cleanPrefix = normalized.replace(/\/+$/, "") || "/";
+    const id = `route-${this.nextId++}`;
 
-    this.router.on("GET", clean, () => handler, store);
-
-    // If prefix route without wildcard or params, also register subpath wildcard
-    const wildcard =
-      !clean.includes("*") && !clean.includes(":")
-        ? `${clean === "/" ? "" : clean}/*`
-        : null;
-
-    if (wildcard) {
-      this.router.on("GET", wildcard, () => handler, { ...store, isWildcard: true });
+    const patterns: string[] = [];
+    if (cleanPrefix.endsWith("/*")) {
+      patterns.push(cleanPrefix);
+    } else if (cleanPrefix.includes(":")) {
+      patterns.push(cleanPrefix);
+    } else {
+      patterns.push(cleanPrefix);
+      if (cleanPrefix === "/") {
+        patterns.push("/*");
+      } else {
+        patterns.push(`${cleanPrefix}/*`);
+      }
     }
+
+    const reg: RouteRegistration = {
+      id,
+      prefix: normalized,
+      handler,
+      description,
+      patterns,
+    };
+
+    this.registrations.push(reg);
+    this.rebuildHonoApp();
 
     return {
       dispose: () => {
-        this.router.off("GET", clean);
-        if (wildcard) {
-          this.router.off("GET", wildcard);
+        const idx = this.registrations.findIndex((r) => r.id === id);
+        if (idx !== -1) {
+          this.registrations.splice(idx, 1);
+          this.rebuildHonoApp();
         }
       },
     };
   }
 
+  private rebuildHonoApp(): void {
+    const app = new Hono();
+
+    // Sort: specific parameterized routes first, then exact routes, then wildcard routes last
+    const sorted = [...this.registrations].sort((a, b) => {
+      const aIsWild = a.patterns.some((p) => p.endsWith("/*"));
+      const bIsWild = b.patterns.some((p) => p.endsWith("/*"));
+      if (aIsWild && !bIsWild) return 1;
+      if (!aIsWild && bIsWild) return -1;
+      return b.prefix.length - a.prefix.length;
+    });
+
+    for (const reg of sorted) {
+      const bridge = async (c: Context) => {
+        const url = new URL(c.req.url);
+        const ctx: EmaRouteContext = {
+          path: c.req.path,
+          params: (c.req.param() || {}) as Record<string, string>,
+          query: url.searchParams,
+        };
+
+        const result = await reg.handler(ctx);
+        if (result instanceof Response) {
+          return result;
+        }
+        if (typeof result === "string") {
+          return c.text(result);
+        }
+        return c.json(result);
+      };
+
+      for (const pattern of reg.patterns) {
+        app.all(pattern, bridge);
+      }
+    }
+
+    this.honoApp = app;
+  }
+
   /**
-   * Reads a resource by URI path.
+   * Reads a resource by URI path using Web Standard request dispatch.
    *
    * @throws {Error} if route is not found or handler throws.
    */
   async read<T = unknown>(uri: string): Promise<T> {
     const url = new URL(uri, "http://localhost");
-    const matched = this.router.find("GET", uri);
+    const res = await this.honoApp.request(url.toString());
 
-    if (!matched || !matched.store) {
+    if (res.status === 404) {
       throw new Error(`Route not found: ${url.pathname}`);
     }
 
-    const store = matched.store as RouteStore;
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Route error (${res.status}): ${errText || url.pathname}`);
+    }
 
-    const ctx: EmaRouteContext = {
-      path: url.pathname,
-      params: (matched.params || {}) as Record<string, string>,
-      query: url.searchParams,
-    };
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      return (await res.json()) as T;
+    }
 
-    return (await store.handler(ctx)) as T;
+    return (await res.text()) as unknown as T;
   }
 
   /**
    * Lists all mounted route prefixes.
    */
   listRoutes(): ReadonlyArray<EmaRouteEntry> {
-    const seen = new Set<string>();
-    const result: EmaRouteEntry[] = [];
-    const routes = (this.router as unknown as { routes?: FindMyWayRoute[] }).routes || [];
-
-    for (const route of routes) {
-      const store = route.store;
-      if (store && !store.isWildcard && !seen.has(store.prefix)) {
-        seen.add(store.prefix);
-        result.push({
-          prefix: store.prefix,
-          description: store.description,
-        });
-      }
-    }
-
-    return result;
+    return this.registrations.map((r) => ({
+      prefix: r.prefix,
+      description: r.description,
+    }));
   }
 }

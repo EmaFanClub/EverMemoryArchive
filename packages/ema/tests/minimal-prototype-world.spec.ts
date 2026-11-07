@@ -113,6 +113,17 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       handle.dispose();
       await expect(router.read("/world/channel")).rejects.toThrow("Route not found");
     });
+
+    it("exposes standard Hono app for Web Standard fetch and request dispatch", async () => {
+      const router = new SimpleEmaRouter();
+      router.serve("/world/channel/health", () => ({ status: "ok" }));
+
+      // Test underlying Hono app.request directly
+      const res = await router.app.request("http://localhost/world/channel/health");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({ status: "ok" });
+    });
   });
 
   describe("SimpleEmaInputBatcher & XML Protocol", () => {
