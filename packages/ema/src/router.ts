@@ -1,11 +1,11 @@
 /**
  * @prism-shadow/ema - SimpleEmaRouter
  *
- * Battle-tested Radix Tree resource router for EMA Worlds powered by radix3.
+ * HTTP radix-tree resource router for EMA Worlds powered by find-my-way.
  * Conforms to EmaRouter interface from RFC-0001.
  */
 
-import { createRouter, type RadixRouter } from "radix3";
+import FindMyWay, { type Instance, type HTTPVersion } from "find-my-way";
 import type {
   EmaRouter,
   EmaRouteHandler,
@@ -14,24 +14,27 @@ import type {
   Disposable,
 } from "./interfaces.js";
 
-interface RouteRegistration {
-  readonly id: string;
+interface RouteStore {
   readonly prefix: string;
   readonly handler: EmaRouteHandler;
   readonly description?: string;
-  readonly patterns: readonly string[];
+  readonly isWildcard?: boolean;
 }
 
-interface RouteNodeData {
-  readonly handler: EmaRouteHandler;
-  readonly registrationId: string;
+interface FindMyWayRoute {
+  readonly method: string;
+  readonly path: string;
+  readonly store?: RouteStore;
 }
 
 export class SimpleEmaRouter implements EmaRouter {
-  private router: RadixRouter<RouteNodeData> = createRouter<RouteNodeData>();
-  private registrations: RouteRegistration[] = [];
-  private patternStacks = new Map<string, RouteRegistration[]>();
-  private nextId = 1;
+  private router: Instance<HTTPVersion.V1> = FindMyWay<HTTPVersion.V1>({
+    ignoreTrailingSlash: true,
+    ignoreDuplicateSlashes: true,
+  });
+
+  // Track handlers per path to support clean unmounting and override restoration
+  private pathHandlers = new Map<string, RouteStore[]>();
 
   /**
    * Mounts a handler under a path prefix (e.g. `/world/channel` or `/world/channel/messages/:id`).
@@ -43,75 +46,73 @@ export class SimpleEmaRouter implements EmaRouter {
   ): Disposable {
     const normalized = pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`;
     const cleanPrefix = normalized.replace(/\/+$/, "") || "/";
-    const id = `route-${this.nextId++}`;
 
-    // Determine radix patterns: exact and prefix wildcard (if not already wildcard)
-    const patterns: string[] = [];
-    if (cleanPrefix.endsWith("/**") || cleanPrefix.endsWith("/*")) {
-      patterns.push(cleanPrefix);
+    // Standard HTTP route patterns: exact path and wildcard subpaths
+    const patterns: Array<{ path: string; isWildcard: boolean }> = [];
+    if (cleanPrefix.endsWith("/*")) {
+      patterns.push({ path: cleanPrefix, isWildcard: false });
     } else {
-      patterns.push(cleanPrefix);
+      patterns.push({ path: cleanPrefix, isWildcard: false });
       if (cleanPrefix === "/") {
-        patterns.push("/**");
+        patterns.push({ path: "/*", isWildcard: true });
       } else {
-        patterns.push(`${cleanPrefix}/**`);
+        patterns.push({ path: `${cleanPrefix}/*`, isWildcard: true });
       }
     }
 
-    const reg: RouteRegistration = {
-      id,
-      prefix: normalized,
-      handler,
-      description,
-      patterns,
-    };
+    const unregisters: Array<() => void> = [];
 
-    this.registrations.push(reg);
+    for (const { path, isWildcard } of patterns) {
+      const store: RouteStore = {
+        prefix: normalized,
+        handler,
+        description,
+        isWildcard,
+      };
 
-    // Register into radix tree with stack semantics
-    for (const pattern of patterns) {
-      let stack = this.patternStacks.get(pattern);
+      let stack = this.pathHandlers.get(path);
       if (!stack) {
         stack = [];
-        this.patternStacks.set(pattern, stack);
+        this.pathHandlers.set(path, stack);
       }
-      stack.push(reg);
-      this.router.insert(pattern, {
-        handler: reg.handler,
-        registrationId: reg.id,
+      stack.push(store);
+
+      this.updateHttpRoute(path);
+
+      unregisters.push(() => {
+        const currentStack = this.pathHandlers.get(path);
+        if (currentStack) {
+          const idx = currentStack.indexOf(store);
+          if (idx !== -1) {
+            currentStack.splice(idx, 1);
+          }
+          if (currentStack.length === 0) {
+            this.pathHandlers.delete(path);
+          }
+        }
+        this.updateHttpRoute(path);
       });
     }
 
     return {
       dispose: () => {
-        // Remove registration
-        const regIdx = this.registrations.findIndex((r) => r.id === id);
-        if (regIdx !== -1) {
-          this.registrations.splice(regIdx, 1);
-        }
-
-        // Unwind from radix tree
-        for (const pattern of patterns) {
-          const stack = this.patternStacks.get(pattern);
-          if (stack) {
-            const idx = stack.findIndex((r) => r.id === id);
-            if (idx !== -1) {
-              stack.splice(idx, 1);
-            }
-            if (stack.length > 0) {
-              const top = stack[stack.length - 1];
-              this.router.insert(pattern, {
-                handler: top.handler,
-                registrationId: top.id,
-              });
-            } else {
-              this.router.remove(pattern);
-              this.patternStacks.delete(pattern);
-            }
-          }
+        for (const unreg of unregisters) {
+          unreg();
         }
       },
     };
+  }
+
+  private updateHttpRoute(path: string): void {
+    if (this.router.hasRoute("GET", path)) {
+      this.router.off("GET", path);
+    }
+
+    const stack = this.pathHandlers.get(path);
+    if (stack && stack.length > 0) {
+      const active = stack[stack.length - 1];
+      this.router.on("GET", path, () => active, active);
+    }
   }
 
   /**
@@ -121,41 +122,51 @@ export class SimpleEmaRouter implements EmaRouter {
    */
   async read<T = unknown>(uri: string): Promise<T> {
     const url = new URL(uri, "http://localhost");
-    const pathname = url.pathname;
-    const query = url.searchParams;
+    const matched = this.router.find("GET", uri);
 
-    const matched = this.router.lookup(pathname);
-    if (!matched) {
-      throw new Error(`Route not found: ${pathname}`);
+    if (!matched || !matched.store) {
+      throw new Error(`Route not found: ${url.pathname}`);
     }
+
+    const store = matched.store as RouteStore;
 
     const params: Record<string, string> = {};
     if (matched.params) {
       for (const [key, val] of Object.entries(matched.params)) {
-        try {
-          params[key] = decodeURIComponent(String(val));
-        } catch {
-          params[key] = String(val);
+        if (typeof val === "string") {
+          params[key] = val;
         }
       }
     }
 
     const ctx: EmaRouteContext = {
-      path: pathname,
+      path: url.pathname,
       params,
-      query,
+      query: url.searchParams,
     };
 
-    return (await matched.handler(ctx)) as T;
+    return (await store.handler(ctx)) as T;
   }
 
   /**
    * Lists all mounted route prefixes.
    */
   listRoutes(): ReadonlyArray<EmaRouteEntry> {
-    return this.registrations.map((r) => ({
-      prefix: r.prefix,
-      description: r.description,
-    }));
+    const seen = new Set<string>();
+    const result: EmaRouteEntry[] = [];
+    const internalRoutes = (this.router as unknown as { routes?: FindMyWayRoute[] }).routes || [];
+
+    for (const route of internalRoutes) {
+      const store = route.store;
+      if (store && !store.isWildcard && !seen.has(store.prefix)) {
+        seen.add(store.prefix);
+        result.push({
+          prefix: store.prefix,
+          description: store.description,
+        });
+      }
+    }
+
+    return result;
   }
 }
