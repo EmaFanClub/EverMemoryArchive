@@ -51,13 +51,7 @@ describe("Minimal Prototype - World & Router Architecture", () => {
     it("handles multi-parameter paths and prefix routing with specificity precedence", async () => {
       const router = new SimpleEmaRouter();
 
-      // Wildcard / prefix root for channel world using standard Hono wildcard syntax
-      router.serve("/world/channel/*", (ctx) => ({
-        matched: "root",
-        path: ctx.path,
-      }));
-
-      // Specific multi-parameter route under channel world
+      // Specific multi-parameter route under channel world (registered first)
       router.serve(
         "/world/channel/parts/:partId/messages/:msgId",
         (ctx) => ({
@@ -66,6 +60,12 @@ describe("Minimal Prototype - World & Router Architecture", () => {
           msg: ctx.params.msgId,
         })
       );
+
+      // Wildcard / prefix root for channel world using standard Hono wildcard syntax
+      router.serve("/world/channel/*", (ctx) => ({
+        matched: "root",
+        path: ctx.path,
+      }));
 
       // Generic route for other worlds
       router.serve(

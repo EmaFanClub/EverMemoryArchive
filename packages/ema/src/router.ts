@@ -21,7 +21,7 @@ interface RouteRegistration {
 }
 
 export class SimpleEmaRouter implements EmaRouter {
-  private routes = new Set<RouteRegistration>();
+  private routes: RouteRegistration[] = [];
   private honoApp: Hono | null = null;
 
   /**
@@ -34,6 +34,7 @@ export class SimpleEmaRouter implements EmaRouter {
 
   /**
    * Mounts a handler under a standard Hono route path (e.g. `/world/channel/*` or `/world/channel/messages/:id`).
+   * Preserves exact registration order.
    */
   serve(
     path: string,
@@ -46,12 +47,12 @@ export class SimpleEmaRouter implements EmaRouter {
       description,
     };
 
-    this.routes.add(entry);
+    this.routes.push(entry);
     this.honoApp = null;
 
     return {
       dispose: () => {
-        this.routes.delete(entry);
+        this.routes = this.routes.filter((r) => r !== entry);
         this.honoApp = null;
       },
     };
@@ -61,16 +62,7 @@ export class SimpleEmaRouter implements EmaRouter {
     if (!this.honoApp) {
       const app = new Hono();
 
-      // Sort routes so wildcard routes (*) match after specific routes
-      const sorted = [...this.routes].sort((a, b) => {
-        const aWild = a.path.includes("*");
-        const bWild = b.path.includes("*");
-        if (aWild && !bWild) return 1;
-        if (!aWild && bWild) return -1;
-        return b.path.length - a.path.length;
-      });
-
-      for (const entry of sorted) {
+      for (const entry of this.routes) {
         app.all(entry.path, async (c: Context) => {
           const url = new URL(c.req.url);
           const ctx: EmaRouteContext = {
@@ -123,10 +115,10 @@ export class SimpleEmaRouter implements EmaRouter {
   }
 
   /**
-   * Lists all mounted route prefixes.
+   * Lists all mounted route prefixes in their exact registration order.
    */
   listRoutes(): ReadonlyArray<EmaRouteEntry> {
-    return Array.from(this.routes).map((r) => ({
+    return this.routes.map((r) => ({
       prefix: r.path,
       description: r.description,
     }));
