@@ -201,7 +201,7 @@ export class PenguinChannelWorld extends EmaWorld {
 
     // 1. Mount Router Endpoints for this World
     const routeHandle = ctx.router.serve(
-      "/world/channel",
+      "/world/channel/*",
       (routeCtx) => {
         const subpath = routeCtx.path.replace(/^\/world\/channel\/?/, "");
 

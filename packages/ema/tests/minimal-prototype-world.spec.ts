@@ -51,8 +51,8 @@ describe("Minimal Prototype - World & Router Architecture", () => {
     it("handles multi-parameter paths and prefix routing with specificity precedence", async () => {
       const router = new SimpleEmaRouter();
 
-      // Wildcard / prefix root for channel world
-      router.serve("/world/channel", (ctx) => ({
+      // Wildcard / prefix root for channel world using standard Hono wildcard syntax
+      router.serve("/world/channel/*", (ctx) => ({
         matched: "root",
         path: ctx.path,
       }));
@@ -332,7 +332,9 @@ describe("Minimal Prototype - World & Router Architecture", () => {
 
       // Query router to verify world routes mounted
       const routes = proto.router.listRoutes();
-      expect(routes.some((r) => r.prefix === "/world/channel")).toBe(true);
+      expect(
+        routes.some((r) => r.prefix === "/world/channel/*" || r.prefix === "/world/channel")
+      ).toBe(true);
 
       // Wait for debounce batch flush
       await new Promise((resolve) => setTimeout(resolve, 50));

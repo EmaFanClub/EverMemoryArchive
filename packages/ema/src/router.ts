@@ -15,114 +15,85 @@ import type {
 } from "./interfaces.js";
 
 interface RouteRegistration {
-  readonly id: string;
-  readonly prefix: string;
+  readonly path: string;
   readonly handler: EmaRouteHandler;
   readonly description?: string;
-  readonly patterns: readonly string[];
 }
 
 export class SimpleEmaRouter implements EmaRouter {
-  private registrations: RouteRegistration[] = [];
-  private honoApp: Hono = new Hono();
-  private nextId = 1;
-
-  constructor() {
-    this.rebuildHonoApp();
-  }
+  private routes = new Set<RouteRegistration>();
+  private honoApp: Hono | null = null;
 
   /**
    * The underlying Hono instance, supporting Web Standard Fetch and Penguin plugin route binding.
+   * Built lazily from mounted routes on demand.
    */
   get app(): Hono {
-    return this.honoApp;
+    return this.getApp();
   }
 
   /**
-   * Mounts a handler under a path prefix (e.g. `/world/channel` or `/world/channel/messages/:id`).
+   * Mounts a handler under a standard Hono route path (e.g. `/world/channel/*` or `/world/channel/messages/:id`).
    */
   serve(
-    pathPrefix: string,
+    path: string,
     handler: EmaRouteHandler,
     description?: string
   ): Disposable {
-    const normalized = pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`;
-    const cleanPrefix = normalized.replace(/\/+$/, "") || "/";
-    const id = `route-${this.nextId++}`;
-
-    const patterns: string[] = [];
-    if (cleanPrefix.endsWith("/*")) {
-      patterns.push(cleanPrefix);
-    } else if (cleanPrefix.includes(":")) {
-      patterns.push(cleanPrefix);
-    } else {
-      patterns.push(cleanPrefix);
-      if (cleanPrefix === "/") {
-        patterns.push("/*");
-      } else {
-        patterns.push(`${cleanPrefix}/*`);
-      }
-    }
-
-    const reg: RouteRegistration = {
-      id,
-      prefix: normalized,
+    const entry: RouteRegistration = {
+      path,
       handler,
       description,
-      patterns,
     };
 
-    this.registrations.push(reg);
-    this.rebuildHonoApp();
+    this.routes.add(entry);
+    this.honoApp = null;
 
     return {
       dispose: () => {
-        const idx = this.registrations.findIndex((r) => r.id === id);
-        if (idx !== -1) {
-          this.registrations.splice(idx, 1);
-          this.rebuildHonoApp();
-        }
+        this.routes.delete(entry);
+        this.honoApp = null;
       },
     };
   }
 
-  private rebuildHonoApp(): void {
-    const app = new Hono();
+  private getApp(): Hono {
+    if (!this.honoApp) {
+      const app = new Hono();
 
-    // Sort: specific parameterized routes first, then exact routes, then wildcard routes last
-    const sorted = [...this.registrations].sort((a, b) => {
-      const aIsWild = a.patterns.some((p) => p.endsWith("/*"));
-      const bIsWild = b.patterns.some((p) => p.endsWith("/*"));
-      if (aIsWild && !bIsWild) return 1;
-      if (!aIsWild && bIsWild) return -1;
-      return b.prefix.length - a.prefix.length;
-    });
+      // Sort routes so wildcard routes (*) match after specific routes
+      const sorted = [...this.routes].sort((a, b) => {
+        const aWild = a.path.includes("*");
+        const bWild = b.path.includes("*");
+        if (aWild && !bWild) return 1;
+        if (!aWild && bWild) return -1;
+        return b.path.length - a.path.length;
+      });
 
-    for (const reg of sorted) {
-      const bridge = async (c: Context) => {
-        const url = new URL(c.req.url);
-        const ctx: EmaRouteContext = {
-          path: c.req.path,
-          params: (c.req.param() || {}) as Record<string, string>,
-          query: url.searchParams,
-        };
+      for (const entry of sorted) {
+        app.all(entry.path, async (c: Context) => {
+          const url = new URL(c.req.url);
+          const ctx: EmaRouteContext = {
+            path: c.req.path,
+            params: (c.req.param() || {}) as Record<string, string>,
+            query: url.searchParams,
+          };
 
-        const result = await reg.handler(ctx);
-        if (result instanceof Response) {
-          return result;
-        }
-        if (typeof result === "string") {
-          return c.text(result);
-        }
-        return c.json(result);
-      };
-
-      for (const pattern of reg.patterns) {
-        app.all(pattern, bridge);
+          const result = await entry.handler(ctx);
+          if (result instanceof Response) {
+            return result;
+          }
+          if (typeof result === "string") {
+            return c.text(result);
+          }
+          return c.json(result);
+        });
       }
+
+      this.honoApp = app;
     }
 
-    this.honoApp = app;
+    return this.honoApp;
   }
 
   /**
@@ -132,7 +103,7 @@ export class SimpleEmaRouter implements EmaRouter {
    */
   async read<T = unknown>(uri: string): Promise<T> {
     const url = new URL(uri, "http://localhost");
-    const res = await this.honoApp.request(url.toString());
+    const res = await this.getApp().request(url.toString());
 
     if (res.status === 404) {
       throw new Error(`Route not found: ${url.pathname}`);
@@ -155,8 +126,8 @@ export class SimpleEmaRouter implements EmaRouter {
    * Lists all mounted route prefixes.
    */
   listRoutes(): ReadonlyArray<EmaRouteEntry> {
-    return this.registrations.map((r) => ({
-      prefix: r.prefix,
+    return Array.from(this.routes).map((r) => ({
+      prefix: r.path,
       description: r.description,
     }));
   }
