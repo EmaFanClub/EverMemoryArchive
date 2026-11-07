@@ -6,6 +6,7 @@
  */
 
 export * from "./types.js";
+export * from "./interfaces.js";
 export * from "./prompts/index.js";
 export * from "./builder.js";
 export * from "./minimal.js";

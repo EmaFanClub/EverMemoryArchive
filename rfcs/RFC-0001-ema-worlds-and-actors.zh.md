@@ -108,20 +108,9 @@ EMA 必须具备内部的输入聚合器（Input Batcher），支持在特定时
 
 ### 编写一个 World 实例
 
-开发者或插件贡献者只需实现一个继承自 `EmaWorld` 的类：
-
-```typescript
-import { Interface } from "@prismshadow/penguin-core";
-
-@Interface()
-export abstract class EmaWorld {
-  // 启动世界：建立监听、初始化路由
-  abstract start(ctx: EmaCtx): Disposable;
-
-  // 与该世界的某个 Part 进行交互
-  abstract interact(ctx: EmaCtx, actor: EmaActor, id: Id, ...args: unknown[]): Disposable;
-}
-```
+开发者或插件贡献者只需实现一个继承自 `EmaWorld` 的类（规范类型声明见代码库 `packages/ema/src/interfaces.ts`）：
+- **生命周期启动**：实现 `start(ctx)`，在其中建立外部网络监听、挂载世界专属路由并连接输入队列；
+- **环境交互响应**：实现 `interact(ctx, actor, id, ...args)`，接收伴侣 Actor 的动作指令并派发至指定 Part。
 
 例如 `TelegramWorld`：
 1. 在 `start(ctx)` 中：
@@ -169,113 +158,34 @@ penguin input <Input> <Channel>telegram-channel:1234</Channel><Name>爱&lt;你</
 ## Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-### 1. 核心接口定义
+### 1. 核心契约与职责要求
 
-#### (1) `EmaWorld` 与 `@Interface()`
+具体 TypeScript 接口与类型声明初始化于 `packages/ema/src/interfaces.ts`。本节阐明各核心契约在架构上**至少需要具备的能力与字段**：
 
-```typescript
-import { Interface } from "@prismshadow/penguin-core";
+#### (1) `EmaWorld`（世界抽象）
+- **契约标识**：作为 Penguin Interface 原语，通过 `@Interface()` 声明抽象类，作为跨模块的装配句柄。
+- **生命周期启动（`start`）**：至少需要接收运行时上下文 `EmaCtx`，建立底层网络长连接或监听器，向 Router 注册世界路由，并返回一个可撤销/断开监听的 `Disposable` 句柄。
+- **环境交互操作（`interact`）**：至少需要接收 `EmaCtx`、执行操作的 `EmaActor`、世界内的目标 Part 标识（`id`）以及动作载荷（如回复、表情、系统命令），执行平台端消息或操作投递，并返回可用于清理或取消的 `Disposable` 句柄。
+- **多 Part 拓扑管理**：必须能够识别并管理所属世界下的多个交互细分子单元（Part），如不同的频道、群组或私聊会话。
 
-export type Id = string;
+#### (2) `EmaCtx`（运行时上下文）
+- **路由暴露**：至少需要提供资源路由器实例 `router`，允许世界动态挂载其专属路由。
+- **事务输入投递**：至少需要提供输入聚合队列 `inputBatcher`，供世界推送归一化后的 `EmaInput`。
+- **世界注册表**：至少需要暴露活跃世界注册管理器 `registry`，供世界注册自身与相互发现。
 
-export interface Disposable {
-  dispose(): void;
-}
+#### (3) `EmaActor`（伴侣参与者身份）
+- **身份凭证**：至少需要包含 Actor 在伴侣系统内的唯一 ID、展示昵称、当前绑定的 Penguin 会话标识以及所属 Agent ID，确保跨世界调用时发送者身份的真实性与可溯源性。
 
-export interface EmaActor {
-  /** 伴侣在 EMA 内部的唯一标识 */
-  readonly id: Id;
-  /** 伴侣展示名称 */
-  readonly name: string;
-  /** 伴侣绑定的当前 Penguin 会话 ID */
-  readonly session: string;
-  /** 绑定的 Penguin Agent ID */
-  readonly agentId: string;
-}
+#### (4) `EmaInput`（归一化输入事件）
+- **路由与寻址元数据**：至少需要包含事件全局唯一 ID、所属世界标识（如 `telegram` / `qq`）以及具体 Part 标识（如 `channel:1234`）。
+- **发送者上下文**：至少需要包含发送者外部 ID、展示昵称，以及是否为主要主人（`isOwner`）的标记。
+- **核心载荷与时序**：至少需要包含文本正文内容、毫秒级时间戳；可选附带被回复的消息 ID 及平台原始元数据。
 
-export interface EmaCtx {
-  /** 统一资源路由器 */
-  readonly router: EmaRouter;
-  /** 事务性输入收集与批处理队列 */
-  readonly inputBatcher: EmaInputBatcher;
-  /** 世界注册表与生命周期管理器 */
-  readonly registry: EmaWorldRegistry;
-}
+### 2. Ema Router 实现要求
 
-@Interface()
-export abstract class EmaWorld {
-  /** 启动世界并注册资源路由与监听器 */
-  abstract start(ctx: EmaCtx): Disposable;
-
-  /** Actor 与特定 Part 进行交互（输出消息、动作响应、环境操作） */
-  abstract interact(
-    ctx: EmaCtx,
-    actor: EmaActor,
-    id: Id,
-    ...args: unknown[]
-  ): Disposable;
-}
-```
-
-#### (2) `EmaInput` 结构化事件
-
-```typescript
-export interface EmaSender {
-  readonly id: string;
-  readonly name: string;
-  readonly isOwner?: boolean;
-}
-
-export interface EmaInput {
-  /** 消息或事件在世界内的唯一 ID */
-  readonly id: Id;
-  /** 所属世界名称或标识，如 "telegram" */
-  readonly world: string;
-  /** 所属世界的细分子部分，如 "channel:1234" 或 "group:567" */
-  readonly partId: string;
-  /** 发送者信息 */
-  readonly sender: EmaSender;
-  /** 消息文本正文 */
-  readonly content: string;
-  /** 毫秒时间戳 */
-  readonly timestamp: number;
-  /** 可选的被引用消息 ID */
-  readonly replyTo?: Id;
-  /** 原始平台附加元数据 */
-  readonly metadata?: Record<string, unknown>;
-}
-```
-
-### 2. Ema Router 实现机制
-
-Ema Router 提供基于前缀和模式匹配的 URI 空间：
-
-```typescript
-export interface EmaRouteContext {
-  readonly path: string;
-  readonly params: Record<string, string>;
-  readonly query: URLSearchParams;
-}
-
-export type EmaRouteHandler = (ctx: EmaRouteContext) => Promise<unknown> | unknown;
-
-export interface EmaRouter {
-  /**
-   * 将 handler 挂载到指定前缀（如 `/world/telegram`）
-   */
-  serve(pathPrefix: string, handler: EmaRouteHandler): Disposable;
-
-  /**
-   * 根据 URI 检索资源，如 `read("/world/telegram/messages/123")`
-   */
-  read<T = unknown>(uri: string): Promise<T>;
-
-  /**
-   * 列出所有挂载的路由条目
-   */
-  listRoutes(): ReadonlyArray<{ prefix: string; worldName?: string }>;
-}
-```
+- **路由挂载（`serve`）**：至少需要支持将资源处理器挂载到特定路径前缀（如 `/world/telegram`），返回可随时注销路由的 `Disposable` 句柄。
+- **只读检索（`read`）**：至少需要支持传入规范 URI（如 `/world/telegram/messages/:id`），自动提取路径参数并分发至对应 Handler 返回数据。
+- **路径清单（`listRoutes`）**：至少需要支持枚举当前系统中所有挂载的世界与前缀，支撑运维可观测性。
 
 路由匹配算法采用轻量级前缀与通配参数提取：
 - `/world/:world/messages/:id` 自动提取 `params.world` 与 `params.id`；

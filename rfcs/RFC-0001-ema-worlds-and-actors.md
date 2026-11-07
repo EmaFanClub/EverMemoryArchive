@@ -108,20 +108,9 @@ At the lowest level, input delivery leverages PenguinHarness's standard CLI/API 
 
 ### Implementing a World
 
-A plugin author implements an `EmaWorld` class:
-
-```typescript
-import { Interface } from "@prismshadow/penguin-core";
-
-@Interface()
-export abstract class EmaWorld {
-  // Starts the world: initializes connections, registers routes
-  abstract start(ctx: EmaCtx): Disposable;
-
-  // Interacts with a specific part of the world
-  abstract interact(ctx: EmaCtx, actor: EmaActor, id: Id, ...args: unknown[]): Disposable;
-}
-```
+A plugin author implements a class extending `EmaWorld` (canonical interface contracts are defined in `packages/ema/src/interfaces.ts`):
+- **Lifecycle Start**: Implements `start(ctx)` to establish external network listeners, register world routes on the router, and connect input ingestion;
+- **Environmental Interaction**: Implements `interact(ctx, actor, id, ...args)` to receive actor directives and dispatch them to the targeted part.
 
 For example, `TelegramWorld`:
 1. In `start(ctx)`:
@@ -169,105 +158,34 @@ The companion agent ingests the structured input, generates a single cohesive re
 ## Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-### 1. Core Interfaces
+### 1. Core Contract & Requirement Baseline
 
-#### (1) `EmaWorld` & `@Interface()`
+Canonical TypeScript interfaces and types are initialized in `packages/ema/src/interfaces.ts`. This section outlines the architectural **minimum required capabilities and fields**:
 
-```typescript
-import { Interface } from "@prismshadow/penguin-core";
+#### (1) `EmaWorld` (World Primitive)
+- **Contract Marker**: Declared as an abstract class decorated with `@Interface()`, serving as the structural assembly handle across plugins.
+- **Lifecycle Start (`start`)**: Must at least receive runtime context `EmaCtx`, establish underlying network connections/listeners, register world routes with the router, and return a `Disposable` cleanup handle.
+- **Environmental Interaction (`interact`)**: Must at least receive `EmaCtx`, the operating `EmaActor`, the target part identifier (`id`) within the world, and arbitrary action payloads (replies, reactions, commands), dispatching platform operations and returning a `Disposable` interaction handle.
+- **Multi-Part Topology**: Must be capable of managing and identifying multiple interaction loci (parts) within the realm (channels, groups, DMs, rooms).
 
-export type Id = string;
+#### (2) `EmaCtx` (Runtime Context)
+- **Router Exposure**: Must at least provide the unified `EmaRouter` instance for mounting world routes.
+- **Transactional Input Ingestion**: Must at least provide `EmaInputBatcher` for worlds to submit normalized `EmaInput` events.
+- **World Registry**: Must at least expose `EmaWorldRegistry` to register world instances and discover peer worlds.
 
-export interface Disposable {
-  dispose(): void;
-}
+#### (3) `EmaActor` (Companion Actor Identity)
+- **Identity Credentials**: Must at least provide the companion's unique actor ID, display name, bound Penguin session ID, and operating agent ID, guaranteeing provenance and preventing impersonation.
 
-export interface EmaActor {
-  /** Unique actor identifier */
-  readonly id: Id;
-  /** Companion display name */
-  readonly name: string;
-  /** Bound Penguin session ID */
-  readonly session: string;
-  /** Bound Penguin Agent ID */
-  readonly agentId: string;
-}
+#### (4) `EmaInput` (Normalized Input Event)
+- **Addressing Metadata**: Must at least provide unique event ID, originating world identifier (e.g. `telegram`, `qq`), and specific part identifier (e.g. `channel:1234`).
+- **Sender Context**: Must at least provide sender external ID, display nickname, and a flag indicating whether the sender is the companion's primary owner (`isOwner`).
+- **Core Payload & Timing**: Must at least provide text content and a millisecond timestamp; optionally provides referenced reply-to ID and raw platform metadata.
 
-export interface EmaCtx {
-  /** Unified resource router */
-  readonly router: EmaRouter;
-  /** Transactional input queue and batcher */
-  readonly inputBatcher: EmaInputBatcher;
-  /** World registry and lifecycle manager */
-  readonly registry: EmaWorldRegistry;
-}
+### 2. Ema Router Requirements
 
-@Interface()
-export abstract class EmaWorld {
-  /** Starts the world and mounts routes and event listeners */
-  abstract start(ctx: EmaCtx): Disposable;
-
-  /** Actor interacts with a part of the world */
-  abstract interact(
-    ctx: EmaCtx,
-    actor: EmaActor,
-    id: Id,
-    ...args: unknown[]
-  ): Disposable;
-}
-```
-
-#### (2) `EmaInput` Structure
-
-```typescript
-export interface EmaSender {
-  readonly id: string;
-  readonly name: string;
-  readonly isOwner?: boolean;
-}
-
-export interface EmaInput {
-  /** Unique message/event ID within the world */
-  readonly id: Id;
-  /** World identifier, e.g. "telegram" */
-  readonly world: string;
-  /** Specific part identifier within the world, e.g. "channel:1234" */
-  readonly partId: string;
-  /** Sender metadata */
-  readonly sender: EmaSender;
-  /** Inbound text content */
-  readonly content: string;
-  /** Millisecond timestamp */
-  readonly timestamp: number;
-  /** Optional referenced message ID */
-  readonly replyTo?: Id;
-  /** Raw platform metadata */
-  readonly metadata?: Record<string, unknown>;
-}
-```
-
-### 2. Ema Router Mechanism
-
-```typescript
-export interface EmaRouteContext {
-  readonly path: string;
-  readonly params: Record<string, string>;
-  readonly query: URLSearchParams;
-}
-
-export type EmaRouteHandler = (ctx: EmaRouteContext) => Promise<unknown> | unknown;
-
-export interface EmaRouter {
-  /** Mounts handler under path prefix (e.g. `/world/telegram`) */
-  serve(pathPrefix: string, handler: EmaRouteHandler): Disposable;
-
-  /** Reads a resource path, e.g. `read("/world/telegram/messages/123")` */
-  read<T = unknown>(uri: string): Promise<T>;
-
-  /** Lists all registered route prefixes */
-  listRoutes(): ReadonlyArray<{ prefix: string; worldName?: string }>;
-}
-```
+- **Route Mounting (`serve`)**: Must at least support mounting resource handlers under path prefixes (e.g. `/world/telegram`), returning a `Disposable` unmount handle.
+- **Read Query (`read`)**: Must at least support querying canonical URIs (e.g. `/world/telegram/messages/:id`), extracting wildcard parameters and dispatching to registered handlers.
+- **Route Enumeration (`listRoutes`)**: Must at least list all active mount prefixes for inspection and CLI observability.
 
 Route matching supports parameterized wildcard extraction (e.g., `/world/:world/messages/:id` populates `params.world` and `params.id`). Disposing of the returned handle unmounts the corresponding subtree.
 
