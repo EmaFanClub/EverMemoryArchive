@@ -7,6 +7,9 @@
 
 export * from "./types.js";
 export * from "./interfaces.js";
+export * from "./router.js";
+export * from "./input-batcher.js";
+export * from "./worlds/penguin-channel-world.js";
 export * from "./prompts/index.js";
 export * from "./builder.js";
 export * from "./minimal.js";

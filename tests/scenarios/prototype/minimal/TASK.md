@@ -9,7 +9,7 @@ This scenario tests and validates that the Minimal EMA Prototype variant remains
 - **Agent**: `ema_minimal` (Project Agent)
 - **Script**: `tests/scenarios/prototype/minimal/minimal-prototype.mjs`
 
-## Architectural Invariants to Verify
+## Architectural Invariants to Verify (RFC-0001)
 
 1. **Zero Personality**:
    - The agent prompt has no character sheet, emotional tone, or roleplay personas.
@@ -17,12 +17,16 @@ This scenario tests and validates that the Minimal EMA Prototype variant remains
 2. **Zero Memory**:
    - EverMemoryArchive (EMA) storage, vector search (LanceDB), document stores (MongoDB), and memory consolidation are 100% disabled.
    - The session transcript in PenguinHarness retains turn continuity for user/evaluator visibility, while EMA long-term cognitive storage remains untouched.
-3. **Penguin Channel Input**:
+3. **World Abstraction & Ema Router (`PenguinChannelWorld`)**:
+   - Implements `EmaWorld` (`@Interface()`) with multi-part channel topology.
+   - Mounts routes under `/world/channel` (inspected via `ema.js world ls` and `ema.js world get`).
+4. **Transactional Input Ingestion**:
    - Ingests incoming messages via channel polling (`penguin org channel tail --json`).
    - Filters strictly for human users (`sender: user:*`). Messages from `agent:*` and `system` are ignored to prevent recursive reply loops.
+   - Debounces and coalesces input into atomic XML `<Input>` payloads with entity escaping.
    - Stateful deduplication via workspace state (`seen-messages.json`).
-4. **Penguin Channel Output & Identity Guard**:
-   - Output dispatches via `penguin org channel send --channel <channel> -m "<message>"`.
+5. **Penguin Channel Output & Identity Guard**:
+   - Output dispatches via `world.interact(...)` calling `penguin org channel send --channel <channel> -m "<message>"`.
    - **Identity Guard**: Enforces `assertAgentIdentity(env)`; refuses to dispatch without `PENGUIN_AGENT_ID` so the prototype cannot impersonate `user:admin`.
    - **Tool Isolation**: Model execution runs with `--approve deny-all` to prevent rogue subshell commands.
 

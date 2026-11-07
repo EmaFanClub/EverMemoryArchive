@@ -1,24 +1,46 @@
 /**
- * @prism-shadow/ema - Minimal Variant Specification & Runner
+ * @prism-shadow/ema - Minimal EMA Prototype Variant
  *
- * Characteristics:
+ * Characteristics & Invariants (RFC-0001):
  * 1. Zero Personality: Purely functional, neutral system prompt without persona or emotional tone.
  * 2. Zero Memory: EverMemoryArchive retrieval, indexing, and storage bypassed.
  *    (Harness session transcript accumulates turn continuity for user visibility;
  *    EMA cognitive storage, embeddings, vector search, and consolidation remain fully bypassed).
- * 3. Penguin Channel Input: Watch bridge ingesting messages into the persistent
- *    `ema_minimal` session. Polls the channel, filters for human senders (`user:*`),
- *    and deduplicates message IDs. Rejects `agent:*` and `system` senders to prevent reply loops.
- * 4. Penguin Channel Output: Formats and dispatches completions back to the channel
- *    on behalf of the operating employee agent (the session that runs the runner),
- *    never the server owner.
- *
- * Identity & Channel Dispatch Specification:
- * - Channel output is dispatched on behalf of the operating employee agent
- *   (the session that runs the runner), never the server owner.
- * - Never read or use /home/rei/.penguin/data/api-token for anything user-visible.
- * - The runner must refuse to dispatch without an explicit agent identity (PENGUIN_AGENT_ID).
+ * 3. World Abstraction: PenguinChannelWorld implements EmaWorld (@Interface) with multi-part support.
+ * 4. Internal EmaRouter: World routes mounted under `/world/channel` (parts, messages).
+ * 5. Transactional Input Batching: Inbound messages coalesced into <Input> XML payloads.
+ * 6. Identity Guard: Verified operating agent identity before any channel dispatch.
  */
+
+import {
+  type EmaCtx,
+  type EmaActor,
+  type EmaInput,
+  type Disposable,
+  type EmaWorldRegistry,
+} from "./interfaces.js";
+import { SimpleEmaRouter } from "./router.js";
+import {
+  SimpleEmaInputBatcher,
+  formatBatchToXml,
+  escapeXml,
+  type EmaBatcherOptions,
+} from "./input-batcher.js";
+import {
+  PenguinChannelWorld,
+  type PenguinChannelWorldOptions,
+} from "./worlds/penguin-channel-world.js";
+
+export { SimpleEmaRouter } from "./router.js";
+export {
+  SimpleEmaInputBatcher,
+  formatBatchToXml,
+  escapeXml,
+} from "./input-batcher.js";
+export {
+  PenguinChannelWorld,
+  type PenguinChannelWorldOptions,
+} from "./worlds/penguin-channel-world.js";
 
 export interface MinimalChannelMessage {
   id?: string;
@@ -54,12 +76,7 @@ export const DEFAULT_MINIMAL_SYSTEM_PROMPT =
 
 /**
  * Guard that verifies the calling agent's identity is present in the environment.
- *
- * Channel output must be dispatched on behalf of the operating employee agent
- * (the session that runs the runner), never the server owner.
- * Never read or use /home/rei/.penguin/data/api-token for anything user-visible.
- *
- * @throws {Error} if PENGUIN_AGENT_ID is unset or blank.
+ * Refuses dispatch without PENGUIN_AGENT_ID.
  */
 export function assertAgentIdentity(
   env: Record<string, string | undefined> = process.env
@@ -74,8 +91,7 @@ export function assertAgentIdentity(
 }
 
 /**
- * Normalizes raw channel JSON messages (from `penguin org channel tail --json`)
- * into standard MinimalChannelMessage instances.
+ * Normalizes raw channel JSON messages into standard MinimalChannelMessage instances.
  */
 export function normalizeChannelMessage(raw: {
   id?: string;
@@ -96,11 +112,6 @@ export function normalizeChannelMessage(raw: {
 
 /**
  * Evaluates whether an incoming channel message should be processed by the watch loop.
- *
- * Rules:
- * 1. Sender must start with "user:" (humans only). Messages from "agent:" and "system"
- *    are rejected to prevent reply loops.
- * 2. Message ID must not be present in `seenIds` (deduplication).
  */
 export function isEligibleChannelMessage(
   msg: { id?: string; sender?: string },
@@ -144,8 +155,7 @@ export function filterNewUserMessages(
 }
 
 /**
- * Parses duration strings (e.g. "4h", "30m", "45s", "1000") into milliseconds.
- * Defaults to 4 hours (14,400,000 ms) if empty or invalid.
+ * Parses duration strings (e.g. "12h", "4h", "30m", "45s") into milliseconds.
  */
 export function parseWatchDuration(raw?: string | number): number {
   if (typeof raw === "number" && !isNaN(raw)) return Math.max(0, raw);
@@ -172,10 +182,7 @@ export function parseWatchDuration(raw?: string | number): number {
 }
 
 /**
- * Executes a minimal prototype turn with zero personality, zero memory,
- * penguin channel input, and penguin channel output.
- *
- * Ensures that any channel dispatch path validates the calling agent identity.
+ * Executes a minimal prototype turn with zero personality, zero memory.
  */
 export async function executeMinimalTurn(
   message: MinimalChannelMessage,
@@ -183,7 +190,6 @@ export async function executeMinimalTurn(
 ): Promise<MinimalTurnResult> {
   let dispatchedAgentId: string | undefined;
 
-  // Validate agent identity if dispatching to a channel or explicitly required
   if (options.channelDispatcher || options.requireAgentIdentity) {
     dispatchedAgentId = assertAgentIdentity(options.env ?? process.env);
   }
@@ -191,20 +197,16 @@ export async function executeMinimalTurn(
   const systemPrompt = options.systemPrompt ?? DEFAULT_MINIMAL_SYSTEM_PROMPT;
   const prompt = message.text;
 
-  // Invariant assertions: no memory, no personality
   const memoryAccessed = false as const;
   const personalityApplied = false as const;
 
-  // LLM generation (or mock invoker for unit testing)
   let response = "";
   if (options.llmInvoker) {
     response = await options.llmInvoker(prompt, systemPrompt);
   } else {
-    // Default placeholder response when no invoker provided
     response = `Received message from ${message.sender}: "${message.text}"`;
   }
 
-  // Format channel output: mention sender if provided
   const mention = message.sender && !message.sender.startsWith("@") ? `@${message.sender} ` : "";
   const outputMessage = `${mention}${response}`.trim();
   const outputChannel = message.channel;
@@ -223,5 +225,117 @@ export async function executeMinimalTurn(
     memoryAccessed,
     personalityApplied,
     dispatchedAgentId,
+  };
+}
+
+export interface MinimalPrototypeOptions {
+  channels?: string[];
+  pollInterval?: number;
+  stateFile?: string;
+  actor?: Partial<EmaActor>;
+  systemPrompt?: string;
+  batcherOptions?: EmaBatcherOptions;
+  channelFetcher?: PenguinChannelWorldOptions["channelFetcher"];
+  channelSender?: PenguinChannelWorldOptions["channelSender"];
+  llmInvoker?: (xmlPayload: string, systemPrompt: string) => Promise<string>;
+  env?: Record<string, string | undefined>;
+}
+
+export interface MinimalPrototypeInstance {
+  ctx: EmaCtx;
+  router: SimpleEmaRouter;
+  inputBatcher: SimpleEmaInputBatcher;
+  world: PenguinChannelWorld;
+  actor: EmaActor;
+  dispose: () => void;
+}
+
+/**
+ * Creates and boots the Minimal Prototype instance with PenguinChannelWorld,
+ * SimpleEmaRouter, and SimpleEmaInputBatcher per RFC-0001.
+ */
+export function createMinimalPrototype(
+  options: MinimalPrototypeOptions = {}
+): MinimalPrototypeInstance {
+  const env = options.env ?? process.env;
+  const router = new SimpleEmaRouter();
+  const inputBatcher = new SimpleEmaInputBatcher(options.batcherOptions);
+
+  const worldsMap = new Map<string, PenguinChannelWorld>();
+  const registry: EmaWorldRegistry = {
+    register: (name, world) => {
+      worldsMap.set(name, world as PenguinChannelWorld);
+      return {
+        dispose: () => {
+          worldsMap.delete(name);
+        },
+      };
+    },
+    get: (name) => worldsMap.get(name),
+    list: () => [...worldsMap.entries()].map(([name, world]) => ({ name, world })),
+  };
+
+  const ctx: EmaCtx = {
+    router,
+    inputBatcher,
+    registry,
+  };
+
+  const channelWorld = new PenguinChannelWorld({
+    channels: options.channels ?? ["ch_ema_minimal_test"],
+    pollInterval: options.pollInterval ?? 5000,
+    stateFile: options.stateFile,
+    channelFetcher: options.channelFetcher,
+    channelSender: options.channelSender,
+    env,
+  });
+
+  registry.register("channel", channelWorld);
+
+  const actor: EmaActor = {
+    id: options.actor?.id ?? "actor-ema-minimal",
+    name: options.actor?.name ?? "Ema Minimal",
+    session: options.actor?.session ?? "session-2026-11-05-10-19-24-d6815237",
+    agentId: options.actor?.agentId ?? (env.PENGUIN_AGENT_ID || "emafanclub_ema_dev"),
+  };
+
+  const systemPrompt = options.systemPrompt ?? DEFAULT_MINIMAL_SYSTEM_PROMPT;
+
+  // Subscribe to coalesced input batches
+  const batchSubscription = inputBatcher.onBatch(async (batch) => {
+    if (batch.length === 0) return;
+
+    const xmlPayload = formatBatchToXml(batch);
+    const primary = batch[0];
+    const targetChannel = primary.partId;
+
+    let response = "";
+    if (options.llmInvoker) {
+      response = await options.llmInvoker(xmlPayload, systemPrompt);
+    } else {
+      response = `Acknowledged input batch of ${batch.length} message(s).`;
+    }
+
+    const mention = primary.sender.name && !primary.sender.name.startsWith("@")
+      ? `@${primary.sender.name} `
+      : "";
+    const formattedReply = `${mention}${response}`.trim();
+
+    channelWorld.interact(ctx, actor, targetChannel, "reply", formattedReply);
+  });
+
+  const worldHandle = channelWorld.start(ctx);
+
+  return {
+    ctx,
+    router,
+    inputBatcher,
+    world: channelWorld,
+    actor,
+    dispose: () => {
+      batchSubscription.dispose();
+      worldHandle.dispose();
+      inputBatcher.dispose();
+    },
   };
 }
