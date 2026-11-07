@@ -104,19 +104,13 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       expect(statusRes.world).toBe("telegram");
     });
 
-    it("restores stacked handler when overriding route is disposed", async () => {
+    it("unmounts route cleanly when disposed", async () => {
       const router = new SimpleEmaRouter();
 
-      const baseHandle = router.serve("/world/channel", () => "base");
-      expect(await router.read<string>("/world/channel")).toBe("base");
+      const handle = router.serve("/world/channel", () => "active");
+      expect(await router.read<string>("/world/channel")).toBe("active");
 
-      const overrideHandle = router.serve("/world/channel", () => "override");
-      expect(await router.read<string>("/world/channel")).toBe("override");
-
-      overrideHandle.dispose();
-      expect(await router.read<string>("/world/channel")).toBe("base");
-
-      baseHandle.dispose();
+      handle.dispose();
       await expect(router.read("/world/channel")).rejects.toThrow("Route not found");
     });
   });

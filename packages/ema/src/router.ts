@@ -33,9 +33,6 @@ export class SimpleEmaRouter implements EmaRouter {
     ignoreDuplicateSlashes: true,
   });
 
-  // Track handlers per path to support clean unmounting and override restoration
-  private pathHandlers = new Map<string, RouteStore[]>();
-
   /**
    * Mounts a handler under a path prefix (e.g. `/world/channel` or `/world/channel/messages/:id`).
    */
@@ -44,75 +41,30 @@ export class SimpleEmaRouter implements EmaRouter {
     handler: EmaRouteHandler,
     description?: string
   ): Disposable {
-    const normalized = pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`;
-    const cleanPrefix = normalized.replace(/\/+$/, "") || "/";
+    const path = pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`;
+    const clean = path.replace(/\/+$/, "") || "/";
+    const store: RouteStore = { prefix: path, handler, description };
 
-    // Standard HTTP route patterns: exact path and wildcard subpaths
-    const patterns: Array<{ path: string; isWildcard: boolean }> = [];
-    if (cleanPrefix.endsWith("/*")) {
-      patterns.push({ path: cleanPrefix, isWildcard: false });
-    } else {
-      patterns.push({ path: cleanPrefix, isWildcard: false });
-      if (cleanPrefix === "/") {
-        patterns.push({ path: "/*", isWildcard: true });
-      } else {
-        patterns.push({ path: `${cleanPrefix}/*`, isWildcard: true });
-      }
-    }
+    this.router.on("GET", clean, () => handler, store);
 
-    const unregisters: Array<() => void> = [];
+    // If prefix route without wildcard or params, also register subpath wildcard
+    const wildcard =
+      !clean.includes("*") && !clean.includes(":")
+        ? `${clean === "/" ? "" : clean}/*`
+        : null;
 
-    for (const { path, isWildcard } of patterns) {
-      const store: RouteStore = {
-        prefix: normalized,
-        handler,
-        description,
-        isWildcard,
-      };
-
-      let stack = this.pathHandlers.get(path);
-      if (!stack) {
-        stack = [];
-        this.pathHandlers.set(path, stack);
-      }
-      stack.push(store);
-
-      this.updateHttpRoute(path);
-
-      unregisters.push(() => {
-        const currentStack = this.pathHandlers.get(path);
-        if (currentStack) {
-          const idx = currentStack.indexOf(store);
-          if (idx !== -1) {
-            currentStack.splice(idx, 1);
-          }
-          if (currentStack.length === 0) {
-            this.pathHandlers.delete(path);
-          }
-        }
-        this.updateHttpRoute(path);
-      });
+    if (wildcard) {
+      this.router.on("GET", wildcard, () => handler, { ...store, isWildcard: true });
     }
 
     return {
       dispose: () => {
-        for (const unreg of unregisters) {
-          unreg();
+        this.router.off("GET", clean);
+        if (wildcard) {
+          this.router.off("GET", wildcard);
         }
       },
     };
-  }
-
-  private updateHttpRoute(path: string): void {
-    if (this.router.hasRoute("GET", path)) {
-      this.router.off("GET", path);
-    }
-
-    const stack = this.pathHandlers.get(path);
-    if (stack && stack.length > 0) {
-      const active = stack[stack.length - 1];
-      this.router.on("GET", path, () => active, active);
-    }
   }
 
   /**
@@ -130,18 +82,9 @@ export class SimpleEmaRouter implements EmaRouter {
 
     const store = matched.store as RouteStore;
 
-    const params: Record<string, string> = {};
-    if (matched.params) {
-      for (const [key, val] of Object.entries(matched.params)) {
-        if (typeof val === "string") {
-          params[key] = val;
-        }
-      }
-    }
-
     const ctx: EmaRouteContext = {
       path: url.pathname,
-      params,
+      params: (matched.params || {}) as Record<string, string>,
       query: url.searchParams,
     };
 
@@ -154,9 +97,9 @@ export class SimpleEmaRouter implements EmaRouter {
   listRoutes(): ReadonlyArray<EmaRouteEntry> {
     const seen = new Set<string>();
     const result: EmaRouteEntry[] = [];
-    const internalRoutes = (this.router as unknown as { routes?: FindMyWayRoute[] }).routes || [];
+    const routes = (this.router as unknown as { routes?: FindMyWayRoute[] }).routes || [];
 
-    for (const route of internalRoutes) {
+    for (const route of routes) {
       const store = route.store;
       if (store && !store.isWildcard && !seen.has(store.prefix)) {
         seen.add(store.prefix);
