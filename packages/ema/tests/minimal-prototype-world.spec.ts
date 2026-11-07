@@ -114,6 +114,28 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       await expect(router.read("/world/channel")).rejects.toThrow("Route not found");
     });
 
+    it("supports lazy deletion when unmounting multiple routes", async () => {
+      const router = new SimpleEmaRouter();
+
+      const h1 = router.serve("/world/r1", () => "r1");
+      const h2 = router.serve("/world/r2", () => "r2");
+      const h3 = router.serve("/world/r3", () => "r3");
+
+      expect(router.listRoutes().length).toBe(3);
+
+      // Lazy delete two routes in O(1) without eager array reallocations
+      h1.dispose();
+      h3.dispose();
+
+      expect(router.listRoutes().map((r) => r.prefix)).toEqual(["/world/r2"]);
+      expect(await router.read<string>("/world/r2")).toBe("r2");
+      await expect(router.read("/world/r1")).rejects.toThrow("Route not found");
+      await expect(router.read("/world/r3")).rejects.toThrow("Route not found");
+
+      h2.dispose();
+      expect(router.listRoutes().length).toBe(0);
+    });
+
     it("exposes standard Hono app for Web Standard fetch and request dispatch", async () => {
       const router = new SimpleEmaRouter();
       router.serve("/world/channel/health", () => ({ status: "ok" }));

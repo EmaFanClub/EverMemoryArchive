@@ -18,6 +18,7 @@ interface RouteRegistration {
   readonly path: string;
   readonly handler: EmaRouteHandler;
   readonly description?: string;
+  disposed?: boolean;
 }
 
 export class SimpleEmaRouter implements EmaRouter {
@@ -45,6 +46,7 @@ export class SimpleEmaRouter implements EmaRouter {
       path,
       handler,
       description,
+      disposed: false,
     };
 
     this.routes.push(entry);
@@ -52,14 +54,19 @@ export class SimpleEmaRouter implements EmaRouter {
 
     return {
       dispose: () => {
-        this.routes = this.routes.filter((r) => r !== entry);
-        this.honoApp = null;
+        if (!entry.disposed) {
+          entry.disposed = true;
+          this.honoApp = null;
+        }
       },
     };
   }
 
   private getApp(): Hono {
     if (!this.honoApp) {
+      // Lazy delete: compact out tombstoned routes in a single O(n) pass during rebuild
+      this.routes = this.routes.filter((r) => !r.disposed);
+
       const app = new Hono();
 
       for (const entry of this.routes) {
@@ -118,9 +125,11 @@ export class SimpleEmaRouter implements EmaRouter {
    * Lists all mounted route prefixes in their exact registration order.
    */
   listRoutes(): ReadonlyArray<EmaRouteEntry> {
-    return this.routes.map((r) => ({
-      prefix: r.path,
-      description: r.description,
-    }));
+    return this.routes
+      .filter((r) => !r.disposed)
+      .map((r) => ({
+        prefix: r.path,
+        description: r.description,
+      }));
   }
 }
