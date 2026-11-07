@@ -47,6 +47,78 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       expect(routes.map((r) => r.prefix)).toContain("/world/channel");
       expect(routes.map((r) => r.prefix)).toContain("/world/telegram");
     });
+
+    it("handles multi-parameter paths and prefix routing with specificity precedence", async () => {
+      const router = new SimpleEmaRouter();
+
+      // Wildcard / prefix root for channel world
+      router.serve("/world/channel", (ctx) => ({
+        matched: "root",
+        path: ctx.path,
+      }));
+
+      // Specific multi-parameter route under channel world
+      router.serve(
+        "/world/channel/parts/:partId/messages/:msgId",
+        (ctx) => ({
+          matched: "channel-message",
+          part: ctx.params.partId,
+          msg: ctx.params.msgId,
+        })
+      );
+
+      // Generic route for other worlds
+      router.serve(
+        "/world/:worldId/status",
+        (ctx) => ({
+          matched: "world-status",
+          world: ctx.params.worldId,
+        })
+      );
+
+      // Root access
+      const rootRes = await router.read<{ matched: string; path: string }>("/world/channel");
+      expect(rootRes.matched).toBe("root");
+
+      // Subpath prefix access falling back to wildcard
+      const subRes = await router.read<{ matched: string; path: string }>("/world/channel/unknown/subpath");
+      expect(subRes.matched).toBe("root");
+      expect(subRes.path).toBe("/world/channel/unknown/subpath");
+
+      // Specific multi-parameter route takes precedence over wildcard
+      const msgRes = await router.read<{
+        matched: string;
+        part: string;
+        msg: string;
+      }>("/world/channel/parts/tg-123/messages/msg-999");
+      expect(msgRes.matched).toBe("channel-message");
+      expect(msgRes.part).toBe("tg-123");
+      expect(msgRes.msg).toBe("msg-999");
+
+      // Generic placeholder route matches other worlds
+      const statusRes = await router.read<{
+        matched: string;
+        world: string;
+      }>("/world/telegram/status");
+      expect(statusRes.matched).toBe("world-status");
+      expect(statusRes.world).toBe("telegram");
+    });
+
+    it("restores stacked handler when overriding route is disposed", async () => {
+      const router = new SimpleEmaRouter();
+
+      const baseHandle = router.serve("/world/channel", () => "base");
+      expect(await router.read<string>("/world/channel")).toBe("base");
+
+      const overrideHandle = router.serve("/world/channel", () => "override");
+      expect(await router.read<string>("/world/channel")).toBe("override");
+
+      overrideHandle.dispose();
+      expect(await router.read<string>("/world/channel")).toBe("base");
+
+      baseHandle.dispose();
+      await expect(router.read("/world/channel")).rejects.toThrow("Route not found");
+    });
   });
 
   describe("SimpleEmaInputBatcher & XML Protocol", () => {

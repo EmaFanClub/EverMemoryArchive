@@ -16,27 +16,10 @@ export interface Disposable {
   dispose(): void;
 }
 
-/**
- * The handle returned by Interface(): both an abstract class constructor and a class decorator.
- */
-export type IfaceHandle<T> = (abstract new (...args: never[]) => T) &
-  (<C extends abstract new (...args: any[]) => any>(
-    target: C,
-    context?: ClassDecoratorContext | unknown
-  ) => C | void);
+import { Interface } from "@prismshadow/penguin-core/plugin";
 
-/**
- * Penguin Interface decorator handle.
- *
- * Marks an abstract class as a Penguin Interface contract.
- * At runtime, returns the target class untouched as a structural handle.
- */
-export function Interface<T = unknown>(): IfaceHandle<T> {
-  function handle(target?: unknown, _context?: unknown): unknown {
-    return target;
-  }
-  return handle as unknown as IfaceHandle<T>;
-}
+export type IfaceHandle<T = unknown> = ReturnType<typeof Interface<T>>;
+export { Interface };
 
 /**
  * Actor identity representing an EMA companion agent within a session/world.

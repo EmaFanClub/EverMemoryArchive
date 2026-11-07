@@ -1,10 +1,11 @@
 /**
  * @prism-shadow/ema - SimpleEmaRouter
  *
- * Lightweight prefix and pattern matching resource router for EMA Worlds.
+ * Battle-tested Radix Tree resource router for EMA Worlds powered by radix3.
  * Conforms to EmaRouter interface from RFC-0001.
  */
 
+import { createRouter, type RadixRouter } from "radix3";
 import type {
   EmaRouter,
   EmaRouteHandler,
@@ -13,17 +14,23 @@ import type {
   Disposable,
 } from "./interfaces.js";
 
-interface InternalRoute {
+interface RouteRegistration {
   readonly id: string;
   readonly prefix: string;
   readonly handler: EmaRouteHandler;
   readonly description?: string;
-  readonly regex: RegExp;
-  readonly paramNames: string[];
+  readonly patterns: readonly string[];
+}
+
+interface RouteNodeData {
+  readonly handler: EmaRouteHandler;
+  readonly registrationId: string;
 }
 
 export class SimpleEmaRouter implements EmaRouter {
-  private routes: InternalRoute[] = [];
+  private router: RadixRouter<RouteNodeData> = createRouter<RouteNodeData>();
+  private registrations: RouteRegistration[] = [];
+  private patternStacks = new Map<string, RouteRegistration[]>();
   private nextId = 1;
 
   /**
@@ -35,33 +42,74 @@ export class SimpleEmaRouter implements EmaRouter {
     description?: string
   ): Disposable {
     const normalized = pathPrefix.startsWith("/") ? pathPrefix : `/${pathPrefix}`;
+    const cleanPrefix = normalized.replace(/\/+$/, "") || "/";
     const id = `route-${this.nextId++}`;
 
-    const paramNames: string[] = [];
-    const escaped = normalized.replace(/:([a-zA-Z0-9_]+)/g, (_match, name) => {
-      paramNames.push(name);
-      return "([^/]+)";
-    });
+    // Determine radix patterns: exact and prefix wildcard (if not already wildcard)
+    const patterns: string[] = [];
+    if (cleanPrefix.endsWith("/**") || cleanPrefix.endsWith("/*")) {
+      patterns.push(cleanPrefix);
+    } else {
+      patterns.push(cleanPrefix);
+      if (cleanPrefix === "/") {
+        patterns.push("/**");
+      } else {
+        patterns.push(`${cleanPrefix}/**`);
+      }
+    }
 
-    // If normalized prefix doesn't end with wildcard, match exact or prefix with /
-    const regex = new RegExp(`^${escaped}(?:/.*)?$`);
-
-    const route: InternalRoute = {
+    const reg: RouteRegistration = {
       id,
       prefix: normalized,
       handler,
       description,
-      regex,
-      paramNames,
+      patterns,
     };
 
-    // Keep routes sorted by specificity (longest prefix first)
-    this.routes.push(route);
-    this.routes.sort((a, b) => b.prefix.length - a.prefix.length);
+    this.registrations.push(reg);
+
+    // Register into radix tree with stack semantics
+    for (const pattern of patterns) {
+      let stack = this.patternStacks.get(pattern);
+      if (!stack) {
+        stack = [];
+        this.patternStacks.set(pattern, stack);
+      }
+      stack.push(reg);
+      this.router.insert(pattern, {
+        handler: reg.handler,
+        registrationId: reg.id,
+      });
+    }
 
     return {
       dispose: () => {
-        this.routes = this.routes.filter((r) => r.id !== id);
+        // Remove registration
+        const regIdx = this.registrations.findIndex((r) => r.id === id);
+        if (regIdx !== -1) {
+          this.registrations.splice(regIdx, 1);
+        }
+
+        // Unwind from radix tree
+        for (const pattern of patterns) {
+          const stack = this.patternStacks.get(pattern);
+          if (stack) {
+            const idx = stack.findIndex((r) => r.id === id);
+            if (idx !== -1) {
+              stack.splice(idx, 1);
+            }
+            if (stack.length > 0) {
+              const top = stack[stack.length - 1];
+              this.router.insert(pattern, {
+                handler: top.handler,
+                registrationId: top.id,
+              });
+            } else {
+              this.router.remove(pattern);
+              this.patternStacks.delete(pattern);
+            }
+          }
+        }
       },
     };
   }
@@ -76,32 +124,36 @@ export class SimpleEmaRouter implements EmaRouter {
     const pathname = url.pathname;
     const query = url.searchParams;
 
-    for (const route of this.routes) {
-      const match = pathname.match(route.regex);
-      if (match) {
-        const params: Record<string, string> = {};
-        for (let i = 0; i < route.paramNames.length; i++) {
-          params[route.paramNames[i]] = decodeURIComponent(match[i + 1] || "");
+    const matched = this.router.lookup(pathname);
+    if (!matched) {
+      throw new Error(`Route not found: ${pathname}`);
+    }
+
+    const params: Record<string, string> = {};
+    if (matched.params) {
+      for (const [key, val] of Object.entries(matched.params)) {
+        try {
+          params[key] = decodeURIComponent(String(val));
+        } catch {
+          params[key] = String(val);
         }
-
-        const ctx: EmaRouteContext = {
-          path: pathname,
-          params,
-          query,
-        };
-
-        return (await route.handler(ctx)) as T;
       }
     }
 
-    throw new Error(`Route not found: ${pathname}`);
+    const ctx: EmaRouteContext = {
+      path: pathname,
+      params,
+      query,
+    };
+
+    return (await matched.handler(ctx)) as T;
   }
 
   /**
    * Lists all mounted route prefixes.
    */
   listRoutes(): ReadonlyArray<EmaRouteEntry> {
-    return this.routes.map((r) => ({
+    return this.registrations.map((r) => ({
       prefix: r.prefix,
       description: r.description,
     }));
