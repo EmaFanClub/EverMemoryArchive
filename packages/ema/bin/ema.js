@@ -21,6 +21,7 @@ import {
   EmailWorld,
   BilibiliWorld,
   BilibiliLoginManager,
+  publishBilibiliDynamic,
   CognitiveActionsWorld,
   parseWatchDuration,
   assertAgentIdentity,
@@ -37,6 +38,12 @@ Usage:
 
   ema.js world get <path>
     Query resources from the EMA Router (e.g. /world/channel/parts)
+
+  ema.js bilibili login [options]
+    Interactive Playwright QR code login for Bilibili account authentication
+
+  ema.js bilibili post-dynamic <text> [options]
+    Publish a feed dynamic post via Playwright browser automation
 
   ema.js run [options]
     Run the Minimal Prototype with PenguinChannelWorld and transactional input batcher
@@ -223,6 +230,38 @@ async function main() {
       }
       process.exit(result.success ? 0 : 1);
     }
+
+    if (sub === "post-dynamic" || sub === "publish-dynamic") {
+      let text = args[2];
+      let storageStatePath = "/home/rei/worktrees/EverMemoryArchive/next/bilibili-storage-state.json";
+      let profileDir = "/home/rei/worktrees/EverMemoryArchive/next/.bilibili-profile";
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--text") text = args[++i];
+        else if (args[i] === "--state-path") storageStatePath = args[++i];
+        else if (args[i] === "--profile") profileDir = args[++i];
+      }
+      if (!text) {
+        console.error("Error: Missing text for dynamic post. Example: ema.js bilibili post-dynamic 'Hello from Ema'");
+        process.exit(1);
+      }
+      console.log(`Publishing Bilibili dynamic via Playwright browser automation...`);
+      console.log(`Profile:       ${profileDir}`);
+      console.log(`Storage State: ${storageStatePath}`);
+      console.log(`Content:       ${text}`);
+      const res = await publishBilibiliDynamic(text, {
+        userDataDir: profileDir,
+        storageStatePath,
+      });
+      if (res.success) {
+        console.log(`\nDynamic published successfully!`);
+        if (res.dynamicId) console.log(`Dynamic ID:  ${res.dynamicId}`);
+        if (res.url) console.log(`Dynamic URL: ${res.url}`);
+      } else {
+        console.error(`\nFailed to publish dynamic: ${res.message}`);
+      }
+      process.exit(res.success ? 0 : 1);
+    }
+
     printUsage();
     process.exit(1);
   }

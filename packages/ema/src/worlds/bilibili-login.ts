@@ -52,6 +52,28 @@ export interface BilibiliScanStatus {
   message: string;
 }
 
+export interface BilibiliPublishDynamicOptions {
+  /** Headless mode for Playwright browser (default: true) */
+  headless?: boolean;
+  /** Persistent browser profile directory (default: .bilibili-profile) */
+  userDataDir?: string;
+  /** File path where Playwright standard storageState is saved (default: bilibili-storage-state.json) */
+  storageStatePath?: string;
+  /** Maximum timeout in ms (default: 45000) */
+  timeoutMs?: number;
+  /** User agent string for Playwright */
+  userAgent?: string;
+  /** Optional custom context for testing / mocking */
+  context?: BrowserContext;
+}
+
+export interface BilibiliPublishDynamicResult {
+  success: boolean;
+  dynamicId?: string;
+  url?: string;
+  message?: string;
+}
+
 export interface BilibiliAuthResult {
   success: boolean;
   uid?: string;
@@ -611,6 +633,171 @@ export class BilibiliLoginManager {
       return { valid: false };
     } catch {
       return { valid: false };
+    }
+  }
+
+  /**
+   * Publishes a feed dynamic post via Playwright browser automation
+   * using the persistent browser profile or storageState.
+   */
+  async publishDynamic(
+    text: string,
+    options?: Partial<BilibiliPublishDynamicOptions>,
+  ): Promise<BilibiliPublishDynamicResult> {
+    return publishBilibiliDynamic(text, {
+      headless: this.options.headless,
+      userDataDir: this.options.userDataDir,
+      storageStatePath: this.options.storageStatePath,
+      userAgent: this.options.userAgent,
+      context: this.options.context,
+      ...options,
+    });
+  }
+}
+
+/**
+ * Publishes a dynamic post on Bilibili using Playwright browser automation
+ * to conform with risk-control and Wbi signing requirements.
+ */
+export async function publishBilibiliDynamic(
+  text: string,
+  options: BilibiliPublishDynamicOptions = {},
+): Promise<BilibiliPublishDynamicResult> {
+  ensurePlaywrightEnvironment();
+
+  if (!text || !text.trim()) {
+    return {
+      success: false,
+      message: "Dynamic text content cannot be empty.",
+    };
+  }
+
+  const profileDir = path.resolve(options.userDataDir ?? ".bilibili-profile");
+  const storageStatePath = options.storageStatePath
+    ? path.resolve(options.storageStatePath)
+    : path.resolve(process.cwd(), "bilibili-storage-state.json");
+
+  let context: BrowserContext;
+  let ownsContext = false;
+
+  if (options.context) {
+    context = options.context;
+  } else {
+    ownsContext = true;
+    context = await chromium.launchPersistentContext(profileDir, {
+      headless: options.headless ?? true,
+      viewport: { width: 1280, height: 800 },
+      locale: "zh-CN",
+      userAgent:
+        options.userAgent ??
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+      ],
+    });
+  }
+
+  try {
+    if (storageStatePath && fs.existsSync(storageStatePath)) {
+      try {
+        const state = JSON.parse(fs.readFileSync(storageStatePath, "utf8"));
+        if (Array.isArray(state.cookies) && state.cookies.length > 0) {
+          await context.addCookies(state.cookies);
+        }
+      } catch {}
+    }
+
+    const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
+    await page.setExtraHTTPHeaders({
+      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    });
+
+    let capturedDynId = "";
+    let capturedCode = -1;
+    let capturedMessage = "";
+
+    page.on("response", async (res) => {
+      const url = res.url();
+      if (url.includes("/dynamic/feed/create/dyn")) {
+        try {
+          const json = await res.json();
+          capturedCode = json.code;
+          capturedMessage = json.message || "";
+          if (json.code === 0 && json.data?.dyn_id_str) {
+            capturedDynId = json.data.dyn_id_str;
+          }
+        } catch {}
+      }
+    });
+
+    await page.goto("https://t.bilibili.com", {
+      waitUntil: "domcontentloaded",
+      timeout: options.timeoutMs ?? 45000,
+    });
+
+    const editor = page.locator(".bili-rich-textarea__inner");
+    await editor.waitFor({ state: "visible", timeout: 20000 });
+
+    await editor.click();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Backspace");
+    await page.waitForTimeout(200);
+
+    await page.keyboard.type(text.trim());
+    await page.waitForTimeout(500);
+
+    const publishBtn = page.locator(".bili-dyn-publishing__action.launcher");
+    await publishBtn.click();
+    await page.waitForTimeout(1000);
+
+    // If first-time specification modal appears, confirm it
+    const confirmBtn = page.locator(
+      ".bili-dyn-specification-popup__btn.bili-button.primary:has-text('确认并发送')",
+    );
+    if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await confirmBtn.click();
+    }
+
+    // Wait for submission response or feed update
+    const timeoutAt = Date.now() + (options.timeoutMs ?? 30000);
+    while (Date.now() < timeoutAt) {
+      if (capturedDynId) break;
+      await page.waitForTimeout(800);
+    }
+
+    // Save back updated storage state
+    if (storageStatePath) {
+      try {
+        await context.storageState({ path: storageStatePath });
+      } catch {}
+    }
+
+    if (capturedDynId) {
+      return {
+        success: true,
+        dynamicId: capturedDynId,
+        url: `https://t.bilibili.com/${capturedDynId}`,
+        message: "Dynamic published successfully.",
+      };
+    }
+
+    if (capturedCode === 0) {
+      return {
+        success: true,
+        message: "Dynamic published successfully.",
+      };
+    }
+
+    return {
+      success: false,
+      message: capturedMessage || "Failed to publish dynamic (no confirmation response).",
+    };
+  } finally {
+    if (ownsContext) {
+      await context.close().catch(() => {});
     }
   }
 }

@@ -54,6 +54,8 @@ import {
   BilibiliLoginManager,
   type BilibiliLoginOptions,
   type BilibiliAuthResult,
+  type BilibiliPublishDynamicResult,
+  publishBilibiliDynamic,
 } from "./bilibili-login.js";
 
 export * from "./bilibili-login.js";
@@ -184,6 +186,7 @@ export interface BilibiliRateLimitConfig {
   danmakuMaxPerMinute?: number; // default: 30
   commentMinIntervalMs?: number; // default: 3000ms
   dmMinIntervalMs?: number; // default: 2000ms
+  dynamicMinIntervalMs?: number; // default: 15000ms
 }
 
 export interface BilibiliDispatchRecord {
@@ -242,6 +245,11 @@ export interface BilibiliWorldOptions {
     message: string,
     options?: BilibiliDmSendOptions,
   ) => Promise<void> | void;
+  /** Custom dynamic publisher for outbound feed dynamics */
+  dynamicSender?: (
+    text: string,
+    options?: Record<string, unknown>,
+  ) => Promise<BilibiliPublishDynamicResult> | void;
 
   /** Custom live danmaku stream subscriber (returns Disposable) */
   danmakuSubscriber?: (
@@ -302,6 +310,10 @@ export class BilibiliWorld extends EmaWorld {
     message: string,
     options?: BilibiliDmSendOptions,
   ) => Promise<void> | void;
+  private dynamicSender: (
+    text: string,
+    options?: Record<string, unknown>,
+  ) => Promise<BilibiliPublishDynamicResult> | void;
 
   private danmakuSubscriber?: (
     roomId: string,
@@ -333,6 +345,10 @@ export class BilibiliWorld extends EmaWorld {
   private lastDanmakuTimestamps: Map<string, number[]> = new Map();
   private lastCommentTimestamps: Map<string, number> = new Map();
   private lastDmTimestamps: Map<string, number> = new Map();
+  private lastDynamicTime = 0;
+
+  private storageStatePath?: string;
+  private userDataDir?: string;
 
   // Sliding duplicate barrage detector: key -> timestamp
   private recentBarrageBursts: Map<string, number> = new Map();
@@ -420,6 +436,9 @@ export class BilibiliWorld extends EmaWorld {
       }
     }
 
+    this.storageStatePath = statePath;
+    this.userDataDir = options.userDataDir;
+
     this.commentPollInterval = options.commentPollInterval ?? 10000;
     this.dmPollInterval = options.dmPollInterval ?? 10000;
     this.env = options.env ?? process.env;
@@ -435,6 +454,7 @@ export class BilibiliWorld extends EmaWorld {
       danmakuMaxPerMinute: options.rateLimits?.danmakuMaxPerMinute ?? 30,
       commentMinIntervalMs: options.rateLimits?.commentMinIntervalMs ?? 3000,
       dmMinIntervalMs: options.rateLimits?.dmMinIntervalMs ?? 2000,
+      dynamicMinIntervalMs: options.rateLimits?.dynamicMinIntervalMs ?? 15000,
     };
 
     this.danmakuSender =
@@ -453,6 +473,16 @@ export class BilibiliWorld extends EmaWorld {
       options.dmSender ??
       ((mid, message) => {
         // Default safe mock sender
+      });
+
+    this.dynamicSender =
+      options.dynamicSender ??
+      ((text, opt) => {
+        return publishBilibiliDynamic(text, {
+          userDataDir: this.userDataDir,
+          storageStatePath: this.storageStatePath,
+          ...opt,
+        });
       });
 
     this.danmakuSubscriber = options.danmakuSubscriber;
@@ -1099,7 +1129,12 @@ export class BilibiliWorld extends EmaWorld {
           lower === "pin_comment" ||
           lower === "dm" ||
           lower === "send_dm" ||
-          lower === "reply"
+          lower === "reply" ||
+          lower === "post" ||
+          lower === "dynamic" ||
+          lower === "post_dynamic" ||
+          lower === "publish" ||
+          lower === "publish_dynamic"
         ) {
           action = lower;
           if (typeof args[1] === "string") {
@@ -1184,6 +1219,27 @@ export class BilibiliWorld extends EmaWorld {
         }
       } catch (err) {
         console.error(`[BilibiliWorld] Failed to dispatch DM to ${mid}:`, err);
+      }
+    } else if (
+      normId === "dynamic" ||
+      normId === "feed" ||
+      normId.startsWith("dynamic:") ||
+      normId.startsWith("feed:") ||
+      action === "post_dynamic" ||
+      action === "dynamic" ||
+      action === "publish_dynamic"
+    ) {
+      this.checkDynamicRateLimit(now);
+
+      try {
+        const res = this.dynamicSender(sanitizedText, actionOptions);
+        if (res && typeof (res as unknown as Promise<unknown>).catch === "function") {
+          (res as unknown as Promise<unknown>).catch((err) => {
+            console.error(`[BilibiliWorld] Failed to dispatch dynamic:`, err);
+          });
+        }
+      } catch (err) {
+        console.error(`[BilibiliWorld] Failed to dispatch dynamic:`, err);
       }
     } else {
       // Fallback: default to danmaku broadcast
@@ -1340,6 +1396,21 @@ export class BilibiliWorld extends EmaWorld {
     this.lastDmTimestamps.set(mid, now);
   }
 
+  /**
+   * Enforces minimum interval for feed dynamics.
+   */
+  private checkDynamicRateLimit(now: number): void {
+    const minInterval = this.rateLimits.dynamicMinIntervalMs;
+    const elapsed = now - this.lastDynamicTime;
+    if (elapsed < minInterval) {
+      const waitSec = Math.ceil((minInterval - elapsed) / 1000);
+      throw new BilibiliRateLimitError(
+        `Bilibili dynamic rate limit exceeded: minimum interval is ${this.rateLimits.dynamicMinIntervalMs}ms (${waitSec}s remaining)`,
+      );
+    }
+    this.lastDynamicTime = now;
+  }
+
   private isSpamContent(text: string): boolean {
     if (this.spamKeywords.length === 0) return false;
     return this.spamKeywords.some((keyword) => keyword && text.includes(keyword));
@@ -1455,6 +1526,13 @@ export class BilibiliWorld extends EmaWorld {
         topic: `Private messages with fan ${dm}`,
       });
     }
+
+    parts.push({
+      id: "dynamic",
+      type: "channel",
+      name: "Bilibili Dynamic Feed (Playwright)",
+      topic: "Automated feed dynamic posts and updates via Playwright browser automation",
+    });
 
     return parts;
   }

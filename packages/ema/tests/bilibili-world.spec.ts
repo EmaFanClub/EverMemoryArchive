@@ -68,7 +68,7 @@ describe("BilibiliWorld - RFC-0001 Architecture & Invariants", () => {
         "/world/bilibili",
       );
       expect(overview.world).toBe("bilibili");
-      expect(overview.parts.length).toBe(6);
+      expect(overview.parts.length).toBe(7);
 
       // 2. Parts listing
       const partsRes = await router.read<{ world: string; parts: Array<{ id: string; type: string }> }>(
@@ -81,6 +81,7 @@ describe("BilibiliWorld - RFC-0001 Architecture & Invariants", () => {
         "opus:998877",
         "dm:1001",
         "dm:1002",
+        "dynamic",
       ]);
 
       // 3. Single part inspection
@@ -706,6 +707,68 @@ describe("BilibiliWorld - RFC-0001 Architecture & Invariants", () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       handle.dispose();
+    });
+
+    it("dispatches dynamic feed posts via dynamicSender when target is dynamic or action is post_dynamic", async () => {
+      const mockDynamicSender = vi.fn().mockResolvedValue({
+        success: true,
+        dynamicId: "1268371909155749890",
+        url: "https://t.bilibili.com/1268371909155749890",
+      });
+
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        dynamicSender: mockDynamicSender,
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      // Method 1: interact with target "dynamic"
+      world.interact(ctx, mockActor, "dynamic", "post", "Hello from Ema Dynamic");
+      expect(mockDynamicSender).toHaveBeenCalledWith("Hello from Ema Dynamic", expect.anything());
+
+      // Method 2: interact with action "post_dynamic"
+      mockDynamicSender.mockClear();
+      const world2 = new BilibiliWorld({
+        rooms: ["123456"],
+        dynamicSender: mockDynamicSender,
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+      world2.interact(ctx, mockActor, "feed", "post_dynamic", "Second dynamic test");
+      expect(mockDynamicSender).toHaveBeenCalledWith("Second dynamic test", expect.anything());
+
+      handle.dispose();
+      world2.dispose();
+    });
+
+    it("enforces dynamicMinIntervalMs rate limit on rapid dynamic posts", () => {
+      const mockDynamicSender = vi.fn().mockResolvedValue({ success: true });
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        dynamicSender: mockDynamicSender,
+        rateLimits: { dynamicMinIntervalMs: 15000 },
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      world.start(ctx);
+
+      // First post succeeds
+      world.interact(ctx, mockActor, "dynamic", "post", "First dynamic");
+      expect(mockDynamicSender).toHaveBeenCalledTimes(1);
+
+      // Immediate second post throws BilibiliRateLimitError
+      expect(() => {
+        world.interact(ctx, mockActor, "dynamic", "post", "Immediate second dynamic");
+      }).toThrow(BilibiliRateLimitError);
+
+      world.dispose();
     });
 
     it("closes SQLite database on teardown", () => {

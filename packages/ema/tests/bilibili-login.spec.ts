@@ -273,4 +273,18 @@ describe("BilibiliLoginManager - Playwright QR Code Login", () => {
     expect(typeof BilibiliWorld.login).toBe("function");
     expect(typeof BilibiliWorld.createLoginSession).toBe("function");
   });
+
+  describe("Bilibili Dynamic Publishing via Playwright", () => {
+    it("rejects empty or whitespace dynamic text", async () => {
+      const manager = new BilibiliLoginManager();
+      const res = await manager.publishDynamic("   ");
+      expect(res.success).toBe(false);
+      expect(res.message).toContain("cannot be empty");
+    });
+
+    it("exposes publishDynamic method on BilibiliLoginManager", () => {
+      const manager = new BilibiliLoginManager();
+      expect(typeof manager.publishDynamic).toBe("function");
+    });
+  });
 });
