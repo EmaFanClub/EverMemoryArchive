@@ -29,14 +29,31 @@ import {
 import {
   PenguinChannelWorld,
   type PenguinChannelWorldOptions,
+  type ChannelSendOptions,
 } from "./worlds/penguin-channel-world.js";
+import { LiveKitWorld, type LiveKitWorldOptions } from "./worlds/livekit-world.js";
 
 export { SimpleEmaRouter } from "./router.js";
 export { SimpleEmaInputBatcher, formatBatchToXml, escapeXml } from "./input-batcher.js";
 export {
   PenguinChannelWorld,
   type PenguinChannelWorldOptions,
+  type ChannelSendOptions,
 } from "./worlds/penguin-channel-world.js";
+export {
+  LiveKitWorld,
+  resolveAffectiveProsody,
+  type LiveKitWorldOptions,
+  type LiveKitRoom,
+  type LiveKitParticipant,
+  type LiveKitTrack,
+  type LiveKitAffectiveProsody,
+  type ResolvedAffectiveProsody,
+  type LiveKitAudioFrame,
+  type LiveKitTtsSession,
+  type LiveKitTranscriptRecord,
+  type LiveKitTranscriptToken,
+} from "./worlds/livekit-world.js";
 
 export interface MinimalChannelMessage {
   id?: string;
@@ -341,6 +358,122 @@ export function createMinimalPrototype(
     router,
     inputBatcher,
     world: channelWorld,
+    actor,
+    dispose: () => {
+      batchSubscription.dispose();
+      worldHandle.dispose();
+      inputBatcher.dispose();
+    },
+  };
+}
+
+export interface LiveKitPrototypeOptions {
+  rooms?: string[];
+  stateFile?: string;
+  actor?: Partial<EmaActor>;
+  systemPrompt?: string;
+  batcherOptions?: EmaBatcherOptions;
+  worldOptions?: LiveKitWorldOptions;
+  llmInvoker?: (xmlPayload: string, systemPrompt: string) => Promise<string>;
+  env?: Record<string, string | undefined>;
+}
+
+export interface LiveKitPrototypeInstance {
+  ctx: EmaCtx;
+  router: SimpleEmaRouter;
+  inputBatcher: SimpleEmaInputBatcher;
+  world: LiveKitWorld;
+  actor: EmaActor;
+  dispose: () => void;
+}
+
+/**
+ * Creates and boots the LiveKit Prototype instance with LiveKitWorld,
+ * SimpleEmaRouter, and SimpleEmaInputBatcher per RFC-0001.
+ */
+export function createLiveKitPrototype(
+  options: LiveKitPrototypeOptions = {},
+): LiveKitPrototypeInstance {
+  const env = options.env ?? process.env;
+  const router = new SimpleEmaRouter();
+  const dbPath = options.stateFile ?? "/tmp/ema-minimal-workspace/ema-livekit-state.sqlite";
+  const sqlitePath = dbPath.endsWith(".json") ? `${dbPath.replace(/\.json$/, "")}.sqlite` : dbPath;
+
+  const inputBatcher = new SimpleEmaInputBatcher({
+    dbPath: sqlitePath,
+    ...options.batcherOptions,
+  });
+
+  const worldsMap = new Map<string, unknown>();
+  const registry: EmaWorldRegistry = {
+    register: (name, world) => {
+      worldsMap.set(name, world);
+      return {
+        dispose: () => {
+          worldsMap.delete(name);
+        },
+      };
+    },
+    get: (name) => worldsMap.get(name) as any,
+    list: () => [...worldsMap.entries()].map(([name, world]) => ({ name, world: world as any })),
+  };
+
+  const ctx: EmaCtx = {
+    router,
+    inputBatcher,
+    registry,
+  };
+
+  const livekitWorld = new LiveKitWorld({
+    rooms: options.rooms ?? ["room:default"],
+    dbPath: sqlitePath,
+    env,
+    ...options.worldOptions,
+  });
+
+  registry.register("livekit", livekitWorld);
+
+  const actor: EmaActor = {
+    id: options.actor?.id ?? "actor-ema-livekit",
+    name: options.actor?.name ?? "Ema LiveKit Companion",
+    session: options.actor?.session ?? "session-2026-11-08-voice",
+    agentId: options.actor?.agentId ?? (env.PENGUIN_AGENT_ID || "emafanclub_ema_dev"),
+  };
+
+  const systemPrompt = options.systemPrompt ?? DEFAULT_MINIMAL_SYSTEM_PROMPT;
+
+  let turnChain = Promise.resolve();
+
+  const batchSubscription = inputBatcher.onBatch((batch) => {
+    if (batch.length === 0) return;
+
+    turnChain = turnChain
+      .then(async () => {
+        const xmlPayload = formatBatchToXml(batch);
+        const primary = batch[0];
+        const targetRoom = primary.partId;
+
+        let response = "";
+        if (options.llmInvoker) {
+          response = await options.llmInvoker(xmlPayload, systemPrompt);
+        } else {
+          response = `Acknowledged voice input batch of ${batch.length} message(s).`;
+        }
+
+        livekitWorld.interact(ctx, actor, targetRoom, "reply", response);
+      })
+      .catch((err) => {
+        console.error("[LiveKitPrototype] Voice turn execution error:", err);
+      });
+  });
+
+  const worldHandle = livekitWorld.start(ctx);
+
+  return {
+    ctx,
+    router,
+    inputBatcher,
+    world: livekitWorld,
     actor,
     dispose: () => {
       batchSubscription.dispose();
