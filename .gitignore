@@ -29,3 +29,11 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Authentication profiles and local credentials
+.bilibili-profile/
+bilibili-cookies.json
+bilibili-storage-state.json
+bilibili-login-qrcode.png
+*-storage-state.json
+*-cookies.json

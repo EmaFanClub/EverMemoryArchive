@@ -220,6 +220,55 @@ describe("BilibiliLoginManager - Playwright QR Code Login", () => {
     globalThis.fetch = originalFetch;
   });
 
+  it("detects existing authenticated session from storageState without requiring QR code", async () => {
+    const testStatePath = "/tmp/test-bilibili-storage-state.json";
+    fs.writeFileSync(
+      testStatePath,
+      JSON.stringify({
+        cookies: [
+          { name: "SESSDATA", value: "active-sess-token" },
+          { name: "bili_jct", value: "active-csrf-token" },
+          { name: "DedeUserID", value: "99887766" },
+        ],
+        origins: [],
+      }),
+    );
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: 0,
+            data: { isLogin: true, mid: 99887766, uname: "PersistentEmaUser" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    try {
+      const manager = new BilibiliLoginManager({
+        storageStatePath: testStatePath,
+      });
+
+      const existing = await manager.checkExistingSession();
+      expect(existing).not.toBeNull();
+      expect(existing?.success).toBe(true);
+      expect(existing?.uid).toBe("99887766");
+      expect(existing?.uname).toBe("PersistentEmaUser");
+      expect(existing?.sessData).toBe("active-sess-token");
+
+      // Calling login() directly returns active session without scanning
+      const loginResult = await manager.login();
+      expect(loginResult.success).toBe(true);
+      expect(loginResult.uname).toBe("PersistentEmaUser");
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (fs.existsSync(testStatePath)) fs.unlinkSync(testStatePath);
+    }
+  });
+
   it("exposes static login helper on BilibiliWorld", () => {
     expect(typeof BilibiliWorld.login).toBe("function");
     expect(typeof BilibiliWorld.createLoginSession).toBe("function");

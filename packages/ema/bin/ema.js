@@ -197,20 +197,27 @@ async function main() {
   if (command === "bilibili") {
     const sub = args[1];
     if (sub === "login") {
-      let qrPath = "/home/rei/worktrees/EverMemoryArchive/next/bilibili-login-qrcode.png";
+      let qrPath = "/home/rei/work/org/ema/ema-dev/bilibili-login-qrcode.png";
       let cookiePath = "/home/rei/worktrees/EverMemoryArchive/next/bilibili-cookies.json";
+      let storageStatePath = "/home/rei/worktrees/EverMemoryArchive/next/bilibili-storage-state.json";
+      let profileDir = "/home/rei/worktrees/EverMemoryArchive/next/.bilibili-profile";
       for (let i = 2; i < args.length; i++) {
         if (args[i] === "--qr-path") qrPath = args[++i];
         else if (args[i] === "--cookie-path") cookiePath = args[++i];
+        else if (args[i] === "--state-path") storageStatePath = args[++i];
+        else if (args[i] === "--profile") profileDir = args[++i];
       }
       const mgr = new BilibiliLoginManager({
         outputQrPath: qrPath,
         cookieSavePath: cookiePath,
+        storageStatePath,
+        userDataDir: profileDir,
       });
       const result = await mgr.login();
       if (result.success) {
         console.log(`\nLogin successful! Welcome, ${result.uname} (UID: ${result.uid})`);
-        console.log(`Cookies saved to: ${result.savedPath}`);
+        console.log(`Session saved to: ${storageStatePath}`);
+        console.log(`Cookies saved to: ${cookiePath}`);
       } else {
         console.error(`\nLogin failed: ${result.message}`);
       }

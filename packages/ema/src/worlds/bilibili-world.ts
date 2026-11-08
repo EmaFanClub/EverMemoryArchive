@@ -211,6 +211,10 @@ export interface BilibiliWorldOptions {
   cookies?: string | Record<string, string>;
   /** Path to saved cookies JSON */
   cookiePath?: string;
+  /** Path to Playwright storageState JSON */
+  storageStatePath?: string;
+  /** Persistent Playwright browser profile directory */
+  userDataDir?: string;
 
   /** Polling interval for video comments in ms (default: 10000) */
   commentPollInterval?: number;
@@ -277,6 +281,7 @@ export class BilibiliWorld extends EmaWorld {
   private videoTargets: string[];
   private dmTargets: string[];
   private ownerUid?: string;
+  private cookies?: Record<string, string>;
 
   private commentPollInterval: number;
   private dmPollInterval: number;
@@ -361,6 +366,58 @@ export class BilibiliWorld extends EmaWorld {
 
     if (options.ownerUid) {
       this.ownerUid = options.ownerUid.replace(/^user:/, "").trim();
+    }
+
+    if (typeof options.cookies === "string") {
+      const map: Record<string, string> = {};
+      for (const pair of options.cookies.split(";")) {
+        const [k, ...v] = pair.trim().split("=");
+        if (k && v.length > 0) map[k.trim()] = v.join("=").trim();
+      }
+      this.cookies = map;
+    } else if (options.cookies) {
+      this.cookies = { ...options.cookies };
+    }
+
+    const statePath =
+      options.storageStatePath ??
+      path.resolve(process.cwd(), "bilibili-storage-state.json");
+    const cookiePath =
+      options.cookiePath ??
+      path.resolve(process.cwd(), "bilibili-cookies.json");
+
+    if (!this.cookies) {
+      const mergedCookies: Record<string, string> = {};
+      let detectedUid: string | undefined;
+
+      if (fs.existsSync(cookiePath)) {
+        try {
+          const saved = JSON.parse(fs.readFileSync(cookiePath, "utf8"));
+          if (saved.cookies) Object.assign(mergedCookies, saved.cookies);
+          if (saved.uid) detectedUid = String(saved.uid);
+        } catch {}
+      }
+
+      if (fs.existsSync(statePath)) {
+        try {
+          const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+          if (Array.isArray(state.cookies)) {
+            for (const c of state.cookies) {
+              if (c.name && c.value) mergedCookies[c.name] = c.value;
+            }
+            if (mergedCookies["DedeUserID"] && !detectedUid) {
+              detectedUid = mergedCookies["DedeUserID"];
+            }
+          }
+        } catch {}
+      }
+
+      if (Object.keys(mergedCookies).length > 0) {
+        this.cookies = mergedCookies;
+        if (detectedUid && !this.ownerUid) {
+          this.ownerUid = detectedUid;
+        }
+      }
     }
 
     this.commentPollInterval = options.commentPollInterval ?? 10000;
@@ -1400,5 +1457,19 @@ export class BilibiliWorld extends EmaWorld {
     }
 
     return parts;
+  }
+
+  /**
+   * Returns active authenticated session cookies if loaded.
+   */
+  getCookies(): Record<string, string> | undefined {
+    return this.cookies ? { ...this.cookies } : undefined;
+  }
+
+  /**
+   * Returns authenticated owner UID if loaded.
+   */
+  getOwnerUid(): string | undefined {
+    return this.ownerUid;
   }
 }

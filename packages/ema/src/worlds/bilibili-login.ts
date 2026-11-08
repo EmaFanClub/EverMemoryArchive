@@ -21,12 +21,18 @@ export interface BilibiliLoginOptions {
   outputQrPath?: string;
   /** File path where login cookies/credentials JSON should be saved (default: /tmp/bilibili-cookies.json) */
   cookieSavePath?: string;
+  /** File path where Playwright standard storageState should be saved (default: bilibili-storage-state.json) */
+  storageStatePath?: string;
+  /** Persistent browser profile directory (default: .bilibili-profile) */
+  userDataDir?: string;
   /** Callback when QR code is ready */
   onQrCode?: (info: BilibiliQrCodeInfo) => void;
   /** Callback when scan status changes */
   onStatusChange?: (status: BilibiliScanStatus) => void;
   /** Custom Playwright browser instance if reusing */
   browser?: Browser;
+  /** Custom Playwright browser context if reusing */
+  context?: BrowserContext;
   /** User agent string for Playwright */
   userAgent?: string;
 }
@@ -59,7 +65,7 @@ export interface BilibiliAuthResult {
 }
 
 export interface BilibiliLoginSession {
-  browser: Browser;
+  browser?: Browser;
   context: BrowserContext;
   page: Page;
   info: BilibiliQrCodeInfo;
@@ -96,8 +102,73 @@ export class BilibiliLoginManager {
       pollIntervalMs: 1500,
       outputQrPath: options.outputQrPath ?? "/tmp/bilibili-login-qrcode.png",
       cookieSavePath: options.cookieSavePath ?? "/tmp/bilibili-cookies.json",
+      storageStatePath:
+        options.storageStatePath ?? path.resolve(process.cwd(), "bilibili-storage-state.json"),
+      userDataDir: options.userDataDir,
       ...options,
     };
+  }
+
+  /**
+   * Checks if an existing persistent browser profile or storageState is already authenticated.
+   */
+  async checkExistingSession(): Promise<BilibiliAuthResult | null> {
+    // 1. Check storageState file if present
+    if (this.options.storageStatePath && fs.existsSync(this.options.storageStatePath)) {
+      try {
+        const state = JSON.parse(fs.readFileSync(this.options.storageStatePath, "utf8"));
+        if (Array.isArray(state.cookies)) {
+          const cookieMap: Record<string, string> = {};
+          for (const c of state.cookies) {
+            cookieMap[c.name] = c.value;
+          }
+          if (cookieMap["SESSDATA"] && cookieMap["DedeUserID"]) {
+            const check = await BilibiliLoginManager.verifySession(cookieMap);
+            if (check.valid) {
+              const cookieString = Object.entries(cookieMap)
+                .map(([k, v]) => `${k}=${v}`)
+                .join("; ");
+              return {
+                success: true,
+                uid: check.uid,
+                uname: check.uname,
+                sessData: cookieMap["SESSDATA"],
+                biliJct: cookieMap["bili_jct"],
+                cookies: cookieMap,
+                cookieString,
+                savedPath: this.options.storageStatePath,
+                message: "Active authenticated session found in storageState.",
+              };
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Check cookieSavePath if present
+    if (this.options.cookieSavePath && fs.existsSync(this.options.cookieSavePath)) {
+      try {
+        const saved = JSON.parse(fs.readFileSync(this.options.cookieSavePath, "utf8"));
+        if (saved.cookies?.SESSDATA && (saved.cookies?.DedeUserID || saved.uid)) {
+          const check = await BilibiliLoginManager.verifySession(saved.cookies);
+          if (check.valid) {
+            return {
+              success: true,
+              uid: check.uid,
+              uname: check.uname,
+              sessData: saved.cookies.SESSDATA,
+              biliJct: saved.cookies.bili_jct,
+              cookies: saved.cookies,
+              cookieString: saved.cookieString,
+              savedPath: this.options.cookieSavePath,
+              message: "Active authenticated session found in saved cookies.",
+            };
+          }
+        }
+      } catch {}
+    }
+
+    return null;
   }
 
   /**
@@ -111,26 +182,50 @@ export class BilibiliLoginManager {
     let capturedKey = "";
     let capturedUrl = "";
 
-    const browser =
-      this.options.browser ??
-      (await chromium.launch({
+    let context: BrowserContext;
+    let browser: Browser | undefined = this.options.browser;
+
+    if (this.options.context) {
+      context = this.options.context;
+    } else if (this.options.userDataDir) {
+      const profileDir = path.resolve(this.options.userDataDir);
+      if (!fs.existsSync(profileDir)) {
+        fs.mkdirSync(profileDir, { recursive: true });
+      }
+      context = await chromium.launchPersistentContext(profileDir, {
         headless: this.options.headless ?? true,
+        viewport: { width: 1280, height: 800 },
+        userAgent:
+          this.options.userAgent ??
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-gpu",
         ],
-      }));
+      });
+    } else {
+      if (!browser) {
+        browser = await chromium.launch({
+          headless: this.options.headless ?? true,
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+          ],
+        });
+      }
+      context = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        userAgent:
+          this.options.userAgent ??
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      });
+    }
 
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      userAgent:
-        this.options.userAgent ??
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    });
-
-    const page = await context.newPage();
+    const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
 
     // Listen for Bilibili passport QR code generation API response
     page.on("response", async (res) => {
@@ -242,7 +337,7 @@ export class BilibiliLoginManager {
       try {
         await page.close().catch(() => {});
         await context.close().catch(() => {});
-        if (!this.options.browser) {
+        if (!this.options.browser && browser) {
           await browser.close().catch(() => {});
         }
       } catch {}
@@ -293,13 +388,39 @@ export class BilibiliLoginManager {
           }
 
           if (dataCode === 0) {
-            // Login confirmed! Extract cookies from Playwright context
-            await page.waitForTimeout(1000);
-            const cookiesList = await context.cookies();
+            // Login confirmed! Extract cookies from response headers and Playwright context
             const cookieMap: Record<string, string> = {};
-            for (const c of cookiesList) {
-              cookieMap[c.name] = c.value;
+
+            // 1. Extract from poll response Set-Cookie headers
+            const setCookieHeaders =
+              typeof pollRes.headers.getSetCookie === "function"
+                ? pollRes.headers.getSetCookie()
+                : [];
+            for (const sc of setCookieHeaders) {
+              const [nv] = sc.split(";");
+              if (nv) {
+                const [name, ...val] = nv.split("=");
+                if (name && val.length > 0) {
+                  cookieMap[name.trim()] = val.join("=").trim();
+                }
+              }
             }
+
+            // 2. If poll response returned cross-domain authentication URL, navigate to settle session
+            if (pollJson?.data?.url) {
+              try {
+                await page.goto(pollJson.data.url, { waitUntil: "domcontentloaded", timeout: 15000 });
+              } catch {}
+            }
+
+            // 3. Extract cookies from Playwright context and merge
+            await page.waitForTimeout(1000);
+            try {
+              const cookiesList = await context.cookies();
+              for (const c of cookiesList) {
+                cookieMap[c.name] = c.value;
+              }
+            } catch {}
 
             const cookieString = Object.entries(cookieMap)
               .map(([k, v]) => `${k}=${v}`)
@@ -363,6 +484,29 @@ export class BilibiliLoginManager {
               result.savedPath = this.options.cookieSavePath;
             }
 
+            // Save standard Playwright storageState if configured
+            if (this.options.storageStatePath) {
+              const stateDir = path.dirname(this.options.storageStatePath);
+              if (!fs.existsSync(stateDir)) {
+                fs.mkdirSync(stateDir, { recursive: true });
+              }
+              try {
+                const cookiesToAdd = [];
+                for (const [name, value] of Object.entries(cookieMap)) {
+                  cookiesToAdd.push({
+                    name,
+                    value,
+                    domain: ".bilibili.com",
+                    path: "/",
+                  });
+                }
+                if (cookiesToAdd.length > 0 && typeof context.addCookies === "function") {
+                  await context.addCookies(cookiesToAdd).catch(() => {});
+                }
+                await context.storageState({ path: this.options.storageStatePath });
+              } catch {}
+            }
+
             await close();
             return result;
           }
@@ -403,10 +547,20 @@ export class BilibiliLoginManager {
   }
 
   /**
-   * High-level one-step helper: generates QR code, prints to console, saves file,
-   * and waits for scan completion.
+   * High-level one-step helper: checks for existing session or persistent profile,
+   * generates QR code, prints to console, saves file, and waits for scan completion.
    */
   async login(): Promise<BilibiliAuthResult> {
+    const existing = await this.checkExistingSession();
+    if (existing) {
+      console.log("\n==========================================");
+      console.log("   Bilibili Login (RFC-0001 - Active)");
+      console.log("==========================================");
+      console.log("Active authenticated session found!");
+      console.log(`Welcome back, ${existing.uname} (UID: ${existing.uid})`);
+      return existing;
+    }
+
     const session = await this.createLoginSession();
     console.log("\n==========================================");
     console.log("   Bilibili QR Code Login (RFC-0001)");
