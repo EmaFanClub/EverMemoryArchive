@@ -50,6 +50,13 @@ import {
   type EmaRouteContext,
 } from "../interfaces.js";
 import { assertAgentIdentity } from "../minimal.js";
+import {
+  BilibiliLoginManager,
+  type BilibiliLoginOptions,
+  type BilibiliAuthResult,
+} from "./bilibili-login.js";
+
+export * from "./bilibili-login.js";
 
 export class BilibiliRateLimitError extends Error {
   constructor(message: string) {
@@ -199,6 +206,11 @@ export interface BilibiliWorldOptions {
 
   /** Primary companion owner UID (e.g. "123456" or "user:123456") to mark isOwner: true */
   ownerUid?: string;
+
+  /** SESSDATA or raw cookie string for authenticated requests */
+  cookies?: string | Record<string, string>;
+  /** Path to saved cookies JSON */
+  cookiePath?: string;
 
   /** Polling interval for video comments in ms (default: 10000) */
   commentPollInterval?: number;
@@ -1336,6 +1348,22 @@ export class BilibiliWorld extends EmaWorld {
       if (list.length >= 100) list.shift();
       list.push(input);
     }
+  }
+
+  /**
+   * Helper method to launch Playwright QR code login flow and wait for completion.
+   */
+  static async login(options?: BilibiliLoginOptions): Promise<BilibiliAuthResult> {
+    const mgr = new BilibiliLoginManager(options);
+    return mgr.login();
+  }
+
+  /**
+   * Generates a login QR code session with Playwright, returning the session handle.
+   */
+  static async createLoginSession(options?: BilibiliLoginOptions) {
+    const mgr = new BilibiliLoginManager(options);
+    return mgr.createLoginSession();
   }
 
   /**
