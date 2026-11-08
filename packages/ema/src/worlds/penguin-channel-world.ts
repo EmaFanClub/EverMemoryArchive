@@ -36,6 +36,8 @@ export interface PenguinChannelWorldOptions {
   channelSender?: (channel: string, text: string) => Promise<void> | void;
   /** Environment variables (defaults to process.env) */
   env?: Record<string, string | undefined>;
+  /** If true, mounts routes without starting active polling (useful for CLI/inspection) */
+  passive?: boolean;
 }
 
 export interface RawChannelMessage {
@@ -44,6 +46,7 @@ export interface RawChannelMessage {
   channel?: string;
   text?: string;
   timestamp?: string;
+  time?: string;
   reply_to?: string;
 }
 
@@ -59,6 +62,7 @@ export class PenguinChannelWorld extends EmaWorld {
   private messageHistory: Map<string, EmaInput> = new Map();
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   private active = false;
+  private passive = false;
 
   private db: DatabaseSync | null = null;
   private insertSeenStmt: StatementSync | null = null;
@@ -69,6 +73,7 @@ export class PenguinChannelWorld extends EmaWorld {
     this.channels = options.channels ?? ["ch_ema_minimal_test"];
     this.pollInterval = options.pollInterval ?? 5000;
     this.env = options.env ?? process.env;
+    this.passive = options.passive ?? false;
 
     // Resolve SQLite database path
     if (options.dbPath) {
@@ -93,11 +98,12 @@ export class PenguinChannelWorld extends EmaWorld {
           const stdout = execFileSync(
             "penguin",
             ["org", "channel", "tail", "--channel", channel, "-n", String(limit), "--json"],
-            { encoding: "utf8", env: this.env }
+            { encoding: "utf8", env: this.env },
           );
           const parsed = JSON.parse(stdout);
           if (Array.isArray(parsed)) return parsed as RawChannelMessage[];
-          if (parsed && Array.isArray(parsed.messages)) return parsed.messages as RawChannelMessage[];
+          if (parsed && Array.isArray(parsed.messages))
+            return parsed.messages as RawChannelMessage[];
           return [];
         } catch (err) {
           console.error(`[PenguinChannelWorld] Failed to tail channel ${channel}:`, err);
@@ -141,11 +147,9 @@ export class PenguinChannelWorld extends EmaWorld {
         );
       `);
       this.insertSeenStmt = this.db.prepare(
-        "INSERT OR IGNORE INTO seen_messages (id, channel, timestamp) VALUES (?, ?, ?)"
+        "INSERT OR IGNORE INTO seen_messages (id, channel, timestamp) VALUES (?, ?, ?)",
       );
-      this.selectAllSeenStmt = this.db.prepare(
-        "SELECT id FROM seen_messages"
-      );
+      this.selectAllSeenStmt = this.db.prepare("SELECT id FROM seen_messages");
     } catch (err) {
       console.error("[PenguinChannelWorld] Failed to initialize SQLite database:", err);
     }
@@ -176,7 +180,10 @@ export class PenguinChannelWorld extends EmaWorld {
             }
           }
         } catch (migrationErr) {
-          console.error("[PenguinChannelWorld] Failed to migrate legacy JSON state to SQLite:", migrationErr);
+          console.error(
+            "[PenguinChannelWorld] Failed to migrate legacy JSON state to SQLite:",
+            migrationErr,
+          );
         }
       }
     } catch (err) {
@@ -235,7 +242,7 @@ export class PenguinChannelWorld extends EmaWorld {
           parts: this.listParts(),
         };
       },
-      "Penguin Channel World resource router"
+      "Penguin Channel World resource router",
     );
 
     // 2. Start input polling loop
@@ -270,19 +277,28 @@ export class PenguinChannelWorld extends EmaWorld {
               isOwner: sender === "user:admin",
             },
             content: text,
-            timestamp: raw.timestamp ? new Date(raw.timestamp).getTime() : Date.now(),
+            timestamp:
+              raw.time || raw.timestamp
+                ? new Date(raw.time || raw.timestamp!).getTime()
+                : Date.now(),
             replyTo: raw.reply_to,
           };
 
+          if (this.messageHistory.size >= 200) {
+            const oldest = this.messageHistory.keys().next().value;
+            if (oldest) this.messageHistory.delete(oldest);
+          }
           this.messageHistory.set(id, input);
           ctx.inputBatcher.push(input);
         }
       }
     };
 
-    // Run first poll immediately, then periodically
-    poll();
-    this.pollingTimer = setInterval(poll, this.pollInterval);
+    // Run polling loop if not in passive mode
+    if (!this.passive) {
+      poll();
+      this.pollingTimer = setInterval(poll, this.pollInterval);
+    }
 
     return {
       dispose: () => {
@@ -292,20 +308,37 @@ export class PenguinChannelWorld extends EmaWorld {
           this.pollingTimer = null;
         }
         routeHandle.dispose();
+        this.dispose();
       },
     };
+  }
+
+  /**
+   * Closes database handles and terminates active polling timers.
+   */
+  dispose(): void {
+    this.active = false;
+    if (this.pollingTimer) {
+      clearInterval(this.pollingTimer);
+      this.pollingTimer = null;
+    }
+    if (this.db) {
+      try {
+        this.insertSeenStmt = null;
+        this.selectAllSeenStmt = null;
+        this.db.close();
+      } catch (err) {
+        console.error("[PenguinChannelWorld] Error closing SQLite database:", err);
+      }
+      this.db = null;
+    }
   }
 
   /**
    * Interacts with a specific channel part on behalf of an EMA Actor.
    * Enforces agent identity verification before any dispatch.
    */
-  interact(
-    _ctx: EmaCtx,
-    _actor: EmaActor,
-    id: Id,
-    ...args: unknown[]
-  ): Disposable {
+  interact(_ctx: EmaCtx, _actor: EmaActor, id: Id, ...args: unknown[]): Disposable {
     // Strictly verify operating employee identity
     assertAgentIdentity(this.env);
 

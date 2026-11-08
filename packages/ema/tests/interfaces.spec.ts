@@ -34,12 +34,7 @@ describe("Ema Interfaces and Contracts", () => {
         };
       }
 
-      interact(
-        _ctx: EmaCtx,
-        _actor: EmaActor,
-        id: string,
-        ...args: unknown[]
-      ): Disposable {
+      interact(_ctx: EmaCtx, _actor: EmaActor, id: string, ...args: unknown[]): Disposable {
         this.interacted = true;
         expect(id).toBe("channel:1234");
         expect(args[0]).toBe("reply");

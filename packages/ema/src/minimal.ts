@@ -32,11 +32,7 @@ import {
 } from "./worlds/penguin-channel-world.js";
 
 export { SimpleEmaRouter } from "./router.js";
-export {
-  SimpleEmaInputBatcher,
-  formatBatchToXml,
-  escapeXml,
-} from "./input-batcher.js";
+export { SimpleEmaInputBatcher, formatBatchToXml, escapeXml } from "./input-batcher.js";
 export {
   PenguinChannelWorld,
   type PenguinChannelWorldOptions,
@@ -78,13 +74,11 @@ export const DEFAULT_MINIMAL_SYSTEM_PROMPT =
  * Guard that verifies the calling agent's identity is present in the environment.
  * Refuses dispatch without PENGUIN_AGENT_ID.
  */
-export function assertAgentIdentity(
-  env: Record<string, string | undefined> = process.env
-): string {
+export function assertAgentIdentity(env: Record<string, string | undefined> = process.env): string {
   const agentId = env.PENGUIN_AGENT_ID?.trim();
   if (!agentId) {
     throw new Error(
-      "refusing to dispatch without an agent identity; channel send would run as the server owner"
+      "refusing to dispatch without an agent identity; channel send would run as the server owner",
     );
   }
   return agentId;
@@ -115,7 +109,7 @@ export function normalizeChannelMessage(raw: {
  */
 export function isEligibleChannelMessage(
   msg: { id?: string; sender?: string },
-  seenIds: Set<string> | string[]
+  seenIds: Set<string> | string[],
 ): boolean {
   if (!msg.id) return false;
   const seenSet = seenIds instanceof Set ? seenIds : new Set(seenIds);
@@ -137,7 +131,7 @@ export function filterNewUserMessages(
     channelId?: string;
   }>,
   seenIds: Set<string> | string[],
-  channelId?: string
+  channelId?: string,
 ): MinimalChannelMessage[] {
   const seenSet = seenIds instanceof Set ? seenIds : new Set(seenIds);
   const eligible: MinimalChannelMessage[] = [];
@@ -147,7 +141,7 @@ export function filterNewUserMessages(
         normalizeChannelMessage({
           ...raw,
           channelId: channelId || raw.channelId || raw.channel,
-        })
+        }),
       );
     }
   }
@@ -186,7 +180,7 @@ export function parseWatchDuration(raw?: string | number): number {
  */
 export async function executeMinimalTurn(
   message: MinimalChannelMessage,
-  options: MinimalTurnOptions = {}
+  options: MinimalTurnOptions = {},
 ): Promise<MinimalTurnResult> {
   let dispatchedAgentId: string | undefined;
 
@@ -255,7 +249,7 @@ export interface MinimalPrototypeInstance {
  * SimpleEmaRouter, and SimpleEmaInputBatcher per RFC-0001.
  */
 export function createMinimalPrototype(
-  options: MinimalPrototypeOptions = {}
+  options: MinimalPrototypeOptions = {},
 ): MinimalPrototypeInstance {
   const env = options.env ?? process.env;
   const router = new SimpleEmaRouter();
@@ -322,9 +316,8 @@ export function createMinimalPrototype(
       response = `Acknowledged input batch of ${batch.length} message(s).`;
     }
 
-    const mention = primary.sender.name && !primary.sender.name.startsWith("@")
-      ? `@${primary.sender.name} `
-      : "";
+    const mention =
+      primary.sender.name && !primary.sender.name.startsWith("@") ? `@${primary.sender.name} ` : "";
     const formattedReply = `${mention}${response}`.trim();
 
     channelWorld.interact(ctx, actor, targetChannel, "reply", formattedReply);

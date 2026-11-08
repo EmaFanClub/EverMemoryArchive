@@ -171,10 +171,5 @@ export abstract class EmaWorld {
   /**
    * Interacts with a specific part of the world on behalf of an EMA Actor.
    */
-  abstract interact(
-    ctx: EmaCtx,
-    actor: EmaActor,
-    id: Id,
-    ...args: unknown[]
-  ): Disposable;
+  abstract interact(ctx: EmaCtx, actor: EmaActor, id: Id, ...args: unknown[]): Disposable;
 }

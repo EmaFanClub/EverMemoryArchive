@@ -37,11 +37,7 @@ export class SimpleEmaRouter implements EmaRouter {
    * Mounts a handler under a standard Hono route path (e.g. `/world/channel/*` or `/world/channel/messages/:id`).
    * Preserves exact registration order.
    */
-  serve(
-    path: string,
-    handler: EmaRouteHandler,
-    description?: string
-  ): Disposable {
+  serve(path: string, handler: EmaRouteHandler, description?: string): Disposable {
     const entry: RouteRegistration = {
       path,
       handler,
@@ -69,6 +65,10 @@ export class SimpleEmaRouter implements EmaRouter {
 
       const app = new Hono();
 
+      app.onError((err, c) => {
+        return c.text(err.message || "Internal Server Error", 500);
+      });
+
       for (const entry of this.routes) {
         app.all(entry.path, async (c: Context) => {
           const url = new URL(c.req.url);
@@ -81,6 +81,9 @@ export class SimpleEmaRouter implements EmaRouter {
           const result = await entry.handler(ctx);
           if (result instanceof Response) {
             return result;
+          }
+          if (result === undefined) {
+            return c.body(null, 204);
           }
           if (typeof result === "string") {
             return c.text(result);
@@ -111,6 +114,10 @@ export class SimpleEmaRouter implements EmaRouter {
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       throw new Error(`Route error (${res.status}): ${errText || url.pathname}`);
+    }
+
+    if (res.status === 204 || res.headers.get("content-length") === "0") {
+      return undefined as unknown as T;
     }
 
     const contentType = res.headers.get("content-type") || "";

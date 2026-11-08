@@ -15,7 +15,7 @@ describe("Minimal EMA Prototype Variant", () => {
     expect(DEFAULT_MINIMAL_SYSTEM_PROMPT).toContain("minimal assistant prototype");
     expect(DEFAULT_MINIMAL_SYSTEM_PROMPT).toContain("Do not adopt a persona or emotional tone");
     expect(DEFAULT_MINIMAL_SYSTEM_PROMPT).toContain(
-      "EverMemoryArchive memory storage and retrieval are disabled"
+      "EverMemoryArchive memory storage and retrieval are disabled",
     );
   });
 
@@ -44,13 +44,13 @@ describe("Minimal EMA Prototype Variant", () => {
 
     it("throws clear error when PENGUIN_AGENT_ID is unset", () => {
       expect(() => assertAgentIdentity({})).toThrow(
-        "refusing to dispatch without an agent identity; channel send would run as the server owner"
+        "refusing to dispatch without an agent identity; channel send would run as the server owner",
       );
     });
 
     it("throws clear error when PENGUIN_AGENT_ID is empty or whitespace", () => {
       expect(() => assertAgentIdentity({ PENGUIN_AGENT_ID: "   " })).toThrow(
-        "refusing to dispatch without an agent identity; channel send would run as the server owner"
+        "refusing to dispatch without an agent identity; channel send would run as the server owner",
       );
     });
   });
@@ -70,11 +70,11 @@ describe("Minimal EMA Prototype Variant", () => {
     it("rejects messages from agent:* and system to prevent reply loops", () => {
       const seen = new Set<string>();
       expect(
-        isEligibleChannelMessage({ id: "msg-2", sender: "agent:emafanclub_ema_dev" }, seen)
+        isEligibleChannelMessage({ id: "msg-2", sender: "agent:emafanclub_ema_dev" }, seen),
       ).toBe(false);
-      expect(
-        isEligibleChannelMessage({ id: "msg-3", sender: "agent:ema_minimal" }, seen)
-      ).toBe(false);
+      expect(isEligibleChannelMessage({ id: "msg-3", sender: "agent:ema_minimal" }, seen)).toBe(
+        false,
+      );
       expect(isEligibleChannelMessage({ id: "msg-4", sender: "system" }, seen)).toBe(false);
     });
 
@@ -88,10 +88,20 @@ describe("Minimal EMA Prototype Variant", () => {
       const seen = new Set(["msg-seen"]);
       const rawBatch = [
         { id: "msg-seen", sender: "user:admin", text: "Old message", time: "2026-11-05T10:00:00Z" },
-        { id: "msg-agent", sender: "agent:ema_dev", text: "Agent message", time: "2026-11-05T10:01:00Z" },
+        {
+          id: "msg-agent",
+          sender: "agent:ema_dev",
+          text: "Agent message",
+          time: "2026-11-05T10:01:00Z",
+        },
         { id: "msg-system", sender: "system", text: "System notice", time: "2026-11-05T10:02:00Z" },
         { id: "msg-new-1", sender: "user:admin", text: "hi", time: "2026-11-05T11:03:40Z" },
-        { id: "msg-new-2", sender: "user:admin", text: "@emafanclub_ema_dev hi", time: "2026-11-05T11:03:52Z" },
+        {
+          id: "msg-new-2",
+          sender: "user:admin",
+          text: "@emafanclub_ema_dev hi",
+          time: "2026-11-05T11:03:52Z",
+        },
       ];
 
       const filtered = filterNewUserMessages(rawBatch, seen, "ch_ema_minimal_test");
@@ -138,13 +148,16 @@ describe("Minimal EMA Prototype Variant", () => {
 
     // Prompt & Invoker
     expect(mockInvoker).toHaveBeenCalledTimes(1);
-    expect(mockInvoker).toHaveBeenCalledWith("Ping minimal prototype", DEFAULT_MINIMAL_SYSTEM_PROMPT);
+    expect(mockInvoker).toHaveBeenCalledWith(
+      "Ping minimal prototype",
+      DEFAULT_MINIMAL_SYSTEM_PROMPT,
+    );
 
     // Dispatcher & Output formatting
     expect(mockDispatcher).toHaveBeenCalledTimes(1);
     expect(mockDispatcher).toHaveBeenCalledWith(
       "ch_ema_dev",
-      "@user:admin Pong! Minimal prototype is operational."
+      "@user:admin Pong! Minimal prototype is operational.",
     );
 
     expect(result.response).toBe("Pong! Minimal prototype is operational.");
@@ -166,9 +179,9 @@ describe("Minimal EMA Prototype Variant", () => {
       executeMinimalTurn(msg, {
         channelDispatcher: mockDispatcher,
         env: {}, // Missing PENGUIN_AGENT_ID
-      })
+      }),
     ).rejects.toThrow(
-      "refusing to dispatch without an agent identity; channel send would run as the server owner"
+      "refusing to dispatch without an agent identity; channel send would run as the server owner",
     );
 
     expect(mockDispatcher).not.toHaveBeenCalled();

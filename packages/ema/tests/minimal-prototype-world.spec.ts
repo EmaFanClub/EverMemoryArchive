@@ -21,20 +21,20 @@ describe("Minimal Prototype - World & Router Architecture", () => {
           foundId: ctx.params.id,
           format: ctx.query.get("format") || "raw",
         }),
-        "Message lookup"
+        "Message lookup",
       );
 
       const result = await router.read<{ foundId: string; format: string }>(
-        "/world/channel/messages/msg-12345?format=json"
+        "/world/channel/messages/msg-12345?format=json",
       );
 
       expect(result.foundId).toBe("msg-12345");
       expect(result.format).toBe("json");
 
       handle.dispose();
-      await expect(
-        router.read("/world/channel/messages/msg-12345")
-      ).rejects.toThrow("Route not found");
+      await expect(router.read("/world/channel/messages/msg-12345")).rejects.toThrow(
+        "Route not found",
+      );
     });
 
     it("lists mounted routes", () => {
@@ -52,14 +52,11 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       const router = new SimpleEmaRouter();
 
       // Specific multi-parameter route under channel world (registered first)
-      router.serve(
-        "/world/channel/parts/:partId/messages/:msgId",
-        (ctx) => ({
-          matched: "channel-message",
-          part: ctx.params.partId,
-          msg: ctx.params.msgId,
-        })
-      );
+      router.serve("/world/channel/parts/:partId/messages/:msgId", (ctx) => ({
+        matched: "channel-message",
+        part: ctx.params.partId,
+        msg: ctx.params.msgId,
+      }));
 
       // Wildcard / prefix root for channel world using standard Hono wildcard syntax
       router.serve("/world/channel/*", (ctx) => ({
@@ -68,20 +65,19 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       }));
 
       // Generic route for other worlds
-      router.serve(
-        "/world/:worldId/status",
-        (ctx) => ({
-          matched: "world-status",
-          world: ctx.params.worldId,
-        })
-      );
+      router.serve("/world/:worldId/status", (ctx) => ({
+        matched: "world-status",
+        world: ctx.params.worldId,
+      }));
 
       // Root access
       const rootRes = await router.read<{ matched: string; path: string }>("/world/channel");
       expect(rootRes.matched).toBe("root");
 
       // Subpath prefix access falling back to wildcard
-      const subRes = await router.read<{ matched: string; path: string }>("/world/channel/unknown/subpath");
+      const subRes = await router.read<{ matched: string; path: string }>(
+        "/world/channel/unknown/subpath",
+      );
       expect(subRes.matched).toBe("root");
       expect(subRes.path).toBe("/world/channel/unknown/subpath");
 
@@ -151,7 +147,7 @@ describe("Minimal Prototype - World & Router Architecture", () => {
   describe("SimpleEmaInputBatcher & XML Protocol", () => {
     it("escapes special characters safely in XML", () => {
       expect(escapeXml("爱<你 & <world> \"quoted\" 'single'")).toBe(
-        "爱&lt;你 &amp; &lt;world&gt; &quot;quoted&quot; &apos;single&apos;"
+        "爱&lt;你 &amp; &lt;world&gt; &quot;quoted&quot; &apos;single&apos;",
       );
     });
 
@@ -273,7 +269,7 @@ describe("Minimal Prototype - World & Router Architecture", () => {
 
       // Check router serving parts
       const partsResult = await router.read<{ world: string; parts: Array<{ id: string }> }>(
-        "/world/channel/parts"
+        "/world/channel/parts",
       );
       expect(partsResult.world).toBe("channel");
       expect(partsResult.parts.map((p) => p.id)).toEqual([
@@ -283,18 +279,26 @@ describe("Minimal Prototype - World & Router Architecture", () => {
 
       // Check router serving message lookup
       const msgResult = await router.read<{ id: string; content: string }>(
-        "/world/channel/messages/msg-101"
+        "/world/channel/messages/msg-101",
       );
       expect(msgResult.id).toBe("msg-101");
       expect(msgResult.content).toBe("Status check");
 
       // Test interact
       channelWorld.interact(
-        { router, inputBatcher: batcher, registry: { register: () => ({ dispose: () => {} }), get: () => undefined, list: () => [] } },
+        {
+          router,
+          inputBatcher: batcher,
+          registry: {
+            register: () => ({ dispose: () => {} }),
+            get: () => undefined,
+            list: () => [],
+          },
+        },
         { id: "actor-1", name: "Ema", session: "sess-1", agentId: "emafanclub_ema_dev" },
         "ch_ema_minimal_test",
         "reply",
-        "System operational."
+        "System operational.",
       );
 
       expect(sentMessages.length).toBe(1);
@@ -316,7 +320,7 @@ describe("Minimal Prototype - World & Router Architecture", () => {
           { id: "a", name: "b", session: "c", agentId: "" },
           "ch_test",
           "reply",
-          "hello"
+          "hello",
         );
       }).toThrow("refusing to dispatch without an agent identity");
     });
@@ -355,7 +359,7 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       // Query router to verify world routes mounted
       const routes = proto.router.listRoutes();
       expect(
-        routes.some((r) => r.prefix === "/world/channel/*" || r.prefix === "/world/channel")
+        routes.some((r) => r.prefix === "/world/channel/*" || r.prefix === "/world/channel"),
       ).toBe(true);
 
       // Wait for debounce batch flush
@@ -365,7 +369,7 @@ describe("Minimal Prototype - World & Router Architecture", () => {
       expect(receivedPrompts[0]).toContain("<Input>");
       expect(receivedPrompts[0]).toContain("<World>channel</World>");
       expect(receivedPrompts[0]).toContain("<Channel>ch_ema_minimal_test</Channel>");
-      expect(receivedPrompts[0]).toContain("<Message id=\"msg-proto-1\">Hello from board</Message>");
+      expect(receivedPrompts[0]).toContain('<Message id="msg-proto-1">Hello from board</Message>');
 
       expect(dispatchedOutputs.length).toBe(1);
       expect(dispatchedOutputs[0].channel).toBe("ch_ema_minimal_test");

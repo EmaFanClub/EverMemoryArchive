@@ -59,7 +59,7 @@ async function main() {
     const router = new SimpleEmaRouter();
     const channelWorld = new PenguinChannelWorld({
       channels: ["ch_ema_minimal_test", "default_channel"],
-      pollInterval: 100000,
+      passive: true,
     });
 
     const ctx = {
@@ -68,26 +68,35 @@ async function main() {
       registry: { register: () => ({ dispose: () => {} }), get: () => undefined, list: () => [] },
     };
 
-    channelWorld.start(ctx);
+    const handle = channelWorld.start(ctx);
 
     if (sub === "ls") {
-      console.log("PenguinChannelWorld /world/channel");
+      const routes = router.listRoutes();
+      for (const r of routes) {
+        console.log(`PenguinChannelWorld ${r.prefix}`);
+      }
+      handle.dispose();
       process.exit(0);
     }
 
     if (sub === "get") {
       const targetPath = args[2];
       if (!targetPath) {
-        console.error("Error: Missing path argument for 'world get'. Example: ema.js world get /world/channel/parts");
+        console.error(
+          "Error: Missing path argument for 'world get'. Example: ema.js world get /world/channel/parts",
+        );
+        handle.dispose();
         process.exit(1);
       }
 
       try {
         const result = await router.read(targetPath);
         console.log(JSON.stringify(result, null, 2));
+        handle.dispose();
         process.exit(0);
       } catch (err) {
         console.error(`Error querying ${targetPath}:`, err.message || err);
+        handle.dispose();
         process.exit(1);
       }
     }
@@ -147,16 +156,8 @@ async function main() {
         // Invoke turn via penguin run in the persistent session
         const stdout = execFileSync(
           "penguin",
-          [
-            "run",
-            "--session",
-            session,
-            "-m",
-            xmlPayload,
-            "--approve",
-            "deny-all",
-          ],
-          { encoding: "utf8", env: process.env }
+          ["run", "--session", session, "-m", xmlPayload, "--approve", "deny-all"],
+          { encoding: "utf8", env: process.env },
         );
 
         return stdout.trim();
