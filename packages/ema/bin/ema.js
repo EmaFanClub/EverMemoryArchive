@@ -20,6 +20,7 @@ import {
   WebWorld,
   EmailWorld,
   BilibiliWorld,
+  BilibiliLoginManager,
   CognitiveActionsWorld,
   parseWatchDuration,
   assertAgentIdentity,
@@ -189,6 +190,32 @@ async function main() {
       }
     }
 
+    printUsage();
+    process.exit(1);
+  }
+
+  if (command === "bilibili") {
+    const sub = args[1];
+    if (sub === "login") {
+      let qrPath = "/home/rei/worktrees/EverMemoryArchive/next/bilibili-login-qrcode.png";
+      let cookiePath = "/home/rei/worktrees/EverMemoryArchive/next/bilibili-cookies.json";
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--qr-path") qrPath = args[++i];
+        else if (args[i] === "--cookie-path") cookiePath = args[++i];
+      }
+      const mgr = new BilibiliLoginManager({
+        outputQrPath: qrPath,
+        cookieSavePath: cookiePath,
+      });
+      const result = await mgr.login();
+      if (result.success) {
+        console.log(`\nLogin successful! Welcome, ${result.uname} (UID: ${result.uid})`);
+        console.log(`Cookies saved to: ${result.savedPath}`);
+      } else {
+        console.error(`\nLogin failed: ${result.message}`);
+      }
+      process.exit(result.success ? 0 : 1);
+    }
     printUsage();
     process.exit(1);
   }
