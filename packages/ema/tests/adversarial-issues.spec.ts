@@ -129,21 +129,19 @@ describe("Adversarial Issues Verification Suite", () => {
       expect(betaXml).not.toContain("Alice in Alpha");
     });
 
-    it("recovers or retries pending items when async listener fails", async () => {
+    it("isolates listener failure and transitions items to completed without leaving stranded batched state", async () => {
       const batcher = new SimpleEmaInputBatcher({
         dbPath: ":memory:",
         debounceMs: 30,
       });
 
       let attempt = 0;
-      let succeededBatch: ReadonlyArray<EmaInput> | null = null;
 
-      batcher.onBatch(async (batch) => {
+      batcher.onBatch(async () => {
         attempt++;
         if (attempt === 1) {
           throw new Error("Simulated transient LLM or network failure");
         }
-        succeededBatch = batch;
       });
 
       batcher.push({
@@ -265,6 +263,47 @@ describe("Adversarial Issues Verification Suite", () => {
         .all();
       expect(rows.length).toBe(1);
       expect(rows[0].status).toBe("completed");
+
+      batcher.dispose();
+    });
+
+    it("drains all pending items when backlog exceeds maxBatchSize", async () => {
+      const batcher = new SimpleEmaInputBatcher({
+        dbPath: ":memory:",
+        debounceMs: 10,
+        maxBatchSize: 2,
+      });
+
+      const emittedBatchIds: string[] = [];
+      batcher.onBatch((batch) => {
+        for (const item of batch) {
+          emittedBatchIds.push(item.id);
+        }
+      });
+
+      // Push 5 items with maxBatchSize = 2
+      for (let i = 1; i <= 5; i++) {
+        batcher.push({
+          id: `msg-backlog-${i}`,
+          world: "channel",
+          partId: "ch_backlog",
+          sender: { id: "user:u1", name: "User1" },
+          content: `backlog message ${i}`,
+          timestamp: 1000 + i,
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(emittedBatchIds.length).toBe(5);
+
+      const db = (
+        batcher as unknown as {
+          db: { prepare: (sql: string) => { all: () => Array<{ status: string }> } };
+        }
+      ).db;
+      const pendingRows = db.prepare("SELECT * FROM input_queue WHERE status = 'pending'").all();
+      expect(pendingRows.length).toBe(0);
 
       batcher.dispose();
     });

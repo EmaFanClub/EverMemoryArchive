@@ -212,18 +212,22 @@ export class SimpleEmaInputBatcher implements EmaInputBatcher {
 
     if (!this.maxWaitTimer) {
       this.maxWaitTimer = setTimeout(() => {
-        this.flush();
+        this.flush().catch((err) => {
+          console.error("[SimpleEmaInputBatcher] Error in maxWait flush:", err);
+        });
       }, this.maxWaitMs);
     }
 
     this.debounceTimer = setTimeout(() => {
-      this.flush();
+      this.flush().catch((err) => {
+        console.error("[SimpleEmaInputBatcher] Error in debounce flush:", err);
+      });
     }, this.debounceMs);
   }
 
   /**
    * Flushes pending inputs out of SQLite partitioned by (world, part_id)
-   * in an instantaneous atomic drain transaction and delivers batches to subscribers.
+   * in instantaneous atomic drain transactions until the queue is fully drained.
    */
   async flush(): Promise<ReadonlyArray<EmaInput>> {
     if (this.debounceTimer) {
@@ -235,83 +239,91 @@ export class SimpleEmaInputBatcher implements EmaInputBatcher {
       this.maxWaitTimer = null;
     }
 
-    // Atomic drain: read pending rows and immediately mark them completed in one instant transaction
-    this.db.exec("BEGIN IMMEDIATE");
-    let rows: Array<{
-      id: string;
-      world: string;
-      part_id: string;
-      sender_id: string;
-      sender_name: string;
-      is_owner: number;
-      content: string;
-      timestamp: number;
-      reply_to: string | null;
-      metadata: string | null;
-    }> = [];
-
-    try {
-      rows = this.selectPendingStmt.all(this.maxBatchSize) as typeof rows;
-      if (!rows || rows.length === 0) {
-        this.db.exec("COMMIT");
-        return [];
-      }
-
-      for (const row of rows) {
-        this.updateCompletedStmt.run(row.id);
-      }
-      this.pruneCompletedStmt.run(Date.now() - 3600000);
-      this.db.exec("COMMIT");
-    } catch (err) {
-      this.db.exec("ROLLBACK");
-      console.error("[SimpleEmaInputBatcher] Failed to atomically drain batch in SQLite:", err);
-      return [];
-    }
-
-    // Partition pending rows by (world, part_id) so batches are strictly homogeneous
-    const partitions = new Map<string, typeof rows>();
-    for (const row of rows) {
-      const key = `${row.world}:::${row.part_id}`;
-      let list = partitions.get(key);
-      if (!list) {
-        list = [];
-        partitions.set(key, list);
-      }
-      list.push(row);
-    }
-
     const allEmitted: EmaInput[] = [];
 
-    for (const [, partitionRows] of partitions) {
-      const batch: EmaInput[] = partitionRows.map((r) => ({
-        id: r.id,
-        world: r.world,
-        partId: r.part_id,
-        sender: {
-          id: r.sender_id,
-          name: r.sender_name,
-          isOwner: Boolean(r.is_owner),
-        },
-        content: r.content,
-        timestamp: r.timestamp,
-        replyTo: r.reply_to ?? undefined,
-        metadata: r.metadata ? (JSON.parse(r.metadata) as Record<string, unknown>) : undefined,
-      }));
+    while (true) {
+      // Atomic drain: read pending rows and immediately mark them completed in one instant transaction
+      let rows: Array<{
+        id: string;
+        world: string;
+        part_id: string;
+        sender_id: string;
+        sender_name: string;
+        is_owner: number;
+        content: string;
+        timestamp: number;
+        reply_to: string | null;
+        metadata: string | null;
+      }> = [];
 
-      for (const listener of this.listeners) {
-        try {
-          const res = listener(batch);
-          if (res && typeof (res as Promise<void>).catch === "function") {
-            (res as Promise<void>).catch((err) => {
-              console.error("[SimpleEmaInputBatcher] Error in async batch listener:", err);
-            });
-          }
-        } catch (err) {
-          console.error("[SimpleEmaInputBatcher] Error in batch listener:", err);
+      try {
+        this.db.exec("BEGIN IMMEDIATE");
+        rows = this.selectPendingStmt.all(this.maxBatchSize) as typeof rows;
+        if (!rows || rows.length === 0) {
+          this.db.exec("COMMIT");
+          break;
         }
+
+        for (const row of rows) {
+          this.updateCompletedStmt.run(row.id);
+        }
+        this.pruneCompletedStmt.run(Date.now() - 3600000);
+        this.db.exec("COMMIT");
+      } catch (err) {
+        try {
+          this.db.exec("ROLLBACK");
+        } catch {}
+        console.error("[SimpleEmaInputBatcher] Failed to atomically drain batch in SQLite:", err);
+        break;
       }
 
-      allEmitted.push(...batch);
+      // Partition pending rows by (world, part_id) so batches are strictly homogeneous
+      const partitions = new Map<string, typeof rows>();
+      for (const row of rows) {
+        const key = `${row.world}:::${row.part_id}`;
+        let list = partitions.get(key);
+        if (!list) {
+          list = [];
+          partitions.set(key, list);
+        }
+        list.push(row);
+      }
+
+      for (const [, partitionRows] of partitions) {
+        const batch: EmaInput[] = partitionRows.map((r) => ({
+          id: r.id,
+          world: r.world,
+          partId: r.part_id,
+          sender: {
+            id: r.sender_id,
+            name: r.sender_name,
+            isOwner: Boolean(r.is_owner),
+          },
+          content: r.content,
+          timestamp: r.timestamp,
+          replyTo: r.reply_to ?? undefined,
+          metadata: r.metadata ? (JSON.parse(r.metadata) as Record<string, unknown>) : undefined,
+        }));
+
+        for (const listener of this.listeners) {
+          try {
+            const res = listener(batch);
+            if (res && typeof (res as Promise<void>).catch === "function") {
+              (res as Promise<void>).catch((err) => {
+                console.error("[SimpleEmaInputBatcher] Error in async batch listener:", err);
+              });
+            }
+          } catch (err) {
+            console.error("[SimpleEmaInputBatcher] Error in batch listener:", err);
+          }
+        }
+
+        allEmitted.push(...batch);
+      }
+
+      if (rows.length < this.maxBatchSize) {
+        break;
+      }
     }
 
     return allEmitted;
