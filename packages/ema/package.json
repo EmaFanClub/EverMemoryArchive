@@ -17,13 +17,25 @@
       "default": "./dist/prompts/index.js"
     }
   },
+  "bin": {
+    "ema": "./bin/ema.js"
+  },
   "files": [
     "dist",
+    "bin",
     "README.md"
   ],
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@prismshadow/penguin-core": "^0.2.18",
+    "fast-xml-parser": "^5.12.0",
+    "hono": "^4.13.16"
   }
 }
