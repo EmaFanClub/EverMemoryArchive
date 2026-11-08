@@ -14,6 +14,13 @@ import {
   createMinimalPrototype,
   SimpleEmaRouter,
   PenguinChannelWorld,
+  TelegramWorld,
+  DiscordWorld,
+  SnowlumaWorld,
+  WebWorld,
+  EmailWorld,
+  BilibiliWorld,
+  CognitiveActionsWorld,
   parseWatchDuration,
   assertAgentIdentity,
   DEFAULT_MINIMAL_SYSTEM_PROMPT,
@@ -61,6 +68,34 @@ async function main() {
       channels: ["ch_ema_minimal_test", "default_channel"],
       passive: true,
     });
+    const telegramWorld = new TelegramWorld({
+      passive: true,
+    });
+    const discordWorld = new DiscordWorld({
+      passive: true,
+    });
+    const snowlumaWorld = new SnowlumaWorld({
+      selfId: "100001",
+      groups: ["group:123456"],
+      privateUsers: ["private:789012"],
+    });
+    const webWorld = new WebWorld({
+      initialSessions: ["default"],
+      heartbeatIntervalMs: 0,
+    });
+    const emailWorld = new EmailWorld({
+      recipients: ["user@domain.com"],
+      passive: true,
+    });
+    const bilibiliWorld = new BilibiliWorld({
+      rooms: ["123456"],
+      videoTargets: ["video:BV1xx411c7mD"],
+      dmTargets: ["1001"],
+      passive: true,
+    });
+    const cognitiveWorld = new CognitiveActionsWorld({
+      passive: true,
+    });
 
     const ctx = {
       router,
@@ -69,13 +104,45 @@ async function main() {
     };
 
     const handle = channelWorld.start(ctx);
+    const telegramHandle = telegramWorld.start(ctx);
+    const discordHandle = discordWorld.start(ctx);
+    const snowlumaHandle = snowlumaWorld.start(ctx);
+    const webHandle = webWorld.start(ctx);
+    const emailHandle = emailWorld.start(ctx);
+    const bilibiliHandle = bilibiliWorld.start(ctx);
+    const cognitiveHandle = cognitiveWorld.start(ctx);
 
     if (sub === "ls") {
       const routes = router.listRoutes();
       for (const r of routes) {
-        console.log(`PenguinChannelWorld ${r.prefix}`);
+        if (r.prefix.startsWith("/world/channel")) {
+          console.log(`PenguinChannelWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/telegram")) {
+          console.log(`TelegramWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/discord")) {
+          console.log(`DiscordWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/qq")) {
+          console.log(`SnowlumaWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/web")) {
+          console.log(`WebWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/email")) {
+          console.log(`EmailWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/bilibili")) {
+          console.log(`BilibiliWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/cognitive")) {
+          console.log(`CognitiveActionsWorld ${r.prefix}`);
+        } else {
+          console.log(`${r.worldName || "World"} ${r.prefix}`);
+        }
       }
       handle.dispose();
+      telegramHandle.dispose();
+      discordHandle.dispose();
+      snowlumaHandle.dispose();
+      webHandle.dispose();
+      emailHandle.dispose();
+      bilibiliHandle.dispose();
+      cognitiveHandle.dispose();
       process.exit(0);
     }
 
@@ -86,6 +153,13 @@ async function main() {
           "Error: Missing path argument for 'world get'. Example: ema.js world get /world/channel/parts",
         );
         handle.dispose();
+        telegramHandle.dispose();
+        discordHandle.dispose();
+        snowlumaHandle.dispose();
+        webHandle.dispose();
+        emailHandle.dispose();
+        bilibiliHandle.dispose();
+        cognitiveHandle.dispose();
         process.exit(1);
       }
 
@@ -93,10 +167,24 @@ async function main() {
         const result = await router.read(targetPath);
         console.log(JSON.stringify(result, null, 2));
         handle.dispose();
+        telegramHandle.dispose();
+        discordHandle.dispose();
+        snowlumaHandle.dispose();
+        webHandle.dispose();
+        emailHandle.dispose();
+        bilibiliHandle.dispose();
+        cognitiveHandle.dispose();
         process.exit(0);
       } catch (err) {
         console.error(`Error querying ${targetPath}:`, err.message || err);
         handle.dispose();
+        telegramHandle.dispose();
+        discordHandle.dispose();
+        snowlumaHandle.dispose();
+        webHandle.dispose();
+        emailHandle.dispose();
+        bilibiliHandle.dispose();
+        cognitiveHandle.dispose();
         process.exit(1);
       }
     }

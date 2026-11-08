@@ -34,7 +34,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@lancedb/lancedb": "^0.23.0",
     "@prismshadow/penguin-core": "^0.2.18",
+    "apache-arrow": "^18.1.0",
     "fast-xml-parser": "^5.12.0",
     "hono": "^4.13.16"
   }
