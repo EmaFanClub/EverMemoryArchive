@@ -131,6 +131,8 @@ export class SimpleEmaInputBatcher implements EmaInputBatcher {
 
   private initSchema(): void {
     this.db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 5000;
       CREATE TABLE IF NOT EXISTS input_queue (
         id TEXT PRIMARY KEY,
         world TEXT NOT NULL,
@@ -221,7 +223,7 @@ export class SimpleEmaInputBatcher implements EmaInputBatcher {
 
   /**
    * Flushes pending inputs out of SQLite partitioned by (world, part_id)
-   * in atomic transactions and delivers batches to subscribers.
+   * in an instantaneous atomic drain transaction and delivers batches to subscribers.
    */
   async flush(): Promise<ReadonlyArray<EmaInput>> {
     if (this.debounceTimer) {
@@ -233,7 +235,9 @@ export class SimpleEmaInputBatcher implements EmaInputBatcher {
       this.maxWaitTimer = null;
     }
 
-    const rows = this.selectPendingStmt.all(this.maxBatchSize) as Array<{
+    // Atomic drain: read pending rows and immediately mark them completed in one instant transaction
+    this.db.exec("BEGIN IMMEDIATE");
+    let rows: Array<{
       id: string;
       world: string;
       part_id: string;
@@ -244,9 +248,23 @@ export class SimpleEmaInputBatcher implements EmaInputBatcher {
       timestamp: number;
       reply_to: string | null;
       metadata: string | null;
-    }>;
+    }> = [];
 
-    if (!rows || rows.length === 0) {
+    try {
+      rows = this.selectPendingStmt.all(this.maxBatchSize) as typeof rows;
+      if (!rows || rows.length === 0) {
+        this.db.exec("COMMIT");
+        return [];
+      }
+
+      for (const row of rows) {
+        this.updateCompletedStmt.run(row.id);
+      }
+      this.pruneCompletedStmt.run(Date.now() - 3600000);
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      console.error("[SimpleEmaInputBatcher] Failed to atomically drain batch in SQLite:", err);
       return [];
     }
 
@@ -265,19 +283,6 @@ export class SimpleEmaInputBatcher implements EmaInputBatcher {
     const allEmitted: EmaInput[] = [];
 
     for (const [, partitionRows] of partitions) {
-      // Atomic status transition: pending -> batched
-      this.db.exec("BEGIN IMMEDIATE");
-      try {
-        for (const row of partitionRows) {
-          this.updateBatchedStmt.run(row.id);
-        }
-        this.db.exec("COMMIT");
-      } catch (err) {
-        this.db.exec("ROLLBACK");
-        console.error("[SimpleEmaInputBatcher] Failed to mark batch in SQLite:", err);
-        continue;
-      }
-
       const batch: EmaInput[] = partitionRows.map((r) => ({
         id: r.id,
         world: r.world,
@@ -293,34 +298,20 @@ export class SimpleEmaInputBatcher implements EmaInputBatcher {
         metadata: r.metadata ? (JSON.parse(r.metadata) as Record<string, unknown>) : undefined,
       }));
 
-      let listenerFailed = false;
       for (const listener of this.listeners) {
         try {
-          await listener(batch);
+          const res = listener(batch);
+          if (res && typeof (res as Promise<void>).catch === "function") {
+            (res as Promise<void>).catch((err) => {
+              console.error("[SimpleEmaInputBatcher] Error in async batch listener:", err);
+            });
+          }
         } catch (err) {
-          listenerFailed = true;
           console.error("[SimpleEmaInputBatcher] Error in batch listener:", err);
         }
       }
 
-      if (listenerFailed) {
-        // Rollback uncompleted items back to 'pending' for retry
-        this.db.exec("BEGIN IMMEDIATE");
-        try {
-          for (const row of partitionRows) {
-            this.updatePendingStmt.run(row.id);
-          }
-          this.db.exec("COMMIT");
-        } catch (rollbackErr) {
-          this.db.exec("ROLLBACK");
-          console.error(
-            "[SimpleEmaInputBatcher] Failed to rollback batch status in SQLite:",
-            rollbackErr,
-          );
-        }
-      } else {
-        allEmitted.push(...batch);
-      }
+      allEmitted.push(...batch);
     }
 
     return allEmitted;

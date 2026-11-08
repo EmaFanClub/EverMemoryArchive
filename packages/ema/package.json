@@ -17,10 +17,17 @@
       "default": "./dist/prompts/index.js"
     }
   },
+  "bin": {
+    "ema": "./bin/ema.js"
+  },
   "files": [
     "dist",
+    "bin",
     "README.md"
   ],
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",

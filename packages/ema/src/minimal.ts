@@ -301,27 +301,37 @@ export function createMinimalPrototype(
 
   const systemPrompt = options.systemPrompt ?? DEFAULT_MINIMAL_SYSTEM_PROMPT;
 
+  // Sequential turn chain guaranteeing session turns are processed FIFO without overlapping collisions
+  let turnChain = Promise.resolve();
+
   // Subscribe to coalesced input batches
-  const batchSubscription = inputBatcher.onBatch(async (batch) => {
+  const batchSubscription = inputBatcher.onBatch((batch) => {
     if (batch.length === 0) return;
 
-    const xmlPayload = formatBatchToXml(batch);
-    const primary = batch[0];
-    const targetChannel = primary.partId;
+    turnChain = turnChain
+      .then(async () => {
+        const xmlPayload = formatBatchToXml(batch);
+        const primary = batch[0];
+        const targetChannel = primary.partId;
 
-    let response = "";
-    if (options.llmInvoker) {
-      response = await options.llmInvoker(xmlPayload, systemPrompt);
-    } else {
-      response = `Acknowledged input batch of ${batch.length} message(s).`;
-    }
+        let response = "";
+        if (options.llmInvoker) {
+          response = await options.llmInvoker(xmlPayload, systemPrompt);
+        } else {
+          response = `Acknowledged input batch of ${batch.length} message(s).`;
+        }
 
-    const mention =
-      primary.sender.name && !primary.sender.name.startsWith("@") ? `@${primary.sender.name} ` : "";
-    const formattedReply = `${mention}${response}`.trim();
+        const mention =
+          primary.sender.name && !primary.sender.name.startsWith("@")
+            ? `@${primary.sender.name} `
+            : "";
+        const formattedReply = `${mention}${response}`.trim();
 
-    channelWorld.interact(ctx, actor, targetChannel, "reply", formattedReply);
-    inputBatcher.markCompleted(batch.map((b) => b.id));
+        channelWorld.interact(ctx, actor, targetChannel, "reply", formattedReply);
+      })
+      .catch((err) => {
+        console.error("[MinimalPrototype] Turn execution error:", err);
+      });
   });
 
   const worldHandle = channelWorld.start(ctx);

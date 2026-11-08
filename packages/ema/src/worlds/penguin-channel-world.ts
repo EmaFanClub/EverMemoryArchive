@@ -135,6 +135,8 @@ export class PenguinChannelWorld extends EmaWorld {
       }
       this.db = new DatabaseSync(this.dbPath);
       this.db.exec(`
+        PRAGMA journal_mode = WAL;
+        PRAGMA busy_timeout = 5000;
         CREATE TABLE IF NOT EXISTS seen_messages (
           id TEXT PRIMARY KEY,
           channel TEXT,
@@ -356,7 +358,16 @@ export class PenguinChannelWorld extends EmaWorld {
       throw new Error("No message text provided for channel interaction");
     }
 
-    void this.channelSender(id, messageText);
+    try {
+      const res = this.channelSender(id, messageText);
+      if (res && typeof (res as Promise<void>).catch === "function") {
+        (res as Promise<void>).catch((err) => {
+          console.error(`[PenguinChannelWorld] Failed to dispatch channel message to ${id}:`, err);
+        });
+      }
+    } catch (err) {
+      console.error(`[PenguinChannelWorld] Failed to dispatch channel message to ${id}:`, err);
+    }
 
     return {
       dispose: () => {},

@@ -171,17 +171,119 @@ describe("Adversarial Issues Verification Suite", () => {
       expect(rows[0].status).not.toBe("batched");
     });
 
+    it("never emits duplicate batches across multiple partitions during concurrent or overlapping flushes", async () => {
+      const batcher = new SimpleEmaInputBatcher({
+        dbPath: ":memory:",
+        debounceMs: 10,
+      });
+
+      const emittedBatchIds: string[] = [];
+      batcher.onBatch(async (batch) => {
+        // simulate async turn processing delay (e.g. LLM call)
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        for (const item of batch) {
+          emittedBatchIds.push(item.id);
+        }
+      });
+
+      // Push message for Partition A
+      batcher.push({
+        id: "msg-part-a",
+        world: "channel",
+        partId: "ch_alpha",
+        sender: { id: "user:u1", name: "User1" },
+        content: "alpha message",
+        timestamp: 1000,
+      });
+
+      // Push message for Partition B in same initial debounce
+      batcher.push({
+        id: "msg-part-b",
+        world: "channel",
+        partId: "ch_beta",
+        sender: { id: "user:u2", name: "User2" },
+        content: "beta message",
+        timestamp: 1001,
+      });
+
+      // Wait 15ms so initial flush starts and enters listener on Partition A
+      await new Promise((resolve) => setTimeout(resolve, 15));
+
+      // While Partition A is awaiting listener, push message for Partition C (triggering second flush)
+      batcher.push({
+        id: "msg-part-c",
+        world: "channel",
+        partId: "ch_gamma",
+        sender: { id: "user:u3", name: "User3" },
+        content: "gamma message",
+        timestamp: 1002,
+      });
+
+      // Wait for all flushes and listeners to settle
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // Every message must be emitted EXACTLY ONCE
+      const countA = emittedBatchIds.filter((id) => id === "msg-part-a").length;
+      const countB = emittedBatchIds.filter((id) => id === "msg-part-b").length;
+      const countC = emittedBatchIds.filter((id) => id === "msg-part-c").length;
+
+      expect(countA).toBe(1);
+      expect(countB).toBe(1);
+      expect(countC).toBe(1);
+
+      batcher.dispose();
+    });
+
+    it("automatically marks inputs as completed upon flush without requiring manual markCompleted", async () => {
+      const batcher = new SimpleEmaInputBatcher({
+        dbPath: ":memory:",
+        debounceMs: 10,
+      });
+
+      batcher.onBatch(() => {
+        // Consumer does NOT call markCompleted
+      });
+
+      batcher.push({
+        id: "msg-auto-complete-1",
+        world: "channel",
+        partId: "ch_auto",
+        sender: { id: "user:u1", name: "User1" },
+        content: "auto complete check",
+        timestamp: 1000,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const db = (
+        batcher as unknown as {
+          db: { prepare: (sql: string) => { all: () => Array<{ status: string }> } };
+        }
+      ).db;
+      const rows = db
+        .prepare("SELECT status FROM input_queue WHERE id = 'msg-auto-complete-1'")
+        .all();
+      expect(rows.length).toBe(1);
+      expect(rows[0].status).toBe("completed");
+
+      batcher.dispose();
+    });
+
     it("provides lifecycle disposal to clean up timers and close SQLite database", () => {
       const batcher = new SimpleEmaInputBatcher({
         dbPath: ":memory:",
         debounceMs: 10000,
       });
 
-      expect(typeof (batcher as unknown as { dispose?: () => void }).dispose).toBe("function");
+      expect(typeof batcher.dispose).toBe("function");
+      batcher.dispose();
+
+      const db = (batcher as unknown as { db: { prepare: (sql: string) => unknown } }).db;
+      expect(() => db.prepare("SELECT 1")).toThrow(/closed|database/i);
     });
   });
 
-  describe("Resource Cleanup Issues", () => {
+  describe("Resource Cleanup & Error Handling Issues", () => {
     it("closes SQLite database on PenguinChannelWorld teardown", () => {
       const world = new PenguinChannelWorld({
         channels: ["ch_cleanup_test"],
@@ -189,7 +291,39 @@ describe("Adversarial Issues Verification Suite", () => {
         env: { PENGUIN_AGENT_ID: "emafanclub_ema_dev" },
       });
 
-      expect(typeof (world as unknown as { dispose?: () => void }).dispose).toBe("function");
+      expect(typeof world.dispose).toBe("function");
+      world.dispose();
+
+      const db = (world as unknown as { db: unknown }).db;
+      expect(db).toBeNull();
+    });
+
+    it("safely handles rejected promise from async channelSender without unhandled rejection", async () => {
+      const mockSender = vi.fn().mockRejectedValue(new Error("Network timeout to channel service"));
+      const world = new PenguinChannelWorld({
+        channels: ["ch_err_test"],
+        dbPath: ":memory:",
+        channelSender: mockSender,
+        env: { PENGUIN_AGENT_ID: "emafanclub_ema_dev" },
+      });
+
+      const ctx = {
+        router: new SimpleEmaRouter(),
+        inputBatcher: new SimpleEmaInputBatcher({ dbPath: ":memory:" }),
+        registry: { register: () => ({ dispose: () => {} }), get: () => undefined, list: () => [] },
+      };
+
+      const actor = { id: "a1", name: "Ema", session: "s1", agentId: "emafanclub_ema_dev" };
+
+      expect(() => {
+        world.interact(ctx, actor, "ch_err_test", "reply", "test error handling");
+      }).not.toThrow();
+
+      // Give event loop tick to verify no unhandledRejection terminates the process
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      world.dispose();
+      ctx.inputBatcher.dispose();
     });
   });
 
