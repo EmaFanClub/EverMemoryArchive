@@ -189,6 +189,51 @@ export interface BilibiliRateLimitConfig {
   dynamicMinIntervalMs?: number; // default: 15000ms
 }
 
+export interface BilibiliContentFilterConfig {
+  /**
+   * Enable or disable local machine content filtering guardrails entirely (default: true)
+   */
+  enabled?: boolean;
+  /**
+   * Prevents leaking local host file paths (e.g. /home/..., /etc/..., C:\Users\..., .vault.toml, etc.)
+   * (default: true)
+   */
+  filterLocalPaths?: boolean;
+  /**
+   * Prevents leaking local network host addresses (e.g. 127.0.0.1, localhost, private IP ports)
+   * (default: true)
+   */
+  filterLocalhost?: boolean;
+  /**
+   * Prevents leaking API credentials, tokens, and secret strings (sk-..., ghp_..., SESSDATA=..., Bearer ...)
+   * (default: true)
+   */
+  filterSecrets?: boolean;
+  /**
+   * Prevents leaking internal harness system markers ([context_summary], [turn_aborted], call:default_api:, etc.)
+   * (default: true)
+   */
+  filterSystemMarkers?: boolean;
+  /**
+   * Action when local sensitive content is detected:
+   * "reject" (throws BilibiliContentFilterError) or "mask" (replaces with [redacted])
+   * (default: "reject")
+   */
+  action?: "reject" | "mask";
+}
+
+export const BILIBILI_LOCAL_PATH_REGEX =
+  /(?:(?:~|\/(?:home|Users|root|etc|var|tmp|usr))\/(?:[a-zA-Z0-9_.\-\/]+)|[A-Za-z]:\\[a-zA-Z0-9_.\-\\]+|(?<![a-zA-Z0-9_])\.(?:vault\.toml|project_config\.toml|env(?:\.[a-zA-Z0-9_-]+)*|ssh\/id_[a-z0-9_]+)\b)/i;
+
+export const BILIBILI_LOCALHOST_REGEX =
+  /(?:https?:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d+)?(?:\/[^\s"'<>]*)?|\b(?:127\.0\.0\.1|localhost|0\.0\.0\.0|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d+)?\b)/i;
+
+export const BILIBILI_SECRETS_REGEX =
+  /(?:\b(?:sk[-_][A-Za-z0-9_*-]{12,}|AIza[0-9A-Za-z_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b|SESSDATA=[A-Za-z0-9%_-]{16,}|bili_jct=[a-f0-9]{32}|\bBearer\s+[A-Za-z0-9._~+/=-]{16,}|\b(?:password|passwd|secret_key|client_secret)\s*[:=]\s*[^\s,;"']+)/i;
+
+export const BILIBILI_SYSTEM_MARKERS_REGEX =
+  /(?:\[(?:turn_aborted|turn_retried|context_summary|user_steering|use_skills|request_error|developer_instructions|org_trigger)\]|<(?:app_data_dir|session_id|agent_id)>|\bsession-\d{4}-\d{2}-\d{2}-[a-zA-Z0-9_\-]+|\bcall:default_api:\w+)/i;
+
 export interface BilibiliDispatchRecord {
   id: string;
   target: string;
@@ -270,6 +315,12 @@ export interface BilibiliWorldOptions {
   /** Action when outbound message contains banned words: "reject" (throws error) or "mask" (replaces with ***) */
   bannedWordAction?: "reject" | "mask";
 
+  /**
+   * Local machine content filter configuration to prevent leaking local paths, localhost URLs,
+   * API credentials/tokens, and harness system markers.
+   */
+  contentFilter?: BilibiliContentFilterConfig | boolean;
+
   /** Inbound spam keywords to drop */
   spamKeywords?: string[];
   /** Drop automated entry notices (WELCOME, INTERACT_WORD, ENTRY_EFFECT) (default: true) */
@@ -327,6 +378,7 @@ export class BilibiliWorld extends EmaWorld {
 
   private bannedWords: string[];
   private bannedWordAction: "reject" | "mask";
+  private contentFilter: Required<BilibiliContentFilterConfig>;
   private spamKeywords: string[];
   private filterEntryNotices: boolean;
 
@@ -446,6 +498,18 @@ export class BilibiliWorld extends EmaWorld {
 
     this.bannedWords = options.bannedWords ?? [];
     this.bannedWordAction = options.bannedWordAction ?? "reject";
+
+    const filterOpt = typeof options.contentFilter === "object" ? options.contentFilter : {};
+    const filterEnabled = options.contentFilter !== false;
+    this.contentFilter = {
+      enabled: filterOpt.enabled ?? filterEnabled,
+      filterLocalPaths: filterOpt.filterLocalPaths ?? true,
+      filterLocalhost: filterOpt.filterLocalhost ?? true,
+      filterSecrets: filterOpt.filterSecrets ?? true,
+      filterSystemMarkers: filterOpt.filterSystemMarkers ?? true,
+      action: filterOpt.action ?? (options.bannedWordAction ?? "reject"),
+    };
+
     this.spamKeywords = options.spamKeywords ?? [];
     this.filterEntryNotices = options.filterEntryNotices ?? true;
 
@@ -1313,26 +1377,78 @@ export class BilibiliWorld extends EmaWorld {
   }
 
   /**
-   * Checks message content against banned word list.
-   * Throws BilibiliContentFilterError on "reject", or masks prohibited keywords.
+   * Checks message content against banned word list and local machine privacy leaks.
+   * Guards against leaking local file paths, localhost/private network addresses, credentials/tokens, and harness system markers.
+   * Throws BilibiliContentFilterError on "reject", or masks prohibited keywords/patterns.
    */
   private checkContentFilter(text: string): string {
-    if (this.bannedWords.length === 0) return text;
-
     let result = text;
-    for (const banned of this.bannedWords) {
-      if (!banned) continue;
-      if (result.includes(banned)) {
-        if (this.bannedWordAction === "mask") {
-          const mask = "*".repeat(banned.length);
-          result = result.split(banned).join(mask);
-        } else {
-          throw new BilibiliContentFilterError(
-            `Refusing to dispatch Bilibili message containing prohibited word: "${banned}"`,
-          );
+
+    // 1. Custom banned words list check
+    if (this.bannedWords.length > 0) {
+      for (const banned of this.bannedWords) {
+        if (!banned) continue;
+        if (result.includes(banned)) {
+          if (this.bannedWordAction === "mask") {
+            const mask = "*".repeat(banned.length);
+            result = result.split(banned).join(mask);
+          } else {
+            throw new BilibiliContentFilterError(
+              `Refusing to dispatch Bilibili message containing prohibited word: "${banned}"`,
+            );
+          }
         }
       }
     }
+
+    // 2. Local machine & privacy leak guardrails
+    if (this.contentFilter.enabled) {
+      const checks: Array<{
+        enabled: boolean;
+        type: string;
+        regex: RegExp;
+      }> = [
+        {
+          enabled: this.contentFilter.filterLocalPaths,
+          type: "local file path",
+          regex: BILIBILI_LOCAL_PATH_REGEX,
+        },
+        {
+          enabled: this.contentFilter.filterLocalhost,
+          type: "localhost or private network address",
+          regex: BILIBILI_LOCALHOST_REGEX,
+        },
+        {
+          enabled: this.contentFilter.filterSecrets,
+          type: "credential, token, or secret",
+          regex: BILIBILI_SECRETS_REGEX,
+        },
+        {
+          enabled: this.contentFilter.filterSystemMarkers,
+          type: "harness system marker",
+          regex: BILIBILI_SYSTEM_MARKERS_REGEX,
+        },
+      ];
+
+      for (const { enabled, type, regex } of checks) {
+        if (!enabled) continue;
+        const testRegex = new RegExp(regex.source, regex.flags);
+        if (testRegex.test(result)) {
+          if (this.contentFilter.action === "mask") {
+            const replaceRegex = new RegExp(
+              regex.source,
+              regex.flags.includes("g") ? regex.flags : regex.flags + "g",
+            );
+            result = result.replace(replaceRegex, "[redacted]");
+          } else {
+            throw new BilibiliContentFilterError(
+              `Refusing to dispatch Bilibili message containing sensitive ${type}`,
+            );
+          }
+        }
+      }
+    }
+
     return result;
   }
 

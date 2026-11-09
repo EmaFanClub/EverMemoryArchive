@@ -664,6 +664,255 @@ describe("BilibiliWorld - RFC-0001 Architecture & Invariants", () => {
     });
   });
 
+  describe("Local Content Filter & Host Privacy Guardrails", () => {
+    it("rejects outbound messages containing local host file paths by default", () => {
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      const pathSamples = [
+        "Please check /home/rei/repos/EverMemoryArchive/secret.txt",
+        "Sensitive file at /etc/shadow",
+        "Windows path C:\\Users\\Administrator\\Desktop\\token.txt",
+        "Config in .vault.toml needs attention",
+        "Leaked .env.production secrets",
+        "SSH key in ~/.ssh/id_rsa",
+      ];
+
+      for (const sample of pathSamples) {
+        expect(() => {
+          world.interact(ctx, mockActor, "room:123456", "danmaku", sample);
+        }).toThrow(BilibiliContentFilterError);
+      }
+
+      handle.dispose();
+    });
+
+    it("rejects outbound messages containing localhost or private network addresses by default", () => {
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      const hostSamples = [
+        "API running on http://127.0.0.1:8080/api",
+        "Debug portal: http://localhost:3000",
+        "Internal node 192.168.1.100:9000",
+      ];
+
+      for (const sample of hostSamples) {
+        expect(() => {
+          world.interact(ctx, mockActor, "room:123456", "danmaku", sample);
+        }).toThrow(BilibiliContentFilterError);
+      }
+
+      handle.dispose();
+    });
+
+    it("rejects outbound messages containing API credentials, tokens, or secrets by default", () => {
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      const secretSamples = [
+        "OpenAI key is sk-proj-1234567890abcdef123456",
+        "GitHub token ghp_123456789012345678901234567890",
+        "Bilibili cookie SESSDATA=1234567890abcdef12345678",
+        "CSRF token bili_jct=1234567890abcdef1234567890abcdef",
+        "Auth header Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+        "Database password: my_super_secret_pw",
+      ];
+
+      for (const sample of secretSamples) {
+        expect(() => {
+          world.interact(ctx, mockActor, "room:123456", "danmaku", sample);
+        }).toThrow(BilibiliContentFilterError);
+      }
+
+      handle.dispose();
+    });
+
+    it("rejects outbound messages containing harness system markers by default", () => {
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      const markerSamples = [
+        "[context_summary] Here is earlier context",
+        "Turn aborted: [turn_aborted] please resume",
+        "Stored under <app_data_dir>/agents",
+        "Session ID session-2026-11-08-12-23-01-dae71a22 active",
+        "Invoking call:default_api:exec_command now",
+      ];
+
+      for (const sample of markerSamples) {
+        expect(() => {
+          world.interact(ctx, mockActor, "room:123456", "danmaku", sample);
+        }).toThrow(BilibiliContentFilterError);
+      }
+
+      handle.dispose();
+    });
+
+    it("masks local machine sensitive content when contentFilter action is 'mask'", () => {
+      let dispatched = "";
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        contentFilter: { action: "mask" },
+        danmakuSender: (_room, msg) => {
+          dispatched = msg;
+        },
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      world.interact(
+        ctx,
+        mockActor,
+        "room:123456",
+        "danmaku",
+        "Check /home/rei/file.txt at http://localhost:8080 with sk-12345678901234567890 [context_summary]",
+      );
+
+      expect(dispatched).toBe(
+        "Check [redacted] at [redacted] with [redacted] [redacted]",
+      );
+
+      handle.dispose();
+    });
+
+    it("supports selective filter toggling via contentFilter options", () => {
+      let dispatched = "";
+      // Allow local paths, but still filter secrets
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        contentFilter: {
+          filterLocalPaths: false,
+          filterSecrets: true,
+        },
+        danmakuSender: (_room, msg) => {
+          dispatched = msg;
+        },
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      // Local path is allowed because filterLocalPaths: false
+      world.interact(ctx, mockActor, "room:123456", "danmaku", "Path is /home/rei/test.txt");
+      expect(dispatched).toBe("Path is /home/rei/test.txt");
+
+      // Secrets are still rejected
+      expect(() => {
+        world.interact(ctx, mockActor, "room:123456", "danmaku", "Token sk-12345678901234567890");
+      }).toThrow(BilibiliContentFilterError);
+
+      handle.dispose();
+    });
+
+    it("allows disabling contentFilter entirely when set to false or enabled: false", () => {
+      let dispatched = "";
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        contentFilter: false,
+        danmakuSender: (_room, msg) => {
+          dispatched = msg;
+        },
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      world.interact(
+        ctx,
+        mockActor,
+        "room:123456",
+        "danmaku",
+        "Host http://localhost:3000 at /tmp/test",
+      );
+      expect(dispatched).toBe("Host http://localhost:3000 at /tmp/test");
+
+      handle.dispose();
+    });
+
+    it("applies local content filter across video comments, DMs, and feed dynamics", () => {
+      const world = new BilibiliWorld({
+        videoTargets: ["video:BV1xx411c7mD"],
+        dmTargets: ["dm:1001"],
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      // Comment rejected for local path
+      expect(() => {
+        world.interact(ctx, mockActor, "video:BV1xx411c7mD", "comment", "Look at /etc/passwd");
+      }).toThrow(BilibiliContentFilterError);
+
+      // DM rejected for secret token
+      expect(() => {
+        world.interact(ctx, mockActor, "dm:1001", "dm", "Here is ghp_123456789012345678901234567890");
+      }).toThrow(BilibiliContentFilterError);
+
+      // Feed dynamic rejected for system marker
+      expect(() => {
+        world.interact(ctx, mockActor, "dynamic", "post", "Test [turn_aborted] dynamic");
+      }).toThrow(BilibiliContentFilterError);
+
+      handle.dispose();
+    });
+
+    it("permits harmless fan-facing messages with Bilibili URLs, BVIDs, and emojis", () => {
+      let dispatched = "";
+      const world = new BilibiliWorld({
+        rooms: ["123456"],
+        danmakuSender: (_room, msg) => {
+          dispatched = msg;
+        },
+        dbPath: ":memory:",
+        passive: true,
+        env: mockEnv,
+      });
+
+      const handle = world.start(ctx);
+
+      const safeMessage =
+        "【EverMemoryArchive】Ema 伴侣系统运行测试：记忆归档与动态感知连接正常 ✨ https://www.bilibili.com/video/BV1xx411c7mD";
+      world.interact(ctx, mockActor, "room:123456", "danmaku", safeMessage);
+      expect(dispatched).toBe(safeMessage);
+
+      handle.dispose();
+    });
+  });
+
   describe("RFC-0001 Invariants & Security", () => {
     it("refuses interact without operating agent identity (assertAgentIdentity)", () => {
       const world = new BilibiliWorld({
