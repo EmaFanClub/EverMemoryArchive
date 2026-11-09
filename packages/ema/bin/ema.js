@@ -81,8 +81,12 @@ async function main() {
   if (command === "world") {
     const sub = args[1];
 
-    // Parse optional flags (--db, --channel, --message, --parent)
+    // Parse optional flags (--db, --channel, --message, --parent, --qq-gateway, etc.)
     let webDbPath = process.env.EMA_WEB_DB_PATH || ":memory:";
+    let qqGatewayUrl = process.env.SNOWLUMA_GATEWAY_URL || process.env.ONEBOT_GATEWAY_URL;
+    let qqGatewayToken = process.env.SNOWLUMA_TOKEN || process.env.ONEBOT_TOKEN;
+    let qqAllowedUsers;
+    let qqAllowedGroups;
     let flagChannel;
     let flagMessage;
     let flagParent;
@@ -91,6 +95,14 @@ async function main() {
     for (let i = 2; i < args.length; i++) {
       if (args[i] === "--db" && i + 1 < args.length) {
         webDbPath = args[++i];
+      } else if (args[i] === "--qq-gateway" && i + 1 < args.length) {
+        qqGatewayUrl = args[++i];
+      } else if (args[i] === "--qq-token" && i + 1 < args.length) {
+        qqGatewayToken = args[++i];
+      } else if (args[i] === "--qq-allowed-users" && i + 1 < args.length) {
+        qqAllowedUsers = args[++i].split(",").map((s) => s.trim());
+      } else if (args[i] === "--qq-allowed-groups" && i + 1 < args.length) {
+        qqAllowedGroups = args[++i].split(",").map((s) => s.trim());
       } else if ((args[i] === "--channel" || args[i] === "--channel-id") && i + 1 < args.length) {
         flagChannel = args[++i];
       } else if ((args[i] === "--message" || args[i] === "--text" || args[i] === "-m") && i + 1 < args.length) {
@@ -120,7 +132,11 @@ async function main() {
       heartbeatIntervalMs: 0,
     });
     const qqWorld = new QQWorld({
-      selfId: "100001",
+      selfId: process.env.SNOWLUMA_SELF_ID || process.env.ONEBOT_SELF_ID || "100001",
+      gatewayUrl: qqGatewayUrl,
+      gatewayToken: qqGatewayToken,
+      allowedUsers: qqAllowedUsers,
+      allowedGroups: qqAllowedGroups,
       groups: ["123456"],
       privateUsers: ["789012"],
       passive: true,

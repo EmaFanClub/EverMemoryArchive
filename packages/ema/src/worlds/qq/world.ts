@@ -39,12 +39,17 @@ import {
 } from "../../channel.js";
 import { assertAgentIdentity } from "../../minimal.js";
 import {
-  QQLoginManager,
-  type QQLoginOptions,
-  type QQQrCodeInfo,
-  type QQScanStatus,
-  type QQAuthResult,
-} from "./login.js";
+  QQAuthorizationManager,
+  normalizeQQUserId,
+  normalizeQQGroupId,
+} from "./authorization.js";
+import {
+  createOneBotHttpCaller,
+  verifyOneBotWebhookSignature,
+  queryGatewayLoginInfo,
+  queryGatewayHealth,
+  OneBotWebSocketClient,
+} from "./gateway.js";
 import { checkQQContentFilter } from "./filter.js";
 import {
   type QQChannel,
@@ -65,10 +70,12 @@ import {
   type QQInteractActionPayload,
   QQRateLimitError,
   QQContentFilterError,
+  QQAuthorizationError,
 } from "./types.js";
 
 export * from "./types.js";
-export * from "./login.js";
+export * from "./authorization.js";
+export * from "./gateway.js";
 export * from "./filter.js";
 
 const INTIMACY_STAGE_ORDER: Record<RelationalIntimacyStage, number> = {
@@ -332,6 +339,12 @@ export class QQWorld extends EmaWorld {
   private env: Record<string, string | undefined>;
   private passive: boolean;
 
+  private authManager: QQAuthorizationManager;
+  private wsClient: OneBotWebSocketClient | null = null;
+  private gatewayHeaders?: Record<string, string>;
+  private webhookSecret?: string;
+  private autoDiscoverGateway: boolean;
+
   private parts: Map<string, EmaWorldPart> = new Map();
   private seenIds: Set<string> = new Set();
   private messageHistory: Map<string, EmaInput> = new Map();
@@ -383,6 +396,32 @@ export class QQWorld extends EmaWorld {
     this.timezone = options.timezone ?? "Asia/Shanghai";
     this.passive = options.passive ?? false;
     this.env = options.env ?? process.env;
+    this.gatewayUrl =
+      options.gatewayUrl ||
+      this.env.SNOWLUMA_GATEWAY_URL ||
+      this.env.ONEBOT_GATEWAY_URL;
+    this.gatewayToken =
+      options.gatewayToken ||
+      this.env.SNOWLUMA_TOKEN ||
+      this.env.ONEBOT_ACCESS_TOKEN ||
+      this.env.ONEBOT_TOKEN;
+    this.gatewayHeaders = options.gatewayHeaders;
+    this.webhookSecret = options.webhookSecret || this.env.ONEBOT_WEBHOOK_SECRET;
+    this.autoDiscoverGateway = options.autoDiscoverGateway ?? true;
+
+    // Initialize Authorization Manager (governs query and speak access for friends and groups)
+    this.authManager = new QQAuthorizationManager(
+      {
+        ...options.authorization,
+        allowedUsers: options.allowedUsers ?? options.authorization?.allowedUsers,
+        allowedGroups: options.allowedGroups ?? options.authorization?.allowedGroups,
+        adminUsers:
+          options.adminUsers ??
+          options.ownerUids ??
+          options.authorization?.adminUsers,
+      },
+      this.env,
+    );
 
     this.contentFilterConfig = {
       enabled: options.contentFilter?.enabled ?? true,
@@ -423,34 +462,16 @@ export class QQWorld extends EmaWorld {
       });
     }
 
-    // Setup OneBot API caller
+    // Setup OneBot API caller (supports direct reverse proxy endpoints with custom headers & tokens)
     if (options.apiCaller) {
       this.apiCaller = options.apiCaller;
-    } else if (this.gatewayUrl) {
-      const url = this.gatewayUrl.replace(/\/+$/, "");
-      const token = this.gatewayToken;
-      this.apiCaller = async (call: OneBotApiCall): Promise<OneBotApiResponse> => {
-        const endpoint = `${url}/${call.action}`;
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
-        if (token) {
-          headers.Authorization = `Bearer ${token}`;
-        }
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(call.params),
-        });
-        if (!res.ok) {
-          return {
-            status: "failed",
-            retcode: res.status,
-            message: `HTTP ${res.status}: ${await res.text().catch(() => "")}`,
-          };
-        }
-        return (await res.json()) as OneBotApiResponse;
-      };
+    } else if (this.gatewayUrl && !this.gatewayUrl.startsWith("ws://") && !this.gatewayUrl.startsWith("wss://")) {
+      this.apiCaller = createOneBotHttpCaller({
+        gatewayUrl: this.gatewayUrl,
+        gatewayToken: this.gatewayToken,
+        gatewayHeaders: this.gatewayHeaders,
+        webhookSecret: this.webhookSecret,
+      });
     } else {
       // Default offline/mock API caller
       this.apiCaller = (call: OneBotApiCall): OneBotApiResponse => {
@@ -463,6 +484,20 @@ export class QQWorld extends EmaWorld {
           echo: call.echo,
         };
       };
+    }
+
+    // Setup Forward WebSocket Client if WebSocket gateway URL is provided
+    const wsUrl =
+      options.gatewayWsUrl ||
+      (this.gatewayUrl?.startsWith("ws://") || this.gatewayUrl?.startsWith("wss://")
+        ? this.gatewayUrl
+        : undefined);
+    if (wsUrl) {
+      this.wsClient = new OneBotWebSocketClient({
+        wsUrl,
+        token: this.gatewayToken,
+        headers: this.gatewayHeaders,
+      });
     }
 
     this.initSqlite();
@@ -830,13 +865,34 @@ export class QQWorld extends EmaWorld {
     this.active = true;
     this.activeCtx = ctx;
 
+    // Start forward WebSocket connection to remote or reverse-proxied gateway if configured
+    if (this.wsClient && !this.passive) {
+      this.wsClient.onEvent((event) => {
+        this.ingestEvent(event).catch((err) => {
+          console.error("[QQWorld] Error ingesting WebSocket event:", err);
+        });
+      });
+      this.wsClient.connect();
+    }
+
+    // Auto-discover bot ID & nickname from gateway if connected to a remote or reverse-proxied gateway
+    if (this.autoDiscoverGateway && this.gatewayUrl && !this.passive) {
+      queryGatewayLoginInfo(this.apiCaller)
+        .then((info) => {
+          if (info?.userId && !this.selfId) {
+            this.selfId = info.userId;
+          }
+        })
+        .catch(() => {});
+    }
+
     const registryHandle = ctx.registry.register("qq", this);
 
     const routePattern = `${this.routePrefix}/*`;
     const routeHandler = async (routeCtx: EmaRouteContext) => {
       const subpath = routeCtx.path.replace(new RegExp(`^${this.routePrefix}/?`), "");
 
-      // 1. Root & Parts List
+      // 1. Root & Parts List (filtered by authorization)
       if (subpath === "" || subpath === "parts") {
         return {
           world: "qq",
@@ -847,6 +903,10 @@ export class QQWorld extends EmaWorld {
       // 2. Specific Part Lookup
       if (subpath.startsWith("parts/")) {
         const partId = decodeURIComponent(subpath.replace(/^parts\//, ""));
+        const authCheck = this.authManager.canQueryPart(partId);
+        if (!authCheck.authorized) {
+          throw new QQAuthorizationError(authCheck.reason || `Part query forbidden: ${partId}`);
+        }
         const part =
           this.parts.get(partId) ||
           this.parts.get(`group:${partId}`) ||
@@ -865,10 +925,14 @@ export class QQWorld extends EmaWorld {
         if (!msg) {
           throw new Error(`Message not found: ${id}`);
         }
+        const authCheck = this.authManager.canQueryPart(msg.partId);
+        if (!authCheck.authorized) {
+          throw new QQAuthorizationError(authCheck.reason || `Message query forbidden`);
+        }
         return msg;
       }
 
-      // 4. RFC-0002 Social Channels Listing
+      // 4. RFC-0002 Social Channels Listing (filtered by authorization)
       if (subpath === "channels") {
         return {
           world: "qq",
@@ -881,6 +945,10 @@ export class QQWorld extends EmaWorld {
         const channelSubpath = decodeURIComponent(subpath.replace(/^channels\//, ""));
         if (channelSubpath.endsWith("/items")) {
           const rawChannelId = channelSubpath.replace(/\/items$/, "");
+          const authCheck = this.authManager.canQueryChannel(rawChannelId);
+          if (!authCheck.authorized) {
+            throw new QQAuthorizationError(authCheck.reason || `Channel items query forbidden: ${rawChannelId}`);
+          }
           const channel = this.getSocialChannel(rawChannelId);
           if (!channel) {
             throw new Error(`Channel not found: ${rawChannelId}`);
@@ -896,6 +964,10 @@ export class QQWorld extends EmaWorld {
             items: envelope.items,
           };
         } else {
+          const authCheck = this.authManager.canQueryChannel(channelSubpath);
+          if (!authCheck.authorized) {
+            throw new QQAuthorizationError(authCheck.reason || `Channel query forbidden: ${channelSubpath}`);
+          }
           const channel = this.getSocialChannel(channelSubpath);
           if (!channel) {
             throw new Error(`Channel not found: ${channelSubpath}`);
@@ -938,6 +1010,10 @@ export class QQWorld extends EmaWorld {
         if (!doc) {
           throw new Error(`Action not found: ${actionName}`);
         }
+        if (routeCtx.method === "POST") {
+          const body = (routeCtx.body || {}) as Record<string, unknown>;
+          return await this.executeAction(actionName, body);
+        }
         return doc;
       }
 
@@ -949,6 +1025,10 @@ export class QQWorld extends EmaWorld {
       // 10. Relational Intimacy Inspection & Updates
       if (subpath.startsWith("intimacy/")) {
         const userId = decodeURIComponent(subpath.replace(/^intimacy\//, ""));
+        const authCheck = this.authManager.canQueryPart(`private:${userId}`);
+        if (!authCheck.authorized) {
+          throw new QQAuthorizationError(authCheck.reason || `Intimacy query forbidden for user ${userId}`);
+        }
         if (routeCtx.method === "POST" && routeCtx.body && typeof routeCtx.body === "object") {
           return this.setIntimacy(userId, routeCtx.body as Partial<UserIntimacyProfile>);
         }
@@ -957,6 +1037,21 @@ export class QQWorld extends EmaWorld {
 
       // 11. OneBot 11 Webhook / HTTP Event Ingestion
       if (subpath === "event" || subpath === "webhook") {
+        if (this.webhookSecret && routeCtx.headers) {
+          const h = routeCtx.headers as any;
+          const sig: string | undefined =
+            typeof h.get === "function"
+              ? h.get("x-signature") || h.get("X-Signature")
+              : h["x-signature"] || h["X-Signature"];
+          const raw =
+            typeof routeCtx.body === "string" ? routeCtx.body : JSON.stringify(routeCtx.body || {});
+          if (!verifyOneBotWebhookSignature(raw, sig, this.webhookSecret)) {
+            return {
+              status: "error",
+              error: "Invalid webhook signature",
+            };
+          }
+        }
         const body = (routeCtx.body || {}) as OneBotEvent;
         const input = await this.ingestEvent(body);
         return {
@@ -966,17 +1061,37 @@ export class QQWorld extends EmaWorld {
         };
       }
 
-      // 12. QQ Login Status Query
-      if (subpath === "login/status") {
-        const loginManager = new QQLoginManager({
-          gatewayUrl: this.gatewayUrl,
-          gatewayToken: this.gatewayToken,
-        });
-        const existing = await loginManager.checkExistingSession();
+      // 12. Authorization Policy Inspection & Dynamic Updates
+      if (subpath === "authorization" || subpath === "auth") {
+        if (routeCtx.method === "POST" && routeCtx.body && typeof routeCtx.body === "object") {
+          const body = routeCtx.body as Record<string, unknown>;
+          if (Array.isArray(body.allowedUsers)) {
+            for (const u of body.allowedUsers) this.authManager.authorizeUser(String(u));
+          }
+          if (Array.isArray(body.allowedGroups)) {
+            for (const g of body.allowedGroups) this.authManager.authorizeGroup(String(g));
+          }
+          if (typeof body.enabled === "boolean") {
+            this.authManager.setEnabled(body.enabled);
+          }
+        }
+        return this.authManager.getStatus();
+      }
+
+      // 13. Gateway / Remote Proxy Status
+      if (subpath === "gateway/status" || subpath === "login/status") {
+        const health = await queryGatewayHealth(this.apiCaller);
         return {
-          isLoggedIn: existing !== null,
-          uin: existing?.uin ?? this.selfId ?? null,
-          nickname: existing?.nickname ?? null,
+          world: "qq",
+          connected: health.connected,
+          mode: this.gatewayUrl ? "remote_gateway" : "mock",
+          gatewayUrl: this.gatewayUrl ?? null,
+          selfId: this.selfId || null,
+          online: health.online,
+          good: health.good,
+          appName: health.appName,
+          appVersion: health.appVersion,
+          error: health.error,
         };
       }
 
@@ -1016,6 +1131,10 @@ export class QQWorld extends EmaWorld {
   dispose(): void {
     this.active = false;
     this.activeCtx = null;
+    if (this.wsClient) {
+      this.wsClient.dispose();
+      this.wsClient = null;
+    }
     if (this.db) {
       try {
         this.insertSeenStmt = null;
@@ -1057,7 +1176,16 @@ export class QQWorld extends EmaWorld {
       return null;
     }
 
-    // 2. Handle Message Events (Private and Group)
+    // 2. Authorization Guard: Check if inbound event is from an authorized friend or group
+    const authCheck = this.authManager.canIngestEvent(event);
+    if (!authCheck.authorized) {
+      if (this.authManager.getStatus().onUnauthorized === "reject") {
+        throw new QQAuthorizationError(authCheck.reason || "Unauthorized event");
+      }
+      return null;
+    }
+
+    // 3. Handle Message Events (Private and Group)
     if (event.post_type === "message") {
       const msgType = event.message_type;
       if (msgType !== "private" && msgType !== "group") {
@@ -1398,6 +1526,16 @@ export class QQWorld extends EmaWorld {
       throw new Error(`Invalid part target identifier: ${id}`);
     }
 
+    // 1b. Authorization Guard: Check if companion is authorized to speak into target group/user
+    const speakCheck = this.authManager.canSpeak(id, isGroup);
+    if (!speakCheck.authorized) {
+      if (this.authManager.getStatus().onUnauthorized === "reject") {
+        throw new QQAuthorizationError(speakCheck.reason || "Speaking refused by authorization");
+      }
+      console.warn(`[QQWorld] Speaking to '${id}' blocked: ${speakCheck.reason}`);
+      return { dispose: () => {} };
+    }
+
     // 2. Parse interaction arguments
     let payload: QQInteractActionPayload = {};
     if (args.length > 0) {
@@ -1578,6 +1716,13 @@ export class QQWorld extends EmaWorld {
     customText?: string,
   ): Promise<{ sent: boolean; reason?: string }> {
     const uId = String(userId).replace(/^(private|dm):/, "");
+
+    // Check authorization first (only authorized friends can receive proactive greetings)
+    const speakCheck = this.authManager.canSpeak(`private:${uId}`, false);
+    if (!speakCheck.authorized) {
+      return { sent: false, reason: "unauthorized_user" };
+    }
+
     const profile = this.getIntimacy(uId);
 
     if (compareIntimacy(profile.stage, "trusted_companion") < 0) {
@@ -1821,14 +1966,18 @@ export class QQWorld extends EmaWorld {
         }
       } catch {}
     }
+    if (!ch) return undefined;
+    if (!this.authManager.canQueryChannel(ch.id).authorized) {
+      return undefined;
+    }
     return ch;
   }
 
   /**
-   * Lists all registered social channels.
+   * Lists all registered social channels (filtered by authorization policy).
    */
   listSocialChannels(): QQChannel[] {
-    return Array.from(this.socialChannels.values());
+    return this.authManager.filterChannels(Array.from(this.socialChannels.values()));
   }
 
   /**
@@ -1904,6 +2053,13 @@ export class QQWorld extends EmaWorld {
    * Lists items for a social channel with relative time grounding.
    */
   listSocialItems(channelId: string, referenceMs: number = Date.now()): EmaChannelItem[] {
+    const authCheck = this.authManager.canQueryChannel(channelId);
+    if (!authCheck.authorized) {
+      throw new QQAuthorizationError(
+        authCheck.reason || `Query forbidden: channel '${channelId}' is not authorized`,
+      );
+    }
+
     const items: EmaChannelItem[] = [];
 
     if (this.db && this.selectSocialItemsByChannelStmt) {
@@ -2076,10 +2232,240 @@ export class QQWorld extends EmaWorld {
   // ==========================================
 
   /**
-   * Lists all monitored and discovered QQ World parts.
+   * Lists all monitored and discovered QQ World parts (filtered by authorization policy).
    */
   listParts(): EmaWorldPart[] {
-    return Array.from(this.parts.values());
+    return this.authManager.filterParts(Array.from(this.parts.values()));
+  }
+
+  /**
+   * Executes a registered action with authorization, rate limit, and privacy guardrails.
+   */
+  async executeAction(
+    actionName: string,
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    assertAgentIdentity(this.env);
+
+    if (actionName === "message.send" || actionName === "message.reply") {
+      const targetId = String(body.targetId || body.channelId || body.partId || "");
+      if (!targetId) {
+        throw new Error("Missing required 'targetId' parameter for message action");
+      }
+      const message = String(body.message || body.text || "");
+      if (!message) {
+        throw new Error("Missing required 'message' text for message action");
+      }
+
+      const isGroup = targetId.startsWith("group:") || targetId.startsWith("qq:group:");
+
+      // Check authorization
+      const authCheck = this.authManager.canSpeak(targetId, isGroup);
+      if (!authCheck.authorized) {
+        throw new QQAuthorizationError(authCheck.reason || "Speaking refused by authorization");
+      }
+
+      // Rate limit check
+      this.checkRateLimit(isGroup ? "group" : "private");
+
+      // Content filter check
+      checkQQContentFilter(
+        message,
+        this.contentFilterConfig,
+        this.bannedWords,
+        this.bannedWordAction,
+      );
+
+      const actor: EmaActor = {
+        id: `actor-qq-${Date.now()}`,
+        name: "Ema Companion",
+        agentId: assertAgentIdentity(this.env),
+        session: (body.session as string) || "default",
+      };
+
+      const payload: QQInteractActionPayload = {
+        text: message,
+        replyTo: body.replyTo as string | number | undefined,
+        at: body.at as Array<string | number> | undefined,
+        images: body.images as string[] | undefined,
+      };
+
+      this.interact(this.activeCtx!, actor, targetId, payload);
+      return {
+        status: "ok",
+        action: actionName,
+        targetId,
+        message,
+      };
+    }
+
+    if (actionName === "notice.poke") {
+      const userId = String(body.userId || body.targetId || "");
+      const groupId = body.groupId ? String(body.groupId) : undefined;
+      if (!userId) {
+        throw new Error("Missing required 'userId' parameter for notice.poke action");
+      }
+
+      if (groupId) {
+        const authCheck = this.authManager.canSpeak(groupId, true);
+        if (!authCheck.authorized) {
+          throw new QQAuthorizationError(
+            authCheck.reason || "Poke forbidden by authorization",
+          );
+        }
+      } else {
+        const authCheck = this.authManager.canSpeak(userId, false);
+        if (!authCheck.authorized) {
+          throw new QQAuthorizationError(
+            authCheck.reason || "Poke forbidden by authorization",
+          );
+        }
+      }
+
+      const params: Record<string, unknown> = {
+        user_id: Number(userId) || userId,
+      };
+      if (groupId) {
+        params.group_id = Number(groupId) || groupId;
+      }
+      const res = await this.apiCaller({
+        action: groupId ? "group_poke" : "friend_poke",
+        params,
+      });
+      return {
+        status: res.status,
+        action: "notice.poke",
+        userId,
+        groupId,
+        data: res.data,
+      };
+    }
+
+    if (actionName === "qzone.post") {
+      const content = String(body.content || body.message || "");
+      if (!content) {
+        throw new Error("Missing required 'content' for qzone.post");
+      }
+      this.checkRateLimit("qzone");
+      checkQQContentFilter(
+        content,
+        this.contentFilterConfig,
+        this.bannedWords,
+        this.bannedWordAction,
+      );
+
+      const res = await this.apiCaller({
+        action: "send_qzone_post",
+        params: { content, images: body.images },
+      });
+      return {
+        status: res.status,
+        action: "qzone.post",
+        content,
+      };
+    }
+
+    if (actionName === "group.card_update") {
+      const groupId = String(body.groupId || "");
+      const card = String(body.card || "");
+      if (!groupId || !card) {
+        throw new Error("Missing required 'groupId' or 'card' for group.card_update");
+      }
+      const authCheck = this.authManager.canSpeak(groupId, true);
+      if (!authCheck.authorized) {
+        throw new QQAuthorizationError(
+          authCheck.reason || "Group card update forbidden by authorization",
+        );
+      }
+
+      checkQQContentFilter(card, this.contentFilterConfig, this.bannedWords, this.bannedWordAction);
+      const res = await this.apiCaller({
+        action: "set_group_card",
+        params: {
+          group_id: Number(groupId) || groupId,
+          user_id: Number(this.selfId) || this.selfId,
+          card,
+        },
+      });
+      return {
+        status: res.status,
+        action: "group.card_update",
+        groupId,
+        card,
+      };
+    }
+
+    throw new Error(`Unsupported action: ${actionName}`);
+  }
+
+  /**
+   * Returns the authorization manager governing access control.
+   */
+  getAuthorizationManager(): QQAuthorizationManager {
+    return this.authManager;
+  }
+
+  /**
+   * Dynamically authorizes a private user / friend.
+   */
+  authorizeUser(userId: string | number): void {
+    this.authManager.authorizeUser(userId);
+  }
+
+  /**
+   * Dynamically authorizes a QQ group.
+   */
+  authorizeGroup(groupId: string | number): void {
+    this.authManager.authorizeGroup(groupId);
+  }
+
+  /**
+   * Revokes authorization for a private user.
+   */
+  revokeUser(userId: string | number): void {
+    this.authManager.revokeUser(userId);
+  }
+
+  /**
+   * Revokes authorization for a QQ group.
+   */
+  revokeGroup(groupId: string | number): void {
+    this.authManager.revokeGroup(groupId);
+  }
+
+  /**
+   * Checks whether a private user / friend is authorized.
+   */
+  isAuthorizedUser(userId: string | number): boolean {
+    return this.authManager.isAuthorizedUser(userId);
+  }
+
+  /**
+   * Checks whether a group is authorized.
+   */
+  isAuthorizedGroup(groupId: string | number): boolean {
+    return this.authManager.isAuthorizedGroup(groupId);
+  }
+
+  /**
+   * Checks gateway health, version, and connectivity status.
+   */
+  async checkGatewayHealth(): Promise<{
+    connected: boolean;
+    online?: boolean;
+    good?: boolean;
+    appName?: string;
+    appVersion?: string;
+    error?: string;
+  }> {
+    return queryGatewayHealth(this.apiCaller);
+  }
+
+  /**
+   * Returns configured gateway URL.
+   */
+  getGatewayUrl(): string | undefined {
+    return this.gatewayUrl;
   }
 
   /**

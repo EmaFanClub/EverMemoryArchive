@@ -144,10 +144,35 @@ export interface QQRateLimitConfig {
   qzoneMaxPerMinute?: number;
 }
 
+export interface QQAuthorizationConfig {
+  /** Enables authorization enforcement (default: true if allowedUsers or allowedGroups are configured, else false) */
+  enabled?: boolean;
+  /** Allowed QQ private user / friend IDs (e.g. ["789012", "user:qq:789012", 789012]) */
+  allowedUsers?: Array<string | number>;
+  /** Allowed QQ group IDs (e.g. ["123456", "group:123456", 123456]) */
+  allowedGroups?: Array<string | number>;
+  /** Admin / owner QQ IDs (always authorized for all queries and speaking) */
+  adminUsers?: Array<string | number>;
+  /**
+   * Whether users inside an authorized group must also be in allowedUsers to query/speak.
+   * - false (default): Anyone in an authorized group can query the companion and trigger responses.
+   * - true: Only users in allowedUsers (or adminUsers) who are also in the authorized group can query/speak.
+   */
+  requireUserAuthInGroups?: boolean;
+  /**
+   * Action when unauthorized query or speak is detected:
+   * - "reject": Throws QQAuthorizationError or returns 403 Forbidden (default).
+   * - "block": Silently ignores / drops inbound events and refuses outbound speaking without throwing.
+   */
+  onUnauthorized?: "reject" | "block";
+  /** Default policy when lists are empty: "allow" | "deny" (default: "allow") */
+  defaultPolicy?: "allow" | "deny";
+}
+
 export interface QQWorldOptions {
-  /** Bot's own QQ account ID (for loop prevention) */
+  /** Bot's own QQ account ID (for loop prevention; auto-discovered from gateway if omitted) */
   selfId?: string | number;
-  /** Primary bot owner QQ IDs (marked with isOwner = true) */
+  /** Primary bot owner QQ IDs (marked with isOwner = true and admin privileges) */
   ownerUids?: Array<string | number>;
   /** Monitored QQ groups, e.g. ["123456"] or ["group:123456"] */
   groups?: Array<string | number>;
@@ -161,10 +186,21 @@ export interface QQWorldOptions {
   routePrefix?: string;
   /** Custom OneBot API caller function */
   apiCaller?: (call: OneBotApiCall) => Promise<OneBotApiResponse> | OneBotApiResponse;
-  /** HTTP gateway URL (e.g. "http://localhost:5700") for default API caller */
+  /**
+   * HTTP/HTTPS or WebSocket gateway URL of Snowluma / OneBot daemon or reverse proxy
+   * (e.g. "http://localhost:5700", "https://snowluma.proxy.domain/api", "ws://127.0.0.1:6700")
+   */
   gatewayUrl?: string;
-  /** HTTP gateway access token */
+  /** Explicit WebSocket gateway URL if separate from HTTP */
+  gatewayWsUrl?: string;
+  /** HTTP gateway access token for Bearer authorization */
   gatewayToken?: string;
+  /** Custom HTTP headers forwarded to reverse-proxied gateway */
+  gatewayHeaders?: Record<string, string>;
+  /** HMAC-SHA1 secret for validating inbound OneBot webhooks (X-Signature: sha1=...) */
+  webhookSecret?: string;
+  /** Auto-discover self_id and bot status from remote gateway on startup (default: true) */
+  autoDiscoverGateway?: boolean;
   /** SQLite database path for persistent seen state and read-through social index (default: ":memory:") */
   dbPath?: string;
   /** Circadian wake hour (0-23, default: 8) */
@@ -183,6 +219,14 @@ export interface QQWorldOptions {
   bannedWordAction?: "reject" | "mask";
   /** Rate limiting configuration */
   rateLimits?: QQRateLimitConfig;
+  /** Configuration authorization for friends and groups */
+  authorization?: QQAuthorizationConfig;
+  /** Convenience shorthand: allowed friend / private user IDs */
+  allowedUsers?: Array<string | number>;
+  /** Convenience shorthand: allowed group IDs */
+  allowedGroups?: Array<string | number>;
+  /** Convenience shorthand: admin user IDs */
+  adminUsers?: Array<string | number>;
   /** Passive mode: mounts routes without active listeners */
   passive?: boolean;
   /** Environment variables (defaults to process.env) */
@@ -213,5 +257,15 @@ export class QQContentFilterError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "QQContentFilterError";
+  }
+}
+
+export class QQAuthorizationError extends Error {
+  readonly status: number = 403;
+  readonly code: string = "ERR_QQ_UNAUTHORIZED";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "QQAuthorizationError";
   }
 }
