@@ -15,6 +15,7 @@ import {
   SimpleEmaRouter,
   PenguinChannelWorld,
   BilibiliWorld,
+  WebWorld,
   BilibiliLoginManager,
   publishBilibiliDynamic,
   parseWatchDuration,
@@ -76,6 +77,10 @@ async function main() {
       dmTargets: ["1001"],
       passive: true,
     });
+    const webWorld = new WebWorld({
+      initialSessions: ["default"],
+      heartbeatIntervalMs: 0,
+    });
 
     const ctx = {
       router,
@@ -85,6 +90,7 @@ async function main() {
 
     const handle = channelWorld.start(ctx);
     const biliHandle = bilibiliWorld.start(ctx);
+    const webHandle = webWorld.start(ctx);
 
     if (sub === "ls") {
       const routes = router.listRoutes();
@@ -93,12 +99,15 @@ async function main() {
           console.log(`PenguinChannelWorld ${r.prefix}`);
         } else if (r.prefix.startsWith("/world/bilibili")) {
           console.log(`BilibiliWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/web")) {
+          console.log(`WebWorld ${r.prefix}`);
         } else {
           console.log(`${r.worldName || "World"} ${r.prefix}`);
         }
       }
       handle.dispose();
       biliHandle.dispose();
+      webHandle.dispose();
       process.exit(0);
     }
 
@@ -110,6 +119,7 @@ async function main() {
         );
         handle.dispose();
         biliHandle.dispose();
+        webHandle.dispose();
         process.exit(1);
       }
 
@@ -118,11 +128,13 @@ async function main() {
         console.log(JSON.stringify(result, null, 2));
         handle.dispose();
         biliHandle.dispose();
+        webHandle.dispose();
         process.exit(0);
       } catch (err) {
         console.error(`Error querying ${targetPath}:`, err.message || err);
         handle.dispose();
         biliHandle.dispose();
+        webHandle.dispose();
         process.exit(1);
       }
     }
