@@ -66,13 +66,21 @@ export function parseMentionInfo(
 
   const isAtAll = atUids.includes("all");
 
-  // Check text-based nickname mentions if not already matched via CQ:at / segment
-  if (!isAtMe && normalizedNicknames.length > 0 && rawText) {
+  // Check text-based nickname and self ID mentions if not already matched via CQ:at / segment
+  if (!isAtMe && rawText) {
     const lowerText = rawText.toLowerCase();
-    for (const nick of normalizedNicknames) {
-      if (lowerText.includes(`@${nick}`)) {
-        isAtMe = true;
-        break;
+    if (selfIdStr && lowerText.includes(`@${selfIdStr.toLowerCase()}`)) {
+      isAtMe = true;
+      if (!atUids.includes(selfIdStr)) {
+        atUids.push(selfIdStr);
+      }
+    }
+    if (!isAtMe && normalizedNicknames.length > 0) {
+      for (const nick of normalizedNicknames) {
+        if (lowerText.includes(`@${nick}`)) {
+          isAtMe = true;
+          break;
+        }
       }
     }
   }

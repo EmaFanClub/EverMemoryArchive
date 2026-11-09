@@ -563,7 +563,7 @@ export class QQWorld extends EmaWorld {
           message_seq: syncedMsg.messageSeq,
           group_id: syncedMsg.groupId ? Number(syncedMsg.groupId) : undefined,
           user_id: Number(syncedMsg.userId) || undefined,
-          message: syncedMsg.content,
+          message: syncedMsg.rawMessage || syncedMsg.content,
           raw_message: syncedMsg.rawMessage || syncedMsg.content,
           time: Math.floor(syncedMsg.timestamp / 1000),
           sender: {
@@ -1413,13 +1413,18 @@ export class QQWorld extends EmaWorld {
         userId: senderIdStr,
       };
 
-      if (typeof event.message === "string") {
-        const parsed = parseCQMessage(event.message, this.selfId, this.nicknames);
+      if (Array.isArray(event.message)) {
+        const parsed = parseSegmentMessage(event.message, this.selfId, this.nicknames);
         content = parsed.content;
         replyTo = parsed.replyTo;
         meta = { ...meta, ...parsed.metadata };
-      } else if (Array.isArray(event.message)) {
-        const parsed = parseSegmentMessage(event.message, this.selfId, this.nicknames);
+      } else if (event.raw_message && event.raw_message.includes("[CQ:")) {
+        const parsed = parseCQMessage(event.raw_message, this.selfId, this.nicknames);
+        content = parsed.content;
+        replyTo = parsed.replyTo;
+        meta = { ...meta, ...parsed.metadata };
+      } else if (typeof event.message === "string") {
+        const parsed = parseCQMessage(event.message, this.selfId, this.nicknames);
         content = parsed.content;
         replyTo = parsed.replyTo;
         meta = { ...meta, ...parsed.metadata };
