@@ -714,4 +714,167 @@ describe("WebWorld (RFC-0001 / node-mw7row3c-pdfz / node-mw7rpkq4-jwez)", () => 
       } catch {}
     });
   });
+
+  describe("9. RFC-0002 Social Media Channel Architecture (Chatroom Channel)", () => {
+    it("indexes EmaNode and WebChannel primitives and serves them via router", async () => {
+      const world = new WebWorld({
+        initialSessions: ["default"],
+        ownerId: "rei",
+        ownerName: "Rei",
+        companionId: "aoi_rei",
+        companionName: "苍星怜",
+        dbPath: ":memory:",
+        env: mockEnv,
+        heartbeatIntervalMs: 0,
+      });
+      world.start(ctx);
+
+      const ownerNode = await router.read<{
+        id: string;
+        world: string;
+        node_kind: string;
+        name: string;
+        channelIds: string[];
+      }>("/world/web/nodes/web:person:rei");
+      expect(ownerNode.id).toBe("web:person:rei");
+      expect(ownerNode.world).toBe("web");
+      expect(ownerNode.node_kind).toBe("person");
+      expect(ownerNode.name).toBe("Rei");
+      expect(ownerNode.channelIds).toContain("web:chatroom:default");
+
+      const botNode = await router.read<{
+        id: string;
+        node_kind: string;
+        name: string;
+      }>("/world/web/nodes/web:bot:aoi_rei");
+      expect(botNode.id).toBe("web:bot:aoi_rei");
+      expect(botNode.node_kind).toBe("bot");
+      expect(botNode.name).toBe("苍星怜");
+
+      const channelsRes = await router.read<{
+        channels: Array<{ id: string; channel_kind: string; name: string }>;
+      }>("/world/web/channels");
+      expect(channelsRes.channels.length).toBeGreaterThanOrEqual(1);
+      expect(channelsRes.channels[0].id).toBe("web:chatroom:default");
+      expect(channelsRes.channels[0].channel_kind).toBe("chatroom");
+
+      const singleChannel = await router.read<{ id: string; channel_kind: string }>(
+        "/world/web/channels/web:chatroom:default",
+      );
+      expect(singleChannel.id).toBe("web:chatroom:default");
+      expect(singleChannel.channel_kind).toBe("chatroom");
+
+      world.dispose();
+    });
+
+    it("supports RFC-0002 channel reading and action posting (session reads channel & posts reply)", async () => {
+      const world = new WebWorld({
+        initialSessions: ["default"],
+        ownerId: "rei",
+        ownerName: "Rei",
+        companionId: "aoi_rei",
+        companionName: "苍星怜",
+        dbPath: ":memory:",
+        env: mockEnv,
+        heartbeatIntervalMs: 0,
+      });
+      world.start(ctx);
+
+      // 1. User posts a message into the chatroom channel
+      const userPostRes = await router.read<{
+        success: boolean;
+        item: { id: string; channelId: string; authorNodeId: string; content: string };
+      }>("/world/web/channels/web:chatroom:default/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderId: "rei",
+          senderName: "Rei",
+          content: "怜，今晚的夜空很清澈呢。",
+        }),
+      });
+      expect(userPostRes.success).toBe(true);
+      expect(userPostRes.item.channelId).toBe("web:chatroom:default");
+      expect(userPostRes.item.authorNodeId).toBe("web:person:rei");
+      expect(userPostRes.item.content).toBe("怜，今晚的夜空很清澈呢。");
+
+      // 2. Agent session reads the chatroom channel items with temporal envelope
+      const channelFeed = await router.read<{
+        context: { time: string; timestampMs: number; timezone?: string };
+        channel: { id: string; channel_kind: string };
+        items: Array<{
+          id: string;
+          authorNodeId: string;
+          content: string;
+          createdAt: string;
+          fetchedAt: string;
+        }>;
+      }>("/world/web/channels/web:chatroom:default/items");
+
+      expect(channelFeed.context.time).toBeDefined();
+      expect(typeof channelFeed.context.timestampMs).toBe("number");
+      expect(channelFeed.channel.id).toBe("web:chatroom:default");
+      expect(channelFeed.items.length).toBe(1);
+      expect(channelFeed.items[0].content).toBe("怜，今晚的夜空很清澈呢。");
+      expect(channelFeed.items[0].createdAt).toContain("ago");
+
+      // 3. Agent session introspects actions and posts reply to the channel via POST /world/web/actions/message.post
+      const actionsList = await router.read<{
+        actions: Array<{ name: string; description: string }>;
+      }>("/world/web/actions");
+      expect(actionsList.actions.map((a) => a.name)).toContain("message.post");
+      expect(actionsList.actions.map((a) => a.name)).toContain("message.reply");
+
+      const actionDoc = await router.read<{
+        name: string;
+        parameters: Record<string, { type: string; required: boolean }>;
+      }>("/world/web/actions/message.post");
+      expect(actionDoc.name).toBe("message.post");
+      expect(actionDoc.parameters.message.required).toBe(true);
+
+      const postReplyRes = await router.read<{
+        success: boolean;
+        action: string;
+        channelId: string;
+        message: string;
+        item: { id: string; authorNodeId: string; content: string; parentItemId?: string };
+      }>("/world/web/actions/message.post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId: "web:chatroom:default",
+          parentItemId: userPostRes.item.id,
+          message: "嗯，微风也很舒服。我泡了热茶，一起坐在窗边看星星吧。",
+        }),
+      });
+
+      expect(postReplyRes.success).toBe(true);
+      expect(postReplyRes.action).toBe("message.post");
+      expect(postReplyRes.channelId).toBe("web:chatroom:default");
+      expect(postReplyRes.item.authorNodeId).toBe("web:bot:aoi_rei");
+      expect(postReplyRes.item.content).toBe(
+        "嗯，微风也很舒服。我泡了热茶，一起坐在窗边看星星吧。",
+      );
+
+      // 4. Verify channel now has both messages in chronological order and item lookup returns replies
+      const updatedFeed = await router.read<{
+        items: Array<{ id: string; authorNodeId: string; content: string }>;
+      }>("/world/web/channels/web:chatroom:default/items");
+      expect(updatedFeed.items.length).toBe(2);
+      expect(updatedFeed.items[0].authorNodeId).toBe("web:person:rei");
+      expect(updatedFeed.items[1].authorNodeId).toBe("web:bot:aoi_rei");
+
+      const itemWithReplies = await router.read<{
+        id: string;
+        replies: Array<{ id: string; content: string }>;
+      }>(`/world/web/items/${userPostRes.item.id}`);
+      expect(itemWithReplies.id).toBe(userPostRes.item.id);
+      expect(itemWithReplies.replies.length).toBe(1);
+      expect(itemWithReplies.replies[0].content).toBe(
+        "嗯，微风也很舒服。我泡了热茶，一起坐在窗边看星星吧。",
+      );
+
+      world.dispose();
+    });
+  });
 });

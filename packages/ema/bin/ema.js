@@ -5,11 +5,13 @@
  * Conforms to RFC-0001 (Ema Worlds and Actors).
  *
  * Commands:
- *   ema.js world ls
- *   ema.js world get <path>
+ *   ema.js world ls [--db <path>]
+ *   ema.js world get <path> [--db <path>]
+ *   ema.js world post <path> [jsonBody] [--channel <id>] [--message <text>] [--db <path>]
  *   ema.js run [--channel <id>] [--session <id>] [--watch] [--watch-for <duration>] [--poll-interval <ms>]
  */
 
+import path from "node:path";
 import {
   createMinimalPrototype,
   SimpleEmaRouter,
@@ -25,14 +27,18 @@ import {
 import { execFileSync } from "node:child_process";
 
 function printUsage() {
-  console.log(`EMA Command-Line Interface (RFC-0001)
+  console.log(`EMA Command-Line Interface (RFC-0001 / RFC-0002)
 
 Usage:
-  ema.js world ls
+  ema.js world ls [--db <path>]
     List active worlds and their mounted route prefixes
 
-  ema.js world get <path>
-    Query resources from the EMA Router (e.g. /world/channel/parts)
+  ema.js world get <path> [--db <path>]
+    Query resources from the EMA Router (e.g. /world/web/channels/web:chatroom:default/items)
+
+  ema.js world post <path> [jsonBody] [--channel <id>] [--message <text>] [--db <path>]
+    Dispatch an action or post an item to an EMA Router endpoint
+    (e.g. ema.js world post /world/web/actions/message.post '{"channelId":"web:chatroom:default","message":"你好！"}')
 
   ema.js bilibili login [options]
     Interactive Playwright QR code login for Bilibili account authentication
@@ -65,6 +71,27 @@ async function main() {
   if (command === "world") {
     const sub = args[1];
 
+    // Parse optional flags (--db, --channel, --message, --parent)
+    let webDbPath = process.env.EMA_WEB_DB_PATH || ":memory:";
+    let flagChannel;
+    let flagMessage;
+    let flagParent;
+    const positional = [];
+
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === "--db" && i + 1 < args.length) {
+        webDbPath = args[++i];
+      } else if ((args[i] === "--channel" || args[i] === "--channel-id") && i + 1 < args.length) {
+        flagChannel = args[++i];
+      } else if ((args[i] === "--message" || args[i] === "--text" || args[i] === "-m") && i + 1 < args.length) {
+        flagMessage = args[++i];
+      } else if ((args[i] === "--parent" || args[i] === "--reply-to") && i + 1 < args.length) {
+        flagParent = args[++i];
+      } else {
+        positional.push(args[i]);
+      }
+    }
+
     // Instantiate prototype router & worlds
     const router = new SimpleEmaRouter();
     const channelWorld = new PenguinChannelWorld({
@@ -79,6 +106,7 @@ async function main() {
     });
     const webWorld = new WebWorld({
       initialSessions: ["default"],
+      dbPath: webDbPath,
       heartbeatIntervalMs: 0,
     });
 
@@ -91,6 +119,12 @@ async function main() {
     const handle = channelWorld.start(ctx);
     const biliHandle = bilibiliWorld.start(ctx);
     const webHandle = webWorld.start(ctx);
+
+    const disposeAll = () => {
+      handle.dispose();
+      biliHandle.dispose();
+      webHandle.dispose();
+    };
 
     if (sub === "ls") {
       const routes = router.listRoutes();
@@ -105,40 +139,71 @@ async function main() {
           console.log(`${r.worldName || "World"} ${r.prefix}`);
         }
       }
-      handle.dispose();
-      biliHandle.dispose();
-      webHandle.dispose();
+      disposeAll();
       process.exit(0);
     }
 
     if (sub === "get") {
-      const targetPath = args[2];
+      const targetPath = positional[0];
       if (!targetPath) {
         console.error(
-          "Error: Missing path argument for 'world get'. Example: ema.js world get /world/channel/parts",
+          "Error: Missing path argument for 'world get'. Example: ema.js world get /world/web/channels/web:chatroom:default/items",
         );
-        handle.dispose();
-        biliHandle.dispose();
-        webHandle.dispose();
+        disposeAll();
         process.exit(1);
       }
 
       try {
         const result = await router.read(targetPath);
         console.log(JSON.stringify(result, null, 2));
-        handle.dispose();
-        biliHandle.dispose();
-        webHandle.dispose();
+        disposeAll();
         process.exit(0);
       } catch (err) {
         console.error(`Error querying ${targetPath}:`, err.message || err);
-        handle.dispose();
-        biliHandle.dispose();
-        webHandle.dispose();
+        disposeAll();
         process.exit(1);
       }
     }
 
+    if (sub === "post") {
+      const targetPath = positional[0];
+      if (!targetPath) {
+        console.error(
+          "Error: Missing path argument for 'world post'. Example: ema.js world post /world/web/actions/message.post '{\"channelId\":\"web:chatroom:default\",\"message\":\"Hello\"}'",
+        );
+        disposeAll();
+        process.exit(1);
+      }
+
+      let payloadObj = {};
+      if (positional[1]) {
+        try {
+          payloadObj = JSON.parse(positional[1]);
+        } catch {
+          payloadObj = { message: positional[1] };
+        }
+      }
+      if (flagChannel !== undefined) payloadObj.channelId = flagChannel;
+      if (flagMessage !== undefined) payloadObj.message = flagMessage;
+      if (flagParent !== undefined) payloadObj.parentItemId = flagParent;
+
+      try {
+        const result = await router.read(targetPath, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payloadObj),
+        });
+        console.log(JSON.stringify(result, null, 2));
+        disposeAll();
+        process.exit(0);
+      } catch (err) {
+        console.error(`Error posting to ${targetPath}:`, err.message || err);
+        disposeAll();
+        process.exit(1);
+      }
+    }
+
+    disposeAll();
     printUsage();
     process.exit(1);
   }

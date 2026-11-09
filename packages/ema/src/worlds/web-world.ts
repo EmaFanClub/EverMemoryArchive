@@ -2,7 +2,10 @@
  * @prism-shadow/ema - WebWorld
  *
  * Web / WebSocket Companion Portal Input and Action Adapter for EverMemoryArchive.
- * Conforms to RFC-0001 (EmaWorld and EmaActor interfaces).
+ * Conforms to:
+ * - RFC-0001 (EmaWorld and EmaActor interfaces, multi-part topology, transactional input batching)
+ * - RFC-0002 (Social Media Channel Architecture: EmaNode, EmaChannel, EmaChannelItem,
+ *   Read-Through SQLite indexing, anchored temporal perception, and hierarchical action introspection)
  *
  * Board Task Associations:
  * - Input Node: node-mw7row3c-pdfz
@@ -25,9 +28,31 @@ import {
   type Disposable,
   type EmaWorldPart,
   type Id,
+  type EmaRouteContext,
   Interface,
 } from "../interfaces.js";
+import {
+  type EmaNode,
+  type EmaChannel,
+  type EmaChannelItem,
+  type EmaTemporalContext,
+  type EmaTemporalEnvelope,
+  type EmaActionDoc,
+  createTemporalEnvelope,
+  formatAgentRelativeTime,
+} from "../channel.js";
 import { assertAgentIdentity } from "../minimal.js";
+
+// ============================================================================
+// RFC-0002 Channel Types for WebWorld
+// ============================================================================
+
+export type WebChannelKind = "chatroom" | "session";
+
+export interface WebChannel extends EmaChannel {
+  readonly world: "web";
+  readonly channel_kind: WebChannelKind;
+}
 
 // ============================================================================
 // Client Metadata & Inbound Types (node-mw7row3c-pdfz)
@@ -183,7 +208,10 @@ export interface WebCustomCard {
 }
 
 export type WebUiCard =
-  WebMemoryGraphCard | WebDiaryPreviewCard | WebRelationshipTimelineCard | WebCustomCard;
+  | WebMemoryGraphCard
+  | WebDiaryPreviewCard
+  | WebRelationshipTimelineCard
+  | WebCustomCard;
 
 export interface WebOutboundEvent {
   /** Monotonically increasing sequence ID per session */
@@ -235,8 +263,18 @@ export interface WebSessionPart extends EmaWorldPart {
 export interface WebWorldOptions {
   /** Route mount prefix (default: "/world/web") */
   routePrefix?: string;
-  /** Initial session part IDs to register (e.g. ["default"]) */
+  /** Initial session/chatroom part IDs to register (e.g. ["default"]) */
   initialSessions?: string[];
+  /** Owner user ID (default: "owner") */
+  ownerId?: string;
+  /** Owner display name (default: "Rei") */
+  ownerName?: string;
+  /** Companion actor ID (default: "aoi_rei") */
+  companionId?: string;
+  /** Companion display name (default: "苍星怜") */
+  companionName?: string;
+  /** Default timezone for temporal envelopes (default: "UTC") */
+  timezone?: string;
   /** SQLite database path for persistent seen state and sessions (defaults to ":memory:") */
   dbPath?: string;
   /** Circular buffer capacity for outbound events per session part (default: 100) */
@@ -261,12 +299,22 @@ export class WebWorld extends EmaWorld {
   private env: Record<string, string | undefined>;
   private requireAgentIdentity: boolean;
   private dbPath: string;
+  private ownerId: string;
+  private ownerName: string;
+  private companionId: string;
+  private companionName: string;
+  private timezone: string;
 
   private sessions: Map<string, WebSessionPart> = new Map();
   private eventBuffers: Map<string, WebOutboundEvent[]> = new Map();
   private sessionSeqMap: Map<string, number> = new Map();
   private listeners: Map<string, Set<(event: WebOutboundEvent) => void>> = new Map();
   private messageHistory: Map<string, EmaInput | WebOutboundEvent> = new Map();
+
+  // RFC-0002 in-memory fallback maps
+  private fallbackNodes: Map<string, EmaNode> = new Map();
+  private fallbackChannels: Map<string, WebChannel> = new Map();
+  private fallbackItems: Map<string, EmaChannelItem> = new Map();
 
   private active = false;
   private ctx: EmaCtx | null = null;
@@ -277,6 +325,18 @@ export class WebWorld extends EmaWorld {
   private updateSessionStmt: StatementSync | null = null;
   private insertEventStmt: StatementSync | null = null;
 
+  // RFC-0002 SQLite prepared statements
+  private insertSocialNodeStmt: StatementSync | null = null;
+  private selectSocialNodeStmt: StatementSync | null = null;
+  private selectSocialNodeByHandleStmt: StatementSync | null = null;
+  private insertSocialChannelStmt: StatementSync | null = null;
+  private selectSocialChannelStmt: StatementSync | null = null;
+  private selectAllSocialChannelsStmt: StatementSync | null = null;
+  private insertSocialItemStmt: StatementSync | null = null;
+  private selectSocialItemStmt: StatementSync | null = null;
+  private selectSocialItemsByChannelStmt: StatementSync | null = null;
+  private selectSocialRepliesStmt: StatementSync | null = null;
+
   constructor(options: WebWorldOptions = {}) {
     super();
     this.routePrefix = (options.routePrefix ?? "/world/web").replace(/\/+$/, "");
@@ -284,9 +344,15 @@ export class WebWorld extends EmaWorld {
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30000;
     this.env = options.env ?? process.env;
     this.requireAgentIdentity = options.requireAgentIdentity ?? Boolean(this.env.PENGUIN_AGENT_ID);
-    this.dbPath = options.dbPath ?? ":memory:";
+    this.dbPath = options.dbPath ?? this.env.EMA_WEB_DB_PATH ?? ":memory:";
+    this.ownerId = options.ownerId ?? "owner";
+    this.ownerName = options.ownerName ?? "Rei";
+    this.companionId = options.companionId ?? "aoi_rei";
+    this.companionName = options.companionName ?? "苍星怜";
+    this.timezone = options.timezone ?? "UTC";
 
     this.initSqlite();
+    this.initSocialPrimitives(options.initialSessions ?? ["default"]);
 
     // Register initial sessions if provided
     if (options.initialSessions) {
@@ -297,7 +363,7 @@ export class WebWorld extends EmaWorld {
   }
 
   // ==========================================================================
-  // Database & State Management
+  // Database & State Management (RFC-0001 + RFC-0002)
   // ==========================================================================
 
   private initSqlite(): void {
@@ -333,6 +399,42 @@ export class WebWorld extends EmaWorld {
           timestamp INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_web_events_part ON web_events(part_id, seq_id);
+
+        CREATE TABLE IF NOT EXISTS seen_social_nodes (
+          id TEXT PRIMARY KEY,
+          world TEXT NOT NULL,
+          node_kind TEXT NOT NULL,
+          name TEXT NOT NULL,
+          handle TEXT,
+          avatar_url TEXT,
+          metadata_json TEXT,
+          fetched_at_ms INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS seen_social_channels (
+          id TEXT PRIMARY KEY,
+          world TEXT NOT NULL,
+          channel_kind TEXT NOT NULL,
+          owner_node_id TEXT,
+          name TEXT NOT NULL,
+          description TEXT,
+          linked_channels_json TEXT,
+          metadata_json TEXT,
+          fetched_at_ms INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS seen_social_items (
+          id TEXT PRIMARY KEY,
+          channel_id TEXT NOT NULL,
+          author_node_id TEXT NOT NULL,
+          name TEXT,
+          content TEXT NOT NULL,
+          created_at_iso TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          fetched_at_ms INTEGER NOT NULL,
+          parent_item_id TEXT,
+          url TEXT,
+          metadata_json TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_social_items_channel ON seen_social_items(channel_id, created_at_ms DESC);
       `);
 
       this.insertSessionStmt = this.db.prepare(`
@@ -351,9 +453,106 @@ export class WebWorld extends EmaWorld {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
+      this.insertSocialNodeStmt = this.db.prepare(
+        `INSERT INTO seen_social_nodes (id, world, node_kind, name, handle, avatar_url, metadata_json, fetched_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name=excluded.name,
+           handle=COALESCE(excluded.handle, seen_social_nodes.handle),
+           avatar_url=COALESCE(excluded.avatar_url, seen_social_nodes.avatar_url),
+           metadata_json=COALESCE(excluded.metadata_json, seen_social_nodes.metadata_json),
+           fetched_at_ms=excluded.fetched_at_ms`,
+      );
+      this.selectSocialNodeStmt = this.db.prepare(
+        "SELECT * FROM seen_social_nodes WHERE id = ?",
+      );
+      this.selectSocialNodeByHandleStmt = this.db.prepare(
+        "SELECT * FROM seen_social_nodes WHERE handle = ?",
+      );
+
+      this.insertSocialChannelStmt = this.db.prepare(
+        `INSERT INTO seen_social_channels (id, world, channel_kind, owner_node_id, name, description, linked_channels_json, metadata_json, fetched_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name=excluded.name,
+           description=COALESCE(excluded.description, seen_social_channels.description),
+           linked_channels_json=COALESCE(excluded.linked_channels_json, seen_social_channels.linked_channels_json),
+           metadata_json=COALESCE(excluded.metadata_json, seen_social_channels.metadata_json),
+           fetched_at_ms=excluded.fetched_at_ms`,
+      );
+      this.selectSocialChannelStmt = this.db.prepare(
+        "SELECT * FROM seen_social_channels WHERE id = ?",
+      );
+      this.selectAllSocialChannelsStmt = this.db.prepare(
+        "SELECT * FROM seen_social_channels",
+      );
+
+      this.insertSocialItemStmt = this.db.prepare(
+        `INSERT INTO seen_social_items (id, channel_id, author_node_id, name, content, created_at_iso, created_at_ms, fetched_at_ms, parent_item_id, url, metadata_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           content=excluded.content,
+           name=COALESCE(excluded.name, seen_social_items.name),
+           parent_item_id=COALESCE(excluded.parent_item_id, seen_social_items.parent_item_id),
+           url=COALESCE(excluded.url, seen_social_items.url),
+           metadata_json=COALESCE(excluded.metadata_json, seen_social_items.metadata_json),
+           fetched_at_ms=excluded.fetched_at_ms`,
+      );
+      this.selectSocialItemStmt = this.db.prepare(
+        "SELECT * FROM seen_social_items WHERE id = ?",
+      );
+      this.selectSocialItemsByChannelStmt = this.db.prepare(
+        "SELECT * FROM seen_social_items WHERE channel_id = ? ORDER BY created_at_ms ASC",
+      );
+      this.selectSocialRepliesStmt = this.db.prepare(
+        "SELECT * FROM seen_social_items WHERE parent_item_id = ? ORDER BY created_at_ms ASC",
+      );
+
       this.loadPersistedSessions();
     } catch (err) {
       console.error("[WebWorld] Failed to initialize SQLite database:", err);
+    }
+  }
+
+  private initSocialPrimitives(initialSessions: string[]): void {
+    const ownerNodeId = `web:person:${this.ownerId}`;
+    const companionNodeId = `web:bot:${this.companionId}`;
+    const channelIds = (initialSessions.length > 0 ? initialSessions : ["default"]).map((s) =>
+      this.normalizeChannelId(s),
+    );
+
+    this.indexSocialNode({
+      id: ownerNodeId,
+      world: "web",
+      node_kind: "person",
+      name: this.ownerName,
+      handle: this.ownerId,
+      channelIds,
+      metadata: { isOwner: true },
+    });
+
+    this.indexSocialNode({
+      id: companionNodeId,
+      world: "web",
+      node_kind: "bot",
+      name: this.companionName,
+      handle: this.companionId,
+      channelIds,
+      metadata: { isCompanion: true },
+    });
+
+    for (const chId of channelIds) {
+      const shortId = this.extractSessionId(chId);
+      this.indexSocialChannel({
+        id: chId,
+        world: "web",
+        channel_kind: "chatroom",
+        ownerNodeId,
+        name: shortId === "default" ? `${this.companionName}的聊天室` : `Web Chatroom (${shortId})`,
+        description: `Web companion chatroom channel (${shortId})`,
+        linkedChannelIds: channelIds.filter((id) => id !== chId),
+        metadata: { sessionId: shortId },
+      });
     }
   }
 
@@ -439,7 +638,7 @@ export class WebWorld extends EmaWorld {
   }
 
   // ==========================================================================
-  // Session & Part Normalization
+  // Session, Part & Channel ID Normalization
   // ==========================================================================
 
   /**
@@ -450,6 +649,12 @@ export class WebWorld extends EmaWorld {
     if (clean.startsWith("web:session:")) {
       return clean;
     }
+    if (clean.startsWith("web:chatroom:")) {
+      return `web:session:${clean.replace(/^web:chatroom:/, "")}`;
+    }
+    if (clean.startsWith("chatroom:")) {
+      return `web:session:${clean.replace(/^chatroom:/, "")}`;
+    }
     if (clean.startsWith("web:")) {
       return `web:session:${clean.replace(/^web:/, "")}`;
     }
@@ -457,10 +662,467 @@ export class WebWorld extends EmaWorld {
   }
 
   /**
-   * Extracts the raw session ID from a Part ID.
+   * Normalizes an ID into a canonical RFC-0002 Channel ID (`web:chatroom:<id>`).
    */
-  public extractSessionId(partId: string): string {
-    return partId.replace(/^web:session:/, "").replace(/^web:/, "");
+  public normalizeChannelId(id: string): string {
+    const clean = id.trim();
+    if (clean.startsWith("web:chatroom:")) {
+      return clean;
+    }
+    if (clean.startsWith("web:session:")) {
+      return `web:chatroom:${clean.replace(/^web:session:/, "")}`;
+    }
+    if (clean.startsWith("chatroom:")) {
+      return `web:chatroom:${clean.replace(/^chatroom:/, "")}`;
+    }
+    if (clean.startsWith("web:")) {
+      return `web:chatroom:${clean.replace(/^web:/, "")}`;
+    }
+    return `web:chatroom:${clean}`;
+  }
+
+  /**
+   * Extracts the raw session ID from a Part ID or Channel ID.
+   */
+  public extractSessionId(partOrChannelId: string): string {
+    return partOrChannelId
+      .replace(/^web:session:/, "")
+      .replace(/^web:chatroom:/, "")
+      .replace(/^chatroom:/, "")
+      .replace(/^web:/, "");
+  }
+
+  // ==========================================================================
+  // RFC-0002 Social Media Primitives (Nodes, Channels, Items, Actions)
+  // ==========================================================================
+
+  public indexSocialNode(node: EmaNode): EmaNode {
+    const fetchedAtMs = Date.now();
+    if (this.db && this.insertSocialNodeStmt) {
+      try {
+        this.insertSocialNodeStmt.run(
+          node.id,
+          node.world,
+          node.node_kind,
+          node.name,
+          node.handle ?? null,
+          node.avatarUrl ?? null,
+          node.metadata ? JSON.stringify(node.metadata) : null,
+          fetchedAtMs,
+        );
+      } catch (err) {
+        console.error("[WebWorld] Failed to insert social node:", err);
+      }
+    }
+    this.fallbackNodes.set(node.id, node);
+    return node;
+  }
+
+  public getSocialNode(id: string): EmaNode | null {
+    if (this.db && this.selectSocialNodeStmt) {
+      try {
+        let row = this.selectSocialNodeStmt.get(id) as Record<string, unknown> | undefined;
+        if (!row && !id.startsWith("web:")) {
+          row =
+            (this.selectSocialNodeStmt.get(`web:person:${id}`) as
+              | Record<string, unknown>
+              | undefined) ??
+            (this.selectSocialNodeStmt.get(`web:bot:${id}`) as Record<string, unknown> | undefined);
+        }
+        if (!row && this.selectSocialNodeByHandleStmt) {
+          row = this.selectSocialNodeByHandleStmt.get(id) as Record<string, unknown> | undefined;
+        }
+        if (row) {
+          const channelRows = this.selectAllSocialChannelsStmt?.all() as
+            | Array<Record<string, unknown>>
+            | undefined;
+          const channelIds = (channelRows || [])
+            .filter((c) => c.owner_node_id === row!.id)
+            .map((c) => String(c.id));
+
+          return {
+            id: String(row.id),
+            world: String(row.world),
+            node_kind: String(row.node_kind),
+            name: String(row.name),
+            handle: row.handle ? String(row.handle) : undefined,
+            avatarUrl: row.avatar_url ? String(row.avatar_url) : undefined,
+            channelIds: channelIds.length > 0 ? channelIds : undefined,
+            metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
+          };
+        }
+      } catch (err) {
+        console.error("[WebWorld] Failed to get social node:", err);
+      }
+    }
+    return (
+      this.fallbackNodes.get(id) ||
+      this.fallbackNodes.get(`web:person:${id}`) ||
+      this.fallbackNodes.get(`web:bot:${id}`) ||
+      null
+    );
+  }
+
+  public indexSocialChannel(channel: WebChannel): WebChannel {
+    const fetchedAtMs = Date.now();
+    if (this.db && this.insertSocialChannelStmt) {
+      try {
+        this.insertSocialChannelStmt.run(
+          channel.id,
+          channel.world,
+          channel.channel_kind,
+          channel.ownerNodeId ?? null,
+          channel.name,
+          channel.description ?? null,
+          channel.linkedChannelIds ? JSON.stringify(channel.linkedChannelIds) : null,
+          channel.metadata ? JSON.stringify(channel.metadata) : null,
+          fetchedAtMs,
+        );
+      } catch (err) {
+        console.error("[WebWorld] Failed to insert social channel:", err);
+      }
+    }
+    this.fallbackChannels.set(channel.id, channel);
+    return channel;
+  }
+
+  public listSocialChannels(): WebChannel[] {
+    if (this.db && this.selectAllSocialChannelsStmt) {
+      try {
+        const rows = this.selectAllSocialChannelsStmt.all() as Array<Record<string, unknown>>;
+        if (rows && rows.length > 0) {
+          return rows.map((row) => ({
+            id: String(row.id),
+            world: "web" as const,
+            channel_kind: String(row.channel_kind) as WebChannelKind,
+            ownerNodeId: row.owner_node_id ? String(row.owner_node_id) : undefined,
+            name: String(row.name),
+            description: row.description ? String(row.description) : undefined,
+            linkedChannelIds: row.linked_channels_json
+              ? JSON.parse(String(row.linked_channels_json))
+              : undefined,
+            metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
+          }));
+        }
+      } catch (err) {
+        console.error("[WebWorld] Failed to list social channels:", err);
+      }
+    }
+    return [...this.fallbackChannels.values()];
+  }
+
+  public getSocialChannel(id: string): WebChannel | null {
+    const channels = this.listSocialChannels();
+    const canonical = this.normalizeChannelId(id);
+    const shortId = this.extractSessionId(id);
+    return (
+      channels.find(
+        (c) =>
+          c.id === id ||
+          c.id === canonical ||
+          this.extractSessionId(c.id) === shortId,
+      ) || null
+    );
+  }
+
+  public indexSocialItem(item: {
+    id: string;
+    channelId: string;
+    authorNodeId: string;
+    name?: string;
+    content: string;
+    createdAtIso?: string;
+    createdAtMs?: number;
+    fetchedAtMs?: number;
+    parentItemId?: string;
+    url?: string;
+    metadata?: Record<string, unknown>;
+  }): EmaChannelItem {
+    const canonicalChannelId = this.normalizeChannelId(item.channelId);
+    const shortId = this.extractSessionId(canonicalChannelId);
+
+    // Ensure channel exists
+    if (!this.getSocialChannel(canonicalChannelId)) {
+      this.indexSocialChannel({
+        id: canonicalChannelId,
+        world: "web",
+        channel_kind: "chatroom",
+        ownerNodeId: `web:person:${this.ownerId}`,
+        name: shortId === "default" ? `${this.companionName}的聊天室` : `Web Chatroom (${shortId})`,
+        description: `Web companion chatroom channel (${shortId})`,
+        metadata: { sessionId: shortId },
+      });
+    }
+
+    const createdAtMs =
+      item.createdAtMs ??
+      (item.createdAtIso ? new Date(item.createdAtIso).getTime() : Date.now());
+    const createdAtIso = item.createdAtIso ?? new Date(createdAtMs).toISOString();
+    const fetchedAtMs = item.fetchedAtMs ?? Date.now();
+
+    if (this.db && this.insertSocialItemStmt) {
+      try {
+        this.insertSocialItemStmt.run(
+          item.id,
+          canonicalChannelId,
+          item.authorNodeId,
+          item.name ?? null,
+          item.content,
+          createdAtIso,
+          createdAtMs,
+          fetchedAtMs,
+          item.parentItemId ?? null,
+          item.url ?? null,
+          item.metadata ? JSON.stringify(item.metadata) : null,
+        );
+      } catch (err) {
+        console.error("[WebWorld] Failed to insert social item:", err);
+      }
+    }
+
+    const resultItem: EmaChannelItem = {
+      id: item.id,
+      channelId: canonicalChannelId,
+      authorNodeId: item.authorNodeId,
+      name: item.name,
+      content: item.content,
+      createdAtIso,
+      createdAt: formatAgentRelativeTime(createdAtMs, fetchedAtMs),
+      fetchedAtMs,
+      fetchedAt: formatAgentRelativeTime(fetchedAtMs, fetchedAtMs),
+      parentItemId: item.parentItemId,
+      url: item.url,
+      metadata: item.metadata,
+    };
+    this.fallbackItems.set(item.id, resultItem);
+    return resultItem;
+  }
+
+  public listSocialItems(channelId: string, referenceMs: number = Date.now()): EmaChannelItem[] {
+    const canonicalChannelId = this.normalizeChannelId(channelId);
+    if (this.db && this.selectSocialItemsByChannelStmt) {
+      try {
+        const rows = this.selectSocialItemsByChannelStmt.all(canonicalChannelId) as Array<
+          Record<string, unknown>
+        >;
+        if (rows) {
+          return rows.map((row) => this.mapRowToChannelItem(row, referenceMs));
+        }
+      } catch (err) {
+        console.error("[WebWorld] Failed to list social items:", err);
+      }
+    }
+    return [...this.fallbackItems.values()]
+      .filter((i) => i.channelId === canonicalChannelId)
+      .sort((a, b) => new Date(a.createdAtIso).getTime() - new Date(b.createdAtIso).getTime())
+      .map((i) => ({
+        ...i,
+        createdAt: formatAgentRelativeTime(new Date(i.createdAtIso).getTime(), referenceMs),
+        fetchedAt: formatAgentRelativeTime(i.fetchedAtMs, referenceMs),
+      }));
+  }
+
+  public getSocialItem(id: string, referenceMs: number = Date.now()): EmaChannelItem | null {
+    if (this.db && this.selectSocialItemStmt) {
+      try {
+        const row = this.selectSocialItemStmt.get(id) as Record<string, unknown> | undefined;
+        if (row) {
+          return this.mapRowToChannelItem(row, referenceMs);
+        }
+      } catch (err) {
+        console.error("[WebWorld] Failed to get social item:", err);
+      }
+    }
+    const fallback = this.fallbackItems.get(id);
+    if (fallback) {
+      return {
+        ...fallback,
+        createdAt: formatAgentRelativeTime(new Date(fallback.createdAtIso).getTime(), referenceMs),
+        fetchedAt: formatAgentRelativeTime(fallback.fetchedAtMs, referenceMs),
+      };
+    }
+    return null;
+  }
+
+  public getSocialItemWithReplies(
+    id: string,
+    referenceMs: number = Date.now(),
+  ): ({
+    context: EmaTemporalContext;
+    item: EmaChannelItem;
+    replies: EmaChannelItem[];
+  } & EmaChannelItem) | null {
+    const item = this.getSocialItem(id, referenceMs);
+    if (!item) return null;
+
+    let replies: EmaChannelItem[] = [];
+    if (this.db && this.selectSocialRepliesStmt) {
+      try {
+        const rows = this.selectSocialRepliesStmt.all(id) as Array<Record<string, unknown>>;
+        if (rows) {
+          replies = rows.map((r) => this.mapRowToChannelItem(r, referenceMs));
+        }
+      } catch (err) {
+        console.error("[WebWorld] Failed to get replies for item:", err);
+      }
+    }
+
+    const envelope = createTemporalEnvelope([item], referenceMs, this.timezone);
+    return {
+      ...item,
+      context: envelope.context,
+      item,
+      replies,
+    };
+  }
+
+  private mapRowToChannelItem(row: Record<string, unknown>, referenceMs: number): EmaChannelItem {
+    const createdAtMs = Number(row.created_at_ms || Date.now());
+    const fetchedAtMs = Number(row.fetched_at_ms || Date.now());
+    const createdAtIso = String(row.created_at_iso || new Date(createdAtMs).toISOString());
+
+    return {
+      id: String(row.id),
+      channelId: String(row.channel_id),
+      authorNodeId: String(row.author_node_id),
+      name: row.name ? String(row.name) : undefined,
+      content: String(row.content),
+      createdAtIso,
+      createdAt: formatAgentRelativeTime(createdAtMs, referenceMs),
+      fetchedAtMs,
+      fetchedAt: formatAgentRelativeTime(fetchedAtMs, referenceMs),
+      parentItemId: row.parent_item_id ? String(row.parent_item_id) : undefined,
+      url: row.url ? String(row.url) : undefined,
+      metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
+    };
+  }
+
+  public listActions(): EmaActionDoc[] {
+    return [
+      {
+        name: "message.post",
+        description: "Posts a message to a Web chatroom channel",
+        parameters: {
+          channelId: {
+            type: "string",
+            required: false,
+            description: "Target chatroom channel ID (default: 'web:chatroom:default')",
+            default: "web:chatroom:default",
+          },
+          message: {
+            type: "string",
+            required: true,
+            description: "Message text content to post to the chatroom channel",
+          },
+          parentItemId: {
+            type: "string",
+            required: false,
+            description: "Optional message ID being replied to",
+          },
+        },
+        rateLimit: "60/minute",
+        example: {
+          channelId: "web:chatroom:default",
+          message: "你好呀，很高兴在这个时刻遇见你，今天也让我安静地陪在你身边吧。",
+        },
+      },
+      {
+        name: "message.reply",
+        description: "Replies to a specific message item inside a Web chatroom channel",
+        parameters: {
+          channelId: {
+            type: "string",
+            required: false,
+            description: "Target chatroom channel ID (default: 'web:chatroom:default')",
+            default: "web:chatroom:default",
+          },
+          parentItemId: {
+            type: "string",
+            required: true,
+            description: "Target message item ID to reply to",
+          },
+          message: {
+            type: "string",
+            required: true,
+            description: "Reply message text content",
+          },
+        },
+        rateLimit: "60/minute",
+        example: {
+          channelId: "web:chatroom:default",
+          parentItemId: "msg_123",
+          message: "收到你的消息啦，我一直在这里听你说。",
+        },
+      },
+    ];
+  }
+
+  public getAction(name: string): EmaActionDoc | null {
+    const norm = name.toLowerCase();
+    return this.listActions().find((a) => a.name.toLowerCase() === norm) || null;
+  }
+
+  private dispatchActionEndpoint(
+    actionName: string,
+    body: Record<string, unknown>,
+    routeCtx: EmaRouteContext,
+  ): {
+    success: boolean;
+    action: string;
+    channelId: string;
+    message: string;
+    item: EmaChannelItem;
+  } {
+    const actionDoc = this.getAction(actionName);
+    if (!actionDoc) {
+      throw new Error(`Action not found: ${actionName}`);
+    }
+
+    const messageText = String(body.message ?? body.content ?? body.text ?? "").trim();
+    for (const [paramName, paramDoc] of Object.entries(actionDoc.parameters)) {
+      if (paramDoc.required) {
+        const val = paramName === "message" ? messageText : body[paramName];
+        if (val === undefined || val === null || val === "") {
+          throw new Error(`Missing required parameter '${paramName}' for action '${actionName}'`);
+        }
+      }
+    }
+
+    const rawChannelId = String(body.channelId ?? "web:chatroom:default");
+    const canonicalChannelId = this.normalizeChannelId(rawChannelId);
+    const shortSessionId = this.extractSessionId(canonicalChannelId);
+    const parentItemId =
+      typeof body.parentItemId === "string" && body.parentItemId ? body.parentItemId : undefined;
+
+    const actor: EmaActor = (body.actor as EmaActor) || {
+      id: (body.actorId as string) || `actor:${this.companionId}`,
+      name: (body.actorName as string) || this.companionName,
+      agentId: this.env.PENGUIN_AGENT_ID || this.companionId,
+      session: (body.session as string) || `session-web-${shortSessionId}`,
+    };
+
+    const dummyCtx: EmaCtx = this.ctx || {
+      router: routeCtx as unknown as EmaCtx["router"],
+      inputBatcher: { push: () => {}, onBatch: () => ({ dispose: () => {} }) },
+      registry: { register: () => ({ dispose: () => {} }), get: () => undefined, list: () => [] },
+    };
+
+    this.interact(dummyCtx, actor, actionName, {
+      channelId: canonicalChannelId,
+      message: messageText,
+      parentItemId,
+    });
+
+    const items = this.listSocialItems(canonicalChannelId);
+    const latestItem = items[items.length - 1]!;
+
+    return {
+      success: true,
+      action: actionName,
+      channelId: canonicalChannelId,
+      message: messageText,
+      item: latestItem,
+    };
   }
 
   // ==========================================================================
@@ -488,8 +1150,24 @@ export class WebWorld extends EmaWorld {
   }): WebSessionPart {
     const canonicalId = this.normalizePartId(part.id);
     const shortSessionId = this.extractSessionId(canonicalId);
+    const canonicalChannelId = this.normalizeChannelId(shortSessionId);
     const existing = this.sessions.get(canonicalId);
     const now = Date.now();
+
+    // Ensure corresponding RFC-0002 chatroom channel is indexed
+    this.indexSocialChannel({
+      id: canonicalChannelId,
+      world: "web",
+      channel_kind: "chatroom",
+      ownerNodeId: `web:person:${this.ownerId}`,
+      name:
+        part.name ||
+        (shortSessionId === "default"
+          ? `${this.companionName}的聊天室`
+          : `Web Chatroom (${shortSessionId})`),
+      description: `Web companion chatroom channel (${shortSessionId})`,
+      metadata: { sessionId: shortSessionId, clientMetadata: part.clientMetadata },
+    });
 
     if (existing) {
       if (part.clientMetadata) {
@@ -562,7 +1240,8 @@ export class WebWorld extends EmaWorld {
 
   /**
    * Primary ingestion gateway for inbound web events.
-   * Enriches client telemetry, normalizes into EmaInput, and pushes to EmaInputBatcher.
+   * Enriches client telemetry, normalizes into EmaInput, indexes into RFC-0002
+   * Read-Through channel storage, and pushes to EmaInputBatcher.
    */
   public ingest(payload: WebInboundEventPayload): EmaInput {
     if (!payload.sessionId) {
@@ -574,6 +1253,7 @@ export class WebWorld extends EmaWorld {
 
     const canonicalPartId = this.normalizePartId(payload.sessionId);
     const shortSessionId = this.extractSessionId(canonicalPartId);
+    const canonicalChannelId = this.normalizeChannelId(shortSessionId);
 
     // Update or register session part
     let sessionPart = this.sessions.get(canonicalPartId);
@@ -592,7 +1272,6 @@ export class WebWorld extends EmaWorld {
     const eventId = payload.id || `web_in_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const timestamp = payload.timestamp ?? Date.now();
 
-    // Construct text representation & metadata according to modality
     let content = "";
     const extraMetadata: Record<string, unknown> = {
       modality: payload.modality,
@@ -645,6 +1324,32 @@ export class WebWorld extends EmaWorld {
       isOwner: payload.sender?.isOwner ?? false,
     };
 
+    // RFC-0002 Read-Through indexing for chat messages
+    if (payload.modality === "chat") {
+      const cleanSenderHandle = sender.id.replace(/^(web:person:|user:)/, "");
+      const authorNodeId = `web:person:${cleanSenderHandle}`;
+      this.indexSocialNode({
+        id: authorNodeId,
+        world: "web",
+        node_kind: "person",
+        name: sender.name,
+        handle: cleanSenderHandle,
+        channelIds: [canonicalChannelId],
+        metadata: { isOwner: sender.isOwner },
+      });
+
+      this.indexSocialItem({
+        id: eventId,
+        channelId: canonicalChannelId,
+        authorNodeId,
+        name: sender.name,
+        content,
+        createdAtMs: timestamp,
+        fetchedAtMs: timestamp,
+        parentItemId: payload.replyTo,
+      });
+    }
+
     const input: EmaInput = {
       id: eventId,
       world: "web",
@@ -655,18 +1360,17 @@ export class WebWorld extends EmaWorld {
       replyTo: payload.replyTo,
       metadata: {
         ...extraMetadata,
+        channelId: canonicalChannelId,
         clientMetadata: sessionPart.clientMetadata,
       },
     };
 
-    // Keep message in in-memory history (pruned to 200 items)
     if (this.messageHistory.size >= 200) {
       const oldest = this.messageHistory.keys().next().value;
       if (oldest) this.messageHistory.delete(oldest);
     }
     this.messageHistory.set(eventId, input);
 
-    // Persist to SQLite
     this.persistEvent(
       "inbound",
       eventId,
@@ -678,7 +1382,6 @@ export class WebWorld extends EmaWorld {
       timestamp,
     );
 
-    // Push into transactional input batcher if context is active
     if (this.ctx) {
       this.ctx.inputBatcher.push(input);
     }
@@ -686,9 +1389,6 @@ export class WebWorld extends EmaWorld {
     return input;
   }
 
-  /**
-   * Helper to ingest a plain chat message.
-   */
   public ingestMessage(
     sessionId: string,
     text: string,
@@ -704,9 +1404,6 @@ export class WebWorld extends EmaWorld {
     });
   }
 
-  /**
-   * Helper to ingest an avatar touch gesture.
-   */
   public ingestTouch(
     sessionId: string,
     touch: WebTouchData,
@@ -722,9 +1419,6 @@ export class WebWorld extends EmaWorld {
     });
   }
 
-  /**
-   * Helper to ingest client interaction telemetry.
-   */
   public ingestTelemetry(
     sessionId: string,
     telemetry: WebTelemetryData,
@@ -741,13 +1435,12 @@ export class WebWorld extends EmaWorld {
   }
 
   // ==========================================================================
-  // Outbound Streaming & Action Dispatcher (node-mw7rpkq4-jwez)
+  // Outbound Streaming & Action Dispatcher (node-mw7rpkq4-jwez & RFC-0002)
   // ==========================================================================
 
   /**
-   * Interacts with a specific web session part on behalf of an EMA Actor.
-   * Authenticates actor credentials and pushes streaming tokens, avatar triggers,
-   * or interactive UI card updates into connected client streams.
+   * Interacts with a specific web session part or executes an RFC-0002 hierarchical action
+   * (`message.post`, `message.reply`) on behalf of an EMA Actor.
    */
   public interact(_ctx: EmaCtx, actor: EmaActor, id: Id, ...args: unknown[]): Disposable {
     // 1. Authenticate Actor credentials per RFC-0001 authenticated-actor-interaction
@@ -766,24 +1459,29 @@ export class WebWorld extends EmaWorld {
       }
     }
 
-    const canonicalPartId = this.normalizePartId(id);
-    const shortSessionId = this.extractSessionId(canonicalPartId);
-
-    // Auto-register part if not yet present
-    let sessionPart = this.sessions.get(canonicalPartId);
-    if (!sessionPart) {
-      sessionPart = this.registerPart({ id: canonicalPartId });
-    }
-
-    // 2. Parse action arguments into structured outbound modalities
+    let targetSessionOrPart = id;
     let eventType: WebOutboundModality = "reply";
     let token: string | undefined;
     let fullText: string | undefined;
     let expression: WebAvatarTrigger | undefined;
     let card: WebUiCard | undefined;
+    let parentItemId: string | undefined;
     let data: unknown;
 
-    if (args.length > 0) {
+    // Support RFC-0002 hierarchical action names as `id` (e.g. interact(ctx, actor, "message.post", { channelId, message }))
+    const normAction = id.trim().toLowerCase();
+    if (normAction === "message.post" || normAction === "message.reply") {
+      const payload = (args[0] && typeof args[0] === "object" ? args[0] : {}) as Record<
+        string,
+        unknown
+      >;
+      targetSessionOrPart = String(payload.channelId ?? payload.sessionId ?? "default");
+      fullText = String(payload.message ?? payload.content ?? payload.text ?? "");
+      if (typeof payload.parentItemId === "string") {
+        parentItemId = payload.parentItemId;
+      }
+      eventType = "reply";
+    } else if (args.length > 0) {
       const first = args[0];
 
       if (typeof first === "string") {
@@ -801,8 +1499,18 @@ export class WebWorld extends EmaWorld {
             if (typeof args[1] === "string") fullText = args[1];
             break;
           case "reply":
+          case "message.post":
+          case "message.reply":
             eventType = "reply";
-            fullText = typeof args[1] === "string" ? args[1] : String(args[1] ?? "");
+            if (typeof args[1] === "string") {
+              fullText = args[1];
+            } else if (typeof args[1] === "object" && args[1] !== null) {
+              const p = args[1] as Record<string, unknown>;
+              fullText = String(p.message ?? p.content ?? p.text ?? "");
+              if (typeof p.parentItemId === "string") parentItemId = p.parentItemId;
+            } else {
+              fullText = String(args[1] ?? "");
+            }
             break;
           case "expression":
             eventType = "expression";
@@ -817,7 +1525,6 @@ export class WebWorld extends EmaWorld {
             }
             break;
           default:
-            // Plain string reply
             eventType = "reply";
             fullText = first;
             break;
@@ -832,6 +1539,9 @@ export class WebWorld extends EmaWorld {
         if (typeof obj.fullText === "string") fullText = obj.fullText;
         else if (typeof obj.text === "string") fullText = obj.text;
         else if (typeof obj.message === "string") fullText = obj.message;
+        else if (typeof obj.content === "string") fullText = obj.content;
+
+        if (typeof obj.parentItemId === "string") parentItemId = obj.parentItemId;
 
         if (obj.expression && typeof obj.expression === "object") {
           expression = obj.expression as WebAvatarTrigger;
@@ -843,12 +1553,48 @@ export class WebWorld extends EmaWorld {
       }
     }
 
+    const canonicalPartId = this.normalizePartId(targetSessionOrPart);
+    const shortSessionId = this.extractSessionId(canonicalPartId);
+    const canonicalChannelId = this.normalizeChannelId(shortSessionId);
+
+    // Auto-register part if not yet present
+    let sessionPart = this.sessions.get(canonicalPartId);
+    if (!sessionPart) {
+      sessionPart = this.registerPart({ id: canonicalPartId });
+    }
+
     // 3. Monotonically increment session sequence ID
     const currentSeq = (this.sessionSeqMap.get(canonicalPartId) ?? 0) + 1;
     this.sessionSeqMap.set(canonicalPartId, currentSeq);
 
     const eventId = `web_out_${currentSeq}_${Date.now()}`;
     const timestamp = Date.now();
+
+    // RFC-0002 Read-Through indexing when posting a reply/message to the chatroom channel
+    if ((eventType === "reply" || eventType === "stream_end") && fullText && fullText.trim()) {
+      const cleanActorHandle = actor.id.replace(/^(web:bot:|actor:)/, "");
+      const authorNodeId = `web:bot:${cleanActorHandle}`;
+      this.indexSocialNode({
+        id: authorNodeId,
+        world: "web",
+        node_kind: "bot",
+        name: actor.name || this.companionName,
+        handle: cleanActorHandle,
+        channelIds: [canonicalChannelId],
+        metadata: { agentId: actor.agentId, session: actor.session },
+      });
+
+      this.indexSocialItem({
+        id: eventId,
+        channelId: canonicalChannelId,
+        authorNodeId,
+        name: actor.name || this.companionName,
+        content: fullText.trim(),
+        createdAtMs: timestamp,
+        fetchedAtMs: timestamp,
+        parentItemId,
+      });
+    }
 
     const outboundEvent: WebOutboundEvent = {
       seqId: currentSeq,
@@ -881,14 +1627,12 @@ export class WebWorld extends EmaWorld {
       buffer.shift();
     }
 
-    // Store in message history
     if (this.messageHistory.size >= 200) {
       const oldest = this.messageHistory.keys().next().value;
       if (oldest) this.messageHistory.delete(oldest);
     }
     this.messageHistory.set(eventId, outboundEvent);
 
-    // Persist to SQLite
     this.persistEvent(
       "outbound",
       eventId,
@@ -924,18 +1668,11 @@ export class WebWorld extends EmaWorld {
   // Client Reconnection & Stream Buffering
   // ==========================================================================
 
-  /**
-   * Retrieves all buffered events for a session part.
-   */
   public getEventBuffer(sessionId: string): WebOutboundEvent[] {
     const canonicalPartId = this.normalizePartId(sessionId);
     return [...(this.eventBuffers.get(canonicalPartId) || [])];
   }
 
-  /**
-   * Subscribes a listener to live outbound events for a session part,
-   * optionally replaying missed events since `lastEventId`.
-   */
   public subscribeSession(
     sessionId: string,
     listener: (event: WebOutboundEvent) => void,
@@ -943,7 +1680,6 @@ export class WebWorld extends EmaWorld {
   ): Disposable {
     const canonicalPartId = this.normalizePartId(sessionId);
 
-    // Auto-register part if not exists
     let part = this.sessions.get(canonicalPartId);
     if (!part) {
       part = this.registerPart({ id: canonicalPartId });
@@ -957,7 +1693,6 @@ export class WebWorld extends EmaWorld {
     }
     set.add(listener);
 
-    // Replay missed buffered events if lastEventId is supplied
     if (lastEventId !== undefined && lastEventId !== null && lastEventId !== "") {
       const targetSeq =
         typeof lastEventId === "number" ? lastEventId : parseInt(String(lastEventId), 10);
@@ -983,9 +1718,6 @@ export class WebWorld extends EmaWorld {
     };
   }
 
-  /**
-   * Creates a Web Standard ReadableStream delivering Server-Sent Events (SSE).
-   */
   public createSseStream(
     sessionId: string,
     lastEventId?: number | string,
@@ -995,7 +1727,6 @@ export class WebWorld extends EmaWorld {
 
     return new ReadableStream<Uint8Array>({
       start: (controller) => {
-        // Initial comment confirming SSE establishment
         controller.enqueue(encoder.encode(": connected to WebWorld SSE stream\n\n"));
 
         subscription = this.subscribeSession(
@@ -1021,7 +1752,7 @@ export class WebWorld extends EmaWorld {
   }
 
   // ==========================================================================
-  // Lifecycle & Router Mounting (RFC-0001)
+  // Lifecycle & Router Mounting (RFC-0001 & RFC-0002)
   // ==========================================================================
 
   public start(ctx: EmaCtx): Disposable {
@@ -1030,8 +1761,8 @@ export class WebWorld extends EmaWorld {
 
     const base = this.routePrefix;
     const routeHandles: Disposable[] = [];
+    const registryHandle = ctx.registry?.register ? ctx.registry.register("web", this) : null;
 
-    // Helper to register and track route disposables
     const serve = (path: string, handler: Parameters<typeof ctx.router.serve>[1], desc: string) => {
       routeHandles.push(ctx.router.serve(path, handler, desc));
     };
@@ -1044,6 +1775,7 @@ export class WebWorld extends EmaWorld {
         prefix: base,
         activeSessions: this.sessions.size,
         parts: this.listParts(),
+        channels: this.listSocialChannels(),
       }),
       "WebWorld overview and topology status",
     );
@@ -1071,7 +1803,148 @@ export class WebWorld extends EmaWorld {
       "WebWorld part details",
     );
 
-    // 3. Sessions Endpoint (alias to parts)
+    // 3. RFC-0002 Nodes Endpoint
+    serve(
+      `${base}/nodes/:id`,
+      (routeCtx) => {
+        const id = decodeURIComponent(routeCtx.params.id);
+        const node = this.getSocialNode(id);
+        if (!node) {
+          throw new Error(`Node not found: ${id}`);
+        }
+        return node;
+      },
+      "WebWorld RFC-0002 social node lookup",
+    );
+
+    // 4. RFC-0002 Channels Endpoints
+    serve(
+      `${base}/channels`,
+      () => ({
+        channels: this.listSocialChannels(),
+      }),
+      "WebWorld RFC-0002 list of chatroom channels",
+    );
+
+    serve(
+      `${base}/channels/:id`,
+      (routeCtx) => {
+        const id = decodeURIComponent(routeCtx.params.id);
+        const channel = this.getSocialChannel(id);
+        if (!channel) {
+          throw new Error(`Channel not found: ${id}`);
+        }
+        return channel;
+      },
+      "WebWorld RFC-0002 channel details",
+    );
+
+    serve(
+      `${base}/channels/:id/items`,
+      (routeCtx) => {
+        const rawChannelId = decodeURIComponent(routeCtx.params.id);
+        const channel = this.getSocialChannel(rawChannelId);
+        if (!channel) {
+          throw new Error(`Channel not found: ${rawChannelId}`);
+        }
+
+        if (routeCtx.method === "POST") {
+          const body = (routeCtx.body || {}) as Record<string, unknown>;
+          const content = String(body.content ?? body.message ?? body.text ?? "").trim();
+          if (!content) {
+            throw new Error("Empty message content");
+          }
+          const role = body.role === "aoi" || body.role === "bot" || body.role === "actor" ? "bot" : "person";
+          if (role === "bot") {
+            return this.dispatchActionEndpoint(
+              "message.post",
+              {
+                ...body,
+                channelId: channel.id,
+                message: content,
+              },
+              routeCtx,
+            );
+          }
+          const senderId = String(body.senderId ?? this.ownerId);
+          const senderName = String(body.senderName ?? body.name ?? this.ownerName);
+          const input = this.ingest({
+            sessionId: this.extractSessionId(channel.id),
+            modality: "chat",
+            text: content,
+            replyTo: typeof body.parentItemId === "string" ? body.parentItemId : undefined,
+            sender: {
+              id: senderId,
+              name: senderName,
+              isOwner: true,
+            },
+          });
+          const item = this.getSocialItem(input.id)!;
+          return {
+            success: true,
+            channel,
+            item,
+          };
+        }
+
+        const referenceMs = routeCtx.query?.get("time")
+          ? new Date(routeCtx.query.get("time")!).getTime()
+          : Date.now();
+        const items = this.listSocialItems(channel.id, referenceMs);
+        const envelope = createTemporalEnvelope(items, referenceMs, this.timezone);
+        return {
+          context: envelope.context,
+          channel,
+          items: envelope.items,
+        };
+      },
+      "WebWorld RFC-0002 channel items read and post",
+    );
+
+    // 5. RFC-0002 Single Item Lookup with Replies
+    serve(
+      `${base}/items/:id`,
+      (routeCtx) => {
+        const id = decodeURIComponent(routeCtx.params.id);
+        const referenceMs = routeCtx.query?.get("time")
+          ? new Date(routeCtx.query.get("time")!).getTime()
+          : Date.now();
+        const item = this.getSocialItemWithReplies(id, referenceMs);
+        if (!item) {
+          throw new Error(`Item not found: ${id}`);
+        }
+        return item;
+      },
+      "WebWorld RFC-0002 item lookup with replies",
+    );
+
+    // 6. RFC-0002 Actions Introspection & Execution
+    serve(
+      `${base}/actions`,
+      () => ({
+        actions: this.listActions(),
+      }),
+      "WebWorld RFC-0002 action schema list",
+    );
+
+    serve(
+      `${base}/actions/:actionName`,
+      (routeCtx) => {
+        const actionName = decodeURIComponent(routeCtx.params.actionName);
+        if (routeCtx.method === "POST") {
+          const body = (routeCtx.body || {}) as Record<string, unknown>;
+          return this.dispatchActionEndpoint(actionName, body, routeCtx);
+        }
+        const doc = this.getAction(actionName);
+        if (!doc) {
+          throw new Error(`Action not found: ${actionName}`);
+        }
+        return doc;
+      },
+      "WebWorld RFC-0002 action introspection and execution",
+    );
+
+    // 7. Sessions Endpoint (alias to parts)
     serve(
       `${base}/sessions/:id`,
       (routeCtx) => {
@@ -1090,7 +1963,7 @@ export class WebWorld extends EmaWorld {
       "WebWorld session details or deletion",
     );
 
-    // 4. Message / Event Lookup by ID
+    // 8. Message / Event Lookup by ID
     serve(
       `${base}/messages/:id`,
       (routeCtx) => {
@@ -1117,7 +1990,7 @@ export class WebWorld extends EmaWorld {
       "WebWorld event lookup",
     );
 
-    // 5. Inbound Ingestion Endpoint (POST /world/web/input or POST /world/web/events)
+    // 9. Inbound Ingestion Endpoint (POST /world/web/input or POST /world/web/events)
     const handleInputIngest = (routeCtx: { body?: unknown }) => {
       const body = (routeCtx.body || {}) as WebInboundEventPayload;
       if (!body.sessionId || !body.modality) {
@@ -1135,7 +2008,7 @@ export class WebWorld extends EmaWorld {
     serve(`${base}/input`, handleInputIngest, "WebWorld inbound input ingestion");
     serve(`${base}/events`, handleInputIngest, "WebWorld inbound event ingestion");
 
-    // 6. Shortcut Ingestion Endpoints per Session
+    // 10. Shortcut Ingestion Endpoints per Session
     serve(
       `${base}/sessions/:id/messages`,
       (routeCtx) => {
@@ -1197,7 +2070,7 @@ export class WebWorld extends EmaWorld {
       "WebWorld post telemetry update to session",
     );
 
-    // 7. Session Event History
+    // 11. Session Event History
     serve(
       `${base}/sessions/:id/history`,
       (routeCtx) => {
@@ -1213,7 +2086,7 @@ export class WebWorld extends EmaWorld {
       "WebWorld session outbound event history",
     );
 
-    // 8. Server-Sent Events (SSE) Streaming Endpoints
+    // 12. Server-Sent Events (SSE) Streaming Endpoints
     const handleSseStream = (sessionId: string, lastEventIdHeader?: string | null) => {
       const stream = this.createSseStream(sessionId, lastEventIdHeader ?? undefined);
       return new Response(stream, {
@@ -1247,7 +2120,7 @@ export class WebWorld extends EmaWorld {
       "WebWorld SSE stream by session ID",
     );
 
-    // 9. Periodic Heartbeat Timer
+    // 13. Periodic Heartbeat Timer
     if (this.heartbeatIntervalMs > 0) {
       this.heartbeatTimer = setInterval(() => {
         if (!this.active) return;
@@ -1284,6 +2157,7 @@ export class WebWorld extends EmaWorld {
           clearInterval(this.heartbeatTimer);
           this.heartbeatTimer = null;
         }
+        registryHandle?.dispose();
         for (const handle of routeHandles) {
           handle.dispose();
         }
@@ -1292,9 +2166,6 @@ export class WebWorld extends EmaWorld {
     };
   }
 
-  /**
-   * Shuts down WebWorld: closes database, clears timers and listeners.
-   */
   public dispose(): void {
     this.active = false;
     this.ctx = null;
@@ -1308,6 +2179,16 @@ export class WebWorld extends EmaWorld {
         this.insertSessionStmt = null;
         this.updateSessionStmt = null;
         this.insertEventStmt = null;
+        this.insertSocialNodeStmt = null;
+        this.selectSocialNodeStmt = null;
+        this.selectSocialNodeByHandleStmt = null;
+        this.insertSocialChannelStmt = null;
+        this.selectSocialChannelStmt = null;
+        this.selectAllSocialChannelsStmt = null;
+        this.insertSocialItemStmt = null;
+        this.selectSocialItemStmt = null;
+        this.selectSocialItemsByChannelStmt = null;
+        this.selectSocialRepliesStmt = null;
         this.db.close();
       } catch (err) {
         console.error("[WebWorld] Error closing SQLite database:", err);
