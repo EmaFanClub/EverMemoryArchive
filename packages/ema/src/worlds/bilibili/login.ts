@@ -17,9 +17,9 @@ export interface BilibiliLoginOptions {
   timeoutMs?: number;
   /** Polling interval in ms for checking scan status (default: 1500ms) */
   pollIntervalMs?: number;
-  /** File path where the QR code image PNG should be saved (default: /tmp/bilibili-login-qrcode.png) */
+  /** File path where the QR code image PNG should be saved (default: .bilibili-login-qrcode.png in cwd) */
   outputQrPath?: string;
-  /** File path where login cookies/credentials JSON should be saved (default: /tmp/bilibili-cookies.json) */
+  /** File path where login cookies/credentials JSON should be saved (default: bilibili-cookies.json in cwd) */
   cookieSavePath?: string;
   /** File path where Playwright standard storageState should be saved (default: bilibili-storage-state.json) */
   storageStatePath?: string;
@@ -122,8 +122,10 @@ export class BilibiliLoginManager {
       headless: true,
       timeoutMs: 180000,
       pollIntervalMs: 1500,
-      outputQrPath: options.outputQrPath ?? "/tmp/bilibili-login-qrcode.png",
-      cookieSavePath: options.cookieSavePath ?? "/tmp/bilibili-cookies.json",
+      outputQrPath:
+        options.outputQrPath ?? path.resolve(process.cwd(), ".bilibili-login-qrcode.png"),
+      cookieSavePath:
+        options.cookieSavePath ?? path.resolve(process.cwd(), "bilibili-cookies.json"),
       storageStatePath:
         options.storageStatePath ?? path.resolve(process.cwd(), "bilibili-storage-state.json"),
       userDataDir: options.userDataDir,
@@ -318,16 +320,17 @@ export class BilibiliLoginManager {
       return null;
     });
 
-    const qrImagePath = this.options.outputQrPath ?? "/tmp/bilibili-login-qrcode.png";
+    const qrImagePath =
+      this.options.outputQrPath ?? path.resolve(process.cwd(), ".bilibili-login-qrcode.png");
 
     // Save PNG image if base64 dataUrl is present
     if (qrData?.dataUrl) {
       const base64Data = qrData.dataUrl.replace(/^data:image\/\w+;base64,/, "");
       const targetDir = path.dirname(qrImagePath);
       if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
+        fs.mkdirSync(targetDir, { recursive: true, mode: 0o700 });
       }
-      fs.writeFileSync(qrImagePath, Buffer.from(base64Data, "base64"));
+      fs.writeFileSync(qrImagePath, Buffer.from(base64Data, "base64"), { mode: 0o600 });
     }
 
     // Format terminal ASCII QR code

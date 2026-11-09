@@ -204,10 +204,10 @@ async function main() {
   if (command === "bilibili") {
     const sub = args[1];
     if (sub === "login") {
-      let qrPath = "/home/rei/work/org/ema/ema-dev/bilibili-login-qrcode.png";
-      let cookiePath = "/home/rei/worktrees/EverMemoryArchive/next/bilibili-cookies.json";
-      let storageStatePath = "/home/rei/worktrees/EverMemoryArchive/next/bilibili-storage-state.json";
-      let profileDir = "/home/rei/worktrees/EverMemoryArchive/next/.bilibili-profile";
+      let qrPath = path.resolve(process.cwd(), ".bilibili-login-qrcode.png");
+      let cookiePath = path.resolve(process.cwd(), "bilibili-cookies.json");
+      let storageStatePath = path.resolve(process.cwd(), "bilibili-storage-state.json");
+      let profileDir = path.resolve(process.cwd(), ".bilibili-profile");
       for (let i = 2; i < args.length; i++) {
         if (args[i] === "--qr-path") qrPath = args[++i];
         else if (args[i] === "--cookie-path") cookiePath = args[++i];
