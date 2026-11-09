@@ -72,10 +72,25 @@ export class SimpleEmaRouter implements EmaRouter {
       for (const entry of this.routes) {
         app.all(entry.path, async (c: Context) => {
           const url = new URL(c.req.url);
+          let body: unknown;
+          if (c.req.method === "POST" || c.req.method === "PUT" || c.req.method === "PATCH") {
+            const contentType = c.req.header("content-type") || "";
+            if (contentType.includes("application/json")) {
+              body = await c.req.json().catch(() => undefined);
+            } else {
+              body = await c.req.text().catch(() => undefined);
+            }
+          }
+
           const ctx: EmaRouteContext = {
             path: c.req.path,
             params: (c.req.param() || {}) as Record<string, string>,
             query: url.searchParams,
+            body,
+            method: c.req.method,
+            headers: c.req.raw.headers,
+            req: c.req.raw,
+            raw: c,
           };
 
           const result = await entry.handler(ctx);
@@ -103,9 +118,9 @@ export class SimpleEmaRouter implements EmaRouter {
    *
    * @throws {Error} if route is not found or handler throws.
    */
-  async read<T = unknown>(uri: string): Promise<T> {
+  async read<T = unknown>(uri: string, init?: RequestInit): Promise<T> {
     const url = new URL(uri, "http://localhost");
-    const res = await this.getApp().request(url.toString());
+    const res = await this.getApp().request(url.toString(), init);
 
     if (res.status === 404) {
       throw new Error(`Route not found: ${url.pathname}`);

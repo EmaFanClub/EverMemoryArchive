@@ -5,7 +5,20 @@
  */
 
 import type { Disposable } from "../../interfaces.js";
+import type { EmaChannel, EmaNode, EmaChannelItem } from "../../channel.js";
 import type { BilibiliPublishDynamicResult } from "./login.js";
+
+export * from "../../channel.js";
+
+/**
+ * Bilibili Channel Kinds conforming to RFC-0002.
+ */
+export type BilibiliChannelKind = "space" | "dynamic" | "video" | "live_room";
+
+export interface BilibiliChannel extends EmaChannel {
+  readonly world: "bilibili";
+  readonly channel_kind: BilibiliChannelKind;
+}
 
 export class BilibiliRateLimitError extends Error {
   constructor(message: string) {
@@ -230,6 +243,11 @@ export interface BilibiliWorldOptions {
     text: string,
     options?: Record<string, unknown>,
   ) => Promise<BilibiliPublishDynamicResult> | void;
+  /** Custom comment like sender */
+  commentLikeSender?: (
+    targetId: string,
+    commentId: string,
+  ) => Promise<void> | void;
 
   /** Custom live danmaku stream subscriber (returns Disposable) */
   danmakuSubscriber?: (
@@ -263,6 +281,9 @@ export interface BilibiliWorldOptions {
 
   /** Rate limit configuration */
   rateLimits?: BilibiliRateLimitConfig;
+
+  /** Timezone for temporal anchoring (default: "Asia/Shanghai") */
+  timezone?: string;
 
   /** Environment variables (defaults to process.env) */
   env?: Record<string, string | undefined>;
