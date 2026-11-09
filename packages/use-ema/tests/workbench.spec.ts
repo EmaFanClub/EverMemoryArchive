@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import { handleWorkbenchRequest, type WorkbenchHost } from "../module.js";
 
 describe("Penguin Workbench Module (Use EMA)", () => {
@@ -100,6 +102,26 @@ describe("Penguin Workbench Module (Use EMA)", () => {
     expect(body.updatedAgentsMd).toContain("# Support Agent");
     expect(body.updatedAgentsMd).toContain("<!-- EMA_PERSONALITY_FEATURE_START -->");
     expect(body.updatedAgentsMd).toContain("<!-- EMA_PERSONALITY_FEATURE_END -->");
+  });
+
+  it("installs companion_portal workbench via POST /api/install-workbench", async () => {
+    const tmpAppDataDir = `/tmp/use-ema-test-wb-${Date.now()}`;
+    const res = await handleWorkbenchRequest({
+      method: "POST",
+      path: "/api/install-workbench",
+      body: {
+        agentId: "aoi_rei",
+        appDataDir: tmpAppDataDir,
+        companionName: "苍星怜",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = res.body as any;
+    expect(body.success).toBe(true);
+    expect(body.workbench.workbenchId).toBe("companion_portal");
+    expect(fs.existsSync(path.join(body.workbench.workbenchDir, "index.ts"))).toBe(true);
+    fs.rmSync(tmpAppDataDir, { recursive: true, force: true });
   });
 
   it("returns 404 for unknown route", async () => {

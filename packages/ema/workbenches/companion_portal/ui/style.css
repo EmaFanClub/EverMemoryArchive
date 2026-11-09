@@ -1,0 +1,270 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--wb-bg);
+  color: var(--wb-fg);
+  font-family: var(--wb-font, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.chat-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Header */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--wb-border);
+  background: var(--wb-bg);
+  flex-shrink: 0;
+}
+
+.chat-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-identity h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wb-tone-success-fg, #10b981);
+  flex-shrink: 0;
+}
+
+.status-dot.busy {
+  background: var(--wb-accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.status-text {
+  font-size: 0.8rem;
+  color: var(--wb-muted);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-ghost {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  border: 1px solid var(--wb-border);
+  border-radius: var(--wb-radius, 6px);
+  background: transparent;
+  color: var(--wb-muted);
+  cursor: pointer;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--wb-surface);
+  color: var(--wb-fg);
+}
+
+/* Message Stream */
+.message-stream {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.time-separator {
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--wb-muted);
+  padding: 2px 10px;
+  margin: 4px 0;
+}
+
+.message-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 82%;
+}
+
+.message-group.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.message-group.actor {
+  align-self: flex-start;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--wb-surface);
+  border: 1px solid var(--wb-border);
+  color: var(--wb-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.message-group.user .group-body {
+  align-items: flex-end;
+}
+
+.message-group.actor .group-body {
+  align-items: flex-start;
+}
+
+.bubble {
+  padding: 9px 13px;
+  border-radius: 12px;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  word-break: break-word;
+  position: relative;
+}
+
+.bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.bubble.actor {
+  background: var(--wb-surface);
+  border: 1px solid var(--wb-border);
+  color: var(--wb-fg);
+  border-top-left-radius: 4px;
+}
+
+.bubble.user {
+  background: var(--wb-accent);
+  color: var(--wb-accent-fg, #fff);
+  border-top-right-radius: 4px;
+}
+
+.bubble-time {
+  display: block;
+  font-size: 0.7rem;
+  opacity: 0.65;
+  text-align: right;
+  margin-top: 3px;
+}
+
+.live-activity {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: var(--wb-muted);
+}
+
+/* Composer */
+.composer-dock {
+  padding: 10px 20px 16px;
+  background: var(--wb-bg);
+  flex-shrink: 0;
+}
+
+.error-banner {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--wb-radius, 6px);
+  font-size: 0.82rem;
+  color: var(--wb-tone-danger-fg, #ef4444);
+  background: var(--wb-tone-danger-bg, rgba(239, 68, 68, 0.1));
+  border: 1px solid var(--wb-tone-danger-line, rgba(239, 68, 68, 0.25));
+}
+
+.composer-form {
+  margin: 0;
+}
+
+.composer-frame {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--wb-surface);
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+}
+
+.composer-frame:focus-within {
+  border-color: var(--wb-accent);
+}
+
+#input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--wb-fg);
+  font-family: inherit;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  resize: none;
+  padding: 2px 4px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+#send-btn {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
