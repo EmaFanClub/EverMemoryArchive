@@ -3,7 +3,6 @@
   "version": "2.0.0",
   "type": "module",
   "penguin": {
-    "version": "2026.10.26.1",
     "modules": [
       {
         "name": "Workbench",
