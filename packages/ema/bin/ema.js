@@ -134,15 +134,15 @@ async function main() {
   if (command === "bilibili") {
     const sub = args[1];
     if (sub === "login") {
-      let qrPath = "/tmp/bilibili-login-qrcode.png";
-      let cookiePath = "bilibili-cookies.json";
-      let storageStatePath = "bilibili-storage-state.json";
-      let profileDir = ".bilibili-profile";
+      let qrPath = path.resolve(process.cwd(), ".bilibili-login-qrcode.png");
+      let cookiePath = path.resolve(process.cwd(), "bilibili-cookies.json");
+      let storageStatePath = path.resolve(process.cwd(), "bilibili-storage-state.json");
+      let profileDir = path.resolve(process.cwd(), ".bilibili-profile");
       for (let i = 2; i < args.length; i++) {
-        if (args[i] === "--qr-path") qrPath = args[++i];
-        else if (args[i] === "--cookie-path") cookiePath = args[++i];
-        else if (args[i] === "--state-path") storageStatePath = args[++i];
-        else if (args[i] === "--profile") profileDir = args[++i];
+        if (args[i] === "--qr-path") qrPath = path.resolve(args[++i]);
+        else if (args[i] === "--cookie-path") cookiePath = path.resolve(args[++i]);
+        else if (args[i] === "--state-path") storageStatePath = path.resolve(args[++i]);
+        else if (args[i] === "--profile") profileDir = path.resolve(args[++i]);
       }
       const mgr = new BilibiliLoginManager({
         outputQrPath: qrPath,
