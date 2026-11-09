@@ -648,6 +648,28 @@ export class QQWorld extends EmaWorld {
         CREATE INDEX IF NOT EXISTS idx_social_items_channel ON seen_social_items (channel_id, created_at_ms);
       `);
 
+      try {
+        this.db.exec("ALTER TABLE seen_social_nodes ADD COLUMN metadata_json TEXT");
+      } catch {}
+      try {
+        this.db.exec("ALTER TABLE seen_social_nodes ADD COLUMN fetched_at_ms INTEGER");
+      } catch {}
+      try {
+        this.db.exec("ALTER TABLE seen_social_channels ADD COLUMN linked_channels_json TEXT");
+      } catch {}
+      try {
+        this.db.exec("ALTER TABLE seen_social_channels ADD COLUMN metadata_json TEXT");
+      } catch {}
+      try {
+        this.db.exec("ALTER TABLE seen_social_channels ADD COLUMN fetched_at_ms INTEGER");
+      } catch {}
+      try {
+        this.db.exec("ALTER TABLE seen_social_items ADD COLUMN created_at_ms INTEGER");
+      } catch {}
+      try {
+        this.db.exec("ALTER TABLE seen_social_items ADD COLUMN metadata_json TEXT");
+      } catch {}
+
       this.insertSeenStmt = this.db.prepare(
         "INSERT OR IGNORE INTO snowluma_seen_messages (id, part_id, timestamp) VALUES (?, ?, ?)",
       );

@@ -12,6 +12,7 @@
  *   ema.js run [--channel <id>] [--session <id>] [--watch] [--watch-for <duration>] [--poll-interval <ms>]
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import {
   createMinimalPrototype,
@@ -133,14 +134,15 @@ async function main() {
       heartbeatIntervalMs: 0,
     });
     const qqWorld = new QQWorld({
-      selfId: process.env.SNOWLUMA_SELF_ID || process.env.ONEBOT_SELF_ID || "100001",
+      selfId: process.env.SNOWLUMA_SELF_ID || process.env.ONEBOT_SELF_ID || "1000000001",
       gatewayUrl: qqGatewayUrl,
       gatewayToken: qqGatewayToken,
       allowedUsers: qqAllowedUsers,
       allowedGroups: qqAllowedGroups,
-      groups: ["123456"],
+      groups: ["2000000001", "123456"],
       privateUsers: ["789012"],
       passive: true,
+      dbPath: webDbPath,
     });
 
     const ctx = {
@@ -293,9 +295,13 @@ async function main() {
       let session = "619e98db";
       let agent = "aoi_rei";
       let pollInterval = 2000;
-      let watchFor = "12h";
+      let watchFor = "";
       let requireMention = true;
-      let dbPath = "/tmp/ema-qq-companion.sqlite";
+      let dbPath =
+        process.env.EMA_QQ_DB_PATH ||
+        (fs.existsSync("/home/rei/work/aoi-rei")
+          ? "/home/rei/work/aoi-rei/data/qq-world.sqlite"
+          : path.resolve(process.cwd(), "data", "qq-world.sqlite"));
 
       for (let i = 2; i < args.length; i++) {
         if (args[i] === "--gateway" || args[i] === "--url") gateway = args[++i];
@@ -309,8 +315,8 @@ async function main() {
         else if (args[i] === "--db") dbPath = path.resolve(args[++i]);
       }
 
-      const durationMs = parseWatchDuration(watchFor);
-      const endTime = Date.now() + durationMs;
+      const durationMs = watchFor ? parseWatchDuration(watchFor) : Infinity;
+      const endTime = Number.isFinite(durationMs) ? Date.now() + durationMs : Infinity;
 
       console.log("=== EMA QQ Companion Runner (SnowLuma / OneBot 11) ===");
       console.log(`Gateway:         ${gateway}`);
@@ -318,7 +324,7 @@ async function main() {
       console.log(`Backend Session: ${session} (Agent: ${agent})`);
       console.log(`Mention Filter:  ${requireMention ? "Only reply when @mentioned or replied to" : "Reply to all messages"}`);
       console.log(`Poll Interval:   ${pollInterval} ms`);
-      console.log(`Watch Duration:  ${watchFor} (until ${new Date(endTime).toISOString()})`);
+      console.log(`Watch Duration:  ${Number.isFinite(durationMs) ? `${watchFor} (until ${new Date(endTime).toISOString()})` : "Permanent (persistent companion mode)"}`);
       console.log(`Local DB:        ${dbPath}`);
       console.log("------------------------------------------------------");
 
@@ -342,14 +348,16 @@ async function main() {
       process.on("SIGINT", shutdown);
       process.on("SIGTERM", shutdown);
 
-      const waitInterval = setInterval(() => {
-        if (Date.now() >= endTime) {
-          clearInterval(waitInterval);
-          console.log(`\n[QQ Runner] Watch duration (${watchFor}) completed. Exiting.`);
-          runner.dispose();
-          process.exit(0);
-        }
-      }, 10000);
+      if (Number.isFinite(durationMs)) {
+        const waitInterval = setInterval(() => {
+          if (Date.now() >= endTime) {
+            clearInterval(waitInterval);
+            console.log(`\n[QQ Runner] Watch duration (${watchFor}) completed. Exiting.`);
+            runner.dispose();
+            process.exit(0);
+          }
+        }, 10000);
+      }
       return;
     }
 

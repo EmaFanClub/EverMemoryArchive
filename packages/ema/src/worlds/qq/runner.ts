@@ -10,6 +10,8 @@
  */
 
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { SimpleEmaRouter } from "../../router.js";
 import { SimpleEmaInputBatcher, formatBatchToXml } from "../../input-batcher.js";
 import { assertAgentIdentity } from "../../minimal.js";
@@ -102,7 +104,12 @@ export function createQQCompanionRunner(
   const nicknames = options.nicknames || ["小纸夜", "Ema", "怜", "Aoi Rei"];
   const pollIntervalMs = options.pollIntervalMs ?? 2000;
   const requireMentionInGroups = options.requireMentionInGroups ?? true;
-  const dbPath = options.dbPath || "/tmp/ema-qq-companion.sqlite";
+  const dbPath =
+    options.dbPath ||
+    process.env.EMA_QQ_DB_PATH ||
+    (fs.existsSync("/home/rei/work/aoi-rei")
+      ? "/home/rei/work/aoi-rei/data/qq-world.sqlite"
+      : path.resolve(process.cwd(), "data", "qq-world.sqlite"));
 
   const router = new SimpleEmaRouter();
   const inputBatcher = new SimpleEmaInputBatcher({
