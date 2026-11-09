@@ -20,8 +20,10 @@ import {
   generatePenguinSystemConfigYaml,
   getAgentPreset,
   getPersonalityPreset,
+  installWebWorkbench,
   type EmaAgentConfig,
   type EmaPersonalityFeatureConfig,
+  type WebWorkbenchInstallOptions,
 } from "@prism-shadow/ema";
 
 export interface WorkbenchHost {
@@ -153,6 +155,32 @@ export async function handleWorkbenchRequest(
         wasUpdated: alreadyHad,
       },
     };
+  }
+
+  // Install Web Companion Portal Workbench into a Penguin Agent
+  if (req.method === "POST" && path === "/api/install-workbench") {
+    const body = (req.body || {}) as Partial<WebWorkbenchInstallOptions>;
+    if (!body.agentId || typeof body.agentId !== "string") {
+      return {
+        status: 400,
+        body: { error: "Missing required 'agentId' parameter." },
+      };
+    }
+    try {
+      const result = installWebWorkbench(body as WebWorkbenchInstallOptions);
+      return {
+        status: 200,
+        body: {
+          success: true,
+          workbench: result,
+        },
+      };
+    } catch (err) {
+      return {
+        status: 400,
+        body: { error: err instanceof Error ? err.message : String(err) },
+      };
+    }
   }
 
   // Quick Preset Generator

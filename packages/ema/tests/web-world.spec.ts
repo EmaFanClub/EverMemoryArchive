@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import {
   WebWorld,
+  installWebWorkbench,
+  installWebChannelProtocolToAgentsMd,
+  WEB_CHANNEL_PROTOCOL_START_MARKER,
+  WEB_CHANNEL_PROTOCOL_END_MARKER,
   SimpleEmaRouter,
   SimpleEmaInputBatcher,
   formatBatchToXml,
@@ -875,6 +881,49 @@ describe("WebWorld (RFC-0001 / node-mw7row3c-pdfz / node-mw7rpkq4-jwez)", () => 
       );
 
       world.dispose();
+    });
+  });
+
+  describe("10. Installable Companion Portal Workbench (installWebWorkbench)", () => {
+    it("installs companion_portal workbench and injects RFC-0002 channel protocol into AGENTS.md", () => {
+      const tmpAppDataDir = `/tmp/ema-test-workbench-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const agentStateDir = path.join(tmpAppDataDir, "agents", "aoi_rei", "agent_state");
+      fs.mkdirSync(agentStateDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(agentStateDir, "AGENTS.md"),
+        "# Aoi Rei\n\nGentle companion.\n",
+        "utf8",
+      );
+
+      const result = installWebWorkbench({
+        agentId: "aoi_rei",
+        appDataDir: tmpAppDataDir,
+        companionName: "苍星怜",
+        ownerName: "Rei",
+      });
+
+      expect(result.agentId).toBe("aoi_rei");
+      expect(result.workbenchId).toBe("companion_portal");
+      expect(result.agentsMdUpdated).toBe(true);
+      expect(result.files.length).toBe(5);
+      for (const f of result.files) {
+        expect(fs.existsSync(f)).toBe(true);
+      }
+
+      const updatedAgentsMd = fs.readFileSync(path.join(agentStateDir, "AGENTS.md"), "utf8");
+      expect(updatedAgentsMd).toContain(WEB_CHANNEL_PROTOCOL_START_MARKER);
+      expect(updatedAgentsMd).toContain(WEB_CHANNEL_PROTOCOL_END_MARKER);
+      expect(updatedAgentsMd).toContain("/world/web/channels/web:chatroom:default/items");
+      expect(updatedAgentsMd).toContain("/world/web/actions/message.post");
+
+      // Idempotent re-injection
+      const secondPass = installWebChannelProtocolToAgentsMd(updatedAgentsMd, {
+        dbPath: result.dbPath,
+        emaCliPath: result.emaCliPath,
+      });
+      expect(secondPass.split(WEB_CHANNEL_PROTOCOL_START_MARKER).length - 1).toBe(1);
+
+      fs.rmSync(tmpAppDataDir, { recursive: true, force: true });
     });
   });
 });

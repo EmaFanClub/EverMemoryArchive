@@ -8,6 +8,7 @@
  *   ema.js world ls [--db <path>]
  *   ema.js world get <path> [--db <path>]
  *   ema.js world post <path> [jsonBody] [--channel <id>] [--message <text>] [--db <path>]
+ *   ema.js web install-workbench --agent <id> [--name <companion_name>] [--owner <owner_name>] [--app-data-dir <dir>]
  *   ema.js run [--channel <id>] [--session <id>] [--watch] [--watch-for <duration>] [--poll-interval <ms>]
  */
 
@@ -18,6 +19,7 @@ import {
   PenguinChannelWorld,
   BilibiliWorld,
   WebWorld,
+  installWebWorkbench,
   BilibiliLoginManager,
   publishBilibiliDynamic,
   parseWatchDuration,
@@ -39,6 +41,9 @@ Usage:
   ema.js world post <path> [jsonBody] [--channel <id>] [--message <text>] [--db <path>]
     Dispatch an action or post an item to an EMA Router endpoint
     (e.g. ema.js world post /world/web/actions/message.post '{"channelId":"web:chatroom:default","message":"你好！"}')
+
+  ema.js web install-workbench --agent <id> [options]
+    Install the Web Companion Portal Workbench (companion_portal) into a Penguin agent
 
   ema.js bilibili login [options]
     Interactive Playwright QR code login for Bilibili account authentication
@@ -83,7 +88,10 @@ async function main() {
         webDbPath = args[++i];
       } else if ((args[i] === "--channel" || args[i] === "--channel-id") && i + 1 < args.length) {
         flagChannel = args[++i];
-      } else if ((args[i] === "--message" || args[i] === "--text" || args[i] === "-m") && i + 1 < args.length) {
+      } else if (
+        (args[i] === "--message" || args[i] === "--text" || args[i] === "-m") &&
+        i + 1 < args.length
+      ) {
         flagMessage = args[++i];
       } else if ((args[i] === "--parent" || args[i] === "--reply-to") && i + 1 < args.length) {
         flagParent = args[++i];
@@ -169,7 +177,7 @@ async function main() {
       const targetPath = positional[0];
       if (!targetPath) {
         console.error(
-          "Error: Missing path argument for 'world post'. Example: ema.js world post /world/web/actions/message.post '{\"channelId\":\"web:chatroom:default\",\"message\":\"Hello\"}'",
+          'Error: Missing path argument for \'world post\'. Example: ema.js world post /world/web/actions/message.post \'{"channelId":"web:chatroom:default","message":"Hello"}\'',
         );
         disposeAll();
         process.exit(1);
@@ -204,6 +212,45 @@ async function main() {
     }
 
     disposeAll();
+    printUsage();
+    process.exit(1);
+  }
+
+  if (command === "web") {
+    const sub = args[1];
+    if (sub === "install-workbench") {
+      let agentId = "";
+      let companionName;
+      let ownerName;
+      let workbenchId;
+      let appDataDir;
+      let dbPath;
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--agent" || args[i] === "-a") agentId = args[++i];
+        else if (args[i] === "--name") companionName = args[++i];
+        else if (args[i] === "--owner") ownerName = args[++i];
+        else if (args[i] === "--workbench-id") workbenchId = args[++i];
+        else if (args[i] === "--app-data-dir") appDataDir = args[++i];
+        else if (args[i] === "--db") dbPath = args[++i];
+        else if (!agentId && !args[i].startsWith("-")) agentId = args[i];
+      }
+      if (!agentId) {
+        console.error(
+          "Error: Missing --agent <agent_id>. Example: ema.js web install-workbench --agent aoi_rei",
+        );
+        process.exit(1);
+      }
+      const res = installWebWorkbench({
+        agentId,
+        companionName,
+        ownerName,
+        workbenchId,
+        appDataDir,
+        dbPath,
+      });
+      console.log(JSON.stringify(res, null, 2));
+      process.exit(0);
+    }
     printUsage();
     process.exit(1);
   }
@@ -248,7 +295,9 @@ async function main() {
         else if (args[i] === "--profile") profileDir = args[++i];
       }
       if (!text) {
-        console.error("Error: Missing text for dynamic post. Example: ema.js bilibili post-dynamic 'Hello from Ema'");
+        console.error(
+          "Error: Missing text for dynamic post. Example: ema.js bilibili post-dynamic 'Hello from Ema'",
+        );
         process.exit(1);
       }
       console.log(`Publishing Bilibili dynamic via Playwright browser automation...`);

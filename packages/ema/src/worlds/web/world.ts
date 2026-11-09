@@ -1,19 +1,11 @@
 /**
- * @prism-shadow/ema - WebWorld
+ * @prism-shadow/ema - WebWorld Implementation
  *
  * Web / WebSocket Companion Portal Input and Action Adapter for EverMemoryArchive.
  * Conforms to:
  * - RFC-0001 (EmaWorld and EmaActor interfaces, multi-part topology, transactional input batching)
  * - RFC-0002 (Social Media Channel Architecture: EmaNode, EmaChannel, EmaChannelItem,
  *   Read-Through SQLite indexing, anchored temporal perception, and hierarchical action introspection)
- *
- * Board Task Associations:
- * - Input Node: node-mw7row3c-pdfz
- *   (Web/WebSocket Companion Portal Input Adapter: SSE/WebSocket client connection,
- *   streaming user prompts, Live2D touch events, and client interaction telemetry).
- * - Action Node: node-mw7rpkq4-jwez
- *   (Web Companion Portal Streaming Outbound Action Dispatcher: SSE/WebSocket token streaming,
- *   Live2D/3D emotion and expression triggers, and interactive UI card updates).
  */
 
 import fs from "node:fs";
@@ -30,266 +22,30 @@ import {
   type Id,
   type EmaRouteContext,
   Interface,
-} from "../interfaces.js";
+} from "../../interfaces.js";
 import {
   type EmaNode,
-  type EmaChannel,
   type EmaChannelItem,
   type EmaTemporalContext,
-  type EmaTemporalEnvelope,
   type EmaActionDoc,
   createTemporalEnvelope,
   formatAgentRelativeTime,
-} from "../channel.js";
-import { assertAgentIdentity } from "../minimal.js";
-
-// ============================================================================
-// RFC-0002 Channel Types for WebWorld
-// ============================================================================
-
-export type WebChannelKind = "chatroom" | "session";
-
-export interface WebChannel extends EmaChannel {
-  readonly world: "web";
-  readonly channel_kind: WebChannelKind;
-}
-
-// ============================================================================
-// Client Metadata & Inbound Types (node-mw7row3c-pdfz)
-// ============================================================================
-
-export interface WebClientMetadata {
-  /** Client timezone, e.g. "Asia/Tokyo", "America/New_York" */
-  timezone?: string;
-  /** Viewport dimensions */
-  viewport?: { width: number; height: number };
-  /** Audio playback/recording capabilities */
-  audioSupport?: boolean;
-  /** Active UI focus or active tab, e.g. "chat", "avatar", "cards", "timeline" */
-  uiFocus?: "chat" | "avatar" | "cards" | "timeline" | string;
-  /** Browser or client User Agent */
-  userAgent?: string;
-  /** Preferred UI language */
-  language?: string;
-  /** Color theme preference */
-  theme?: "light" | "dark" | "system";
-  /** Arbitrary client telemetry extensions */
-  extra?: Record<string, unknown>;
-}
-
-export type WebInboundModality = "chat" | "touch" | "telemetry";
-
-export interface WebTouchData {
-  /** Target avatar hot spot / body part */
-  part: "head" | "face" | "cheek" | "hair" | "hand" | "chest" | "body" | string;
-  /** Gesture type */
-  gesture: "pat" | "poke" | "stroke" | "pinch" | "tap" | "double_tap" | "hold" | string;
-  /** Normalized or pixel coordinates */
-  x?: number;
-  y?: number;
-  /** Touch pressure or velocity */
-  pressure?: number;
-}
-
-export interface WebTelemetryData {
-  /** Page visibility state */
-  visibility?: "visible" | "hidden";
-  /** Window focus / blur state */
-  windowFocus?: "focus" | "blur";
-  /** Client idle state */
-  idleState?: "idle" | "active";
-  /** Duration in ms that client has been idle */
-  idleDurationMs?: number;
-  /** Active UI tab or view */
-  activeTab?: string;
-  /** Additional telemetry metrics */
-  metrics?: Record<string, unknown>;
-}
-
-export interface WebInboundEventPayload {
-  /** Optional custom event ID */
-  id?: string;
-  /** Target session identifier or part ID */
-  sessionId: string;
-  /** Inbound event modality */
-  modality: WebInboundModality;
-  /** Inbound sender metadata */
-  sender?: {
-    id: string;
-    name: string;
-    isOwner?: boolean;
-  };
-  /** Text content for chat modality */
-  text?: string;
-  /** Live2D / 3D Touch gesture data */
-  touch?: WebTouchData;
-  /** Client interaction telemetry data */
-  telemetry?: WebTelemetryData;
-  /** Inbound millisecond timestamp */
-  timestamp?: number;
-  /** Referenced or replied-to message ID */
-  replyTo?: Id;
-  /** Enriched client metadata */
-  clientMetadata?: WebClientMetadata;
-  /** Raw platform or client metadata */
-  metadata?: Record<string, unknown>;
-}
-
-// ============================================================================
-// Outbound Streaming & Modality Types (node-mw7rpkq4-jwez)
-// ============================================================================
-
-export type WebOutboundModality =
-  | "stream_start"
-  | "token"
-  | "stream_end"
-  | "reply"
-  | "expression"
-  | "card"
-  | "heartbeat"
-  | "system";
-
-export interface WebEmotionState {
-  /** Emotional valence: -1.0 (very negative) to 1.0 (very positive) */
-  valence: number;
-  /** Emotional arousal: 0.0 (calm/low energy) to 1.0 (excited/high energy) */
-  arousal: number;
-  /** Conversational or cognitive stage */
-  stage?: "opening" | "listening" | "thinking" | "responding" | "closing" | string;
-}
-
-export interface WebAvatarTrigger {
-  /** Facial or emotional expression */
-  expression?:
-    | "blushing"
-    | "smiling"
-    | "head_tilting"
-    | "pouting"
-    | "surprised"
-    | "gentle"
-    | "crying"
-    | "neutral"
-    | string;
-  /** Physical avatar motion */
-  motion?: "wave" | "nod" | "shake_head" | "bow" | "lean_forward" | "idle" | string;
-  /** Coordinated emotional coordinates */
-  emotion?: WebEmotionState;
-  /** Duration of expression in milliseconds */
-  durationMs?: number;
-}
-
-export interface WebMemoryGraphCard {
-  type: "memory_graph";
-  title?: string;
-  nodes: Array<{ id: string; label: string; group?: string; weight?: number }>;
-  links?: Array<{ source: string; target: string; relation?: string }>;
-}
-
-export interface WebDiaryPreviewCard {
-  type: "diary_preview";
-  title: string;
-  date: string;
-  mood?: string;
-  excerpt: string;
-  tags?: string[];
-}
-
-export interface WebRelationshipTimelineCard {
-  type: "relationship_timeline";
-  title: string;
-  intimacyLevel?: number;
-  milestones: Array<{ date: string; title: string; description?: string }>;
-}
-
-export interface WebCustomCard {
-  type: "custom_card" | string;
-  title: string;
-  data: Record<string, unknown>;
-}
-
-export type WebUiCard =
-  | WebMemoryGraphCard
-  | WebDiaryPreviewCard
-  | WebRelationshipTimelineCard
-  | WebCustomCard;
-
-export interface WebOutboundEvent {
-  /** Monotonically increasing sequence ID per session */
-  seqId: number;
-  /** Globally unique event identifier */
-  id: string;
-  /** Normalized part ID (e.g. web:session:123) */
-  partId: string;
-  /** Short session ID */
-  sessionId: string;
-  /** Outbound modality type */
-  type: WebOutboundModality;
-  /** Acting companion credentials */
-  actor: {
-    id: string;
-    name: string;
-    agentId?: string;
-    session?: string;
-  };
-  /** Dispatch timestamp */
-  timestamp: number;
-  /** Streaming chunk or token */
-  token?: string;
-  /** Complete text response */
-  fullText?: string;
-  /** Live2D/3D Avatar expression and motion trigger */
-  expression?: WebAvatarTrigger;
-  /** Interactive UI card update */
-  card?: WebUiCard;
-  /** Generic payload container */
-  data?: unknown;
-}
-
-// ============================================================================
-// Multi-Part Topology Types
-// ============================================================================
-
-export interface WebSessionPart extends EmaWorldPart {
-  readonly id: Id;
-  readonly type: "session" | "room" | "channel";
-  readonly name: string;
-  readonly sessionId: string;
-  clientMetadata?: WebClientMetadata;
-  createdAt: number;
-  lastActiveAt: number;
-  activeConnections: number;
-}
-
-export interface WebWorldOptions {
-  /** Route mount prefix (default: "/world/web") */
-  routePrefix?: string;
-  /** Initial session/chatroom part IDs to register (e.g. ["default"]) */
-  initialSessions?: string[];
-  /** Owner user ID (default: "owner") */
-  ownerId?: string;
-  /** Owner display name (default: "Rei") */
-  ownerName?: string;
-  /** Companion actor ID (default: "aoi_rei") */
-  companionId?: string;
-  /** Companion display name (default: "苍星怜") */
-  companionName?: string;
-  /** Default timezone for temporal envelopes (default: "UTC") */
-  timezone?: string;
-  /** SQLite database path for persistent seen state and sessions (defaults to ":memory:") */
-  dbPath?: string;
-  /** Circular buffer capacity for outbound events per session part (default: 100) */
-  bufferSize?: number;
-  /** Heartbeat interval in ms (default: 30000; set to 0 to disable) */
-  heartbeatIntervalMs?: number;
-  /** Environment variables (defaults to process.env) */
-  env?: Record<string, string | undefined>;
-  /** Whether to strictly enforce agent identity in interact() (default: true if PENGUIN_AGENT_ID is defined) */
-  requireAgentIdentity?: boolean;
-}
-
-// ============================================================================
-// WebWorld Implementation
-// ============================================================================
+} from "../../channel.js";
+import { assertAgentIdentity } from "../../minimal.js";
+import type {
+  WebChannel,
+  WebChannelKind,
+  WebClientMetadata,
+  WebTouchData,
+  WebTelemetryData,
+  WebInboundEventPayload,
+  WebOutboundModality,
+  WebAvatarTrigger,
+  WebUiCard,
+  WebOutboundEvent,
+  WebSessionPart,
+  WebWorldOptions,
+} from "./types.js";
 
 @Interface()
 export class WebWorld extends EmaWorld {
@@ -463,9 +219,7 @@ export class WebWorld extends EmaWorld {
            metadata_json=COALESCE(excluded.metadata_json, seen_social_nodes.metadata_json),
            fetched_at_ms=excluded.fetched_at_ms`,
       );
-      this.selectSocialNodeStmt = this.db.prepare(
-        "SELECT * FROM seen_social_nodes WHERE id = ?",
-      );
+      this.selectSocialNodeStmt = this.db.prepare("SELECT * FROM seen_social_nodes WHERE id = ?");
       this.selectSocialNodeByHandleStmt = this.db.prepare(
         "SELECT * FROM seen_social_nodes WHERE handle = ?",
       );
@@ -483,9 +237,7 @@ export class WebWorld extends EmaWorld {
       this.selectSocialChannelStmt = this.db.prepare(
         "SELECT * FROM seen_social_channels WHERE id = ?",
       );
-      this.selectAllSocialChannelsStmt = this.db.prepare(
-        "SELECT * FROM seen_social_channels",
-      );
+      this.selectAllSocialChannelsStmt = this.db.prepare("SELECT * FROM seen_social_channels");
 
       this.insertSocialItemStmt = this.db.prepare(
         `INSERT INTO seen_social_items (id, channel_id, author_node_id, name, content, created_at_iso, created_at_ms, fetched_at_ms, parent_item_id, url, metadata_json)
@@ -498,9 +250,7 @@ export class WebWorld extends EmaWorld {
            metadata_json=COALESCE(excluded.metadata_json, seen_social_items.metadata_json),
            fetched_at_ms=excluded.fetched_at_ms`,
       );
-      this.selectSocialItemStmt = this.db.prepare(
-        "SELECT * FROM seen_social_items WHERE id = ?",
-      );
+      this.selectSocialItemStmt = this.db.prepare("SELECT * FROM seen_social_items WHERE id = ?");
       this.selectSocialItemsByChannelStmt = this.db.prepare(
         "SELECT * FROM seen_social_items WHERE channel_id = ? ORDER BY created_at_ms ASC",
       );
@@ -725,8 +475,7 @@ export class WebWorld extends EmaWorld {
         if (!row && !id.startsWith("web:")) {
           row =
             (this.selectSocialNodeStmt.get(`web:person:${id}`) as
-              | Record<string, unknown>
-              | undefined) ??
+              Record<string, unknown> | undefined) ??
             (this.selectSocialNodeStmt.get(`web:bot:${id}`) as Record<string, unknown> | undefined);
         }
         if (!row && this.selectSocialNodeByHandleStmt) {
@@ -734,8 +483,7 @@ export class WebWorld extends EmaWorld {
         }
         if (row) {
           const channelRows = this.selectAllSocialChannelsStmt?.all() as
-            | Array<Record<string, unknown>>
-            | undefined;
+            Array<Record<string, unknown>> | undefined;
           const channelIds = (channelRows || [])
             .filter((c) => c.owner_node_id === row!.id)
             .map((c) => String(c.id));
@@ -817,10 +565,7 @@ export class WebWorld extends EmaWorld {
     const shortId = this.extractSessionId(id);
     return (
       channels.find(
-        (c) =>
-          c.id === id ||
-          c.id === canonical ||
-          this.extractSessionId(c.id) === shortId,
+        (c) => c.id === id || c.id === canonical || this.extractSessionId(c.id) === shortId,
       ) || null
     );
   }
@@ -855,8 +600,7 @@ export class WebWorld extends EmaWorld {
     }
 
     const createdAtMs =
-      item.createdAtMs ??
-      (item.createdAtIso ? new Date(item.createdAtIso).getTime() : Date.now());
+      item.createdAtMs ?? (item.createdAtIso ? new Date(item.createdAtIso).getTime() : Date.now());
     const createdAtIso = item.createdAtIso ?? new Date(createdAtMs).toISOString();
     const fetchedAtMs = item.fetchedAtMs ?? Date.now();
 
@@ -947,11 +691,13 @@ export class WebWorld extends EmaWorld {
   public getSocialItemWithReplies(
     id: string,
     referenceMs: number = Date.now(),
-  ): ({
-    context: EmaTemporalContext;
-    item: EmaChannelItem;
-    replies: EmaChannelItem[];
-  } & EmaChannelItem) | null {
+  ):
+    | ({
+        context: EmaTemporalContext;
+        item: EmaChannelItem;
+        replies: EmaChannelItem[];
+      } & EmaChannelItem)
+    | null {
     const item = this.getSocialItem(id, referenceMs);
     if (!item) return null;
 
@@ -1854,7 +1600,8 @@ export class WebWorld extends EmaWorld {
           if (!content) {
             throw new Error("Empty message content");
           }
-          const role = body.role === "aoi" || body.role === "bot" || body.role === "actor" ? "bot" : "person";
+          const role =
+            body.role === "aoi" || body.role === "bot" || body.role === "actor" ? "bot" : "person";
           if (role === "bot") {
             return this.dispatchActionEndpoint(
               "message.post",

@@ -1,0 +1,37 @@
+{
+  "name": "aoi-rei-companion-portal",
+  "version": "2.0.0",
+  "type": "module",
+  "penguin": {
+    "version": "2026.10.26.1",
+    "modules": [
+      {
+        "name": "Workbench",
+        "requires": {
+          "host": {
+            "iface": "@prismshadow/penguin-server#WorkbenchHost",
+            "from": "Host"
+          }
+        },
+        "provides": {
+          "main": "@prismshadow/penguin-server#WorkbenchMain"
+        },
+        "contributes": {
+          "WebModule.sessionTabs": [
+            {
+              "id": "companion_portal.main",
+              "key": "companion-portal",
+              "title": "Aoi Rei Chat",
+              "titleZh": "苍星怜",
+              "renderer": {
+                "iframe": {
+                  "src": "ui/index.html"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
