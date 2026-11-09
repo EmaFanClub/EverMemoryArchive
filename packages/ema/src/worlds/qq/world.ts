@@ -52,6 +52,10 @@ import {
 } from "./gateway.js";
 import { checkQQContentFilter } from "./filter.js";
 import {
+  QQMessageSynchronizer,
+  parseMentionInfo,
+} from "./sync.js";
+import {
   type QQChannel,
   type QQChannelKind,
   type OneBotMessageType,
@@ -64,6 +68,10 @@ import {
   type UserIntimacyProfile,
   type QQDeliveryReceipt,
   type QQInputMetadata,
+  type QQGroupSyncState,
+  type QQMessageGap,
+  type QQSyncStatus,
+  type QQSyncedMessage,
   type QQContentFilterConfig,
   type QQRateLimitConfig,
   type QQWorldOptions,
@@ -77,6 +85,7 @@ export * from "./types.js";
 export * from "./authorization.js";
 export * from "./gateway.js";
 export * from "./filter.js";
+export * from "./sync.js";
 
 const INTIMACY_STAGE_ORDER: Record<RelationalIntimacyStage, number> = {
   stranger: 0,
@@ -165,7 +174,11 @@ export function parseCQParams(rawParams: string): Record<string, string> {
 /**
  * Parses a string containing CQ codes into normalized text, replyTo, and rich metadata.
  */
-export function parseCQMessage(raw: string): {
+export function parseCQMessage(
+  raw: string,
+  selfId?: string | number,
+  nicknames?: string[],
+): {
   content: string;
   replyTo?: string;
   metadata: QQInputMetadata;
@@ -216,13 +229,17 @@ export function parseCQMessage(raw: string): {
   });
 
   const content = unescapeCQText(normalized).trim();
+  const mentionInfo = parseMentionInfo(raw, selfId, nicknames);
+  const combinedAtUids = Array.from(new Set([...atUids, ...mentionInfo.atUids]));
 
   return {
     content,
     replyTo,
     metadata: {
       rawMessage: raw,
-      atUids: atUids.length > 0 ? atUids : undefined,
+      atUids: combinedAtUids.length > 0 ? combinedAtUids : undefined,
+      isAtMe: mentionInfo.isAtMe,
+      isAtAll: mentionInfo.isAtAll,
       images: images.length > 0 ? images : undefined,
       voice,
       jsonCard,
@@ -233,7 +250,11 @@ export function parseCQMessage(raw: string): {
 /**
  * Parses an array of OneBotSegments into normalized text, replyTo, and metadata.
  */
-export function parseSegmentMessage(segments: OneBotSegment[]): {
+export function parseSegmentMessage(
+  segments: OneBotSegment[],
+  selfId?: string | number,
+  nicknames?: string[],
+): {
   content: string;
   replyTo?: string;
   metadata: QQInputMetadata;
@@ -306,12 +327,16 @@ export function parseSegmentMessage(segments: OneBotSegment[]): {
   }
 
   const content = parts.join(" ").replace(/\s+/g, " ").trim();
+  const mentionInfo = parseMentionInfo(segments, selfId, nicknames);
+  const combinedAtUids = Array.from(new Set([...atUids, ...mentionInfo.atUids]));
 
   return {
     content,
     replyTo,
     metadata: {
-      atUids: atUids.length > 0 ? atUids : undefined,
+      atUids: combinedAtUids.length > 0 ? combinedAtUids : undefined,
+      isAtMe: mentionInfo.isAtMe,
+      isAtAll: mentionInfo.isAtAll,
       images: images.length > 0 ? images : undefined,
       voice,
       jsonCard,
@@ -344,6 +369,11 @@ export class QQWorld extends EmaWorld {
   private gatewayHeaders?: Record<string, string>;
   private webhookSecret?: string;
   private autoDiscoverGateway: boolean;
+
+  private requireMentionInGroups: boolean;
+  private nicknames: string[];
+  private autoSync: boolean;
+  private synchronizer: QQMessageSynchronizer;
 
   private parts: Map<string, EmaWorldPart> = new Map();
   private seenIds: Set<string> = new Set();
@@ -503,6 +533,47 @@ export class QQWorld extends EmaWorld {
     this.initSqlite();
     this.initSocialPrimitives(options);
     this.loadState();
+
+    this.requireMentionInGroups = options.requireMentionInGroups ?? false;
+    this.nicknames = options.nicknames ? [...options.nicknames] : [];
+    this.autoSync = options.autoSync ?? true;
+
+    // Initialize Synchronizer for group message sync, sequence tracking, and gap perception
+    const syncGroups = new Set<string>();
+    for (const g of options.groups || []) syncGroups.add(String(g));
+    for (const g of options.allowedGroups || []) syncGroups.add(String(g));
+    for (const g of options.authorization?.allowedGroups || []) syncGroups.add(String(g));
+
+    this.synchronizer = new QQMessageSynchronizer({
+      apiCaller: this.apiCaller,
+      db: this.db || new DatabaseSync(":memory:"),
+      groups: Array.from(syncGroups),
+      selfId: this.selfId,
+      nicknames: this.nicknames,
+      intervalMs: options.syncIntervalMs,
+      batchSize: options.syncBatchSize,
+      autoRecoverGaps: options.autoRecoverGaps,
+      authManager: this.authManager,
+      onMessage: async (syncedMsg) => {
+        const fakeEvent: OneBotEvent = {
+          post_type: "message",
+          message_type: "group",
+          sub_type: "normal",
+          message_id: syncedMsg.messageId,
+          message_seq: syncedMsg.messageSeq,
+          group_id: syncedMsg.groupId ? Number(syncedMsg.groupId) : undefined,
+          user_id: Number(syncedMsg.userId) || undefined,
+          message: syncedMsg.content,
+          raw_message: syncedMsg.rawMessage || syncedMsg.content,
+          time: Math.floor(syncedMsg.timestamp / 1000),
+          sender: {
+            user_id: Number(syncedMsg.userId) || undefined,
+            nickname: syncedMsg.senderName,
+          },
+        };
+        await this.ingestEvent(fakeEvent);
+      },
+    });
   }
 
   private initSqlite(): void {
@@ -881,9 +952,18 @@ export class QQWorld extends EmaWorld {
         .then((info) => {
           if (info?.userId && !this.selfId) {
             this.selfId = info.userId;
+            this.synchronizer.setSelfId(info.userId);
+          }
+          if (info?.nickname) {
+            this.synchronizer.addNicknames([info.nickname]);
           }
         })
         .catch(() => {});
+    }
+
+    // Start background message synchronizer if enabled
+    if (this.autoSync && this.gatewayUrl && !this.passive) {
+      this.synchronizer.start();
     }
 
     const registryHandle = ctx.registry.register("qq", this);
@@ -1095,6 +1175,56 @@ export class QQWorld extends EmaWorld {
         };
       }
 
+      // 14. Message Synchronization & Sequence Gap Perception
+      if (subpath === "sync/status") {
+        return this.synchronizer.getSyncStatus();
+      }
+
+      if (subpath === "sync/now") {
+        const results = await this.synchronizer.syncAll();
+        return {
+          status: "ok",
+          synced: results,
+          statusSummary: this.synchronizer.getSyncStatus().summary,
+        };
+      }
+
+      if (subpath === "sync/messages") {
+        const query = routeCtx.query;
+        const groupId = query?.get("group_id") || query?.get("groupId") || "";
+        const limitStr = query?.get("limit");
+        const sinceSeqStr = query?.get("since_seq") || query?.get("sinceSeq");
+        const atMeOnlyStr = query?.get("at_me_only") || query?.get("atMeOnly");
+
+        if (groupId) {
+          const authCheck = this.authManager.canQueryPart(`group:${groupId}`);
+          if (!authCheck.authorized) {
+            throw new QQAuthorizationError(authCheck.reason || `Group query forbidden for sync messages: ${groupId}`);
+          }
+        }
+
+        const messages = this.synchronizer.getSyncedMessages(groupId, {
+          limit: limitStr ? parseInt(limitStr, 10) : undefined,
+          sinceSeq: sinceSeqStr ? parseInt(sinceSeqStr, 10) : undefined,
+          atMeOnly: atMeOnlyStr === "true" || atMeOnlyStr === "1",
+        });
+
+        return {
+          world: "qq",
+          groupId,
+          count: messages.length,
+          messages,
+        };
+      }
+
+      if (subpath === "sync/gaps") {
+        return {
+          world: "qq",
+          gaps: this.synchronizer.getGapHistory(),
+          summary: this.synchronizer.getSyncStatus().summary,
+        };
+      }
+
       return {
         world: "qq",
         parts: this.listParts(),
@@ -1131,6 +1261,7 @@ export class QQWorld extends EmaWorld {
   dispose(): void {
     this.active = false;
     this.activeCtx = null;
+    this.synchronizer.stop();
     if (this.wsClient) {
       this.wsClient.dispose();
       this.wsClient = null;
@@ -1261,20 +1392,33 @@ export class QQWorld extends EmaWorld {
       };
 
       if (typeof event.message === "string") {
-        const parsed = parseCQMessage(event.message);
+        const parsed = parseCQMessage(event.message, this.selfId, this.nicknames);
         content = parsed.content;
         replyTo = parsed.replyTo;
         meta = { ...meta, ...parsed.metadata };
       } else if (Array.isArray(event.message)) {
-        const parsed = parseSegmentMessage(event.message);
+        const parsed = parseSegmentMessage(event.message, this.selfId, this.nicknames);
         content = parsed.content;
         replyTo = parsed.replyTo;
         meta = { ...meta, ...parsed.metadata };
       } else if (event.raw_message) {
-        const parsed = parseCQMessage(event.raw_message);
+        const parsed = parseCQMessage(event.raw_message, this.selfId, this.nicknames);
         content = parsed.content;
         replyTo = parsed.replyTo;
         meta = { ...meta, ...parsed.metadata };
+      }
+
+      if (typeof event.message_seq === "number") {
+        meta.messageSeq = event.message_seq;
+      }
+
+      // Check if message is replying to the bot
+      if (replyTo && this.selfId) {
+        const prev = this.messageHistory.get(replyTo);
+        if (prev && prev.sender.id === `user:qq:${this.selfId}`) {
+          meta.isReplyToMe = true;
+          meta.isAtMe = true;
+        }
       }
 
       if (!content) {
@@ -1339,7 +1483,13 @@ export class QQWorld extends EmaWorld {
       this.storeHistory(input);
 
       if (this.activeCtx) {
-        this.activeCtx.inputBatcher.push(input);
+        if (this.requireMentionInGroups && partId.startsWith("group:")) {
+          if (meta.isAtMe || meta.isReplyToMe) {
+            this.activeCtx.inputBatcher.push(input);
+          }
+        } else {
+          this.activeCtx.inputBatcher.push(input);
+        }
       }
 
       return input;
@@ -2224,6 +2374,20 @@ export class QQWorld extends EmaWorld {
         rateLimit: "5/minute",
         example: { groupId: "123456", card: "Ema伴侣" },
       },
+      {
+        name: "sync.refresh",
+        description: "Triggers an immediate synchronization round of all authorized QQ groups and detects sequence gaps",
+        parameters: {},
+        rateLimit: "10/minute",
+        example: {},
+      },
+      {
+        name: "sync.status",
+        description: "Returns telemetry on group message synchronization, sequence tracking, and gap perception",
+        parameters: {},
+        rateLimit: "30/minute",
+        example: {},
+      },
     ];
   }
 
@@ -2395,6 +2559,22 @@ export class QQWorld extends EmaWorld {
       };
     }
 
+    if (actionName === "sync.refresh") {
+      const results = await this.synchronizer.syncAll();
+      return {
+        status: "ok",
+        synced: results,
+        statusSummary: this.synchronizer.getSyncStatus().summary,
+      };
+    }
+
+    if (actionName === "sync.status") {
+      return {
+        status: "ok",
+        sync: this.synchronizer.getSyncStatus(),
+      };
+    }
+
     throw new Error(`Unsupported action: ${actionName}`);
   }
 
@@ -2481,6 +2661,7 @@ export class QQWorld extends EmaWorld {
     seenCount: number;
     historyCount: number;
     receiptsCount: number;
+    sync: QQSyncStatus;
   } {
     return {
       world: "qq",
@@ -2492,7 +2673,29 @@ export class QQWorld extends EmaWorld {
       seenCount: this.seenIds.size,
       historyCount: this.messageHistory.size,
       receiptsCount: this.deliveryReceipts.size,
+      sync: this.synchronizer.getSyncStatus(),
     };
+  }
+
+  /**
+   * Returns the message synchronizer managing sequence tracking and gap recovery.
+   */
+  getSynchronizer(): QQMessageSynchronizer {
+    return this.synchronizer;
+  }
+
+  /**
+   * Returns current sync telemetry and gap status.
+   */
+  getSyncStatus(): QQSyncStatus {
+    return this.synchronizer.getSyncStatus();
+  }
+
+  /**
+   * Triggers an immediate synchronization round across all monitored & authorized groups.
+   */
+  async syncNow(): Promise<Record<string, number>> {
+    return await this.synchronizer.syncAll();
   }
 
   /**

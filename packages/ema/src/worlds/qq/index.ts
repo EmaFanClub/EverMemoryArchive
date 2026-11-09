@@ -13,6 +13,7 @@ export * from "./types.js";
 export * from "./filter.js";
 export * from "./authorization.js";
 export * from "./gateway.js";
+export * from "./sync.js";
 export * from "./world.js";
 export {
   QQLoginManager,

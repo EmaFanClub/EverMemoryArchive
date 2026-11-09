@@ -45,6 +45,7 @@ export interface OneBotEvent {
   message_type?: OneBotMessageType;
   sub_type?: string;
   message_id?: number | string;
+  message_seq?: number;
   user_id?: number | string;
   group_id?: number | string;
   message?: string | OneBotSegment[];
@@ -112,12 +113,67 @@ export interface QQInputMetadata {
   groupId?: string;
   userId?: string;
   atUids?: string[];
+  isAtMe?: boolean;
+  isAtAll?: boolean;
+  isReplyToMe?: boolean;
+  messageSeq?: number;
   images?: Array<{ file?: string; url?: string }>;
   voice?: { file?: string; url?: string };
   jsonCard?: Record<string, unknown> | null;
   noticeType?: string;
   subType?: string;
   isPoke?: boolean;
+}
+
+export interface QQGroupSyncState {
+  groupId: string;
+  lastSeq: number;
+  lastSyncedAt: number;
+  totalSynced: number;
+  gapsDetected: number;
+  messagesMissed: number;
+  messagesRecovered: number;
+  lastGap?: QQMessageGap;
+}
+
+export interface QQMessageGap {
+  groupId: string;
+  fromSeq: number;
+  toSeq: number;
+  missedCount: number;
+  timestamp: number;
+  recovered: boolean;
+  recoveredCount?: number;
+}
+
+export interface QQSyncStatus {
+  enabled: boolean;
+  syncIntervalMs: number;
+  autoRecoverGaps: boolean;
+  groups: Record<string, QQGroupSyncState>;
+  summary: {
+    totalSynced: number;
+    totalGapsDetected: number;
+    totalMessagesMissed: number;
+    totalMessagesRecovered: number;
+    hasActiveGaps: boolean;
+  };
+}
+
+export interface QQSyncedMessage {
+  messageId: string;
+  groupId?: string;
+  userId: string;
+  senderName: string;
+  messageSeq?: number;
+  content: string;
+  rawMessage?: string;
+  isAtMe: boolean;
+  atUids: string[];
+  replyTo?: string;
+  timestamp: number;
+  createdAtIso: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface QQContentFilterConfig {
@@ -227,6 +283,31 @@ export interface QQWorldOptions {
   allowedGroups?: Array<string | number>;
   /** Convenience shorthand: admin user IDs */
   adminUsers?: Array<string | number>;
+  /**
+   * Whether to require an @mention or reply to the bot to trigger agent turns in group chats (default: false).
+   * Note: Regardless of this setting, all messages are always synchronized to local SQLite and channel items.
+   */
+  requireMentionInGroups?: boolean;
+  /**
+   * Companion's known nicknames for text-based mention detection, e.g. ["小纸夜", "Ema"]
+   */
+  nicknames?: string[];
+  /**
+   * Whether to automatically synchronize group message history in the background (default: true if gatewayUrl is set)
+   */
+  autoSync?: boolean;
+  /**
+   * Group message polling/synchronization interval in milliseconds (default: 3000ms)
+   */
+  syncIntervalMs?: number;
+  /**
+   * Number of messages to fetch per sync poll batch (default: 20, max 100)
+   */
+  syncBatchSize?: number;
+  /**
+   * Whether to automatically detect and recover sequence gaps (default: true)
+   */
+  autoRecoverGaps?: boolean;
   /** Passive mode: mounts routes without active listeners */
   passive?: boolean;
   /** Environment variables (defaults to process.env) */
