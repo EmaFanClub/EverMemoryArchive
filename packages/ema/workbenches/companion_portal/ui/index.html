@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>苍星怜</title>
+    <link rel="stylesheet" href="/workbench-ui.css" />
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="chat-shell">
+      <header class="chat-header">
+        <div class="chat-identity">
+          <span id="status-dot" class="status-dot online" aria-hidden="true"></span>
+          <h1>苍星怜</h1>
+          <span id="status-text" class="status-text" role="status">在线</span>
+        </div>
+        <div class="header-actions">
+          <button id="stop-btn" type="button" class="btn-ghost" hidden>停止</button>
+          <button id="reset-btn" type="button" class="btn-ghost">新对话</button>
+        </div>
+      </header>
+
+      <div id="stream" class="message-stream" aria-label="对话消息">
+        <div id="messages" class="message-list"></div>
+        <article id="live-group" class="message-group actor live" hidden>
+          <span class="avatar" aria-hidden="true">怜</span>
+          <div class="group-body">
+            <div class="bubble actor">
+              <p id="live-text"></p>
+              <span id="live-activity" class="live-activity">正在思考...</span>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <footer class="composer-dock">
+        <p id="error-banner" class="error-banner" role="alert" hidden></p>
+        <form id="composer" class="composer-form">
+          <div class="composer-frame">
+            <textarea
+              id="input"
+              rows="1"
+              maxlength="20000"
+              placeholder="向苍星怜发送消息... (Enter 发送，Shift+Enter 换行)"
+              aria-label="消息内容"
+            ></textarea>
+            <button id="send-btn" type="submit" class="wb-primary" disabled>发送</button>
+          </div>
+        </form>
+      </footer>
+    </div>
+  </body>
+</html>
