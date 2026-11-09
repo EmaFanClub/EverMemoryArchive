@@ -76,6 +76,11 @@ export interface EmaRouteContext {
   readonly path: string;
   readonly params: Record<string, string>;
   readonly query: URLSearchParams;
+  readonly body?: unknown;
+  readonly method?: string;
+  readonly headers?: Headers;
+  readonly req?: Request;
+  readonly raw?: unknown;
 }
 
 export type EmaRouteHandler = (ctx: EmaRouteContext) => Promise<unknown> | unknown;
@@ -98,7 +103,7 @@ export interface EmaRouter {
   /**
    * Reads a resource from the router by URI path.
    */
-  read<T = unknown>(uri: string): Promise<T>;
+  read<T = unknown>(uri: string, init?: RequestInit): Promise<T>;
 
   /**
    * Lists all mounted route prefixes.

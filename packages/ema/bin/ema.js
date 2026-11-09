@@ -14,6 +14,9 @@ import {
   createMinimalPrototype,
   SimpleEmaRouter,
   PenguinChannelWorld,
+  BilibiliWorld,
+  BilibiliLoginManager,
+  publishBilibiliDynamic,
   parseWatchDuration,
   assertAgentIdentity,
   DEFAULT_MINIMAL_SYSTEM_PROMPT,
@@ -29,6 +32,12 @@ Usage:
 
   ema.js world get <path>
     Query resources from the EMA Router (e.g. /world/channel/parts)
+
+  ema.js bilibili login [options]
+    Interactive Playwright QR code login for Bilibili account authentication
+
+  ema.js bilibili post-dynamic <text> [options]
+    Publish a feed dynamic post via Playwright browser automation
 
   ema.js run [options]
     Run the Minimal Prototype with PenguinChannelWorld and transactional input batcher
@@ -61,6 +70,12 @@ async function main() {
       channels: ["ch_ema_minimal_test", "default_channel"],
       passive: true,
     });
+    const bilibiliWorld = new BilibiliWorld({
+      rooms: ["123456"],
+      videoTargets: ["video:BV1xx411c7mD"],
+      dmTargets: ["1001"],
+      passive: true,
+    });
 
     const ctx = {
       router,
@@ -69,13 +84,21 @@ async function main() {
     };
 
     const handle = channelWorld.start(ctx);
+    const biliHandle = bilibiliWorld.start(ctx);
 
     if (sub === "ls") {
       const routes = router.listRoutes();
       for (const r of routes) {
-        console.log(`PenguinChannelWorld ${r.prefix}`);
+        if (r.prefix.startsWith("/world/channel")) {
+          console.log(`PenguinChannelWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/bilibili")) {
+          console.log(`BilibiliWorld ${r.prefix}`);
+        } else {
+          console.log(`${r.worldName || "World"} ${r.prefix}`);
+        }
       }
       handle.dispose();
+      biliHandle.dispose();
       process.exit(0);
     }
 
@@ -86,6 +109,7 @@ async function main() {
           "Error: Missing path argument for 'world get'. Example: ema.js world get /world/channel/parts",
         );
         handle.dispose();
+        biliHandle.dispose();
         process.exit(1);
       }
 
@@ -93,12 +117,76 @@ async function main() {
         const result = await router.read(targetPath);
         console.log(JSON.stringify(result, null, 2));
         handle.dispose();
+        biliHandle.dispose();
         process.exit(0);
       } catch (err) {
         console.error(`Error querying ${targetPath}:`, err.message || err);
         handle.dispose();
+        biliHandle.dispose();
         process.exit(1);
       }
+    }
+
+    printUsage();
+    process.exit(1);
+  }
+
+  if (command === "bilibili") {
+    const sub = args[1];
+    if (sub === "login") {
+      let qrPath = path.resolve(process.cwd(), ".bilibili-login-qrcode.png");
+      let cookiePath = path.resolve(process.cwd(), "bilibili-cookies.json");
+      let storageStatePath = path.resolve(process.cwd(), "bilibili-storage-state.json");
+      let profileDir = path.resolve(process.cwd(), ".bilibili-profile");
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--qr-path") qrPath = path.resolve(args[++i]);
+        else if (args[i] === "--cookie-path") cookiePath = path.resolve(args[++i]);
+        else if (args[i] === "--state-path") storageStatePath = path.resolve(args[++i]);
+        else if (args[i] === "--profile") profileDir = path.resolve(args[++i]);
+      }
+      const mgr = new BilibiliLoginManager({
+        outputQrPath: qrPath,
+        cookieSavePath: cookiePath,
+        storageStatePath,
+        userDataDir: profileDir,
+      });
+      const result = await mgr.login();
+      if (result.success) {
+        console.log(`\nLogin successful! Welcome, ${result.uname} (UID: ${result.uid})`);
+        console.log(`Session saved to: ${storageStatePath}`);
+        console.log(`Cookies saved to: ${cookiePath}`);
+      } else {
+        console.error(`\nLogin failed: ${result.message}`);
+      }
+      process.exit(result.success ? 0 : 1);
+    }
+
+    if (sub === "post-dynamic" || sub === "publish-dynamic") {
+      let text = args[2];
+      let storageStatePath = "bilibili-storage-state.json";
+      let profileDir = ".bilibili-profile";
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--text") text = args[++i];
+        else if (args[i] === "--state-path") storageStatePath = args[++i];
+        else if (args[i] === "--profile") profileDir = args[++i];
+      }
+      if (!text) {
+        console.error("Error: Missing text for dynamic post. Example: ema.js bilibili post-dynamic 'Hello from Ema'");
+        process.exit(1);
+      }
+      console.log(`Publishing Bilibili dynamic via Playwright browser automation...`);
+      const res = await publishBilibiliDynamic(text, {
+        userDataDir: profileDir,
+        storageStatePath,
+      });
+      if (res.success) {
+        console.log(`\nDynamic published successfully!`);
+        if (res.dynamicId) console.log(`Dynamic ID:  ${res.dynamicId}`);
+        if (res.url) console.log(`Dynamic URL: ${res.url}`);
+      } else {
+        console.error(`\nFailed to publish dynamic: ${res.message}`);
+      }
+      process.exit(res.success ? 0 : 1);
     }
 
     printUsage();

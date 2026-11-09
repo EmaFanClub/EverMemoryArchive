@@ -9,10 +9,14 @@ Future agents and engineers use these scenarios to automatically test and certif
 ```text
 tests/scenarios/
 ├── README.md                      # This document: how to discover, initiate, and run QA scenarios
-└── prototype/
-    └── minimal/                   # Minimal EMA Prototype QA scenario
-        ├── TASK.md                # Scenario definition, preconditions, steps, and pass criteria
-        └── minimal-prototype.mjs  # Executable scenario runner and channel watcher
+├── prototype/
+│   └── minimal/                   # Minimal EMA Prototype QA scenario
+│       ├── TASK.md                # Scenario definition, preconditions, steps, and pass criteria
+│       └── minimal-prototype.mjs  # Executable scenario runner and channel watcher
+└── bilibili/
+    └── channels/                  # Bilibili Channels QA scenario (RFC-0002)
+        ├── TASK.md                # Scenario definition, invariants, and pass criteria
+        └── qa-runner.mjs          # Executable QA scenario runner & certification suite
 ```
 
 ## How to Start a QA Scenario
@@ -22,6 +26,7 @@ When an automated agent, CI job, or human engineer needs to run a QA verificatio
 ### 1. Identify the Target Scenario
 Browse the scenario directory corresponding to the component or variant under test:
 - `prototype/minimal/`: Zero-personality, zero-memory, channel I/O baseline prototype.
+- `bilibili/channels/`: RFC-0002 Social Media Channel Architecture certification for BilibiliWorld.
 - *(Future scenarios will cover memory-augmented variants, personality layers, and adversarial evaluations)*.
 
 Read the scenario's `TASK.md` to understand:
@@ -57,6 +62,15 @@ node tests/scenarios/prototype/minimal/minimal-prototype.mjs --channel ch_ema_mi
 
 # C. Verify channel output
 penguin org channel tail --channel ch_ema_minimal_test -n 2
+```
+
+To run the Bilibili Channels QA (RFC-0002):
+```bash
+# Automated end-to-end certification run
+node tests/scenarios/bilibili/channels/qa-runner.mjs
+
+# JSON report output for CI/CD logging
+node tests/scenarios/bilibili/channels/qa-runner.mjs --json
 ```
 
 ### 4. Evaluate Pass/Fail Criteria
