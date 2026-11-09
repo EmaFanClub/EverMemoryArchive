@@ -21,6 +21,7 @@ import {
   WebWorld,
   QQWorld,
   QQLoginManager,
+  createQQCompanionRunner,
   installWebWorkbench,
   BilibiliLoginManager,
   publishBilibiliDynamic,
@@ -285,6 +286,73 @@ async function main() {
 
   if (command === "qq" || command === "snowluma") {
     const sub = args[1];
+    if (sub === "run") {
+      let gateway = process.env.SNOWLUMA_GATEWAY_URL || process.env.ONEBOT_GATEWAY_URL || "http://localhost:13000";
+      let token = process.env.SNOWLUMA_TOKEN || process.env.ONEBOT_TOKEN;
+      let group = "2000000001";
+      let session = "619e98db";
+      let agent = "aoi_rei";
+      let pollInterval = 2000;
+      let watchFor = "12h";
+      let requireMention = true;
+      let dbPath = "/tmp/ema-qq-companion.sqlite";
+
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--gateway" || args[i] === "--url") gateway = args[++i];
+        else if (args[i] === "--token") token = args[++i];
+        else if (args[i] === "--group") group = args[++i];
+        else if (args[i] === "--session") session = args[++i];
+        else if (args[i] === "--agent") agent = args[++i];
+        else if (args[i] === "--poll-interval") pollInterval = parseInt(args[++i], 10);
+        else if (args[i] === "--watch-for") watchFor = args[++i];
+        else if (args[i] === "--all-messages") requireMention = false;
+        else if (args[i] === "--db") dbPath = path.resolve(args[++i]);
+      }
+
+      const durationMs = parseWatchDuration(watchFor);
+      const endTime = Date.now() + durationMs;
+
+      console.log("=== EMA QQ Companion Runner (SnowLuma / OneBot 11) ===");
+      console.log(`Gateway:         ${gateway}`);
+      console.log(`Target Group:    ${group} (Ema 同好会)`);
+      console.log(`Backend Session: ${session} (Agent: ${agent})`);
+      console.log(`Mention Filter:  ${requireMention ? "Only reply when @mentioned or replied to" : "Reply to all messages"}`);
+      console.log(`Poll Interval:   ${pollInterval} ms`);
+      console.log(`Watch Duration:  ${watchFor} (until ${new Date(endTime).toISOString()})`);
+      console.log(`Local DB:        ${dbPath}`);
+      console.log("------------------------------------------------------");
+
+      const runner = createQQCompanionRunner({
+        gatewayUrl: gateway,
+        gatewayToken: token,
+        groupId: group,
+        session,
+        agentId: agent,
+        pollIntervalMs: pollInterval,
+        requireMentionInGroups: requireMention,
+        dbPath,
+      });
+
+      const shutdown = () => {
+        console.log("\n[QQ Runner] Shutting down companion bridge...");
+        runner.dispose();
+        process.exit(0);
+      };
+
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
+      const waitInterval = setInterval(() => {
+        if (Date.now() >= endTime) {
+          clearInterval(waitInterval);
+          console.log(`\n[QQ Runner] Watch duration (${watchFor}) completed. Exiting.`);
+          runner.dispose();
+          process.exit(0);
+        }
+      }, 10000);
+      return;
+    }
+
     if (sub === "login") {
       let qrPath = path.resolve(process.cwd(), ".qq-login-qrcode.png");
       let credentialPath = path.resolve(process.cwd(), "qq-credentials.json");

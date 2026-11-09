@@ -31,6 +31,8 @@ import {
   parseSegmentMessage,
   parseMentionInfo,
   QQMessageSynchronizer,
+  cleanLlmReplyText,
+  createQQCompanionRunner,
   SimpleEmaRouter,
   type EmaCtx,
   type EmaInput,
@@ -439,6 +441,80 @@ describe("QQ World - requireMentionInGroups Option & Route Endpoints", () => {
     } finally {
       handle.dispose();
       world.dispose();
+    }
+  });
+
+  it("cleans raw penguin run stdout into clean companion response", () => {
+    const rawStdout = `
+PenguinHarness run v0.2.18-g4f741de
+Agent: aoi_rei
+Workspace: /home/rei/work/org/ema/ema-dev
+Model: gemini-3.8-flash
+Server: http://localhost:17469
+**Analyzing User Input**
+
+I'm currently scrutinizing the user's input, specifically their greeting. My priority is to ascertain if this is a standard direct chat message or if it carries any specific channel implications.
+
+
+你好呀。今天过得还好吗？如果有什么想聊的，我一直都在这里听你说。
+[stats] context 8k (+8k) · tokens 8k (+8k) · 4.7s (+4.7s)
+    `;
+
+    const cleaned = cleanLlmReplyText(rawStdout);
+    expect(cleaned).toBe("你好呀。今天过得还好吗？如果有什么想聊的，我一直都在这里听你说。");
+  });
+
+  it("boots QQ companion runner and handles an @mention turn round-trip", async () => {
+    let capturedReply = "";
+    let capturedTarget = "";
+
+    const runner = createQQCompanionRunner({
+      gatewayUrl: "http://mock-gateway:13000",
+      groupId: "2000000001",
+      selfId: BOT_UID,
+      nicknames: ["小纸夜", "Ema"],
+      requireMentionInGroups: true,
+      dbPath: ":memory:",
+      llmInvoker: async (prompt, batch) => {
+        expect(prompt).toContain("Ema 同好会");
+        expect(prompt).toContain("测试群友");
+        return "收到你的艾特啦，测试一切正常 ✨";
+      },
+      env: { PENGUIN_AGENT_ID: "emafanclub_ema_dev" },
+    });
+
+    try {
+      // Mock the interact method on runner.world
+      const originalInteract = runner.world.interact.bind(runner.world);
+      vi.spyOn(runner.world, "interact").mockImplementation((ctx, actor, target, payload: any) => {
+        capturedTarget = target;
+        capturedReply = payload.text;
+        return { dispose: () => {} };
+      });
+
+      // Ingest an @mention message
+      const mentionEvent: OneBotEvent = {
+        post_type: "message",
+        message_type: "group",
+        sub_type: "normal",
+        message_id: 88888,
+        message_seq: 301,
+        group_id: 2000000001,
+        user_id: 123456,
+        time: 1700000000,
+        raw_message: `[CQ:at,qq=${BOT_UID}] @Ema 你好！`,
+        sender: { user_id: 123456, nickname: "测试群友" },
+      };
+
+      await runner.world.ingestEvent(mentionEvent);
+
+      // Await turn debounce and execution
+      await new Promise((r) => setTimeout(r, 800));
+
+      expect(capturedTarget).toBe("group:2000000001");
+      expect(capturedReply).toBe("收到你的艾特啦，测试一切正常 ✨");
+    } finally {
+      runner.dispose();
     }
   });
 });
