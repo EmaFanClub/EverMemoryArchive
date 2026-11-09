@@ -48,6 +48,11 @@ Per board and user directives, the verification methodology is strictly centered
   - **Autonomous Dispatch**: Agent successfully dispatched actions using both `world.interact(ctx, actor, actionName, params)` and HTTP `POST /world/bilibili/actions/:name`.
   - **Closed-Loop Perception Feedback**: Dispatched posts and comments were immediately recorded into `seen_social_items` via read-through caching. The agent verified that subsequent channel queries immediately reflected outbound actions without waiting for external platform crawlers.
   - **Privacy Guardrails**: Dispatches attempting to leak local file paths (`/home/rei/secret.pem` or `.vault.toml`) were intercepted by `BilibiliContentFilterError`.
+  - **Live Platform Dispatch Verification**: Executed live outbound dynamic dispatch via `world.interact(ctx, actor, "post.publish", { message: "..." })` backed by Playwright with authentic authenticated storageState for UID `3546869527480631` (`Sakana酱ノ`). Dynamic published successfully to Bilibili:
+    - **Dynamic ID**: `1268543613399203842`
+    - **Live Dynamic URL**: https://t.bilibili.com/1268543613399203842
+    - **Content**: `【EverMemoryArchive】Ema 伴侣系统运行测试：RFC-0002 社交媒体动态发布（post.publish）真实闭环执行成功 ✨`
+    - **Read-Through Verification**: Immediately indexed in `bilibili:dynamic:3546869527480631` channel offline readback.
 
 ---
 
