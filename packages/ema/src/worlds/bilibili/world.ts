@@ -227,12 +227,17 @@ export class BilibiliWorld extends EmaWorld {
       this.cookies = { ...options.cookies };
     }
 
+    const defaultStatePath = path.resolve(process.cwd(), "bilibili-storage-state.json");
+    const fallbackStatePath = path.resolve("/home/rei/worktrees/EverMemoryArchive/next/bilibili-storage-state.json");
     const statePath =
       options.storageStatePath ??
-      path.resolve(process.cwd(), "bilibili-storage-state.json");
+      (fs.existsSync(defaultStatePath) ? defaultStatePath : fallbackStatePath);
+
+    const defaultCookiePath = path.resolve(process.cwd(), "bilibili-cookies.json");
+    const fallbackCookiePath = path.resolve("/home/rei/worktrees/EverMemoryArchive/next/bilibili-cookies.json");
     const cookiePath =
       options.cookiePath ??
-      path.resolve(process.cwd(), "bilibili-cookies.json");
+      (fs.existsSync(defaultCookiePath) ? defaultCookiePath : fallbackCookiePath);
 
     if (!this.cookies) {
       const mergedCookies: Record<string, string> = {};

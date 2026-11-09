@@ -675,13 +675,35 @@ export async function publishBilibiliDynamic(
   const profileDir = path.resolve(options.userDataDir ?? ".bilibili-profile");
   const storageStatePath = options.storageStatePath
     ? path.resolve(options.storageStatePath)
-    : path.resolve(process.cwd(), "bilibili-storage-state.json");
+    : (fs.existsSync(path.resolve(process.cwd(), "bilibili-storage-state.json"))
+        ? path.resolve(process.cwd(), "bilibili-storage-state.json")
+        : path.resolve("/home/rei/worktrees/EverMemoryArchive/next/bilibili-storage-state.json"));
 
+  let browser: Browser | null = null;
   let context: BrowserContext;
   let ownsContext = false;
 
   if (options.context) {
     context = options.context;
+  } else if (storageStatePath && fs.existsSync(storageStatePath)) {
+    ownsContext = true;
+    browser = await chromium.launch({
+      headless: options.headless ?? true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+      ],
+    });
+    context = await browser.newContext({
+      storageState: storageStatePath,
+      viewport: { width: 1280, height: 800 },
+      locale: "zh-CN",
+      userAgent:
+        options.userAgent ??
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    });
   } else {
     ownsContext = true;
     context = await chromium.launchPersistentContext(profileDir, {
@@ -701,7 +723,7 @@ export async function publishBilibiliDynamic(
   }
 
   try {
-    if (storageStatePath && fs.existsSync(storageStatePath)) {
+    if (!browser && storageStatePath && fs.existsSync(storageStatePath)) {
       try {
         const state = JSON.parse(fs.readFileSync(storageStatePath, "utf8"));
         if (Array.isArray(state.cookies) && state.cookies.length > 0) {
@@ -726,8 +748,8 @@ export async function publishBilibiliDynamic(
           const json = await res.json();
           capturedCode = json.code;
           capturedMessage = json.message || "";
-          if (json.code === 0 && json.data?.dyn_id_str) {
-            capturedDynId = json.data.dyn_id_str;
+          if (json.code === 0 && (json.data?.dyn_id_str || json.data?.dyn_id)) {
+            capturedDynId = String(json.data.dyn_id_str || json.data.dyn_id);
           }
         } catch {}
       }
@@ -798,6 +820,9 @@ export async function publishBilibiliDynamic(
   } finally {
     if (ownsContext) {
       await context.close().catch(() => {});
+      if (browser) {
+        await browser.close().catch(() => {});
+      }
     }
   }
 }
