@@ -1,78 +1,71 @@
-# RFC-0002 Social Media Channel Architecture（社交媒体频道架构）
+# RFC-0002 社交媒体 Channel 架构
 
-[English](RFC-0002-social-media-channel.md)
+[English Version](RFC-0002-social-media-channel.md)
 
-> **状态**：In Review（草案供董事会评审）  
-> **修订**：v1.1.0  
+> **状态**：审阅中（董事会审查草案）  
+> **版本**：v1.2.0  
 
-- Feature Name: `social-media-channel`
-- Start Date: 2026-11-09
-- RFC PR: Pending Board Review
-- Implementation PR: Pending
+- 特性名称：`social-media-channel`
+- 起始日期：2026-11-09
+- RFC PR：待董事会审查
+- 实现 PR：待定
 
 ## Summary
 [summary]: #summary
 
-本 RFC 将 EverMemoryArchive (EMA) 各 World 的社交媒体建模极致精简为两个核心原语：
+本 RFC 为 EverMemoryArchive（EMA）各世界（World）建立统一的社交媒体渠道抽象体系，将所有异构社交平台的交互收敛为两大核心概念原语：
 
-1. **`Node`（实体节点，`node_kind: person | bot | organization | ...`）**：
-   代表社交世界中的参与实体（UP 主、博主、用户、伴侣自身、社团组织）。Node 可以拥有或关联若干 Channel。
-2. **`Channel`（频道容器，`channel_kind: string`）**：
-   代表互动与内容发生的频道容器。**各 World 自行扩展 `channel_kind`**（如 B站扩展为 `space`、`dynamic`、`video`、`live_room`；Telegram 扩展为 `channel`、`group`；Discord 扩展为 `text`、`forum`），但**统一继承 `EmaChannel` 共通接口**。
+1. **`Node`（`node_kind`）**：
+   表征外部平台中的社交实体与行动主体（创作者、用户、机器人、组织）。一个 Node 可以拥有、管理或关联多个 Channel。
+2. **`Channel`（`channel_kind`）**：
+   表征交互或发布渠道。每个 World 可根据平台特性自由扩展自己的 `channel_kind`（例如 Bilibili 扩展为 `space`、`dynamic`、`video`、`live_room`；Telegram 扩展为 `channel`、`group`；Discord 扩展为 `text`、`forum`），所有 Channel 均遵循统一的架构契约。
 
-所有 Channel 统一具备四大运行时基石能力：
-- **本地读穿透索引（世界状态，而非认知记忆）**：伴侣看过的页面与帖子缓存在本地 SQLite 中（记录 `fetchedAt`）。查看过一遍后，即可通过完全相同的接口离线重访，零外部网络请求，彻底免疫平台风控。这些记录严格属于**客观世界状态（World State）**，绝不污染内部认知记忆库。
-- **面向 Agent 认知特性的时间锚定与相对时间格式**：查询响应附带时间基准锚点（`context: { time: rfc-3339 }`），实体时间戳格式化为“自然语言相对时长 + 确切秒数差”：
-  ```json
-  {
-    "context": { "time": "2026-11-09T01:30:00Z" },
-    "items": [
-      { "id": "1268371909155749890", "name": "...", "createdAt": "7 days ago (413830 seconds ago)" }
-    ]
-  }
-  ```
-- **分级动作命名空间**：动作采用点号分级（如 `comment.like`、`post.publish`、`comment.reply`）。
-- **自文档化动作查询**：Agent 可在运行时读取 `/world/:world/actions` 自省参数文档与频控。
-- **频道相互链接（Interconnection）**：Channel 可声明关联的其他 Channel 标识（`linkedChannelIds`），支持在主页空间、动态流、讨论区与直播间之间无缝跳转。
+所有 Channel 共享以下四项核心运行时能力：
+- **本地 Read-Through 离线索引（客观世界状态，非 Agent 记忆）**：Ema 浏览或发布的动态、帖子在本地 SQLite 中带抓取时间戳（`fetchedAt`）缓存。再次查看时完全通过同一接口从本地重现，不消耗外网带宽，不触发平台风控；客观事实与 Agent 认知记忆物理隔离。
+- **Agent 适配的相对时间感知**：响应包裹统一时间锚点上下文（`context: { time: RFC-3339 }`），并将条目时间格式化为“自然单位 + 精确已过秒数”（如 `"2 minutes ago (120 seconds ago)"`），彻底消除大模型在时间计算上的幻觉。
+- **层级化动作命名空间与运行时自省**：采用点号分隔层级命名（如 `comment.like`、`post.publish`、`comment.reply`），Ema 可在运行时动态通过 `/world/:world/actions` 查询动作文档、参数规范与速率限制。
+- **渠道图谱互联**：Channel 声明与其他 Channel 的关联拓扑（`linkedChannelIds`），支持伴侣 Agent 自主在个人空间、动态流、讨论区与直播间之间跳转漫游。
 
 ---
 
 ## Motivation
 [motivation]: #motivation
 
-### 1. 摒弃过度庞杂的通用大一统建模，回归两个核心原语
+### 1. 摆脱过度建模陷阱与两大原语的确立
 
-社交平台看似千差万别：B 站有空间、动态、视频和直播间；TG 有广播频道和讨论群；Discord 有文字频道与论坛帖子。如果试图用一套大一统的复杂多模态 AST 把所有平台的每种卡片（抽奖、投票、商品）全部写死，会导致系统臃肿且不可维护。
+社交媒体形态高度分化：Bilibili 拥有个人空间、动态流、视频投稿和直播间；Telegram 拥有广播频道和群组；Discord 拥有文本频道和论坛帖子；且帖子内包含复杂图文。
 
-正确的解法是大幅精简，提炼为两个不变的核心：
-- **`Node`**：社交世界里“谁在参与”（人、机器人、组织）。
-- **`Channel`**：内容与互动“在哪里发生”。每个平台各自扩展 `channel_kind`，但继承统一的 `EmaChannel` 基础接口与规范契约。
+试图为所有平台设计大一统的繁重通用块结构，会导致系统极度臃肿；反之，若为每个平台单独写一套孤立代码，又会导致伴侣系统无法沉淀通用的社交交互认知。
 
-### 2. 世界状态（World State）与认知记忆（Cognitive Memory）分离
+破局点在于将概念极度抽象为两大原语：
+- **`Node`**：社交世界里**谁**在交互（用户、创作者、组织）；
+- **`Channel`**：沟通在**哪里**发生，内容如何流动。各平台自行定义 `channel_kind`，但对外遵循统一的 Channel 契约。
 
-外部动态与评论是**客观世界状态**。伴侣的**认知记忆**（`agent_state/memory`）属于主观心理反思与人类情感羁绊。将社交内容直接塞进记忆库会造成反思召回充斥杂音；保存在本地 Channel 索引中，既实现了无网络离线重访，又保障了记忆库的纯粹。
+### 2. 客观世界状态 vs. Agent 认知记忆
 
-### 3. 本地读穿透缓存（无需爬虫）
+外部平台上的帖子、评论属于客观的**外部世界状态**；Ema 的**认知记忆**（`agent_state/memory`）属于内部反思、深度情感与提炼后的知识。将外部社交数据直接塞入内部记忆文件，会污染 Agent 的记忆检索；通过本地 Channel 索引隔离存储，既能保证离线重现，又保持认知记忆的纯净。
 
-Ema 不需要外部爬虫。但只要看过的页面或发布过的内容，本地以 `fetchedAt` 标记沉淀。之后 Agent 再次查看同一动态或评论时，走完全相同的 Router 路由，无需发网络请求即可秒级读取。
+### 3. 无需爬虫的主动读穿透缓存（Read-Through Caching）
 
-### 4. 消除 Agent 对绝对时间戳的心算幻觉
+Ema 并不需要主动爬虫抓取全站。但凡是 Ema 浏览过或发布过的页面，本地都会以 `fetchedAt` 记下索引。当下一次 Ema 回顾“刚才那个粉丝说了什么”时，请求发送至相同的 Router 路由，直接从本地索引返回，完全不需要重新请求平台接口。
 
-LLM 面对 ISO-8601 字符串难以推演距今时长。通过响应中的 `context.time` 显式锚定，配合 `"7 days ago (413830 seconds ago)"`，使 Agent 同时具备生活直觉与精确时序推理。
+### 4. 为大模型消除时间认知幻觉
 
-### 5. 分级动作与运行时自省
+大模型在处理原始 ISO 时间戳时，很难做准确的相对时长心算。通过在查询信封中锁定参考时刻 `context: { time: RFC-3339 }`，并提供兼具语义化与精确秒数的格式（`"7 days ago (604800 seconds ago)"`），Agent 既能直观理解时间距离，又具备机器级的判定精度。
 
-分级动作（`comment.like`、`post.publish`）统一跨平台的动词语义。运行时暴露的动作文档端点使 Agent 能够零样本自主理解每个动作的参数约束与调用规范。
+### 5. 层级化动作与动态模式发现
+
+使用形如 `comment.like`、`post.publish` 的层级命名，规范各平台动作命名空间。动作文档接口让 Agent 在决策前能够自省可用动作的参数规范与限流阈值，实现真正的运行时自主决策。
 
 ---
 
 ## Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-### 1. 实体 Node 与频道 Channel
+### 1. Node 与 Channel 的概念呈现
 
 在任意 World 中：
-* 参与者是一个 **Node**：
+* 实体投射为 **Node**：
   ```json
   {
     "id": "bilibili:person:3546869527480631",
@@ -86,7 +79,7 @@ LLM 面对 ISO-8601 字符串难以推演距今时长。通过响应中的 `cont
     ]
   }
   ```
-* 交互阵地是一个 **Channel**：
+* 交互场所投射为 **Channel**：
   ```json
   {
     "id": "bilibili:dynamic:3546869527480631",
@@ -101,17 +94,17 @@ LLM 面对 ISO-8601 字符串难以推演距今时长。通过响应中的 `cont
   }
   ```
 
-### 2. 带时间锚点的离线读穿透
+### 2. 读取 Channel 条目与时间感知信封
 
-Agent 查询频道内容：
-```ts
-const res = await router.read("/world/bilibili/channels/bilibili:dynamic:3546869527480631/items");
-```
-返回响应：
+当 Ema 检索 Channel 资源时：
+`GET /world/bilibili/channels/bilibili:dynamic:3546869527480631/items?time=2026-11-09T01:30:00Z`
+
+返回数据信封：
 ```json
 {
   "context": {
-    "time": "2026-11-09T01:30:00Z"
+    "time": "2026-11-09T01:30:00Z",
+    "timestampMs": 1794187800000
   },
   "channel": {
     "id": "bilibili:dynamic:3546869527480631",
@@ -123,7 +116,7 @@ const res = await router.read("/world/bilibili/channels/bilibili:dynamic:3546869
       "id": "1268371909155749890",
       "authorNodeId": "bilibili:person:3546869527480631",
       "name": "【EverMemoryArchive】Ema 伴侣系统运行测试：记忆归档与动态感知连接正常 ✨",
-      "createdAt": "7 days ago (413830 seconds ago)",
+      "createdAt": "7 days ago (604800 seconds ago)",
       "fetchedAt": "10 minutes ago (600 seconds ago)",
       "url": "https://t.bilibili.com/1268371909155749890"
     }
@@ -131,24 +124,23 @@ const res = await router.read("/world/bilibili/channels/bilibili:dynamic:3546869
 }
 ```
 
-再次读取时，完全相同接口直接由本地 SQLite 索引响应，不产生网络调用。
+若再次检索该数据，完全由本地离线索引即时返回，不发生网络请求。
 
-### 3. 分级动作自文档自省
+### 3. 自省与执行层级化动作
 
-Agent 自主查阅当前平台支持的操作：
-```ts
-const docs = await router.read("/world/bilibili/actions");
-```
+Ema 在运行时自省受支持的动作模式：
+`GET /world/bilibili/actions`
+
 返回：
 ```json
 {
   "actions": [
     {
       "name": "comment.like",
-      "description": "为动态下方的指定评论点赞",
+      "description": "点赞视频或动态下的评论",
       "parameters": {
-        "postId": { "type": "string", "required": true, "description": "目标动态或帖子 ID" },
-        "commentId": { "type": "string", "required": true, "description": "评论 ID" }
+        "postId": { "type": "string", "required": true, "description": "目标动态或稿件 ID" },
+        "commentId": { "type": "string", "required": true, "description": "被点赞评论 ID" }
       },
       "rateLimit": "30/minute"
     }
@@ -156,12 +148,13 @@ const docs = await router.read("/world/bilibili/actions");
 }
 ```
 
-执行动作：
-```ts
-world.interact(ctx, actor, "comment.like", {
-  postId: "1268371909155749890",
-  commentId: "9988776655"
-});
+Ema 通过统一交互接口或 HTTP 动作端点执行动作：
+`POST /world/bilibili/actions/comment.like`
+```json
+{
+  "postId": "1268371909155749890",
+  "commentId": "9988776655"
+}
 ```
 
 ---
@@ -169,193 +162,51 @@ world.interact(ctx, actor, "comment.like", {
 ## Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-### 1. 通用契约定义
+### 1. 核心契约与最低能力要求
 
-```ts
-/**
- * Agent 相对时间基准锚点
- */
-export interface EmaTemporalContext {
-  readonly time: string;         // ISO-8601 / RFC-3339
-  readonly timestampMs: number;
-}
+具体 TypeScript 接口与类型声明定义在 `packages/ema/src/channel.ts`。本节阐述各原语在架构层面**至少需要具备的能力与属性**：
 
-export type EmaRelativeTimeString = string;
+#### (1) `Node`（社交实体原语）
+- **全局唯一寻址**：必须提供带世界前缀的唯一标识（`id`，如 `bilibili:person:<uid>`）以及所属 `world`。
+- **实体类别归属（`node_kind`）**：必须区分实体类别（如 `person`、`bot`、`organization`）。
+- **实体元数据**：必须包含展示名称、可选的平台 Handle、头像 URL 及平台原始属性。
+- **渠道图谱关联**：必须声明该实体拥有或关联的 Channel ID 列表（`channelIds`），支持由人寻道。
 
-/**
- * 格式化相对时间：例如 "<N> <单位> ago (<S> seconds ago)"
- */
-export function formatAgentRelativeTime(
-  targetMs: number,
-  referenceMs: number = Date.now(),
-): EmaRelativeTimeString {
-  const deltaSec = Math.max(0, Math.floor((referenceMs - targetMs) / 1000));
-  if (deltaSec < 60) return `just now (${deltaSec} seconds ago)`;
-  const minutes = Math.floor(deltaSec / 60);
-  if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago (${deltaSec} seconds ago)`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago (${deltaSec} seconds ago)`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days > 1 ? "s" : ""} ago (${deltaSec} seconds ago)`;
-}
+#### (2) `Channel`（社交场所原语）
+- **渠道寻址与身份**：必须提供全局唯一的渠道 ID（如 `bilibili:dynamic:<uid>`）及所属 `world`。
+- **平台特化种类（`channel_kind`）**：各世界根据平台特质自由扩展分类（如 Bilibili 扩展 `space`、`dynamic`、`video`、`live_room`；Telegram 扩展 `broadcast`、`group`；Discord 扩展 `text`、`forum`）。
+- **归属与关联拓扑**：可选关联宿主 Node（`ownerNodeId`），并声明互联渠道列表（`linkedChannelIds`），支持多跳拓扑漫游。
+- **语义描述**：提供展示名称、简介及平台特化扩展属性。
 
-export interface EmaTemporalEnvelope<T> {
-  readonly context: EmaTemporalContext;
-  readonly items: T[];
-}
+#### (3) `ChannelItem`（条目与互动单元）
+- **寻址与从属**：具备渠道内唯一 ID，指明所属宿主 `channelId` 与发布者 `authorNodeId`。
+- **内容载荷**：提供正文文本、可选标题、可选父级条目引用（`parentItemId`，用于支持嵌套评论/回帖）及平台直达 URL。
+- **双重时间戳锚定**：必须提供 ISO-8601 创建时间与相对时间信封（`createdAt`），以及本地首次观测记录时间（`fetchedAtMs` / `fetchedAt`），以支持离线重现性校验。
 
-/**
- * Node: 社交世界中的实体
- */
-export interface EmaNode {
-  readonly id: string;
-  readonly world: string;
-  /** 实体种类 */
-  readonly node_kind: "person" | "bot" | "organization" | string;
-  readonly name: string;
-  readonly handle?: string;
-  readonly avatarUrl?: string;
-  /** 该实体拥有或关联的 Channel ID 列表 */
-  readonly channelIds?: string[];
-  readonly metadata?: Record<string, unknown>;
-}
+#### (4) `TemporalContext` 与 `TemporalEnvelope`（时间针锚定）
+- **基准时刻锚定**：条目查询时必须附带固定的上下文参考时刻（`context: { time, timestampMs }`），作为相对时长计算的稳定基准。
+- **双重表达形式**：时间信封输出必须兼具语义化单位与绝对秒数（例如 `<duration> ago (<seconds> seconds ago)` 或 `just now (0 seconds ago)`），彻底消除模型跨轮计算偏差。
 
-/**
- * 通用 Channel 基础契约：所有 World 的 Channel 均继承此接口。
- * 各 World 自由扩展自己的 channel_kind。
- */
-export interface EmaChannel {
-  readonly id: string;
-  readonly world: string;
-  /** 频道种类（由各 World 自行扩展） */
-  readonly channel_kind: string;
-  /** 所属 Node ID（若适用） */
-  readonly ownerNodeId?: string;
-  readonly name: string;
-  readonly description?: string;
-  /** 相互链接的其他 Channel ID */
-  readonly linkedChannelIds?: string[];
-  readonly metadata?: Record<string, unknown>;
-}
+#### (5) `ActionDoc`（动作模式自省）
+- **层级命名体系**：必须采用点号分隔命名规则（如 `post.publish`、`comment.reply`、`danmaku.send`）。
+- **自省式参数模式**：必须提供参数名称、类型、必填标识、中文描述、默认值、限流阈值及示例，支持 Agent 进行零样本自主调用。
 
-/**
- * Channel 内的通用条目（如动态、帖子、视频、评论）
- */
-export interface EmaChannelItem {
-  readonly id: string;
-  readonly channelId: string;
-  readonly authorNodeId: string;
-  readonly name?: string;
-  readonly content: string;
-  readonly createdAtIso: string;
-  readonly createdAt: EmaRelativeTimeString;
-  readonly fetchedAtMs: number;
-  readonly fetchedAt: EmaRelativeTimeString;
-  readonly parentItemId?: string;
-  readonly url?: string;
-  readonly metadata?: Record<string, unknown>;
-}
-```
+### 2. 本地 Read-Through 离线缓存架构
 
-### 2. 各 World 平台特化扩展示例
+- **客观世界状态隔离**：外部社交节点、渠道与历史观测条目持久化存储于本地关系型状态表（如 SQLite 物理表 `seen_social_*`），物理隔离于内部认知记忆。
+- **杜绝认知记忆污染**：社交平台数据表征客观现实，不直接写入或作为 Agent 认知记忆（`agent_state/memory`）持久化。
+- **读穿透不变量**：任何条目在被首次感知（轮询进站、Webhook 或 Agent 自主出站动作）时带 `fetched_at_ms` 写入本地；后续读取必须能够 100% 离线脱网重现，不产生平台网络调用。
 
-各 World 仅需定义自己的 `channel_kind` 枚举，无需改变核心逻辑：
+### 3. Ema Router 统一资源投影
 
-```ts
-// Bilibili 扩展
-export type BilibiliChannelKind = "space" | "dynamic" | "video" | "live_room";
-
-export interface BilibiliChannel extends EmaChannel {
-  readonly world: "bilibili";
-  readonly channel_kind: BilibiliChannelKind;
-}
-
-// Telegram 扩展
-export type TelegramChannelKind = "broadcast" | "group" | "discussion_thread";
-
-export interface TelegramChannel extends EmaChannel {
-  readonly world: "telegram";
-  readonly channel_kind: TelegramChannelKind;
-}
-
-// Discord 扩展
-export type DiscordChannelKind = "text" | "announcement" | "forum" | "thread";
-
-export interface DiscordChannel extends EmaChannel {
-  readonly world: "discord";
-  readonly channel_kind: DiscordChannelKind;
-}
-```
-
-### 3. 分级动作自文档模型
-
-```ts
-export interface EmaActionDoc {
-  /** 点号分级动作名称，如 "comment.like", "post.publish" */
-  readonly name: string;
-  readonly description: string;
-  readonly parameters: Record<string, {
-    readonly type: "string" | "number" | "boolean" | "object" | "array";
-    readonly required: boolean;
-    readonly description: string;
-    readonly default?: unknown;
-  }>;
-  readonly rateLimit?: string;
-  readonly example?: Record<string, unknown>;
-}
-```
-
-### 4. 本地读穿透 SQLite 表结构
-
-```sql
-CREATE TABLE IF NOT EXISTS seen_social_nodes (
-  id TEXT PRIMARY KEY,
-  world TEXT NOT NULL,
-  node_kind TEXT NOT NULL,
-  name TEXT NOT NULL,
-  handle TEXT,
-  avatar_url TEXT,
-  metadata_json TEXT,
-  fetched_at_ms INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS seen_social_channels (
-  id TEXT PRIMARY KEY,
-  world TEXT NOT NULL,
-  channel_kind TEXT NOT NULL,
-  owner_node_id TEXT,
-  name TEXT NOT NULL,
-  description TEXT,
-  linked_channels_json TEXT,
-  metadata_json TEXT,
-  fetched_at_ms INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS seen_social_items (
-  id TEXT PRIMARY KEY,
-  channel_id TEXT NOT NULL,
-  author_node_id TEXT NOT NULL,
-  name TEXT,
-  content TEXT NOT NULL,
-  created_at_iso TEXT NOT NULL,
-  created_at_ms INTEGER NOT NULL,
-  fetched_at_ms INTEGER NOT NULL,
-  parent_item_id TEXT,
-  url TEXT,
-  metadata_json TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_social_items_channel ON seen_social_items(channel_id, created_at_ms DESC);
-```
-
-### 5. 路由器路由端点
-
-- `GET /world/:world/nodes/:id`：从本地索引读取 Node 档案。
-- `GET /world/:world/channels/:id`：读取 Channel 描述及相互链接的 channel 列表。
-- `GET /world/:world/channels/:id/items`：获取带时间锚点的 items。
-- `GET /world/:world/items/:id`：离线读取特定单条 item。
-- `GET /world/:world/actions`：获取当前 World 的动作自省列表。
-- `POST /world/:world/actions/:actionName`：派发分级动作。
+提供社交媒体能力的 World 必须在统一的 `EmaRouter` 上挂载标准化端点：
+- `GET /world/:world/nodes/:id`：从本地索引检索社交实体 Node；
+- `GET /world/:world/channels`：枚举当前世界的所有渠道；
+- `GET /world/:world/channels/:id`：检索渠道详情及关联链接；
+- `GET /world/:world/channels/:id/items`：获取按查询时间锚定包裹的时间感知条目列表；
+- `GET /world/:world/items/:id`：离线检索单条帖子或互动内容；
+- `GET /world/:world/actions`：自省当前世界所有已注册的层级动作规范；
+- `POST /world/:world/actions/:actionName`：执行层级动作调度，附带参数校验、内容安全过滤与防刷限流。
 
 ---
 
@@ -364,38 +215,58 @@ CREATE INDEX IF NOT EXISTS idx_social_items_channel ON seen_social_items(channel
 
 ### world-state-not-agent-memory
 
-> 本地社交 nodes、channels 和 items 严格归属于外部“世界状态（World State）”，绝不直接写入伴侣的认知记忆文件。
+> **本地社交节点、渠道与交互条目严格属于被感知的外部世界状态，绝不直接写入或作为 Agent 认知记忆文件处理。**
+
+外部社交流表征平台客观现实；将公域网络信息写入认知记忆会污染反思提炼与深层伴侣互动。
 
 ### read-through-offline-reproducibility
 
-> 伴侣 Agent 浏览过的内容在本地打上 `fetchedAt` 标记后，必须能够通过完全相同的 Router 接口进行离线只读访问，不得强制发起网络请求。
+> **任何被 Agent 感知过的社交内容，必须能通过同一 Router 接口完全离线重现，不触发外部平台网络请求。**
+
+社交平台普遍具备严格反爬与风控体系；频繁向外网回查历史条目会招致限流封禁，读穿透缓存确保了系统的离线稳定性。
 
 ### anchored-temporal-perception
 
-> 频道返回的所有时间信息必须附带参考上下文时刻锚点，并采用自然语言时长与确切秒数差的复合形式格式化。
+> **渠道查询返回的每个时间载荷必须携带锚定的参考时刻，并将条目时间表述为相对时间加精确秒数。**
+
+大模型无法稳定完成跨轮绝对时间计算；双重相对时间信封彻底消除了时序混乱与时间幻觉。
 
 ### hierarchical-action-introspectability
 
-> 所有动作采用分级命名空间（`domain.action`），并在运行时提供可供 Agent 自省查阅的参数模式与频控文档。
+> **所有渠道动作必须采用层级化命名，并在运行时向 Agent 暴露机器与模型均可解析的模式文档。**
+
+平坦动作名无法跨世界复用；内省文档赋予了伴侣模型零样本决策与安全执行能力。
 
 ---
 
 ## Drawbacks
 [drawbacks]: #drawbacks
 
-- 各 World 需要自行映射平台私有属性到 `metadata`，并在实现中定义自己特化的 `channel_kind` 枚举。
-  *缓解方案*：核心接口字段极少，扩展成本非常低。
+- **扩展样板**：各 World 需要映射并声明各自特定的 `channel_kind`。
+  *缓解方式*：契约高度轻量化，只需声明必要的标识与正文信息。
+
+---
+
+## Rationale and alternatives
+[rationale-and-alternatives]: #rationale-and-alternatives
+
+- **为什么不使用复杂的 AST 块结构？**：在现阶段属于过度设计；通过 `metadata` 保存平台特定数据，正文保持纯净，足以满足大部分伴侣交互需求。
+- **为什么不采用平坦渠道？**：渠道必须具备互联性（如空间与直播间关联）以及明确的拥有者实体。
 
 ---
 
 ## Changes
 
+### v1.2.0
+
+- 严格遵循规范哲学，移除具体 TypeScript 代码块、函数体实现及 SQL DDL 语句。
+- 契约与能力要求全面对齐 RFC-0001 规范标准，将实现细节指针收敛至 `packages/ema/src/channel.ts`。
+
 ### v1.1.0
 
-- 极大精简架构，统一收敛为两个核心原语：`Node` (`node_kind`) 与 `Channel` (`channel_kind`)。
-- 移除大一统 Block AST，改由各 World 继承共通基础接口并自行扩展。
-- 保持本地读穿透索引 (`fetchedAt`)、锚定相对时间戳与分级动作自省文档化。
+- 彻底简化为 `Node` 与 `Channel` 两大核心原语。
+- 移除 Block AST，确立本地 Read-Through 缓存、时间感知信封与动作自省体系。
 
 ### v1.0.0
 
-- 初始草案供董事会评审。
+- 初始董事会审阅草案。

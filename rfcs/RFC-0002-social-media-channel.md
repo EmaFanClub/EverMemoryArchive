@@ -3,7 +3,7 @@
 [中文版](RFC-0002-social-media-channel.zh.md)
 
 > **State**: In Review (Draft for Board Review)  
-> **Rev**: v1.1.0  
+> **Rev**: v1.2.0  
 
 - Feature Name: `social-media-channel`
 - Start Date: 2026-11-09
@@ -13,27 +13,18 @@
 ## Summary
 [summary]: #summary
 
-This RFC simplifies and unifies social media representations across EverMemoryArchive (EMA) Worlds into just two core primitives:
+This RFC establishes a unified architectural framework for social media channels across EverMemoryArchive (EMA) Worlds, simplifying all social media interactions into two core conceptual primitives:
 
-1. **`Node` (`node_kind: person | bot | organization | ...`)**:
+1. **`Node` (`node_kind`)**:
    Represents social actors and entities (creators, users, bots, organizations) across external platforms. A Node can own, administer, or link to Channels.
-2. **`Channel` (`channel_kind: string`)**:
-   Represents an interaction or publication channel. Each World extends `channel_kind` to fit its platform (e.g. Bilibili extends with `space`, `dynamic`, `video`, `live_room`; Telegram extends with `channel`, `group`; Discord extends with `text`, `forum`), while all Channels inherit a common base interface.
+2. **`Channel` (`channel_kind`)**:
+   Represents an interaction or publication channel. Each World extends `channel_kind` to fit its platform (e.g. Bilibili extends with `space`, `dynamic`, `video`, `live_room`; Telegram extends with `channel`, `group`; Discord extends with `text`, `forum`), while all Channels adhere to common architectural contracts.
 
 All Channels share four core runtime capabilities:
-- **Local Read-Through Index (World State, Not Agent Memory)**: Posts and pages viewed or published by Ema are cached locally in SQLite with `fetchedAt`. Once viewed, they can be re-inspected offline via the exact same interface without hitting external network or triggering platform risk controls. These records belong strictly to the perceived **World State**, not internal cognitive memory.
-- **Agent-Adapted Relative Temporal Perception**: Responses provide an anchored time context (`context: { time: rfc-3339 }`) and format relative item timestamps as human units plus exact elapsed seconds:
-  ```json
-  {
-    "context": { "time": "2026-11-09T01:30:00Z" },
-    "items": [
-      { "id": "1268371909155749890", "name": "...", "createdAt": "7 days ago (413830 seconds ago)" }
-    ]
-  }
-  ```
-- **Hierarchical Action Namespace**: Actions use dot notation (e.g. `comment.like`, `post.publish`, `comment.reply`).
-- **Self-Documenting Action Inspection**: Ema can query `/world/:world/actions` to inspect action schemas, descriptions, and rate limits at runtime.
-- **Channel Interconnection**: Channels declare links to other channels (`linkedChannelIds`), enabling seamless navigation across spaces, feeds, discussions, and live rooms.
+- **Local Read-Through Index (World State, Not Agent Memory)**: Posts and pages viewed or published by Ema are cached locally in persistent storage with observation timestamps (`fetchedAt`). Once viewed, they can be re-inspected offline via the exact same interface without hitting external network or triggering platform risk controls. These records belong strictly to the perceived **World State**, not internal cognitive memory.
+- **Agent-Adapted Relative Temporal Perception**: Responses provide an anchored time context (`context: { time: RFC-3339 }`) and format relative item timestamps as natural units plus exact elapsed seconds (e.g. `"2 minutes ago (120 seconds ago)"`), eliminating LLM arithmetic hallucinations.
+- **Hierarchical Action Namespace & Introspection**: Actions use dot notation (e.g. `comment.like`, `post.publish`, `comment.reply`). Ema can inspect action schemas, parameter requirements, and rate limits at runtime via `/world/:world/actions`.
+- **Channel Interconnection**: Channels declare links to other channels (`linkedChannelIds`), enabling autonomous multi-hop navigation across spaces, feeds, discussions, and live rooms.
 
 ---
 
@@ -48,7 +39,7 @@ Attempting to build a monolithic universal format with dozens of rigid block typ
 
 The solution is radical simplification into two fundamental concepts:
 - **`Node`**: *Who* exists in the social world (users, companions, organizations).
-- **`Channel`**: *Where* communication occurs and *how* content flows. Each World defines its own `channel_kind`, but all channels adhere to a common interface contract.
+- **`Channel`**: *Where* communication occurs and *how* content flows. Each World defines its own `channel_kind`, but all channels adhere to a common architectural baseline.
 
 ### 2. World State vs. Agent Memory
 
@@ -56,11 +47,11 @@ External posts, comments, and pages belong to the objective **World State**. Ema
 
 ### 3. Read-Through Caching Without Scrapers
 
-Ema does not need an aggressive crawler. However, "remembering" every page or post Ema has viewed is invaluable. When Ema visits a post, it is indexed with its `fetchedAt` timestamp. Later reviews (e.g. "What did that fan comment say?") query the identical Router endpoint and resolve instantly from local storage.
+Ema does not need an aggressive crawler. However, "remembering" every page or post Ema has viewed is invaluable. When Ema visits a post, it is indexed with its `fetchedAt` timestamp. Later reviews (e.g. "What did that fan comment say?") query the identical Router endpoint and resolve instantly from local storage without platform network calls.
 
 ### 4. Anchoring Time for LLM Agents
 
-LLM agents struggle with mental arithmetic on raw ISO-8601 timestamps. By anchoring responses with `context: { time: RFC-3339 }` and presenting item timestamps as `"7 days ago (413830 seconds ago)"`, Ema gains both natural orientation and exact machine precision.
+LLM agents struggle with mental arithmetic on raw ISO-8601 timestamps. By anchoring responses with `context: { time: RFC-3339 }` and presenting item timestamps as `"7 days ago (604800 seconds ago)"`, Ema gains both natural orientation and exact machine precision without calculation error.
 
 ### 5. Hierarchical Actions & Runtime Discovery
 
@@ -71,10 +62,10 @@ Hierarchical action names (`comment.like`, `post.publish`) prevent verb collisio
 ## Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-### 1. Nodes and Channels
+### 1. Nodes and Channels Representation
 
 In any World:
-* An entity is a **Node**:
+* An entity is projected as a **Node**:
   ```json
   {
     "id": "bilibili:person:3546869527480631",
@@ -88,7 +79,7 @@ In any World:
     ]
   }
   ```
-* An interaction locus is a **Channel**:
+* An interaction locus is projected as a **Channel**:
   ```json
   {
     "id": "bilibili:dynamic:3546869527480631",
@@ -105,15 +96,15 @@ In any World:
 
 ### 2. Reading Channel Items with Relative Time
 
-When Ema reads items from a channel:
-```ts
-const res = await router.read("/world/bilibili/channels/bilibili:dynamic:3546869527480631/items");
-```
-Response:
+When Ema queries items from a channel:
+`GET /world/bilibili/channels/bilibili:dynamic:3546869527480631/items?time=2026-11-09T01:30:00Z`
+
+Response envelope:
 ```json
 {
   "context": {
-    "time": "2026-11-09T01:30:00Z"
+    "time": "2026-11-09T01:30:00Z",
+    "timestampMs": 1794187800000
   },
   "channel": {
     "id": "bilibili:dynamic:3546869527480631",
@@ -125,7 +116,7 @@ Response:
       "id": "1268371909155749890",
       "authorNodeId": "bilibili:person:3546869527480631",
       "name": "【EverMemoryArchive】Ema 伴侣系统运行测试：记忆归档与动态感知连接正常 ✨",
-      "createdAt": "7 days ago (413830 seconds ago)",
+      "createdAt": "7 days ago (604800 seconds ago)",
       "fetchedAt": "10 minutes ago (600 seconds ago)",
       "url": "https://t.bilibili.com/1268371909155749890"
     }
@@ -133,15 +124,14 @@ Response:
 }
 ```
 
-If Ema queries this post again, the response is served directly from the local SQLite index without any network call.
+If Ema queries this post again, the response is served directly from the local read-through index without triggering platform network requests.
 
-### 3. Inspecting and Calling Hierarchical Actions
+### 3. Inspecting and Executing Hierarchical Actions
 
-Ema can inspect supported actions:
-```ts
-const docs = await router.read("/world/bilibili/actions");
-```
-Yielding:
+Ema introspects supported actions dynamically:
+`GET /world/bilibili/actions`
+
+Response:
 ```json
 {
   "actions": [
@@ -158,12 +148,13 @@ Yielding:
 }
 ```
 
-Ema executes the action via `interact`:
-```ts
-world.interact(ctx, actor, "comment.like", {
-  postId: "1268371909155749890",
-  commentId: "9988776655"
-});
+Ema executes the action via `world.interact(...)` or HTTP endpoint:
+`POST /world/bilibili/actions/comment.like`
+```json
+{
+  "postId": "1268371909155749890",
+  "commentId": "9988776655"
+}
 ```
 
 ---
@@ -171,195 +162,51 @@ world.interact(ctx, actor, "comment.like", {
 ## Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-### 1. Data Contracts
+### 1. Core Contract & Requirement Baseline
 
-```ts
-/**
- * Temporal context anchoring relative calculations for LLM agents.
- */
-export interface EmaTemporalContext {
-  /** ISO-8601 / RFC-3339 reference time */
-  readonly time: string;
-  readonly timestampMs: number;
-}
+Canonical TypeScript interfaces and contracts are defined in `packages/ema/src/channel.ts`. This section outlines the architectural **minimum required capabilities and attributes**:
 
-export type EmaRelativeTimeString = string;
+#### (1) `Node` (Social Actor Primitive)
+- **Global Identity**: Must provide a globally unique address (`id`) qualified by world (e.g. `bilibili:person:<uid>`) and originating `world` identifier.
+- **Categorization (`node_kind`)**: Must categorize entities (e.g. `person`, `bot`, `organization`).
+- **Entity Metadata**: Must provide display name, optional platform handle, avatar URL, and arbitrary platform metadata.
+- **Channel Association**: Must declare owned or associated channels (`channelIds`), enabling navigation from entity to their interaction loci.
 
-/**
- * Formats relative time as: "<N> <unit> ago (<S> seconds ago)"
- */
-export function formatAgentRelativeTime(
-  targetMs: number,
-  referenceMs: number = Date.now(),
-): EmaRelativeTimeString {
-  const deltaSec = Math.max(0, Math.floor((referenceMs - targetMs) / 1000));
-  if (deltaSec < 60) return `just now (${deltaSec} seconds ago)`;
-  const minutes = Math.floor(deltaSec / 60);
-  if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago (${deltaSec} seconds ago)`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago (${deltaSec} seconds ago)`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days > 1 ? "s" : ""} ago (${deltaSec} seconds ago)`;
-}
+#### (2) `Channel` (Social Locus Primitive)
+- **Addressing & Identity**: Must provide unique channel ID qualified by world and channel kind (e.g. `bilibili:dynamic:<uid>`), along with originating `world`.
+- **Extensible Kind (`channel_kind`)**: Each world defines its own domain partitions (e.g. Bilibili defines `space`, `dynamic`, `video`, `live_room`; Telegram defines `broadcast`, `group`; Discord defines `text`, `forum`).
+- **Ownership & Topology**: Associates with an owning `ownerNodeId` where applicable, and declares interconnected channels via `linkedChannelIds` for multi-hop graph traversal.
+- **Descriptive Metadata**: Supplies display name, description, and arbitrary platform-specific properties.
 
-export interface EmaTemporalEnvelope<T> {
-  readonly context: EmaTemporalContext;
-  readonly items: T[];
-}
+#### (3) `ChannelItem` (Social Content & Interaction Entry)
+- **Addressing**: Unique item identifier within the channel, targeting parent channel (`channelId`), and attributing author (`authorNodeId`).
+- **Content Payload**: Text content, optional title/subject, optional parent item reference (`parentItemId` for nested comments/threads), and external platform URL.
+- **Dual-Temporal Grounding**: Must provide both ISO-8601 creation timestamp and anchored relative time (`createdAt`), as well as the local observation timestamp (`fetchedAtMs` / `fetchedAt`) for offline read-through verification.
 
-/**
- * Node: An entity or actor in a social media world.
- */
-export interface EmaNode {
-  readonly id: string;
-  readonly world: string;
-  /** Primary node category */
-  readonly node_kind: "person" | "bot" | "organization" | string;
-  readonly name: string;
-  readonly handle?: string;
-  readonly avatarUrl?: string;
-  /** IDs of channels associated with or owned by this node */
-  readonly channelIds?: string[];
-  readonly metadata?: Record<string, unknown>;
-}
+#### (4) `TemporalContext` & `TemporalEnvelope` (Temporal Anchoring)
+- **Reference Instant**: Queries must include an anchored reference time context (`context: { time, timestampMs }`), establishing a stable perception baseline.
+- **Dual Representation**: Relative time representation must present both human-readable duration units and exact elapsed seconds (e.g. `<duration> ago (<seconds> seconds ago)` or `just now (0 seconds ago)`), preventing LLM arithmetic errors.
 
-/**
- * Common Channel Interface: Implemented by all worlds.
- * Each world extends channel_kind for its specific loci.
- */
-export interface EmaChannel {
-  readonly id: string;
-  readonly world: string;
-  /** Specific channel kind defined by each world (e.g. "space", "dynamic", "video", "live_room", "forum") */
-  readonly channel_kind: string;
-  /** Owning node ID if applicable */
-  readonly ownerNodeId?: string;
-  readonly name: string;
-  readonly description?: string;
-  /** IDs of linked or interconnected channels */
-  readonly linkedChannelIds?: string[];
-  /** Arbitrary platform metadata */
-  readonly metadata?: Record<string, unknown>;
-}
+#### (5) `ActionDoc` (Introspectable Action Schema)
+- **Hierarchical Naming**: Must follow a dot-separated domain hierarchy (e.g. `post.publish`, `comment.reply`, `danmaku.send`).
+- **Self-Documenting Schema**: Must expose parameter definitions (name, type, required, description, default), invocation rate limits, and example payloads to enable zero-shot autonomous tool calling by companion agents.
 
-/**
- * Common item inside a Channel (e.g. post, dynamic, video, comment).
- */
-export interface EmaChannelItem {
-  readonly id: string;
-  readonly channelId: string;
-  readonly authorNodeId: string;
-  readonly name?: string;
-  readonly content: string;
-  readonly createdAtIso: string;
-  readonly createdAt: EmaRelativeTimeString;
-  readonly fetchedAtMs: number;
-  readonly fetchedAt: EmaRelativeTimeString;
-  readonly parentItemId?: string;
-  readonly url?: string;
-  readonly metadata?: Record<string, unknown>;
-}
-```
+### 2. Local Read-Through Caching Architecture
 
-### 2. World-Specific Channel Extensions
+- **World State Segregation**: External social nodes, channels, and observed items are persisted in local relational storage, strictly separated from agent cognitive memory.
+- **Zero Memory Pollution**: Social media items represent external world facts and are strictly decoupled from internal cognitive memory (`agent_state/memory`).
+- **Read-Through Invariant**: When an item is first observed (inbound poll, webhook, or outbound action dispatch), it is recorded with its fetch timestamp (`fetched_at_ms`). Subsequent queries must reproduce identically from the local index without external platform network calls.
 
-Each World defines its own `channel_kind` enum/types while adhering to `EmaChannel`:
+### 3. Unified Router Projection
 
-```ts
-// Bilibili World channel kinds
-export type BilibiliChannelKind = "space" | "dynamic" | "video" | "live_room";
-
-export interface BilibiliChannel extends EmaChannel {
-  readonly world: "bilibili";
-  readonly channel_kind: BilibiliChannelKind;
-}
-
-// Telegram World channel kinds
-export type TelegramChannelKind = "broadcast" | "group" | "discussion_thread";
-
-export interface TelegramChannel extends EmaChannel {
-  readonly world: "telegram";
-  readonly channel_kind: TelegramChannelKind;
-}
-
-// Discord World channel kinds
-export type DiscordChannelKind = "text" | "announcement" | "forum" | "thread";
-
-export interface DiscordChannel extends EmaChannel {
-  readonly world: "discord";
-  readonly channel_kind: DiscordChannelKind;
-}
-```
-
-### 3. Action Documentation Schema
-
-```ts
-export interface EmaActionDoc {
-  /** Hierarchical dot-separated action name: e.g. "comment.like", "post.publish" */
-  readonly name: string;
-  readonly description: string;
-  readonly parameters: Record<string, {
-    readonly type: "string" | "number" | "boolean" | "object" | "array";
-    readonly required: boolean;
-    readonly description: string;
-    readonly default?: unknown;
-  }>;
-  readonly rateLimit?: string;
-  readonly example?: Record<string, unknown>;
-}
-```
-
-### 4. Local SQLite Schema for Read-Through Index
-
-```sql
-CREATE TABLE IF NOT EXISTS seen_social_nodes (
-  id TEXT PRIMARY KEY,
-  world TEXT NOT NULL,
-  node_kind TEXT NOT NULL,
-  name TEXT NOT NULL,
-  handle TEXT,
-  avatar_url TEXT,
-  metadata_json TEXT,
-  fetched_at_ms INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS seen_social_channels (
-  id TEXT PRIMARY KEY,
-  world TEXT NOT NULL,
-  channel_kind TEXT NOT NULL,
-  owner_node_id TEXT,
-  name TEXT NOT NULL,
-  description TEXT,
-  linked_channels_json TEXT,
-  metadata_json TEXT,
-  fetched_at_ms INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS seen_social_items (
-  id TEXT PRIMARY KEY,
-  channel_id TEXT NOT NULL,
-  author_node_id TEXT NOT NULL,
-  name TEXT,
-  content TEXT NOT NULL,
-  created_at_iso TEXT NOT NULL,
-  created_at_ms INTEGER NOT NULL,
-  fetched_at_ms INTEGER NOT NULL,
-  parent_item_id TEXT,
-  url TEXT,
-  metadata_json TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_social_items_channel ON seen_social_items(channel_id, created_at_ms DESC);
-```
-
-### 5. Router Endpoints
-
-- `GET /world/:world/nodes/:id`: Returns a Node from the local index.
-- `GET /world/:world/channels/:id`: Returns Channel metadata and linked channels.
-- `GET /world/:world/channels/:id/items`: Returns Channel items wrapped in `EmaTemporalEnvelope`.
-- `GET /world/:world/items/:id`: Returns an item (and direct replies) offline from local index.
-- `GET /world/:world/actions`: Returns array of `EmaActionDoc`.
-- `POST /world/:world/actions/:actionName`: Dispatches hierarchical action.
+Worlds exposing social media channels mount standard resource endpoints on the unified `EmaRouter`:
+- `GET /world/:world/nodes/:id`: Resolves a social entity Node from the local index.
+- `GET /world/:world/channels`: Lists available channels in the world.
+- `GET /world/:world/channels/:id`: Resolves channel metadata and linked channels.
+- `GET /world/:world/channels/:id/items`: Returns channel items wrapped in a temporal envelope anchored to the query instant.
+- `GET /world/:world/items/:id`: Queries a specific post, comment, or thread offline.
+- `GET /world/:world/actions`: Introspects registered hierarchical actions and their schemas.
+- `POST /world/:world/actions/:actionName`: Dispatches actions with argument validation, content filtering, and anti-flooding rate limiting.
 
 ---
 
@@ -399,20 +246,25 @@ CREATE INDEX IF NOT EXISTS idx_social_items_channel ON seen_social_items(channel
 ## Drawbacks
 [drawbacks]: #drawbacks
 
-- **Extension Boilerplate**: Worlds must declare their specific `channel_kind` values and map their platform items to `EmaChannelItem`.
-  *Mitigation*: The interface is minimal, requiring only basic fields (`id`, `world`, `channel_kind`, `name`).
+- **Extension Boilerplate**: Worlds must declare their specific `channel_kind` values and map platform items to common channel items.
+  *Mitigation*: The interface is minimal, requiring only basic identity and content fields.
 
 ---
 
 ## Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
-- **Why not a complex Block AST?**: Overkill for RFC-0002. Storing rich platform content in `metadata_json` while keeping `content` and `name` clean allows simple agents to work without an AST parser, while letting worlds attach platform-specific fields as needed.
+- **Why not a complex Block AST?**: Storing rich platform content in metadata while keeping text content clean allows simple agents to work without an AST parser, while letting worlds attach platform-specific fields as needed.
 - **Why not flat channels?**: Channels must be able to link to other channels (e.g. Space -> Live Room) and have an owner Node (e.g. Creator).
 
 ---
 
 ## Changes
+
+### v1.2.0
+
+- Removed concrete TypeScript code blocks, function bodies, and SQL schemas per architectural guidelines.
+- Aligned reference specification with RFC-0001 conceptual requirement baselines and pointing to `packages/ema/src/channel.ts`.
 
 ### v1.1.0
 
