@@ -16,3 +16,4 @@ This directory is EverMemoryArchive's design RFC surface: one architectural desi
 | Document | Title | Status |
 | --- | --- | --- |
 | [RFC-0001-ema-worlds-and-actors.md](RFC-0001-ema-worlds-and-actors.md) / [.zh](RFC-0001-ema-worlds-and-actors.zh.md) | Ema Worlds and Actors | In Review |
+| [RFC-0002-social-media-channel.md](RFC-0002-social-media-channel.md) / [.zh](RFC-0002-social-media-channel.zh.md) | Social Media Channel Architecture | In Review |
