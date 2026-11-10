@@ -256,6 +256,7 @@ async function main() {
       let workbenchId;
       let appDataDir;
       let dbPath;
+      let actorKind;
       for (let i = 2; i < args.length; i++) {
         if (args[i] === "--agent" || args[i] === "-a") agentId = args[++i];
         else if (args[i] === "--name") companionName = args[++i];
@@ -263,6 +264,7 @@ async function main() {
         else if (args[i] === "--workbench-id") workbenchId = args[++i];
         else if (args[i] === "--app-data-dir") appDataDir = args[++i];
         else if (args[i] === "--db") dbPath = args[++i];
+        else if (args[i] === "--actor-kind") actorKind = args[++i];
         else if (!agentId && !args[i].startsWith("-")) agentId = args[i];
       }
       if (!agentId) {
@@ -278,6 +280,7 @@ async function main() {
         workbenchId,
         appDataDir,
         dbPath,
+        actorKind: actorKind === "multiple-agent" ? "multiple-agent" : actorKind === "single-session" ? "single-session" : undefined,
       });
       console.log(JSON.stringify(res, null, 2));
       process.exit(0);
