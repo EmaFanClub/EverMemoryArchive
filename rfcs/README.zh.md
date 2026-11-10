@@ -16,3 +16,5 @@
 | 文档 | 标题 | 状态 |
 | --- | --- | --- |
 | [RFC-0001-ema-worlds-and-actors.zh.md](RFC-0001-ema-worlds-and-actors.zh.md) / [EN](RFC-0001-ema-worlds-and-actors.md) | Ema Worlds and Actors | In Review |
+| [RFC-0002-social-media-channel.zh.md](RFC-0002-social-media-channel.zh.md) / [EN](RFC-0002-social-media-channel.md) | 社交媒体 Channel 架构 | In Review |
+| [RFC-0003-ema-training-meta-theory.zh.md](RFC-0003-ema-training-meta-theory.zh.md) / [EN](RFC-0003-ema-training-meta-theory.md) | EMA 训练元理论（Meta-Theory of EMA Training） | Draft |
