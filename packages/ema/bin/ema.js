@@ -29,6 +29,10 @@ import {
   parseWatchDuration,
   assertAgentIdentity,
   DEFAULT_MINIMAL_SYSTEM_PROMPT,
+  loadGalgameDataset,
+  EmaShirobanaTrainer,
+  runModelAndThinkingAblation,
+  syncShirobanaAgentState,
 } from "../dist/index.js";
 import { execFileSync } from "node:child_process";
 
@@ -535,6 +539,63 @@ async function main() {
         process.exit(0);
       }
     }, 10000);
+    return;
+  }
+
+  if (command === "train-shirobana") {
+    let scriptPath = "/home/rei/work/org/ema/ema-dev/data/galgame/hoken-sensei.json";
+    let outPath = "/home/rei/work/org/ema/ema-dev/data/galgame/shirobana-v1-checkpoint.json";
+    let maxScenes = 10;
+    let studentModelId = "gemini-3.8-flash";
+    let teacherModelId = "gemini-3.8-flash";
+    let thinkingLevel = "medium";
+
+    for (let i = 1; i < args.length; i++) {
+      if (args[i] === "--script" && i + 1 < args.length) scriptPath = args[++i];
+      else if (args[i] === "--out" && i + 1 < args.length) outPath = args[++i];
+      else if (args[i] === "--scenes" && i + 1 < args.length) maxScenes = Number(args[++i]);
+      else if (args[i] === "--student-model" && i + 1 < args.length) studentModelId = args[++i];
+      else if (args[i] === "--teacher-model" && i + 1 < args.length) teacherModelId = args[++i];
+      else if (args[i] === "--thinking" && i + 1 < args.length) thinkingLevel = args[++i];
+    }
+
+    const ds = loadGalgameDataset(scriptPath);
+    const selected = ds.scenes.slice(0, maxScenes);
+    const trainer = new EmaShirobanaTrainer({
+      studentModel: { provider: "penguin-go", modelId: studentModelId, thinkingLevel },
+      teacherModel: { provider: "penguin-go", modelId: teacherModelId, thinkingLevel: "medium" },
+      rsiScoreThreshold: 85,
+      maxWindowAttempts: 2,
+      studentBatchSize: 12,
+      enableReflectionCheck: true,
+      syncAgentOnDisk: true,
+    });
+
+    const counter = { count: 0 };
+    const results = [];
+    for (const s of selected) {
+      const r = await trainer.trainSceneWindow(s, counter);
+      results.push(r);
+      console.log(
+        `[Train] ${s.sceneId} (${s.title}) | ${r.initialMeanScore} -> ${r.finalMeanScore} | P=${trainer.personality.version} | cost=$${r.metrics.costUsd}`,
+      );
+    }
+
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(
+      outPath,
+      JSON.stringify(
+        {
+          personality: trainer.personality,
+          memoryIndex: trainer.memoryIndex,
+          results,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    console.log(`Saved checkpoint to ${outPath}`);
     return;
   }
 
