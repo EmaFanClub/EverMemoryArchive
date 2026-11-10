@@ -22,17 +22,112 @@ export type IfaceHandle<T = unknown> = ReturnType<typeof Interface<T>>;
 export { Interface };
 
 /**
- * Actor identity representing an EMA companion agent within a session/world.
+ * Actor kinds supported by EverMemoryArchive runtime.
+ * - "single-session": Dispatches all turns to a single dedicated session.
+ * - "multiple-agent": Dispatches turns through a unique router session acting as the sole entrypoint.
  */
-export interface EmaActor {
+export type EmaActorKind = "single-session" | "multiple-agent";
+
+/**
+ * Base actor fields common across all actor topologies.
+ */
+export interface EmaActorBase {
   /** Unique actor identifier within EMA */
   readonly id: Id;
   /** Companion display name */
   readonly name: string;
-  /** Bound Penguin session ID */
-  readonly session: string;
   /** Bound Penguin Agent ID */
   readonly agentId: string;
+}
+
+/**
+ * Single-session actor: directly dispatches to a single configured or created session.
+ */
+export interface EmaSingleSessionActor extends EmaActorBase {
+  readonly kind?: "single-session";
+  /** Bound Penguin session ID */
+  readonly session: string;
+  /** Optional explicit session ID configuration */
+  readonly sessionId?: string;
+}
+
+/**
+ * Multiple-agent actor: dispatches through a unique router session created and initialized
+ * upon receiving the first message, serving as the sole entrypoint.
+ */
+export interface EmaMultipleAgentActor extends EmaActorBase {
+  readonly kind: "multiple-agent";
+  /** Router session ID (sole entrypoint for this multiple-agent actor) */
+  readonly routerSessionId?: string;
+  /** Primary session pointer (aliases routerSessionId once created) */
+  readonly session: string;
+  /** Agent ID that runs the router session (defaults to agentId) */
+  readonly routerAgentId?: string;
+  /** Initialization prompt for the router session */
+  readonly routerInitPrompt?: string;
+  /** Whether the router session has been created and initialized */
+  readonly isInitialized?: boolean;
+  /** Sub-agents / specialist workers associated with this actor */
+  readonly agents?: ReadonlyArray<{
+    readonly agentId: string;
+    readonly role?: string;
+    readonly title?: string;
+  }>;
+}
+
+/**
+ * Actor identity representing an EMA companion agent within a session/world.
+ * Supports both single-session and multiple-agent topologies.
+ */
+export type EmaActor = EmaSingleSessionActor | EmaMultipleAgentActor;
+
+/**
+ * Configuration schema for initializing or customizing an actor.
+ */
+export interface EmaSingleSessionActorConfig {
+  id?: string;
+  name?: string;
+  agentId?: string;
+  kind?: "single-session";
+  sessionId?: string;
+}
+
+export interface EmaMultipleAgentActorConfig {
+  id?: string;
+  name?: string;
+  agentId?: string;
+  kind: "multiple-agent";
+  routerSessionId?: string;
+  routerAgentId?: string;
+  routerInitPrompt?: string;
+  isInitialized?: boolean;
+  agents?: ReadonlyArray<{
+    readonly agentId: string;
+    readonly role?: string;
+    readonly title?: string;
+  }>;
+}
+
+export type EmaActorConfig = EmaSingleSessionActorConfig | EmaMultipleAgentActorConfig;
+
+/**
+ * Resolves the kind of an actor, defaulting to "single-session".
+ */
+export function getActorKind(actor?: Partial<EmaActor> | EmaActorConfig | null): EmaActorKind {
+  return actor?.kind === "multiple-agent" ? "multiple-agent" : "single-session";
+}
+
+/**
+ * Resolves the active entry session ID for an actor.
+ */
+export function getActorEntrySession(actor?: Partial<EmaActor> | EmaActorConfig | null): string | undefined {
+  if (!actor) return undefined;
+  if (actor.kind === "multiple-agent") {
+    return actor.routerSessionId || ("session" in actor ? (actor as EmaMultipleAgentActor).session : undefined);
+  }
+  return ("sessionId" in actor && actor.sessionId)
+    ? actor.sessionId
+    : ("session" in actor ? (actor as EmaSingleSessionActor).session : undefined);
 }
 
 /**

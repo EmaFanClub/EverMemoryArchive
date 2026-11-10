@@ -78,6 +78,16 @@ body {
   color: var(--wb-muted);
 }
 
+.actor-badge {
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
