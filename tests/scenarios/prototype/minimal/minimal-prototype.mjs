@@ -46,6 +46,8 @@ function parseArgs() {
     watchFor: "12h",
     pollInterval: 5000,
     stateFile: DEFAULT_STATE_FILE,
+    actorKind: "single-session",
+    routerInitPrompt: "",
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -67,6 +69,10 @@ function parseArgs() {
       options.dispatch = true;
     } else if (arg === "--session") {
       options.session = args[++i];
+    } else if (arg === "--actor-kind") {
+      options.actorKind = args[++i];
+    } else if (arg === "--router-init-prompt") {
+      options.routerInitPrompt = args[++i];
     } else if (arg === "--watch-for") {
       options.watchFor = args[++i];
     } else if (arg === "--poll-interval") {
@@ -111,6 +117,7 @@ async function runWatchMode(opts) {
   console.log("=== Minimal EMA Prototype Watcher (RFC-0001 Architecture) ===");
   console.log(`World:           PenguinChannelWorld (@Interface)`);
   console.log(`Channel Part:    ${opts.channel}`);
+  console.log(`Actor Topology:  ${opts.actorKind}`);
   console.log(`Persistent Sess: ${opts.session}`);
   console.log(`Watch Duration:  ${opts.watchFor} (${durationMs} ms, until ${new Date(endTime).toISOString()})`);
   console.log(`Operating Agent: ${agentId}`);
@@ -118,21 +125,65 @@ async function runWatchMode(opts) {
   console.log(`State File:      ${opts.stateFile}`);
   console.log("-------------------------------------------------------------");
 
+  let activeSession = opts.session;
+  let routerInitialized = false;
+
+  const actorConfig =
+    opts.actorKind === "multiple-agent"
+      ? {
+          id: "actor-ema-multi-agent",
+          name: "Ema Multi-Agent Companion",
+          kind: "multiple-agent",
+          routerAgentId: agentId,
+          routerInitPrompt: opts.routerInitPrompt,
+          agentId,
+        }
+      : {
+          id: "actor-ema-minimal",
+          name: "Ema Minimal",
+          kind: "single-session",
+          session: opts.session,
+          sessionId: opts.session,
+          agentId,
+        };
+
   const proto = createMinimalPrototype({
     channels: [opts.channel],
     pollInterval: opts.pollInterval,
     stateFile: opts.stateFile,
     systemPrompt: DEFAULT_MINIMAL_SYSTEM_PROMPT,
     batcherOptions: { debounceMs: 400, maxWaitMs: 1500 },
-    actor: {
-      id: "actor-ema-minimal",
-      name: "Ema Minimal",
-      session: opts.session,
-      agentId,
-    },
+    actor: actorConfig,
     llmInvoker: async (xmlPayload) => {
       console.log(`\n[Watcher] Ingesting Transactional XML Input:\n${xmlPayload}`);
-      const reply = runLlm(xmlPayload, opts.session);
+
+      if (opts.actorKind === "multiple-agent" && !routerInitialized) {
+        // Create router session on receiving message and initialize!
+        try {
+          const createOut = execFileSync("penguin", ["session", "create", "--agent", agentId], {
+            encoding: "utf8",
+            env: process.env,
+          }).trim();
+          const match = createOut.match(/session-[0-9a-zA-Z_-]+/);
+          if (match) {
+            activeSession = match[0];
+          }
+        } catch (e) {
+          console.warn("[Watcher] Fallback to default session for router:", e.message);
+        }
+
+        const initPrompt =
+          opts.routerInitPrompt ||
+          "You are the primary Router Session for the multiple-agent companion actor. " +
+          "You serve as the sole entrypoint for incoming inputs across all worlds. " +
+          "Coordinate specialized sub-agents, maintain conversational continuity, " +
+          "and dispatch responses back to the origin channel.";
+        runLlm(initPrompt, activeSession);
+        routerInitialized = true;
+        console.log(`[Watcher] Router session initialized: ${activeSession}`);
+      }
+
+      const reply = runLlm(xmlPayload, activeSession);
       console.log(`[Watcher] Session Output:\n${reply}`);
       return reply;
     },

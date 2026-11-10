@@ -184,7 +184,7 @@ export function installWebWorkbench(
 
   // 2. Customize and write index.ts
   const srcIndexTs = fs.readFileSync(path.join(templateDir, "index.ts"), "utf8");
-  const customizedIndexTs = srcIndexTs
+  let customizedIndexTs = srcIndexTs
     .replace(
       /const WEB_WORLD_DB_PATH =\s*"[^"]+";/,
       `const WEB_WORLD_DB_PATH = ${JSON.stringify(dbPath)};`,
@@ -203,6 +203,13 @@ export function installWebWorkbench(
     )
     .replaceAll("苍星怜", companionName)
     .replaceAll('"Rei"', JSON.stringify(ownerName));
+
+  if (options.actorKind) {
+    customizedIndexTs = customizedIndexTs.replace(
+      /const defaultKind:\s*"single-session" \| "multiple-agent"\s*=\s*process\.env\.EMA_ACTOR_KIND === "multiple-agent"\s*\?\s*"multiple-agent"\s*:\s*"single-session";/,
+      `const defaultKind: "single-session" | "multiple-agent" = ${JSON.stringify(options.actorKind)};`,
+    );
+  }
 
   const destIndexTsPath = path.join(workbenchDir, "index.ts");
   fs.writeFileSync(destIndexTsPath, customizedIndexTs, "utf8");

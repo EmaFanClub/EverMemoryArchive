@@ -61,6 +61,18 @@ export interface ChatMessage {
   parentItemId?: string;
 }
 
+export interface PersistedActorState {
+  id: string;
+  name: string;
+  kind: "single-session" | "multiple-agent";
+  agentId: string;
+  sessionId?: string;
+  routerSessionId?: string;
+  routerAgentId?: string;
+  routerInitPrompt?: string;
+  isInitialized?: boolean;
+}
+
 export interface ChatState {
   sessionId: string;
   channelId: string;
@@ -72,6 +84,7 @@ export interface ChatState {
   messages: ChatMessage[];
   items: EmaChannelItem[];
   updatedAt: string;
+  actor?: PersistedActorState;
 }
 
 const WEB_WORLD_DB_PATH =
@@ -407,16 +420,43 @@ interface PersistedMeta {
   lastUserItemId?: string;
   lastUserItemMs?: number;
   updatedAt: string;
+  actor: PersistedActorState;
 }
 
 function normalizeMeta(raw: unknown): PersistedMeta | null {
   if (!raw || typeof raw !== "object") return null;
   const doc = raw as Record<string, unknown>;
-  if (typeof doc.sessionId !== "string" || !doc.sessionId) return null;
   const nowIso = new Date().toISOString();
   const status = doc.status === "running" || doc.status === "failed" ? doc.status : "idle";
+
+  const rawActor = (doc.actor && typeof doc.actor === "object" ? doc.actor : {}) as Record<string, unknown>;
+  const actorKind: "single-session" | "multiple-agent" =
+    rawActor.kind === "multiple-agent" ? "multiple-agent" : "single-session";
+
+  const actor: PersistedActorState = {
+    id: typeof rawActor.id === "string" && rawActor.id ? rawActor.id : "actor-aoi-rei",
+    name: typeof rawActor.name === "string" && rawActor.name ? rawActor.name : "苍星怜",
+    kind: actorKind,
+    agentId: typeof rawActor.agentId === "string" && rawActor.agentId ? rawActor.agentId : "aoi_rei",
+    sessionId:
+      typeof rawActor.sessionId === "string"
+        ? rawActor.sessionId
+        : typeof doc.sessionId === "string" && doc.sessionId
+          ? doc.sessionId
+          : undefined,
+    routerSessionId: typeof rawActor.routerSessionId === "string" ? rawActor.routerSessionId : undefined,
+    routerAgentId: typeof rawActor.routerAgentId === "string" ? rawActor.routerAgentId : undefined,
+    routerInitPrompt: typeof rawActor.routerInitPrompt === "string" ? rawActor.routerInitPrompt : undefined,
+    isInitialized: Boolean(rawActor.isInitialized),
+  };
+
+  const sessionId =
+    actor.kind === "multiple-agent"
+      ? (actor.routerSessionId || (typeof doc.sessionId === "string" ? doc.sessionId : ""))
+      : (actor.sessionId || (typeof doc.sessionId === "string" ? doc.sessionId : ""));
+
   return {
-    sessionId: doc.sessionId,
+    sessionId,
     channelId:
       typeof doc.channelId === "string" && doc.channelId ? doc.channelId : DEFAULT_CHANNEL_ID,
     status,
@@ -425,6 +465,7 @@ function normalizeMeta(raw: unknown): PersistedMeta | null {
     ...(typeof doc.lastUserItemId === "string" ? { lastUserItemId: doc.lastUserItemId } : {}),
     ...(typeof doc.lastUserItemMs === "number" ? { lastUserItemMs: doc.lastUserItemMs } : {}),
     updatedAt: typeof doc.updatedAt === "string" ? doc.updatedAt : nowIso,
+    actor,
   };
 }
 
@@ -441,6 +482,7 @@ function buildChatState(meta: PersistedMeta): ChatState {
     messages: snapshot.messages,
     items: snapshot.items,
     updatedAt: meta.updatedAt,
+    actor: meta.actor,
   };
 }
 
@@ -478,16 +520,42 @@ export default {
           readChannelSnapshot(DEFAULT_CHANNEL_ID);
 
           const existing = normalizeMeta(host.getState());
-          if (existing) return structuredClone(existing);
+          if (existing) {
+            // For single-session, ensure a sessionId exists
+            if (existing.actor.kind === "single-session" && !existing.sessionId) {
+              const { sessionId } = await host.createSession();
+              existing.sessionId = sessionId;
+              existing.actor.sessionId = sessionId;
+              await host.setState(existing);
+            }
+            return structuredClone(existing);
+          }
 
-          const { sessionId } = await host.createSession();
+          const defaultKind: "single-session" | "multiple-agent" =
+            process.env.EMA_ACTOR_KIND === "multiple-agent" ? "multiple-agent" : "single-session";
+
+          let initialSessionId = "";
+          if (defaultKind === "single-session") {
+            const created = await host.createSession();
+            initialSessionId = created.sessionId;
+          }
+
           const nowIso = new Date().toISOString();
           const fresh: PersistedMeta = {
-            sessionId,
+            sessionId: initialSessionId,
             channelId: DEFAULT_CHANNEL_ID,
             status: "idle",
             error: null,
             updatedAt: nowIso,
+            actor: {
+              id: "actor-aoi-rei",
+              name: "苍星怜",
+              kind: defaultKind,
+              agentId: "aoi_rei",
+              sessionId: defaultKind === "single-session" ? initialSessionId : undefined,
+              routerSessionId: undefined,
+              isInitialized: false,
+            },
           };
           await host.setState(fresh);
           return structuredClone(fresh);
@@ -764,18 +832,57 @@ export default {
                       createdAtMs: nowMs,
                     });
 
+                    // 1. Resolve or lazily provision Actor session
+                    let targetSessionId = meta.sessionId;
+                    if (meta.actor.kind === "multiple-agent") {
+                      if (!meta.actor.routerSessionId) {
+                        // Create on receiving message and initialize!
+                        const routerAgent = meta.actor.routerAgentId || meta.actor.agentId;
+                        const created = await host.createSession(
+                          routerAgent ? { agentId: routerAgent } : undefined,
+                        );
+                        meta.actor.routerSessionId = created.sessionId;
+                        meta.sessionId = created.sessionId;
+                        targetSessionId = created.sessionId;
+
+                        // Initialize the unique router session
+                        const routerInitPrompt =
+                          meta.actor.routerInitPrompt ||
+                          `You are the primary Router Session for companion actor "${meta.actor.name}" (${meta.actor.id}). ` +
+                          `You serve as the sole entrypoint for incoming inputs across all worlds. ` +
+                          `Coordinate specialized sub-agents, maintain conversational continuity, ` +
+                          `and dispatch responses back to the origin channel.`;
+                        await host.run(targetSessionId, [{ text: routerInitPrompt }]);
+                        meta.actor.isInitialized = true;
+                        meta.updatedAt = new Date().toISOString();
+                        await host.setState(meta);
+                      } else {
+                        targetSessionId = meta.actor.routerSessionId;
+                        meta.sessionId = targetSessionId;
+                      }
+                    } else {
+                      // Single-session actor
+                      if (!targetSessionId) {
+                        const created = await host.createSession();
+                        meta.sessionId = created.sessionId;
+                        meta.actor.sessionId = created.sessionId;
+                        targetSessionId = created.sessionId;
+                        await host.setState(meta);
+                      }
+                    }
+
                     meta.status = "running";
                     meta.error = null;
                     meta.lastUserItemId = msgId;
                     meta.lastUserItemMs = nowMs;
                     delete meta.stopped;
-                    stopped.delete(meta.sessionId);
+                    stopped.delete(targetSessionId);
                     meta.updatedAt = nowIso;
 
                     await host.setState(meta);
 
                     // Subscribe before host.run so no fast turn is missed
-                    follow(meta.sessionId);
+                    follow(targetSessionId);
 
                     // Notify session of new channel activity per RFC-0001 / RFC-0002
                     // Session must read the channel and post its reply back to the channel
@@ -794,9 +901,9 @@ export default {
                       `3. 发送成功后，直接输出你刚才发送的那句回复内容结束回合。`;
 
                     try {
-                      await host.run(meta.sessionId, [{ text: channelEventPrompt }]);
+                      await host.run(targetSessionId, [{ text: channelEventPrompt }]);
                     } catch (err) {
-                      unfollow(meta.sessionId);
+                      unfollow(targetSessionId);
                       meta.status = "failed";
                       meta.error = err instanceof Error ? err.message : String(err);
                       meta.updatedAt = new Date().toISOString();
@@ -810,24 +917,98 @@ export default {
                     return { body: buildChatState(meta) };
                   }
 
-                  // 5. POST /reset: Clear chatroom channel items and start a fresh session
+                  // 5. GET /actor & POST /actor: Introspect or reconfigure Actor topology
+                  if (req.method === "GET" && req.path === "/actor") {
+                    return {
+                      body: {
+                        actor: meta.actor,
+                        entrySessionId:
+                          meta.actor.kind === "multiple-agent"
+                            ? meta.actor.routerSessionId
+                            : meta.sessionId,
+                        isReady:
+                          meta.actor.kind === "multiple-agent"
+                            ? Boolean(meta.actor.routerSessionId && meta.actor.isInitialized)
+                            : Boolean(meta.sessionId),
+                      },
+                    };
+                  }
+
+                  if (req.method === "POST" && req.path === "/actor") {
+                    const body = (req.body || {}) as Partial<PersistedActorState>;
+                    const nextKind =
+                      body.kind === "multiple-agent"
+                        ? "multiple-agent"
+                        : body.kind === "single-session"
+                          ? "single-session"
+                          : meta.actor.kind;
+
+                    if (nextKind !== meta.actor.kind) {
+                      meta.actor.kind = nextKind;
+                      if (nextKind === "multiple-agent") {
+                        meta.actor.routerSessionId =
+                          typeof body.routerSessionId === "string" ? body.routerSessionId : undefined;
+                        meta.actor.isInitialized = Boolean(meta.actor.routerSessionId);
+                        meta.sessionId = meta.actor.routerSessionId || "";
+                      } else {
+                        meta.actor.sessionId =
+                          typeof body.sessionId === "string"
+                            ? body.sessionId
+                            : meta.sessionId || undefined;
+                        meta.sessionId = meta.actor.sessionId || "";
+                      }
+                    }
+
+                    if (typeof body.id === "string") meta.actor.id = body.id;
+                    if (typeof body.name === "string") meta.actor.name = body.name;
+                    if (typeof body.agentId === "string") meta.actor.agentId = body.agentId;
+                    if (typeof body.routerAgentId === "string") meta.actor.routerAgentId = body.routerAgentId;
+                    if (typeof body.routerInitPrompt === "string") meta.actor.routerInitPrompt = body.routerInitPrompt;
+
+                    meta.updatedAt = new Date().toISOString();
+                    await host.setState(meta);
+                    return {
+                      body: {
+                        success: true,
+                        actor: meta.actor,
+                        entrySessionId:
+                          meta.actor.kind === "multiple-agent"
+                            ? meta.actor.routerSessionId
+                            : meta.sessionId,
+                        isReady:
+                          meta.actor.kind === "multiple-agent"
+                            ? Boolean(meta.actor.routerSessionId && meta.actor.isInitialized)
+                            : Boolean(meta.sessionId),
+                      },
+                    };
+                  }
+
+                  // 6. POST /reset: Clear chatroom channel items and reset session state
                   if (req.method === "POST" && req.path === "/reset") {
-                    unfollow(meta.sessionId);
-                    stopped.delete(meta.sessionId);
+                    if (meta.sessionId) {
+                      unfollow(meta.sessionId);
+                      stopped.delete(meta.sessionId);
+                    }
 
                     resetChannelItems(DEFAULT_CHANNEL_ID);
 
-                    const { sessionId } = await host.createSession();
                     const nowIso = new Date().toISOString();
-                    const fresh: PersistedMeta = {
-                      sessionId,
-                      channelId: DEFAULT_CHANNEL_ID,
-                      status: "idle",
-                      error: null,
-                      updatedAt: nowIso,
-                    };
-                    await host.setState(fresh);
-                    return { body: buildChatState(fresh) };
+                    if (meta.actor.kind === "multiple-agent") {
+                      // Reset router session so next message creates and initializes a fresh router session
+                      meta.actor.routerSessionId = undefined;
+                      meta.actor.isInitialized = false;
+                      meta.sessionId = "";
+                    } else {
+                      const { sessionId } = await host.createSession();
+                      meta.sessionId = sessionId;
+                      meta.actor.sessionId = sessionId;
+                    }
+
+                    meta.status = "idle";
+                    meta.error = null;
+                    meta.updatedAt = nowIso;
+                    await host.setState(meta);
+                    return { body: buildChatState(meta) };
                   }
 
                   return { status: 404, body: { error: `No such route: ${req.path}` } };
