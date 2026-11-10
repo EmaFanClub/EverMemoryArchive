@@ -279,6 +279,8 @@ export interface WebWorkbenchInstallOptions {
   emaCliPath?: string;
   /** Whether to inject/update the RFC-0002 channel protocol block in the agent's AGENTS.md (default: true) */
   updateAgentsMd?: boolean;
+  /** Initial actor configuration (kind: "single-session" | "multiple-agent") */
+  actorKind?: "single-session" | "multiple-agent";
 }
 
 export interface WebWorkbenchInstallResult {

@@ -135,6 +135,18 @@ function renderStatus() {
   $("status-text").textContent = isRunning ? "正在输入..." : "在线";
   $("stop-btn").hidden = !isRunning;
 
+  const actorBadge = $("actor-badge");
+  if (actorBadge) {
+    if (state.actor?.kind === "multiple-agent") {
+      const shortId = state.actor.routerSessionId ? state.actor.routerSessionId.slice(-8) : "init";
+      actorBadge.textContent = `Router: ${shortId}`;
+      actorBadge.title = `Multiple-agent actor, router session: ${state.actor.routerSessionId || "uninitialized"}`;
+      actorBadge.hidden = false;
+    } else {
+      actorBadge.hidden = true;
+    }
+  }
+
   const errText = state.error;
   $("error-banner").hidden = !errText;
   if (errText) {

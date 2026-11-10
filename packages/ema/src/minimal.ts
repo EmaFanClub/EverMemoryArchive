@@ -15,6 +15,7 @@
 import {
   type EmaCtx,
   type EmaActor,
+  type EmaActorConfig,
   type EmaInput,
   type Disposable,
   type EmaWorldRegistry,
@@ -30,6 +31,7 @@ import {
   PenguinChannelWorld,
   type PenguinChannelWorldOptions,
 } from "./worlds/penguin-channel-world.js";
+import { EmaActorRouter, type ActorSessionHost } from "./actor-router.js";
 
 export { SimpleEmaRouter } from "./router.js";
 export { SimpleEmaInputBatcher, formatBatchToXml, escapeXml } from "./input-batcher.js";
@@ -226,7 +228,8 @@ export interface MinimalPrototypeOptions {
   channels?: string[];
   pollInterval?: number;
   stateFile?: string;
-  actor?: Partial<EmaActor>;
+  actor?: Partial<EmaActor> | EmaActorConfig;
+  sessionHost?: ActorSessionHost;
   systemPrompt?: string;
   batcherOptions?: EmaBatcherOptions;
   channelFetcher?: PenguinChannelWorldOptions["channelFetcher"];
@@ -292,12 +295,39 @@ export function createMinimalPrototype(
 
   registry.register("channel", channelWorld);
 
-  const actor: EmaActor = {
-    id: options.actor?.id ?? "actor-ema-minimal",
-    name: options.actor?.name ?? "Ema Minimal",
-    session: options.actor?.session ?? "session-2026-11-05-10-19-24-d6815237",
-    agentId: options.actor?.agentId ?? (env.PENGUIN_AGENT_ID || "emafanclub_ema_dev"),
+  const actorConfig: EmaActorConfig = options.actor ?? {
+    id: "actor-ema-minimal",
+    name: "Ema Minimal",
+    kind: "single-session",
+    sessionId: "session-2026-11-05-10-19-24-d6815237",
+    agentId: env.PENGUIN_AGENT_ID || "emafanclub_ema_dev",
   };
+
+  const actorRouter = new EmaActorRouter();
+  const actorKind = actorConfig.kind || "single-session";
+  const defaultSession =
+    actorKind === "multiple-agent"
+      ? (actorConfig as any).routerSessionId || ""
+      : (actorConfig as any).sessionId || (actorConfig as any).session || "session-2026-11-05-10-19-24-d6815237";
+
+  let actor: EmaActor = {
+    id: actorConfig.id || "actor-ema-minimal",
+    name: actorConfig.name || "Ema Minimal",
+    kind: actorKind,
+    agentId: actorConfig.agentId || (env.PENGUIN_AGENT_ID || "emafanclub_ema_dev"),
+    session: defaultSession,
+    ...(actorKind === "multiple-agent"
+      ? {
+          routerSessionId: (actorConfig as any).routerSessionId,
+          routerAgentId: (actorConfig as any).routerAgentId,
+          routerInitPrompt: (actorConfig as any).routerInitPrompt,
+          isInitialized: (actorConfig as any).isInitialized,
+          agents: (actorConfig as any).agents,
+        }
+      : {
+          sessionId: (actorConfig as any).sessionId || defaultSession,
+        }),
+  } as EmaActor;
 
   const systemPrompt = options.systemPrompt ?? DEFAULT_MINIMAL_SYSTEM_PROMPT;
 
@@ -310,6 +340,14 @@ export function createMinimalPrototype(
 
     turnChain = turnChain
       .then(async () => {
+        // Resolve or lazily provision router session on receiving batch for multiple-agent actor
+        if (options.sessionHost) {
+          const resolution = await actorRouter.resolveActorSession(actorConfig, options.sessionHost, {
+            defaultAgentId: env.PENGUIN_AGENT_ID || "emafanclub_ema_dev",
+          });
+          actor = resolution.actor;
+        }
+
         const xmlPayload = formatBatchToXml(batch);
         const primary = batch[0];
         const targetChannel = primary.partId;
@@ -317,6 +355,10 @@ export function createMinimalPrototype(
         let response = "";
         if (options.llmInvoker) {
           response = await options.llmInvoker(xmlPayload, systemPrompt);
+        } else if (options.sessionHost) {
+          const sessionToUse = actor.session;
+          await options.sessionHost.run(sessionToUse, [{ text: xmlPayload }]);
+          response = `Dispatched batch to actor session ${sessionToUse}.`;
         } else {
           response = `Acknowledged input batch of ${batch.length} message(s).`;
         }
