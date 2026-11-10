@@ -17,4 +17,7 @@ export * from "./worlds/web/index.js";
 export * from "./prompts/index.js";
 export * from "./builder.js";
 export * from "./minimal.js";
+export * from "./cognition/index.js";
+export * from "./compaction/index.js";
+export * from "./dreaming/index.js";
 export * from "./training/index.js";

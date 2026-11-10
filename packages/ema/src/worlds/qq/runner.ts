@@ -52,6 +52,14 @@ export function cleanLlmReplyText(raw: string): string {
     }
   }
 
+  // If the model emitted <OS>...</OS> and/or <Action>...</Action> blocks, extract only <Action>
+  const actionMatch = text.match(/<Action>([\s\S]*?)<\/Action>/i);
+  if (actionMatch) {
+    text = actionMatch[1].trim();
+  } else {
+    text = text.replace(/<OS>[\s\S]*?<\/OS>/gi, "").replace(/<\/?Action>/gi, "").trim();
+  }
+
   return text.trim();
 }
 

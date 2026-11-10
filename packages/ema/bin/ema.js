@@ -32,6 +32,10 @@ import {
   loadGalgameDataset,
   loadExternalPersonaSeed,
   EmaPersonaTrainer,
+  EmaMemoryCompactor,
+  EmaDreamEngine,
+  loadOrCreateCognitiveState,
+  startParallelRouteSessionConsolidator,
   runModelAndThinkingAblation,
   syncCompanionAgentState,
 } from "../dist/index.js";
@@ -630,6 +634,160 @@ async function main() {
       "utf8",
     );
     console.log(`Saved checkpoint to ${outPath}`);
+    return;
+  }
+
+  if (command === "compact") {
+    let agentId = "aoi_rei";
+    let routeSessionId = "";
+    let statePath = "";
+    let archivePath = "";
+    let targetCharacter = "";
+    let protagonistCharacter = "Owner";
+    let rollupThreshold = 40;
+    let modelId = "gemini-3.8-flash";
+
+    for (let i = 1; i < args.length; i++) {
+      if ((args[i] === "--agent-id" || args[i] === "--agent") && i + 1 < args.length)
+        agentId = args[++i];
+      else if ((args[i] === "--route-session" || args[i] === "--session") && i + 1 < args.length)
+        routeSessionId = args[++i];
+      else if (args[i] === "--state" && i + 1 < args.length) statePath = args[++i];
+      else if (args[i] === "--archive" && i + 1 < args.length) archivePath = args[++i];
+      else if (args[i] === "--target" && i + 1 < args.length) targetCharacter = args[++i];
+      else if (args[i] === "--protagonist" && i + 1 < args.length) protagonistCharacter = args[++i];
+      else if (args[i] === "--rollup-threshold" && i + 1 < args.length)
+        rollupThreshold = Number(args[++i]);
+      else if (args[i] === "--model" && i + 1 < args.length) modelId = args[++i];
+    }
+
+    if (!statePath) {
+      statePath = path.resolve(process.cwd(), "data", `${agentId}-ema-state.json`);
+    }
+    if (!archivePath) {
+      archivePath = path.resolve(path.dirname(statePath), `${agentId}-memory-archive.jsonl`);
+    }
+
+    const state = loadOrCreateCognitiveState({
+      statePath,
+      agentId,
+      companionName: targetCharacter || agentId,
+      protagonistName: protagonistCharacter,
+    });
+
+    const compactor = new EmaMemoryCompactor({
+      targetCharacter: state.personality.name,
+      protagonistCharacter: state.protagonistName,
+      model: { provider: "penguin-go", modelId, thinkingLevel: "medium" },
+      companionAgentId: agentId,
+      l0RollupThreshold: rollupThreshold,
+      archiveJsonlPath: archivePath,
+      statePath,
+      syncAgentOnDisk: true,
+    });
+
+    if (!routeSessionId) {
+      console.error("Error: --route-session <id> is required for `ema.js compact`.");
+      process.exit(1);
+    }
+
+    const res = await compactor.compactRouteSession(routeSessionId, state);
+    console.log(
+      `[Compact] Agent=${agentId} Session=${routeSessionId} | CompactedTurns=${res.compactedTurnCount} (${res.previousCursor}->${res.newCursor}) | +${res.newL0Items.length} L0, +${res.newL1Items.length} L1 | cost=$${res.metrics.costUsd}`,
+    );
+    return;
+  }
+
+  if (command === "dream") {
+    let agentId = "aoi_rei";
+    let routeSessionId = "";
+    let statePath = "";
+    let archivePath = "";
+    let outPath = "";
+    let watch = false;
+    let pollIntervalMs = 10_000;
+    let forceRefine = false;
+    let modelId = "gemini-3.8-flash";
+
+    for (let i = 1; i < args.length; i++) {
+      if ((args[i] === "--agent-id" || args[i] === "--agent") && i + 1 < args.length)
+        agentId = args[++i];
+      else if ((args[i] === "--route-session" || args[i] === "--session") && i + 1 < args.length)
+        routeSessionId = args[++i];
+      else if (args[i] === "--state" && i + 1 < args.length) statePath = args[++i];
+      else if (args[i] === "--archive" && i + 1 < args.length) archivePath = args[++i];
+      else if (args[i] === "--out" && i + 1 < args.length) outPath = args[++i];
+      else if (args[i] === "--watch") watch = true;
+      else if (args[i] === "--poll-interval" && i + 1 < args.length)
+        pollIntervalMs = Number(args[++i]);
+      else if (args[i] === "--force-refine") forceRefine = true;
+      else if (args[i] === "--model" && i + 1 < args.length) modelId = args[++i];
+    }
+
+    if (!statePath) {
+      statePath = path.resolve(process.cwd(), "data", `${agentId}-ema-state.json`);
+    }
+    if (!archivePath) {
+      archivePath = path.resolve(path.dirname(statePath), `${agentId}-memory-archive.jsonl`);
+    }
+
+    const state = loadOrCreateCognitiveState({
+      statePath,
+      agentId,
+    });
+
+    const dreamer = new EmaDreamEngine({
+      targetCharacter: state.personality.name,
+      protagonistCharacter: state.protagonistName,
+      companionAgentId: agentId,
+      studentModel: { provider: "penguin-go", modelId, thinkingLevel: "medium" },
+      teacherModel: { provider: "penguin-go", modelId, thinkingLevel: "medium" },
+      forcePersonaRefinement: forceRefine,
+      archiveJsonlPath: archivePath,
+      statePath,
+      syncAgentOnDisk: true,
+    });
+
+    if (watch && routeSessionId) {
+      console.log(
+        `[Dream Daemon] Attached in parallel to Route Session ${routeSessionId} (agent=${agentId}, poll=${pollIntervalMs}ms)...`,
+      );
+      const handle = startParallelRouteSessionConsolidator({
+        dreamer,
+        state,
+        routeSessionId,
+        pollIntervalMs,
+        onCompact: (c) => {
+          if (c) {
+            console.log(
+              `[Parallel Compact] +${c.newL0Items.length} L0, +${c.newL1Items.length} L1 | cursor=${c.newCursor} | cost=$${c.metrics.costUsd}`,
+            );
+          }
+        },
+        onDream: (d) => {
+          console.log(
+            `[Parallel Dream] Scenes=${d.evaluatedSceneCount} Score=${d.meanDaytimeScore} | P: ${d.personalityVersionBefore}->${d.personalityVersionAfter} (gate=${d.gatePassed}) | cost=$${d.metrics.costUsd}`,
+          );
+        },
+      });
+      await handle.tickNow();
+      process.on("SIGINT", () => {
+        handle.dispose();
+        process.exit(0);
+      });
+      return;
+    }
+
+    const res = await dreamer.runDreamCycle(state, {
+      routeSessionId: routeSessionId || undefined,
+    });
+    console.log(
+      `[Dream] Agent=${agentId} | Scenes=${res.evaluatedSceneCount} Turns=${res.evaluatedTurnCount} MeanScore=${res.meanDaytimeScore} | P: ${res.personalityVersionBefore}->${res.personalityVersionAfter} (mutated=${res.personalityMutated}, gate=${res.gatePassed}) | cost=$${res.metrics.costUsd}`,
+    );
+    if (outPath) {
+      fs.mkdirSync(path.dirname(outPath), { recursive: true });
+      fs.writeFileSync(outPath, JSON.stringify(res, null, 2), "utf8");
+    }
     return;
   }
 
