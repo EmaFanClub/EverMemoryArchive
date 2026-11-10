@@ -64,7 +64,7 @@ Aligning personality updates with windowed memory compaction (`compact`) boundar
 The EMA training meta-theory is built upon six foundational primitives:
 
 1. **Sequential Dataset ($D$)**:
-   A narrative script or interaction history is normalized into an ordered sequence of $T$ tasks (e.g., $T = 2000+$ questions for a target character such as *Shirobana*):
+   A narrative script or interaction history is normalized into an ordered sequence of $T$ tasks (e.g., $T = 2000+$ questions for a target companion character):
    $$D = \{q_1, q_2, \dots, q_T\}, \quad q_t = (\text{Input}_t, \text{Action}_t^*)$$
    where $\text{Input}_t$ encapsulates all observable dialogue and environmental events preceding the character's turn, and $\text{Action}_t^*$ is the ground-truth action and dialogue from the source script.
 
@@ -126,20 +126,20 @@ Dataset D = {q_1, q_2, ..., q_T}  (T = 2000+ Sequential Questions)
 
 #### (1) Single-Step Execution & Teacher Verification Walkthrough
 
-Consider training the character *Shirobana* (`白花`) on a scene where an amnesiac spirit woman loses control:
+Consider training a target companion character (*Character A*) on a scene where an unstable stranger suddenly loses control:
 
-1. **Input Construction**: All observable lines preceding Shirobana's reaction are packaged as `<Input>`:
+1. **Input Construction**: All observable lines preceding Character A's reaction are packaged as `<Input>`:
    ```xml
-   <Input> <name>女子</name> 连最重要的记忆都……舍弃了…… </Input>
-   <Input> <name>女子</name> 我……我是…… </Input>
-   <Input> <name>女子</name> 啊啊……啊啊啊啊……！ </Input>
+   <Input> <name>Stranger</name> Even the most important memories... were cast aside... </Input>
+   <Input> <name>Stranger</name> Who... who am I... </Input>
+   <Input> <name>Stranger</name> Ahh... ahhhhh...! </Input>
    ```
 2. **Student Inference ($\text{OS} \to \text{React}$)**:
    - Conditioned on $(P_{u,v}, \text{MemoryIndex}, \text{History})$, the EMA agent generates its inner psychological transition:
-     `set_os("Shock and immediate protective vigilance: her spiritual aura is going berserk, I must shield Sora at once")`
+     `set_os("Shock and immediate protective vigilance: the stranger is losing control, I must shield my partner at once")`
    - Conditioned on that `os`, the agent predicts an external reaction `react`.
 3. **Teacher Evaluation & Action Override**:
-   - The Teacher inspects the Ground Truth: `「唔！」` (and the accompanying action description: *Shirobana reacted immediately to the woman's abnormality, stepping between them: 「Sora, back away!」*).
+   - The Teacher inspects the Ground Truth: `「Watch out, step back!」` (and the accompanying action description: *Character A reacted immediately to the anomaly, stepping forward to shield her partner*).
    - The Teacher compares the agent's `os` against the Ground Truth:
      - **Case A (`os` is inconsistent with Ground Truth)**: Signal that Personality $P$ requires adjustment (`adjust_personality`).
      - **Case B (`os` is consistent with Ground Truth)**: Evaluate whether `react` is reasonably aligned with the Ground Truth action in intent and persona voice (exact verbatim match is not required; behavioral plausibility is sufficient).

@@ -30,9 +30,10 @@ import {
   assertAgentIdentity,
   DEFAULT_MINIMAL_SYSTEM_PROMPT,
   loadGalgameDataset,
-  EmaShirobanaTrainer,
+  loadExternalPersonaSeed,
+  EmaPersonaTrainer,
   runModelAndThinkingAblation,
-  syncShirobanaAgentState,
+  syncCompanionAgentState,
 } from "../dist/index.js";
 import { execFileSync } from "node:child_process";
 
@@ -542,9 +543,13 @@ async function main() {
     return;
   }
 
-  if (command === "train-shirobana") {
-    let scriptPath = "/home/rei/work/org/ema/ema-dev/data/galgame/hoken-sensei.json";
-    let outPath = "/home/rei/work/org/ema/ema-dev/data/galgame/shirobana-v1-checkpoint.json";
+  if (command === "train") {
+    let scriptPath = "";
+    let seedPath = "";
+    let outPath = "./ema-persona-checkpoint.json";
+    let agentId = "";
+    let targetCharacter = "";
+    let protagonistCharacter = "";
     let maxScenes = 10;
     let studentModelId = "gemini-3.8-flash";
     let teacherModelId = "gemini-3.8-flash";
@@ -552,24 +557,53 @@ async function main() {
 
     for (let i = 1; i < args.length; i++) {
       if (args[i] === "--script" && i + 1 < args.length) scriptPath = args[++i];
+      else if (args[i] === "--seed" && i + 1 < args.length) seedPath = args[++i];
       else if (args[i] === "--out" && i + 1 < args.length) outPath = args[++i];
+      else if (args[i] === "--agent-id" && i + 1 < args.length) agentId = args[++i];
+      else if (args[i] === "--target" && i + 1 < args.length) targetCharacter = args[++i];
+      else if (args[i] === "--protagonist" && i + 1 < args.length) protagonistCharacter = args[++i];
       else if (args[i] === "--scenes" && i + 1 < args.length) maxScenes = Number(args[++i]);
       else if (args[i] === "--student-model" && i + 1 < args.length) studentModelId = args[++i];
       else if (args[i] === "--teacher-model" && i + 1 < args.length) teacherModelId = args[++i];
       else if (args[i] === "--thinking" && i + 1 < args.length) thinkingLevel = args[++i];
     }
 
-    const ds = loadGalgameDataset(scriptPath);
-    const selected = ds.scenes.slice(0, maxScenes);
-    const trainer = new EmaShirobanaTrainer({
-      studentModel: { provider: "penguin-go", modelId: studentModelId, thinkingLevel },
-      teacherModel: { provider: "penguin-go", modelId: teacherModelId, thinkingLevel: "medium" },
-      rsiScoreThreshold: 85,
-      maxWindowAttempts: 2,
-      studentBatchSize: 12,
-      enableReflectionCheck: true,
-      syncAgentOnDisk: true,
+    if (!scriptPath) {
+      console.error("Error: --script <path> is required for `ema.js train`.");
+      process.exit(1);
+    }
+
+    const seed = seedPath ? loadExternalPersonaSeed(seedPath) : null;
+    const ds = loadGalgameDataset(scriptPath, {
+      targetCharacter: targetCharacter || seed?.targetCharacter,
+      protagonistCharacter: protagonistCharacter || seed?.protagonistCharacter,
+      speakerAliases: seed?.speakerAliases,
+      sceneSpeakerOverrides: seed?.sceneSpeakerOverrides,
     });
+
+    const selected = ds.scenes.slice(0, maxScenes);
+    const trainer = new EmaPersonaTrainer(
+      {
+        targetCharacter: ds.targetCharacter,
+        protagonistCharacter: ds.protagonistCharacter,
+        companionAgentId: agentId || "ema_minimal",
+        studentModel: { provider: "penguin-go", modelId: studentModelId, thinkingLevel },
+        teacherModel: { provider: "penguin-go", modelId: teacherModelId, thinkingLevel: "medium" },
+        rsiScoreThreshold: 85,
+        maxWindowAttempts: 2,
+        studentBatchSize: 12,
+        enableReflectionCheck: true,
+        syncAgentOnDisk: Boolean(agentId),
+      },
+      {
+        initialPersonality: seed?.personality,
+      },
+    );
+
+    if (!seed?.personality && selected.length > 0) {
+      console.log(`[Warmup] Distilling initial P_0_0 for ${ds.targetCharacter}...`);
+      await trainer.distillInitialPersonalityFromWarmup(selected.slice(0, 3));
+    }
 
     const counter = { count: 0 };
     const results = [];

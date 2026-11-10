@@ -1,11 +1,11 @@
 /**
  * @prism-shadow/ema - Training Prototype Types (RFC-0003 / RFC-0004 / RFC-0005)
  *
- * Defines data structures for:
- * - Galgame script washing & Turn Bundle construction (D = {q_1, ..., q_T})
+ * Defines generic, character-agnostic data structures for:
+ * - Narrative script washing & Turn Bundle construction (D = {q_1, ..., q_T})
  * - Latent-mediated forward trajectory: Input_t -> OS_t -> Action_t
  * - Single-level In-Context MemoryIndex_{0,x} = compress({MemoryItem_n})
- * - Structured Personality P_{u,v} & Teacher RSI mutation loop
+ * - Structured CompanionPersonality P_{u,v} & Teacher RSI mutation loop
  * - Base model & thinking level ablation metrics
  */
 
@@ -41,9 +41,9 @@ export interface RawGalgameScript {
  * A single training question / turn bundle q_t = <Input_t, GT_Action_t>.
  */
 export interface TurnBundle {
-  /** Globally unique turn ID, e.g. "005_シナリオ01_05#turn-03" */
+  /** Globally unique turn ID, e.g. "scene_01#turn-03" */
   id: string;
-  /** Scene identifier, e.g. "005_シナリオ01_05" */
+  /** Scene identifier */
   sceneId: string;
   /** 1-based turn index within the scene */
   turnIndexInScene: number;
@@ -53,7 +53,7 @@ export interface TurnBundle {
   inputLines: RawScriptLine[];
   /** Formatted Input_t string shown to the Student & Teacher */
   inputText: string;
-  /** Consecutive target-character (Shirobana) lines coalesced into this turn */
+  /** Consecutive target-character lines coalesced into this turn */
   gtActionLines: RawScriptLine[];
   /** Formatted Ground Truth Action_t^* string */
   gtActionText: string;
@@ -99,22 +99,22 @@ export interface WashedDataset {
 }
 
 /**
- * Structured Personality P_{u,v} (RFC-0004 / RFC-0005).
+ * Structured Companion Personality P_{u,v} (RFC-0004 / RFC-0005).
  */
-export interface ShirobanaPersonality {
+export interface CompanionPersonality {
   /** Version label, e.g. "P_0_0", "P_0_1", "P_1_0" */
   version: string;
-  /** Character name */
+  /** Target character display name */
   name: string;
-  /** Core identity, background, soul-person (魂人) nature, and bond with Sora (苍空) */
+  /** Core identity, background, worldview, and bond with the counterpart */
   coreIdentity: string;
-  /** Archetype & emotional dynamics (tsundere, aloof exterior vs deep devotion) */
+  /** Archetype & emotional dynamics */
   emotionalDynamics: string[];
   /** Concrete speech style rules, sentence length constraints, and catchphrases */
   speechStyleRules: string[];
   /** Latent <OS> inner monologue cognitive patterns that bridge Input -> Action */
   cognitiveOSPatterns: string[];
-  /** Signature physical actions & habits (blowing soap bubbles, shin kicks, etc.) */
+  /** Signature physical actions & behavioral habits */
   behavioralHabits: string[];
   /** Anti-OOC negative constraints accumulated via Teacher RSI error diagnostics */
   antiOocConstraints: string[];
@@ -127,6 +127,18 @@ export interface ShirobanaPersonality {
     scoreBefore: number;
     scoreAfter?: number;
   }>;
+}
+
+/**
+ * External configuration bundle for loading character-specific aliases and initial P_{0,0}
+ * from a JSON file outside the repository.
+ */
+export interface ExternalPersonaSeedBundle {
+  targetCharacter: string;
+  protagonistCharacter?: string;
+  speakerAliases?: string[];
+  sceneSpeakerOverrides?: Record<string, string[]>;
+  personality: CompanionPersonality;
 }
 
 /**
@@ -167,9 +179,9 @@ export interface SceneMemoryIndexItem {
   chapter: string;
   title: string;
   setting: string;
-  /** Concise first-person episodic summary from Shirobana's perspective */
+  /** Concise first-person episodic summary from the target character's perspective */
   summary: string;
-  /** Shirobana's latent inner feelings (<OS> trajectory) during this scene */
+  /** Target character's latent inner feelings (<OS> trajectory) during this scene */
   innerOSArc: string;
   /** Key relational facts, lore, or promises to remember in future scenes */
   keyFacts: string[];

@@ -1,8 +1,8 @@
 /**
- * @prism-shadow/ema - Galgame Script Dataset Washer & Turn-Bundle Builder
+ * @prism-shadow/ema - Narrative Script Dataset Washer & Turn-Bundle Builder
  *
- * Transforms cleaned visual novel scripts (e.g. `hoken-sensei.json`) into
- * sequential SceneWindows and TurnBundles D = {q_1, ..., q_T} for Shirobana (白花).
+ * Transforms structured visual novel / narrative dialogue scripts into
+ * sequential SceneWindows and TurnBundles D = {q_1, ..., q_T} for any target character.
  */
 
 import fs from "node:fs";
@@ -10,41 +10,55 @@ import type {
   DatasetWashStats,
   RawGalgameScript,
   RawScriptLine,
-  RawScriptScene,
   SceneWindow,
   TurnBundle,
   WashedDataset,
 } from "./types.js";
 
-export const SHIROBANA_SPEAKER_ALIASES = new Set([
-  "白花",
-  "シロバナ",
-  "白",
-  "小白",
-  "百花",
-  "苍空＆白花",
-]);
+export interface WashDatasetOptions {
+  /** Primary target character name to train as the companion */
+  targetCharacter?: string;
+  /** Counterpart / protagonist name in the script (defaults to "主角") */
+  protagonistCharacter?: string;
+  /** Additional speaker aliases mapped to the target character */
+  speakerAliases?: string[];
+  /** Scene-specific speaker aliases (e.g. pre-reveal mystery speaker in a specific scene) */
+  sceneSpeakerOverrides?: Record<string, string[]>;
+  /** Exclude adult/H-scenes from the training sequence; defaults to true */
+  excludeHScenes?: boolean;
+  /** Optional scene tag substring used to detect adult scenes (defaults to "Hシーン") */
+  hSceneMarker?: string;
+  /** Maximum story order index (optional filter for engine/preview placeholders) */
+  maxOrder?: number;
+  /** Optional scene ID filter or slice */
+  sceneIds?: string[];
+}
 
 /**
- * Checks whether a script line is spoken/thought by Shirobana (白花).
- * Handles scene-specific pre-reveal aliases (`？？？` in `001_シナリオ01_01`).
+ * Checks whether a script line is spoken/thought by the target character.
  */
-export function isShirobanaSpeaker(speaker: string | null, sceneId: string): boolean {
+export function isTargetSpeaker(
+  speaker: string | null,
+  sceneId: string,
+  aliasSet: ReadonlySet<string>,
+  sceneOverrides?: Record<string, string[]>,
+): boolean {
   if (!speaker) return false;
-  if (SHIROBANA_SPEAKER_ALIASES.has(speaker)) return true;
-  if (sceneId === "001_シナリオ01_01" && speaker === "？？？") return true;
+  if (aliasSet.has(speaker)) return true;
+  const overrides = sceneOverrides?.[sceneId];
+  if (overrides && overrides.includes(speaker)) return true;
   return false;
 }
 
 /**
- * Extracts chapter identifier from a scene_id (e.g. "005_シナリオ01_05" -> "シナリオ01").
+ * Extracts chapter identifier from a scene_id (e.g. "005_ch01_05" -> "ch01").
  */
 export function extractChapterFromSceneId(sceneId: string): string {
   const parts = sceneId.split("_");
   if (parts.length >= 2) {
     return parts[1];
   }
-  return "unknown";
+  return "default";
 }
 
 /**
@@ -63,9 +77,9 @@ export function formatInputLine(line: RawScriptLine): string {
 }
 
 /**
- * Formats Shirobana's consecutive lines into Ground Truth Action_t^*.
+ * Formats consecutive target-character lines into Ground Truth Action_t^*.
  */
-export function formatShirobanaActionLines(lines: RawScriptLine[]): {
+export function formatTargetActionLines(lines: RawScriptLine[]): {
   gtActionText: string;
   explicitOS: string | null;
 } {
@@ -93,13 +107,28 @@ export function formatShirobanaActionLines(lines: RawScriptLine[]): {
   };
 }
 
-export interface WashDatasetOptions {
-  /** Exclude H-scenes (`Hシーン`) from the training sequence; defaults to true */
-  excludeHScenes?: boolean;
-  /** Maximum story order index (defaults to 201 to exclude engine/voice-preview placeholders) */
-  maxOrder?: number;
-  /** Optional scene ID filter or slice */
-  sceneIds?: string[];
+/**
+ * Infers the most frequent non-protagonist speaker in the script when `targetCharacter`
+ * is not explicitly passed.
+ */
+function inferDefaultTargetSpeaker(script: RawGalgameScript, protagonist?: string): string {
+  const counts = new Map<string, number>();
+  for (const scene of script.scenes) {
+    for (const line of scene.lines) {
+      if (line.speaker && line.speaker !== protagonist) {
+        counts.set(line.speaker, (counts.get(line.speaker) || 0) + 1);
+      }
+    }
+  }
+  let best = "Target";
+  let bestCount = -1;
+  for (const [sp, count] of counts.entries()) {
+    if (count > bestCount) {
+      best = sp;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 /**
@@ -109,8 +138,14 @@ export function washGalgameScript(
   script: RawGalgameScript,
   options: WashDatasetOptions = {},
 ): WashedDataset {
+  const protagonistCharacter = options.protagonistCharacter || "主角";
+  const targetCharacter =
+    options.targetCharacter || inferDefaultTargetSpeaker(script, protagonistCharacter);
+  const aliasSet = new Set<string>([targetCharacter, ...(options.speakerAliases || [])]);
+  const sceneOverrides = options.sceneSpeakerOverrides;
   const excludeHScenes = options.excludeHScenes ?? true;
-  const maxOrder = options.maxOrder ?? 201;
+  const hSceneMarker = options.hSceneMarker ?? "Hシーン";
+  const maxOrder = options.maxOrder ?? Number.POSITIVE_INFINITY;
   const sceneIdFilter = options.sceneIds ? new Set(options.sceneIds) : null;
 
   const speakerAliasCounts: Record<string, number> = {};
@@ -126,10 +161,12 @@ export function washGalgameScript(
   for (const rawScene of script.scenes) {
     if (rawScene.order > maxOrder) continue;
 
-    const hasTarget = rawScene.lines.some((l) => isShirobanaSpeaker(l.speaker, rawScene.scene_id));
+    const hasTarget = rawScene.lines.some((l) =>
+      isTargetSpeaker(l.speaker, rawScene.scene_id, aliasSet, sceneOverrides),
+    );
     if (!hasTarget) continue;
 
-    const isHScene = rawScene.scene_id.includes("Hシーン");
+    const isHScene = Boolean(hSceneMarker && rawScene.scene_id.includes(hSceneMarker));
     storyScenesWithTarget++;
     if (isHScene) {
       hScenesWithTarget++;
@@ -156,7 +193,7 @@ export function washGalgameScript(
           .filter(Boolean)
           .join("\n") || "[场景开场]";
 
-      const { gtActionText, explicitOS } = formatShirobanaActionLines(pendingTargetLines);
+      const { gtActionText, explicitOS } = formatTargetActionLines(pendingTargetLines);
 
       turns.push({
         id: `${rawScene.scene_id}#turn-${String(turnIndexInScene).padStart(2, "0")}`,
@@ -175,8 +212,8 @@ export function washGalgameScript(
     };
 
     for (const line of rawScene.lines) {
-      if (isShirobanaSpeaker(line.speaker, rawScene.scene_id)) {
-        const sp = line.speaker || "白花";
+      if (isTargetSpeaker(line.speaker, rawScene.scene_id, aliasSet, sceneOverrides)) {
+        const sp = line.speaker || targetCharacter;
         speakerAliasCounts[sp] = (speakerAliasCounts[sp] || 0) + 1;
         totalRawTargetLines++;
         if (line.type === "monologue") {
@@ -226,15 +263,15 @@ export function washGalgameScript(
   };
 
   return {
-    targetCharacter: "白花",
-    protagonistCharacter: "苍空",
+    targetCharacter,
+    protagonistCharacter,
     stats,
     scenes: washedScenes,
   };
 }
 
 /**
- * Loads and washes a Galgame JSON script from disk.
+ * Loads and washes a narrative JSON script from disk.
  */
 export function loadGalgameDataset(
   jsonPath: string,

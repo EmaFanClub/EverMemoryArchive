@@ -66,7 +66,7 @@ $$\text{Memory} = f_C(D, P)$$
 1. **序列题库（Sequential Dataset, $D$）**：
    将源剧本或长交互历史清洗为按因果时序排列的 $T$ 道题目（例如 $T = 2000+$）：
    $$D = \{q_1, q_2, \dots, q_T\}, \quad q_t = (\text{Input}_t, \text{Action}_t^*)$$
-   其中 $\text{Input}_t$ 为目标角色（如「白花」）发生动作或对话之前的可观测上下文序列，$\text{Action}_t^*$ 为原著/真实轨迹中的 Ground Truth 动作与台词。
+   其中 $\text{Input}_t$ 为目标伴侣角色发生动作或对话之前的可观测上下文序列，$\text{Action}_t^*$ 为原著/真实轨迹中的 Ground Truth 动作与台词。
 
 2. **隐式内心变化（Latent Inner State, $\text{OS}_t$）**：
    EMA Agent 在接收 $\text{Input}_t$ 后，结合当前人格 $P$ 与记忆 $M$ 生成的内部心理状态更新（例如 `<set_os>震惊、警觉护主</set_os>`），用于驱动随后的外部行为预测 $\text{Action}_t$。
@@ -126,22 +126,22 @@ Dataset D = {q_1, q_2, ..., q_T}  (T = 2000+ Sequential Questions)
 
 #### (1) 单步前向与 Teacher 校验示例
 
-以《保健室的老师与沉迷吹泡泡的助手》中「白花」面对失忆魂人女子暴走的一幕为例：
+以目标伴侣角色（角色 A）面对陌生人情绪失控暴走的一幕为例：
 
-1. **输入构造（Inputs）**：提取白花动作前的可观测内容：
+1. **输入构造（Inputs）**：提取角色 A 动作前的可观测内容：
    ```xml
-   <Input> <name>女子</name> 连最重要的记忆都……舍弃了…… </Input>
-   <Input> <name>女子</name> 我……我是…… </Input>
-   <Input> <name>女子</name> 啊啊……啊啊啊啊……！ </Input>
+   <Input> <name>陌生人</name> 连最重要的记忆都……遗忘了…… </Input>
+   <Input> <name>陌生人</name> 我……我究竟是谁…… </Input>
+   <Input> <name>陌生人</name> 啊啊……啊啊啊啊……！ </Input>
    ```
 2. **Agent 推理（OS $\to$ React）**：
    - Agent 依据当前人格 $P_{u,v}$、常驻 `MemoryIndex` 与近期 `History`，首先生成内心状态变化：
-     `set_os("震惊且警觉：眼前的魂人灵气失控即将暴走，必须立刻保护苍空")`
-   - 随后基于该 `os` 生成外部反应 `react`（例如：`「苍空，危险，快退后！」`）。
+     `set_os("震惊且警觉：眼前的陌生人彻底失控即将暴走，必须立刻护在同伴身前")`
+   - 随后基于该 `os` 生成外部反应 `react`（例如：`「危险，快退到我身后！」`）。
 3. **Teacher 判别与强制对齐（Teacher Check & Override）**：
-   - Teacher 拿到 Ground Truth：`「唔！」`（以及紧邻动作描写：*小白很快就对女人的异常做出了反应，「苍空，快后退！」*）。
+   - Teacher 拿到 Ground Truth：`「小心，快退后！」`（以及紧邻动作描写：*角色 A 迅速对异常做出反应，挡在同伴身前*）。
    - Teacher 对比 Agent 的 `os` 与 Ground Truth：
-     - **情况 A（`os` 与 GT 不契合）**：例如 Agent 的 `os` 是“害怕地躲起来”，这与 GT 中白花挺身而出保护苍空的行为相悖 $\to$ 标记需要调整人格（`adjust_personality`）。
+     - **情况 A（`os` 与 GT 不契合）**：例如 Agent 的 `os` 是“害怕地躲起来”，这与 GT 中角色 A 挺身而出保护同伴的行为相悖 $\to$ 标记需要调整人格（`adjust_personality`）。
      - **情况 B（`os` 与 GT 契合）**：进一步检查 `react` 是否与 GT Action 相似。此处**只要求语义与行为意图合理即可**，不要求字面完全一致。
    - **状态提交**：保留契合的 `os`，将外部动作**强制覆盖（Override）**为 Ground Truth Action，向当前窗口追加一行记忆：
      $$\text{MemoryItem}_t = \{\text{inputs}, \text{os}, \text{actions} = \text{GT\_Action}\}$$
@@ -318,7 +318,7 @@ Dataset D = {q_1, q_2, ..., q_T}  (T = 2000+ Sequential Questions)
 [future-possibilities]: #future-possibilities
 
 - **RFC-0004（第一版人格和记忆建模：In-Context Memory-Index + OS）**：具象化上述前两个未决问题，正式定义 $\text{Input} \to \text{OS} \to \text{Action}$ 推理协议、单级 $\text{MemoryIndex}_{0,x}$ 的压缩与解压（Reflect）机制，以及训练压缩 Prompt $C$ 的评分回路。
-- **RFC-0005（第一版剧本到人格+记忆逆向算法）**：具象化后两个未决问题，实现「固定人格逆向记忆格式」与「闭环动态更新人格同时逆向出人格与记忆」的完整算法，并在视觉小说数据集（如《保健室的老师与沉迷吹泡泡的助手》白花线 $2000+$ 题）上完成基准验证。
+- **RFC-0005（第一版剧本到人格+记忆逆向算法）**：具象化后两个未决问题，实现「固定人格逆向记忆格式」与「闭环动态更新人格同时逆向出人格与记忆」的完整算法，并在长篇叙事剧本数据集（$2000+$ 题）上完成基准验证。
 - **多分支状态向量束搜索（Beam Search over $\{P, M\}$ Vectors）**：当算力充裕时，Teacher 在每个窗口边界并行维护 $B$ 个不同演化方向的 $\{P_{u,v}^{(b)}, M_{u,v}^{(b)}\}$ 向量分支，通过后续窗口的长期泛化表现自动完成优胜劣汰。
 
 ---

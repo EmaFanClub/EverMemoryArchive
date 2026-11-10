@@ -195,7 +195,7 @@ export class PenguinServerLLMClient {
   private async completeOnce(prompt: string, options: LlmCallOptions = {}): Promise<LlmCallResponse> {
     const startedAt = Date.now();
     const projectId = options.projectId || this.defaultProjectId;
-    const agentId = options.agentId || "shirobana";
+    const agentId = options.agentId || "ema_minimal";
     const workspace = options.workspace || this.defaultWorkspace;
     const timeoutMs = options.timeoutMs ?? 180_000;
 

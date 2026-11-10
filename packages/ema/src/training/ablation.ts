@@ -11,14 +11,14 @@
  */
 
 import type {
+  CompanionPersonality,
   ModelAblationCandidate,
   ModelAblationResult,
   SceneWindow,
-  ShirobanaPersonality,
 } from "./types.js";
 import { PenguinServerLLMClient, sumMetrics } from "./llm-client.js";
-import { EmaShirobanaTrainer } from "./trainer.js";
-import { INITIAL_SHIROBANA_P0_0 } from "./personality.js";
+import { EmaPersonaTrainer } from "./trainer.js";
+import { createInitialPersonalityTemplate } from "./personality.js";
 
 export const DEFAULT_ABLATION_CANDIDATES: ModelAblationCandidate[] = [
   {
@@ -80,7 +80,9 @@ export const DEFAULT_ABLATION_CANDIDATES: ModelAblationCandidate[] = [
 export interface RunAblationOptions {
   candidates?: ModelAblationCandidate[];
   scenes: SceneWindow[];
-  personality?: ShirobanaPersonality;
+  personality?: CompanionPersonality;
+  targetCharacter?: string;
+  protagonistCharacter?: string;
   teacherModel?: {
     provider: string;
     modelId: string;
@@ -105,12 +107,20 @@ export async function runModelAndThinkingAblation(
   };
   const client = new PenguinServerLLMClient();
   const results: ModelAblationResult[] = [];
+  const personality =
+    options.personality ||
+    createInitialPersonalityTemplate({
+      name: options.targetCharacter || "Companion",
+      protagonistName: options.protagonistCharacter || "主角",
+    });
 
   for (const candidate of candidates) {
     const startedAt = Date.now();
     try {
-      const trainer = new EmaShirobanaTrainer(
+      const trainer = new EmaPersonaTrainer(
         {
+          targetCharacter: options.targetCharacter || personality.name,
+          protagonistCharacter: options.protagonistCharacter || "主角",
           studentModel: {
             provider: candidate.provider,
             modelId: candidate.modelId,
@@ -118,37 +128,38 @@ export async function runModelAndThinkingAblation(
           },
           teacherModel,
           studentBatchSize: options.studentBatchSize ?? 6,
-          maxWindowAttempts: 1,
           enableReflectionCheck: false,
           syncAgentOnDisk: false,
         },
         {
           client,
-          initialPersonality: options.personality || INITIAL_SHIROBANA_P0_0,
+          initialPersonality: personality,
         },
       );
 
       let totalTurns = 0;
-      let validFormats = 0;
-      let osConsistentCount = 0;
+      let validFormatTurns = 0;
+      let osConsistentTurns = 0;
       let sumOsScore = 0;
       let sumActionScore = 0;
       let sumCombinedScore = 0;
-      const studentMetricsList = [];
+      const allMetrics = [];
       const sampleOutputs: ModelAblationResult["sampleOutputs"] = [];
 
       for (const scene of options.scenes) {
         const fwd = await trainer.runStudentSceneForward(scene);
-        studentMetricsList.push(...fwd.metrics);
+        allMetrics.push(...fwd.metrics);
 
         for (const p of fwd.predictions) {
           totalTurns++;
-          if (p.formatValid) validFormats++;
+          if (p.formatValid) validFormatTurns++;
         }
 
         const evaluated = await trainer.evaluateScenePredictions(scene, fwd.predictions);
+        allMetrics.push(...evaluated.metrics);
+
         for (const it of evaluated.items) {
-          if (it.osConsistent) osConsistentCount++;
+          if (it.osConsistent) osConsistentTurns++;
           sumOsScore += it.osScore;
           sumActionScore += it.actionScore;
           sumCombinedScore += it.combinedScore;
@@ -165,26 +176,27 @@ export async function runModelAndThinkingAblation(
         }
       }
 
-      const studentMetrics = sumMetrics(studentMetricsList);
+      const totalLatencyMs = Date.now() - startedAt;
       const denom = Math.max(1, totalTurns);
       const res: ModelAblationResult = {
         candidate,
         sceneCount: options.scenes.length,
         turnCount: totalTurns,
-        formatSuccessRate: Number((validFormats / denom).toFixed(3)),
-        osConsistencyRate: Number((osConsistentCount / denom).toFixed(3)),
+        formatSuccessRate: Number((validFormatTurns / denom).toFixed(3)),
+        osConsistencyRate: Number((osConsistentTurns / denom).toFixed(3)),
         meanOsScore: Number((sumOsScore / denom).toFixed(1)),
         meanActionScore: Number((sumActionScore / denom).toFixed(1)),
         meanCombinedScore: Number((sumCombinedScore / denom).toFixed(1)),
-        totalLatencyMs: studentMetrics.latencyMs,
-        msPerTurn: Math.round(studentMetrics.latencyMs / denom),
-        metrics: studentMetrics,
+        totalLatencyMs,
+        msPerTurn: Math.round(totalLatencyMs / denom),
+        metrics: sumMetrics(allMetrics),
         sampleOutputs,
       };
       results.push(res);
       options.onCandidateResult?.(res);
     } catch (err: any) {
-      const failedRes: ModelAblationResult = {
+      const totalLatencyMs = Date.now() - startedAt;
+      const res: ModelAblationResult = {
         candidate,
         sceneCount: options.scenes.length,
         turnCount: 0,
@@ -193,10 +205,10 @@ export async function runModelAndThinkingAblation(
         meanOsScore: 0,
         meanActionScore: 0,
         meanCombinedScore: 0,
-        totalLatencyMs: Date.now() - startedAt,
+        totalLatencyMs,
         msPerTurn: 0,
         metrics: {
-          latencyMs: Date.now() - startedAt,
+          latencyMs: totalLatencyMs,
           promptTokens: 0,
           cachedTokens: 0,
           thoughtsTokens: 0,
@@ -207,8 +219,8 @@ export async function runModelAndThinkingAblation(
         sampleOutputs: [],
         error: err?.message || String(err),
       };
-      results.push(failedRes);
-      options.onCandidateResult?.(failedRes);
+      results.push(res);
+      options.onCandidateResult?.(res);
     }
   }
 

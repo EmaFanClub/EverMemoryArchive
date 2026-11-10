@@ -1,30 +1,30 @@
 /**
- * @prism-shadow/ema - RFC-0003 / RFC-0004 / RFC-0005 Training Prototype
+ * @prism-shadow/ema - RFC-0003 / RFC-0004 / RFC-0005 Persona & Memory Training Engine
  *
- * Implements the latent-mediated forward-backward RSI loop:
- * 1. Cold-Start Warmup: Initialize P_{0,0} from warmup scenes (q_{1..N})
+ * Implements the generic latent-mediated forward-backward RSI loop:
+ * 1. Cold-Start Warmup (`distillInitialPersonalityFromWarmup`): Initialize P_{0,0} from warmup scenes (q_{1..N})
  * 2. Student Forward (`react`): Input_t -> OS_t -> Action_t (with Teacher-Forcing to GT_Action_t^*)
  * 3. Teacher Evaluation (`evaluate`): Check OS_t consistency with GT_Action_t^* & score Action_t similarity
- * 4. Local Window RSI (`adjust_personality`): Mutate P_{u,v} -> P_{u,v}' when window score < threshold & re-verify
+ * 4. Local Window RSI (`adjust_personality`): Anchor-preserving mutation P_{u,v} -> P_{u,v}' when window score < threshold & re-verify
  * 5. Scene Compaction (`compact` + `reflect`): Compress {MemoryItem_t} -> single-level MemoryIndex_{0,x}
  */
 
 import type {
+  CompanionPersonality,
   CompressionPromptConfig,
   LlmCallMetrics,
   MemoryItem,
   SceneMemoryIndexItem,
   SceneWindow,
-  ShirobanaPersonality,
   TurnBundle,
   WindowTrainingResult,
 } from "./types.js";
 import { PenguinServerLLMClient, sumMetrics, type LlmCallOptions } from "./llm-client.js";
 import {
-  INITIAL_COMPRESSION_PROMPT_C0_0,
-  INITIAL_SHIROBANA_P0_0,
+  createDefaultCompressionPrompt,
+  createInitialPersonalityTemplate,
   formatMemoryIndexMarkdown,
-  syncShirobanaAgentState,
+  syncCompanionAgentState,
 } from "./personality.js";
 
 /**
@@ -64,7 +64,7 @@ export function parseStudentTurnOutput(rawText: string): {
     // ignore
   }
 
-  // Fallback: split if model wrote "内心/OS:" and "台词/Action:"
+  // Fallback: split if model omitted tags
   const fallbackOs = osMatch ? osMatch[1].trim() : "（静静观察着眼前的情形）";
   const fallbackAction = actionMatch
     ? actionMatch[1].trim()
@@ -89,7 +89,6 @@ export function extractJsonFromLlm<T = any>(rawText: string): T {
   try {
     return JSON.parse(cleaned) as T;
   } catch {
-    // Find first { or [ and matching last } or ]
     const firstBrace = cleaned.indexOf("{");
     const firstBracket = cleaned.indexOf("[");
     let start = -1;
@@ -109,6 +108,10 @@ export function extractJsonFromLlm<T = any>(rawText: string): T {
 }
 
 export interface TrainerConfig {
+  /** Target character display name */
+  targetCharacter?: string;
+  /** Counterpart / protagonist name in the narrative */
+  protagonistCharacter?: string;
   studentModel: {
     provider: string;
     modelId: string;
@@ -119,8 +122,10 @@ export interface TrainerConfig {
     modelId: string;
     thinkingLevel: "low" | "medium" | "high";
   };
-  /** Agent ID in PenguinHarness for Shirobana (default: "shirobana") */
-  shirobanaAgentId?: string;
+  /** Agent ID in PenguinHarness for the Student companion (default: "ema_minimal") */
+  companionAgentId?: string;
+  /** Agent ID in PenguinHarness for the Teacher evaluator (default: "ema_minimal") */
+  teacherAgentId?: string;
   /** Minimum acceptable window score before triggering local RSI retry (default: 78) */
   rsiScoreThreshold?: number;
   /** Maximum attempts per scene window (1 = no retry, 2 = 1 retry after mutation; default: 2) */
@@ -129,14 +134,15 @@ export interface TrainerConfig {
   studentBatchSize?: number;
   /** Whether to run reflection check on compacted scene memory (default: true) */
   enableReflectionCheck?: boolean;
-  /** Sync `shirobana` AGENTS.md on disk after each scene window (default: true) */
+  /** Sync companion AGENTS.md on disk after each scene window (default: false) */
   syncAgentOnDisk?: boolean;
 }
 
-export class EmaShirobanaTrainer {
+export class EmaPersonaTrainer {
   public readonly client: PenguinServerLLMClient;
   public readonly config: Required<TrainerConfig>;
-  public personality: ShirobanaPersonality;
+  public personality: CompanionPersonality;
+  public anchorPersonality: CompanionPersonality;
   public compressionPrompt: CompressionPromptConfig;
   public memoryIndex: SceneMemoryIndexItem[];
 
@@ -144,27 +150,41 @@ export class EmaShirobanaTrainer {
     config: TrainerConfig,
     options?: {
       client?: PenguinServerLLMClient;
-      initialPersonality?: ShirobanaPersonality;
+      initialPersonality?: CompanionPersonality;
       initialCompressionPrompt?: CompressionPromptConfig;
       initialMemoryIndex?: SceneMemoryIndexItem[];
     },
   ) {
     this.client = options?.client || new PenguinServerLLMClient();
+    const targetCharacter =
+      config.targetCharacter || options?.initialPersonality?.name || "Companion";
+    const protagonistCharacter = config.protagonistCharacter || "主角";
+
     this.config = {
-      shirobanaAgentId: "shirobana",
+      targetCharacter,
+      protagonistCharacter,
+      companionAgentId: "ema_minimal",
+      teacherAgentId: "ema_minimal",
       rsiScoreThreshold: 78,
       maxWindowAttempts: 2,
       studentBatchSize: 4,
       enableReflectionCheck: true,
-      syncAgentOnDisk: true,
+      syncAgentOnDisk: false,
       ...config,
     };
-    this.personality = options?.initialPersonality
+
+    const seedPersonality = options?.initialPersonality
       ? structuredClone(options.initialPersonality)
-      : structuredClone(INITIAL_SHIROBANA_P0_0);
+      : createInitialPersonalityTemplate({
+          name: targetCharacter,
+          protagonistName: protagonistCharacter,
+        });
+
+    this.personality = structuredClone(seedPersonality);
+    this.anchorPersonality = structuredClone(seedPersonality);
     this.compressionPrompt = options?.initialCompressionPrompt
       ? structuredClone(options.initialCompressionPrompt)
-      : structuredClone(INITIAL_COMPRESSION_PROMPT_C0_0);
+      : createDefaultCompressionPrompt(targetCharacter, protagonistCharacter);
     this.memoryIndex = options?.initialMemoryIndex
       ? structuredClone(options.initialMemoryIndex)
       : [];
@@ -172,7 +192,7 @@ export class EmaShirobanaTrainer {
 
   private studentCallOptions(): LlmCallOptions {
     return {
-      agentId: this.config.shirobanaAgentId,
+      agentId: this.config.companionAgentId,
       provider: this.config.studentModel.provider,
       modelId: this.config.studentModel.modelId,
       thinkingLevel: this.config.studentModel.thinkingLevel,
@@ -181,10 +201,94 @@ export class EmaShirobanaTrainer {
 
   private teacherCallOptions(): LlmCallOptions {
     return {
-      agentId: "ema_minimal",
+      agentId: this.config.teacherAgentId,
       provider: this.config.teacherModel.provider,
       modelId: this.config.teacherModel.modelId,
       thinkingLevel: this.config.teacherModel.thinkingLevel,
+    };
+  }
+
+  /**
+   * RFC-0003 §2.1 Cold-Start Warmup Distillation:
+   * P_{0,0} = distill(q_1, ..., q_N) from the first N warmup scenes.
+   */
+  public async distillInitialPersonalityFromWarmup(
+    warmupScenes: SceneWindow[],
+  ): Promise<{
+    personality: CompanionPersonality;
+    metrics: LlmCallMetrics;
+  }> {
+    const target = this.config.targetCharacter;
+    const protagonist = this.config.protagonistCharacter;
+    const sampleBlocks = warmupScenes.slice(0, 5).map((s) => ({
+      sceneId: s.sceneId,
+      title: s.title,
+      setting: s.setting,
+      turns: s.turns.slice(0, 12).map((t) => ({
+        input: t.inputText.slice(0, 220),
+        gtAction: t.gtActionText,
+        explicitOS: t.explicitOS,
+      })),
+    }));
+
+    const prompt = [
+      `你是 EverMemoryArchive (EMA) 的 **冷启动人格逆向蒸馏器 (Cold-Start Warmup Distiller, P_{0,0} = distill(q_1..q_N))**。`,
+      `请根据以下前序预热场景中目标角色「${target}」与「${protagonist}」及周围人物的真实交互样本，逆向提炼出「${target}」的初始结构化人格档案 \`P_0_0\`。`,
+      ``,
+      `## 预热场景样本`,
+      JSON.stringify(sampleBlocks, null, 2),
+      ``,
+      `## 提炼准则`,
+      `1. **禁止照搬具体剧情或台词原句**: 提炼通用的人格机制、情感动力学、语言句长铁律与口癖、潜变量 <OS> 到 <Action> 的心理映射规律、标志性动作习惯，以及反 OOC 约束。`,
+      `2. **视角边界（非读心铁律）**: 明确规定剧本「[旁白]」中未说出口的第一人称心理活动不可被「${target}」直接读心回应。`,
+      ``,
+      `请严格输出 JSON 对象（不要调用任何工具，不要输出多余说明）：`,
+      `{`,
+      `  "coreIdentity": "核心身份、背景设定与对${protagonist}的关系定位",`,
+      `  "emotionalDynamics": ["情感特质与内外反差规律1", "规律2", "规律3"],`,
+      `  "speechStyleRules": ["句长控制、语调与标志性口癖1", "规律2", "规律3"],`,
+      `  "cognitiveOSPatterns": ["潜变量<OS>到<Action>映射规律1", "规律2", "视角边界（非读心铁律）"],`,
+      `  "behavioralHabits": ["标志性肢体动作或习惯1", "习惯2", "习惯3"],`,
+      `  "antiOocConstraints": ["反AI腔调约束", "句长与情绪边界负向约束", "免工具直出约束"]`,
+      `}`,
+    ].join("\n");
+
+    const res = await this.client.complete(prompt, this.teacherCallOptions());
+    const parsed = extractJsonFromLlm<Partial<CompanionPersonality>>(res.text);
+
+    const distilled: CompanionPersonality = {
+      version: "P_0_0",
+      name: target,
+      coreIdentity: parsed.coreIdentity || this.personality.coreIdentity,
+      emotionalDynamics:
+        Array.isArray(parsed.emotionalDynamics) && parsed.emotionalDynamics.length > 0
+          ? parsed.emotionalDynamics
+          : this.personality.emotionalDynamics,
+      speechStyleRules:
+        Array.isArray(parsed.speechStyleRules) && parsed.speechStyleRules.length > 0
+          ? parsed.speechStyleRules
+          : this.personality.speechStyleRules,
+      cognitiveOSPatterns:
+        Array.isArray(parsed.cognitiveOSPatterns) && parsed.cognitiveOSPatterns.length > 0
+          ? parsed.cognitiveOSPatterns
+          : this.personality.cognitiveOSPatterns,
+      behavioralHabits:
+        Array.isArray(parsed.behavioralHabits) && parsed.behavioralHabits.length > 0
+          ? parsed.behavioralHabits
+          : this.personality.behavioralHabits,
+      antiOocConstraints:
+        Array.isArray(parsed.antiOocConstraints) && parsed.antiOocConstraints.length > 0
+          ? parsed.antiOocConstraints
+          : this.personality.antiOocConstraints,
+      mutationHistory: [],
+    };
+
+    this.personality = structuredClone(distilled);
+    this.anchorPersonality = structuredClone(distilled);
+
+    return {
+      personality: distilled,
+      metrics: res.metrics,
     };
   }
 
@@ -197,8 +301,10 @@ export class EmaShirobanaTrainer {
     targetTurns: TurnBundle[],
     options?: { includeInlinePersonaAndMemory?: boolean },
   ): string {
-    // When running against `shirobana` with syncAgentOnDisk=true, AGENTS.md already
-    // injects P_{u,v} and MemoryIndex into the system prompt prefix (Bug #2 fix).
+    const target = this.config.targetCharacter;
+    const protagonist = this.config.protagonistCharacter;
+    // When syncAgentOnDisk=true, AGENTS.md already injects P_{u,v} and MemoryIndex
+    // into the system prompt prefix (avoiding duplicate token injection).
     const includeInline = options?.includeInlinePersonaAndMemory ?? !this.config.syncAgentOnDisk;
     const recentMemoryIndex = this.memoryIndex.slice(-25);
     const memoryBlock = formatMemoryIndexMarkdown(recentMemoryIndex);
@@ -206,8 +312,8 @@ export class EmaShirobanaTrainer {
     const historyLines: string[] = [];
     for (const h of priorTurnsInScene.slice(-12)) {
       historyLines.push(`${h.inputText}`);
-      historyLines.push(`【白花】(内心OS): （${h.os}）`);
-      historyLines.push(`【白花】: ${h.gtActionText}`);
+      historyLines.push(`【${target}】(内心OS): （${h.os}）`);
+      historyLines.push(`【${target}】: ${h.gtActionText}`);
     }
 
     const inlinePersonaSection = includeInline
@@ -237,15 +343,15 @@ export class EmaShirobanaTrainer {
         `## 当前输入 (Turn ${t.turnIndexInScene})`,
         t.inputText,
         ``,
-        `注意：「[旁白]」中包含苍空视角的心理描写与客观动作，你只能感知客观可见的动作神态与公开台词，严禁读心回应苍空未说出口的内心想法。`,
-        `请严格以**白花**的第一人称视角，先推演你此刻的潜变量内心独白 \`<OS>\`（1句简短的真实心理活动），再输出你实际说出口的台词 \`<Action>\`（必须极其简短干脆，用「」包裹台词，绝不长篇大论，绝不调用任何工具）。`,
+        `注意：「[旁白]」中包含${protagonist}视角的心理描写与客观动作，你只能感知客观可见的动作神态与公开台词，严禁读心回应${protagonist}未说出口的内心想法。`,
+        `请严格以 **${target}** 的第一人称视角，先推演你此刻的潜变量内心独白 \`<OS>\`（1句简短的真实心理活动），再输出你实际说出口的台词 \`<Action>\`（必须符合角色句长与语气铁律，用「」包裹台词，绝不长篇大论，绝不调用任何工具）。`,
         `严格按以下格式输出（不要输出任何其他解释）：`,
         `<OS>你此刻的内心真实想法</OS>`,
         `<Action>「你的台词」</Action>`,
       ].join("\n");
     }
 
-    // Micro-batched causal prediction within the scene window (Zero-Leakage v1.0):
+    // Micro-batched causal prediction within the scene window (Zero-Leakage):
     // Prior batches in `priorTurnsInScene` are teacher-forced with GT_Action,
     // while turns inside the current `targetTurns` batch NEVER expose GT_Action.
     const batchBlocks: string[] = [];
@@ -267,8 +373,8 @@ export class EmaShirobanaTrainer {
         ? `## 本场景前序已发生对话上文 (Teacher-Forced Intra-Scene History)\n${historyLines.join("\n")}\n`
         : `## 本场景前序已发生对话上文\n（本场景刚刚开始）\n`,
       `## 待预测连续回合批次 (共 ${targetTurns.length} 个回合)`,
-      `注意：「[旁白]」中包含苍空视角的心理描写与客观动作，你只能感知客观可见的动作神态与公开台词，严禁读心回应苍空未说出口的内心想法。`,
-      `请按时间顺序依次代入以下每个回合的 [当前输入 Input]，以**白花**第一人称视角推演她在看到该输入瞬间的潜变量内心独白 \`os\`（1句简短的真实心理活动）与实际说出口的台词 \`action\`（必须符合白花真实的极简短句、冷淡/毒舌/傲娇、吹肥皂泡或正事搭档风格，台词用「」包裹，绝不啰嗦）。`,
+      `注意：「[旁白]」中包含${protagonist}视角的心理描写与客观动作，你只能感知客观可见的动作神态与公开台词，严禁读心回应${protagonist}未说出口的内心想法。`,
+      `请按时间顺序依次代入以下每个回合的 [当前输入 Input]，以 **${target}** 第一人称视角推演在看到该输入瞬间的潜变量内心独白 \`os\`（1句简短的真实心理活动）与实际说出口的台词 \`action\`（必须符合角色句长、语调与性格特征，台词用「」包裹，绝不啰嗦）。`,
       ``,
       batchBlocks.join("\n\n"),
       ``,
@@ -292,10 +398,11 @@ export class EmaShirobanaTrainer {
     metrics: LlmCallMetrics[];
   }> {
     if (this.config.syncAgentOnDisk) {
-      syncShirobanaAgentState({
+      syncCompanionAgentState({
         personality: this.personality,
         memoryIndex: this.memoryIndex,
-        agentId: this.config.shirobanaAgentId,
+        agentId: this.config.companionAgentId,
+        protagonistName: this.config.protagonistCharacter,
         thinkingLevel: this.config.studentModel.thinkingLevel,
       });
     }
@@ -349,11 +456,11 @@ export class EmaShirobanaTrainer {
           const os =
             typeof matched.os === "string" && matched.os.trim()
               ? matched.os.trim()
-              : "（静静看着苍空，心里有些在意但表面维持冷淡）";
+              : "（静静注视着对方，内心权衡着当前处境）";
           const action =
             typeof matched.action === "string" && matched.action.trim()
               ? matched.action.trim()
-              : "「……呼——」";
+              : "「……」";
 
           predictions.push({
             turn: t,
@@ -388,10 +495,10 @@ export class EmaShirobanaTrainer {
     items: MemoryItem[];
     metrics: LlmCallMetrics[];
   }> {
+    const target = this.config.targetCharacter;
     const items: MemoryItem[] = [];
     const metrics: LlmCallMetrics[] = [];
 
-    // Evaluate in chunks of up to 18 turns so Teacher output JSON stays well within limits
     const evalChunkSize = 18;
     for (let i = 0; i < predictions.length; i += evalChunkSize) {
       const chunk = predictions.slice(i, i + evalChunkSize);
@@ -407,18 +514,22 @@ export class EmaShirobanaTrainer {
 
       const prompt = [
         `你是 EverMemoryArchive (EMA) 角色逆向蒸馏训练的 **Teacher 审稿与评分器**。`,
-        `请根据《保健室的老师与沉迷吹泡泡的助手》原作中女主角 **白花（此花白花 / 小白）** 的真实剧本表现（Ground Truth Action），严格评测 Student 模型预测的潜变量内心独白 \`predictedOS\` 与外显动作台词 \`predictedAction\`。`,
+        `请根据原作中角色 **${target}** 的真实剧本表现（Ground Truth Action）与当前人格设定，严格评测 Student 模型预测的潜变量内心独白 \`predictedOS\` 与外显动作台词 \`predictedAction\`。`,
+        ``,
+        `## 当前角色人格摘要 (${this.personality.version})`,
+        `- 核心身份: ${this.personality.coreIdentity}`,
+        `- 情感动力学: ${this.personality.emotionalDynamics.join("；")}`,
+        `- 语言风格: ${this.personality.speechStyleRules.join("；")}`,
         ``,
         `## 评分准则 (Rubric, 0-100分)`,
         `1. **OS 一致性 (osConsistent: boolean, osScore: 0-100)**:`,
         `   - 检查 \`predictedOS\` 是否能作为连接 \`input\` 与原作真实反应 \`groundTruthAction\` 的合理心理桥梁。`,
-        `   - 白花是典型的外冷内热/毒舌傲娇魂人少女：表面数落苍空（「真是没用呢」「笨蛋」）或吹肥皂泡（「呼——」）敷衍，内心往往是在意、害羞、吃醋、护短或掩饰寂寞。`,
-        `   - 如果 \`predictedOS\` 与 \`groundTruthAction\` 的情感走向矛盾，设 \`osConsistent: false\`，并在 \`committedOS\` 中给出修正后的真实内心独白 \`OS^*\`。`,
+        `   - 如果 \`predictedOS\` 与 \`groundTruthAction\` 的情感走向或潜台词矛盾，设 \`osConsistent: false\`，并在 \`committedOS\` 中给出修正后的真实内心独白 \`OS^*\`。`,
         `2. **Action 还原度 (actionScore: 0-100)**:`,
-        `   - 语气与傲娇潜台词 (30分): 是否符合白花冷淡、毒舌、简短吐槽的语气？`,
-        `   - 句长与呼吸感 (25分): 原作白花台词极短（常为几个字到一两句短话）。若 \`predictedAction\` 啰嗦冗长或带有AI客服味，必须重扣分！`,
+        `   - 语气与潜台词 (30分): 是否符合角色的人格语调与情感反差？`,
+        `   - 句长与呼吸感 (25分): 句长节奏是否与 \`groundTruthAction\` 一致？若 \`predictedAction\` 啰嗦冗长或带有AI客服味，必须重扣分！`,
         `   - 情境与情绪准确度 (25分): 对输入情境的反应方向是否与 \`groundTruthAction\` 一致（即使字面用词不同，只要神韵、态度、简短度高度契合即可给高分 80-95）。`,
-        `   - 标志性动作口癖 (20分): 吹泡泡「呼——」、直呼「苍空」、吐槽「笨蛋/杂鱼」等是否自然恰当。`,
+        `   - 标志性动作与口癖 (20分): 角色称呼、口头禅与习惯性反应是否自然恰当。`,
         ``,
         `## 待评测回合数据 (场景: ${scene.sceneId} 《${scene.title}》)`,
         JSON.stringify(turnsPayload, null, 2),
@@ -429,7 +540,7 @@ export class EmaShirobanaTrainer {
         `    "turnId": "回合ID",`,
         `    "osConsistent": true,`,
         `    "osScore": 85,`,
-        `    "committedOS": "经Teacher确认或修正后的白花真实内心OS（1句精炼心理活动）",`,
+        `    "committedOS": "经Teacher确认或修正后的角色真实内心OS（1句精炼心理活动）",`,
         `    "actionScore": 82,`,
         `    "diagnostic": "简短诊断：指出predictedOS或predictedAction的优点或与GT的偏差原因"`,
         `  }`,
@@ -471,7 +582,7 @@ export class EmaShirobanaTrainer {
         const diagnostic =
           typeof e.diagnostic === "string" && e.diagnostic.trim()
             ? e.diagnostic.trim()
-            : "基本符合白花人设";
+            : "基本符合角色设定";
 
         items.push({
           turnId: p.turn.id,
@@ -496,17 +607,19 @@ export class EmaShirobanaTrainer {
 
   /**
    * Teacher Personality Mutation (`adjust_personality` in RFC-0003 / RFC-0005):
-   * Analyzes low-scoring turns in the current window and mutates P_{u,v} -> P_{u,v}'.
+   * Analyzes low-scoring turns in the current window and mutates P_{u,v} -> P_{u,v}'
+   * using Anchor-Preserving Modulation so core P_{0,0} anchors are never erased by special scenes.
    */
   public async mutatePersonalityFromWindow(
     scene: SceneWindow,
     items: MemoryItem[],
     nextVersionLabel: string,
   ): Promise<{
-    mutatedPersonality: ShirobanaPersonality;
+    mutatedPersonality: CompanionPersonality;
     mutationReason: string;
     metrics: LlmCallMetrics;
   }> {
+    const target = this.config.targetCharacter;
     const worstItems = [...items]
       .sort((a, b) => a.combinedScore - b.combinedScore)
       .slice(0, 6)
@@ -526,14 +639,14 @@ export class EmaShirobanaTrainer {
 
     const prompt = [
       `你是 EverMemoryArchive (EMA) 角色训练循环的 **Teacher 人格优化器 (adjust_personality)**。`,
-      `在场景 \`${scene.sceneId}\` 《${scene.title}》的测试中，当前白花人格版本 \`${this.personality.version}\` 的平均得分为 **${meanScore.toFixed(1)}**。`,
-      `请分析以下得分最低的典型失分回合，找出当前人格设定在「台词长度与留白控制」「日常傲娇毒舌与正事搭档分寸」「潜变量<OS>到<Action>映射规律」「视角边界（非读心）」或「反OOC负向约束」上的深层机制漏洞，并输出改进后的人格 \`${nextVersionLabel}\`。`,
+      `在场景 \`${scene.sceneId}\` 《${scene.title}》的测试中，当前角色「${target}」人格版本 \`${this.personality.version}\` 的平均得分为 **${meanScore.toFixed(1)}**。`,
+      `请分析以下得分最低的典型失分回合，找出当前人格设定在「台词长度与留白控制」「日常互动与严肃情境分寸」「潜变量<OS>到<Action>映射规律」「视角边界（非读心）」或「反OOC负向约束」上的深层机制漏洞，并输出改进后的人格 \`${nextVersionLabel}\`。`,
       ``,
       `## 严厉的防过拟合与防灾难性遗忘约束 (Anti-Overfitting & Anti-Forgetting Rules — 必须严格遵守！)`,
-      `1. **核心锚点不可抹除 (Preserve Core Persona Anchors)**: 无论当前场景多么特殊，绝对禁止删除白花的核心标志（如：吹肥皂泡「呼——」、对苍空日常毒舌吐槽「笨蛋/杂鱼/真是没用呢」、被触碰时小声控诉「被苍空抱了/袭击了」、台词极简短促、讨厌蒲公英喜欢肥皂泡、非读心视角边界）。`,
-      `2. **分情境增量调制而非全盘覆盖 (Contextual Modulation, Not Replacement)**: 如果当前场景是正事调查、温情坦白或特殊剧情，请用「在日常打闹时保持傲娇毒舌与吹泡泡；而在……情境下则切换为……」的**双轨/多情境条件句**来扩充规则，严禁一刀切地禁止她说「笨蛋」或把她改成死气沉沉的哲学机器！`,
+      `1. **核心锚点不可抹除 (Preserve Core Persona Anchors)**: 无论当前场景多么特殊，绝对禁止删除角色在初始锚点人格中的核心标志（包括核心身份、标志性口癖、习惯性动作、基础句长铁律与非读心视角边界）。`,
+      `2. **分情境增量调制而非全盘覆盖 (Contextual Modulation, Not Replacement)**: 如果当前场景是特殊剧情、严肃调查或情感高潮，请用「在日常情境下保持……；而在……特殊情境下则切换为……」的**多情境条件调制句**来扩充规则，严禁一刀切地抹杀角色的日常性格！`,
       `3. **严禁死记硬背当前场景台词 (No Verbatim Quote Memorization)**: 绝对禁止把下方失分案例中的具体剧情台词原句（gtAction）写进人格规则！特定剧情只属于 MemoryIndex，不属于 Personality。`,
-      `4. **抽象为通用心理学与语言学规律**: 每项数组保留 4～6 条最核心精炼的法则，每条不超过 95 字。`,
+      `4. **抽象为通用心理学与语言学规律**: 每项数组保留 3～5 条最核心精炼的法则，每条不超过 95 字。`,
       ``,
       `## 当前人格 (${this.personality.version})`,
       JSON.stringify(
@@ -556,11 +669,11 @@ export class EmaShirobanaTrainer {
       `{`,
       `  "mutationReason": "一句话总结本次人格突变提炼出的通用机制改进（不含具体剧情剧透）",`,
       `  "coreIdentity": "更新后的核心身份描述（精炼通用）",`,
-      `  "emotionalDynamics": ["通用情感规律1", "通用情感规律2", "...(最多5条)"],`,
-      `  "speechStyleRules": ["通用语言铁律1", "通用语言铁律2", "...(最多5条)"],`,
-      `  "cognitiveOSPatterns": ["通用OS-Action映射规律1", "通用OS-Action映射规律2", "...(最多5条)"],`,
-      `  "behavioralHabits": ["通用动作习惯1", "通用动作习惯2", "...(最多5条)"],`,
-      `  "antiOocConstraints": ["通用反OOC约束1", "通用反OOC约束2", "...(最多5条)"]`,
+      `  "emotionalDynamics": ["通用情感规律1", "通用情感规律2", "...(最多4条)"],`,
+      `  "speechStyleRules": ["通用语言铁律1", "通用语言铁律2", "...(最多4条)"],`,
+      `  "cognitiveOSPatterns": ["通用OS-Action映射规律1", "通用OS-Action映射规律2", "...(最多4条)"],`,
+      `  "behavioralHabits": ["通用动作习惯1", "通用动作习惯2", "...(最多4条)"],`,
+      `  "antiOocConstraints": ["通用反OOC约束1", "通用反OOC约束2", "...(最多4条)"]`,
       `}`,
     ].join("\n");
 
@@ -578,43 +691,51 @@ export class EmaShirobanaTrainer {
     const mutationReason =
       parsed.mutationReason || `针对场景 ${scene.sceneId} 的语调与句长偏差进行 RSI 修正`;
 
-    const mutated: ShirobanaPersonality = {
+    const mergeWithAnchors = (anchors: string[], additions?: string[], maxAdditions = 3): string[] => {
+      if (!Array.isArray(additions) || additions.length === 0) return anchors;
+      const merged = [...anchors];
+      for (const rule of additions.slice(0, maxAdditions)) {
+        if (typeof rule === "string" && rule.trim() && !merged.includes(rule.trim())) {
+          merged.push(rule.trim());
+        }
+      }
+      return merged;
+    };
+
+    const mutated: CompanionPersonality = {
       version: nextVersionLabel,
       name: this.personality.name,
-      coreIdentity: INITIAL_SHIROBANA_P0_0.coreIdentity,
-      emotionalDynamics:
-        Array.isArray(parsed.emotionalDynamics) && parsed.emotionalDynamics.length > 0
-          ? [INITIAL_SHIROBANA_P0_0.emotionalDynamics[0], ...parsed.emotionalDynamics.slice(0, 4)]
-          : this.personality.emotionalDynamics,
-      speechStyleRules:
-        Array.isArray(parsed.speechStyleRules) && parsed.speechStyleRules.length > 0
-          ? [
-              ...INITIAL_SHIROBANA_P0_0.speechStyleRules.slice(0, 2),
-              ...parsed.speechStyleRules.slice(0, 3),
-            ]
-          : this.personality.speechStyleRules,
-      cognitiveOSPatterns:
-        Array.isArray(parsed.cognitiveOSPatterns) && parsed.cognitiveOSPatterns.length > 0
-          ? [
-              INITIAL_SHIROBANA_P0_0.cognitiveOSPatterns[0],
-              INITIAL_SHIROBANA_P0_0.cognitiveOSPatterns[3],
-              ...parsed.cognitiveOSPatterns.slice(0, 3),
-            ]
-          : this.personality.cognitiveOSPatterns,
-      behavioralHabits:
-        Array.isArray(parsed.behavioralHabits) && parsed.behavioralHabits.length > 0
-          ? [
-              INITIAL_SHIROBANA_P0_0.behavioralHabits[0],
-              ...parsed.behavioralHabits.slice(0, 3),
-            ]
-          : this.personality.behavioralHabits,
-      antiOocConstraints:
-        Array.isArray(parsed.antiOocConstraints) && parsed.antiOocConstraints.length > 0
-          ? [
-              ...INITIAL_SHIROBANA_P0_0.antiOocConstraints.slice(0, 2),
-              ...parsed.antiOocConstraints.slice(0, 3),
-            ]
-          : this.personality.antiOocConstraints,
+      coreIdentity: this.anchorPersonality.coreIdentity,
+      emotionalDynamics: mergeWithAnchors(
+        this.anchorPersonality.emotionalDynamics.slice(0, 1),
+        parsed.emotionalDynamics,
+        4,
+      ),
+      speechStyleRules: mergeWithAnchors(
+        this.anchorPersonality.speechStyleRules.slice(0, 2),
+        parsed.speechStyleRules,
+        3,
+      ),
+      cognitiveOSPatterns: mergeWithAnchors(
+        [
+          this.anchorPersonality.cognitiveOSPatterns[0],
+          this.anchorPersonality.cognitiveOSPatterns[
+            this.anchorPersonality.cognitiveOSPatterns.length - 1
+          ],
+        ].filter(Boolean),
+        parsed.cognitiveOSPatterns,
+        3,
+      ),
+      behavioralHabits: mergeWithAnchors(
+        this.anchorPersonality.behavioralHabits.slice(0, 1),
+        parsed.behavioralHabits,
+        3,
+      ),
+      antiOocConstraints: mergeWithAnchors(
+        this.anchorPersonality.antiOocConstraints.slice(0, 2),
+        parsed.antiOocConstraints,
+        3,
+      ),
       mutationHistory: [
         ...this.personality.mutationHistory,
         {
@@ -646,12 +767,14 @@ export class EmaShirobanaTrainer {
     reflectionScore?: number;
     metrics: LlmCallMetrics[];
   }> {
+    const target = this.config.targetCharacter;
+    const protagonist = this.config.protagonistCharacter;
     const callMetrics: LlmCallMetrics[] = [];
 
     const trajectoryText = items
       .map(
         (it) =>
-          `[Turn ${it.turnIndexInScene}]\n${it.inputText}\n【白花】(内心OS): （${it.committedOS}）\n【白花】: ${it.gtActionText}`,
+          `[Turn ${it.turnIndexInScene}]\n${it.inputText}\n【${target}】(内心OS): （${it.committedOS}）\n【${target}】: ${it.gtActionText}`,
       )
       .join("\n\n");
 
@@ -668,8 +791,8 @@ export class EmaShirobanaTrainer {
       ``,
       `请严格输出 JSON 对象（不要调用任何工具，不要输出额外解释）：`,
       `{`,
-      `  "summary": "以白花第一人称（「我」）浓缩的本场景核心事件与互动细节（不超过${this.compressionPrompt.maxSummaryChars}字）",`,
-      `  "innerOSArc": "白花在本场景中的内心情感与傲娇/深情暗线变化（不超过60字）",`,
+      `  "summary": "以${target}第一人称（「我」）浓缩的本场景核心事件与互动细节（不超过${this.compressionPrompt.maxSummaryChars}字）",`,
+      `  "innerOSArc": "${target}在本场景中的内心情感与潜台词变化（不超过60字）",`,
       `  "keyFacts": ["关键事实/约定/人物设定1", "关键事实2"]`,
       `}`,
     ].join("\n");
@@ -682,8 +805,8 @@ export class EmaShirobanaTrainer {
       parsed = extractJsonFromLlm(res.text);
     } catch {
       parsed = {
-        summary: `在《${scene.title}》中，我与苍空在${scene.setting}经历了互动。`,
-        innerOSArc: `表面维持冷淡毒舌，内心依然在意苍空。`,
+        summary: `在《${scene.title}》中，我与${protagonist}在${scene.setting}经历了互动。`,
+        innerOSArc: `内心情绪随着互动自然流转。`,
         keyFacts: [`场景 ${scene.sceneId}: ${scene.title}`],
       };
     }
@@ -694,8 +817,8 @@ export class EmaShirobanaTrainer {
       chapter: scene.chapter,
       title: scene.title,
       setting: scene.setting,
-      summary: (parsed.summary || "").trim() || `与苍空在《${scene.title}》中的经历。`,
-      innerOSArc: (parsed.innerOSArc || "").trim() || `嘴硬心软地陪伴着苍空。`,
+      summary: (parsed.summary || "").trim() || `与${protagonist}在《${scene.title}》中的经历。`,
+      innerOSArc: (parsed.innerOSArc || "").trim() || `陪伴着${protagonist}。`,
       keyFacts: Array.isArray(parsed.keyFacts) ? parsed.keyFacts.slice(0, 4) : [],
     };
 
@@ -708,7 +831,7 @@ export class EmaShirobanaTrainer {
       }));
       const reflectPrompt = [
         `你是 EverMemoryArchive (EMA) 的 **记忆可重构性评测器 (reflect evaluator)**。`,
-        `请评估以下压缩后的单条场景记忆索引 \`MemoryIndex_{0,x}\` 是否足以让白花在未来回忆起该场景的核心事件、人物关系、特殊细节与内心情感。`,
+        `请评估以下压缩后的单条场景记忆索引 \`MemoryIndex_{0,x}\` 是否足以让角色「${target}」在未来回忆起该场景的核心事件、人物关系、特殊细节与内心情感。`,
         ``,
         `## 压缩后的 MemoryIndex_{0,x}`,
         JSON.stringify(indexItem, null, 2),
@@ -787,7 +910,6 @@ export class EmaShirobanaTrainer {
         eval2.items.reduce((s, it) => s + it.combinedScore, 0) /
         Math.max(1, eval2.items.length);
 
-      // Record scoreAfter in mutationHistory
       const lastHist =
         this.personality.mutationHistory[this.personality.mutationHistory.length - 1];
       if (lastHist) {
@@ -799,7 +921,6 @@ export class EmaShirobanaTrainer {
         bestScore = score2;
         mutatedTo = nextVer;
       } else {
-        // Revert personality if mutation did not improve score on the window
         this.personality = prevPersonality;
       }
     }
@@ -808,7 +929,6 @@ export class EmaShirobanaTrainer {
     const compacted = await this.compactSceneMemory(scene, bestItems);
     windowMetrics.push(...compacted.metrics);
 
-    // Update single-level MemoryIndex (replace if sceneId already exists, else push)
     const existingIdx = this.memoryIndex.findIndex((m) => m.sceneId === scene.sceneId);
     if (existingIdx !== -1) {
       this.memoryIndex[existingIdx] = compacted.indexItem;
@@ -817,10 +937,11 @@ export class EmaShirobanaTrainer {
     }
 
     if (this.config.syncAgentOnDisk) {
-      syncShirobanaAgentState({
+      syncCompanionAgentState({
         personality: this.personality,
         memoryIndex: this.memoryIndex,
-        agentId: this.config.shirobanaAgentId,
+        agentId: this.config.companionAgentId,
+        protagonistName: this.config.protagonistCharacter,
         thinkingLevel: this.config.studentModel.thinkingLevel,
       });
     }
@@ -853,7 +974,7 @@ export class EmaShirobanaTrainer {
   /**
    * Batch-compacts a group of scenes directly from their script trajectories (imputing <OS>
    * and extracting summary + keyFacts) so full-story MemoryIndex coverage can be distilled
-   * efficiently across all 108 story scenes.
+   * efficiently across large narrative scripts.
    */
   public async compactScenesBatchFromScript(
     scenes: SceneWindow[],
@@ -861,6 +982,8 @@ export class EmaShirobanaTrainer {
     items: SceneMemoryIndexItem[];
     metrics: LlmCallMetrics;
   }> {
+    const target = this.config.targetCharacter;
+    const protagonist = this.config.protagonistCharacter;
     const payload = scenes.map((s) => ({
       sceneId: s.sceneId,
       order: s.order,
@@ -869,14 +992,14 @@ export class EmaShirobanaTrainer {
       setting: s.setting,
       dialogueSnippet: s.turns
         .slice(0, 18)
-        .map((t) => `${t.inputText.slice(0, 160)}\n【白花】: ${t.gtActionText}`)
+        .map((t) => `${t.inputText.slice(0, 160)}\n【${target}】: ${t.gtActionText}`)
         .join("\n")
         .slice(0, 2200),
     }));
 
     const prompt = [
       `# 批量场景记忆逆向蒸馏与压缩任务 (Batch Scene Compaction: Script + Imputed OS -> MemoryIndex)`,
-      `请以《保健室的老师与沉迷吹泡泡的助手》女主角 **此花白花（白花 / 小白）** 的第一人称视角（「我」），将以下 ${scenes.length} 个剧本场景分别压缩为单层情景记忆索引条目 \`SceneMemoryIndexItem\`。`,
+      `请以目标角色 **${target}** 的第一人称视角（「我」），将以下 ${scenes.length} 个剧本场景分别压缩为单层情景记忆索引条目 \`SceneMemoryIndexItem\`。`,
       ``,
       `## 压缩指令 (${this.compressionPrompt.version})`,
       this.compressionPrompt.instructions,
@@ -888,8 +1011,8 @@ export class EmaShirobanaTrainer {
       `[`,
       `  {`,
       `    "sceneId": "场景ID",`,
-      `    "summary": "以白花第一人称（「我」）浓缩的本场景核心事件与互动细节（不超过140字）",`,
-      `    "innerOSArc": "白花在本场景中的潜变量内心情感与傲娇/深情暗线变化（不超过60字）",`,
+      `    "summary": "以${target}第一人称（「我」）浓缩的本场景核心事件与互动细节（不超过140字）",`,
+      `    "innerOSArc": "${target}在本场景中的潜变量内心情感与潜台词变化（不超过60字）",`,
       `    "keyFacts": ["关键事实/约定/人物设定1", "关键事实2"]`,
       `  }`,
       `]`,
@@ -919,8 +1042,9 @@ export class EmaShirobanaTrainer {
         chapter: s.chapter,
         title: s.title,
         setting: s.setting,
-        summary: (m.summary || "").trim() || `在《${s.title}》中，我与苍空在${s.setting}度过了日常时光。`,
-        innerOSArc: (m.innerOSArc || "").trim() || `表面维持冷淡傲娇，内心深处十分依赖苍空。`,
+        summary:
+          (m.summary || "").trim() || `在《${s.title}》中，我与${protagonist}在${s.setting}度过了时光。`,
+        innerOSArc: (m.innerOSArc || "").trim() || `内心情绪随互动自然流转。`,
         keyFacts: Array.isArray(m.keyFacts) ? m.keyFacts.slice(0, 4) : [],
       };
     });
