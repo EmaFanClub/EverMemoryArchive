@@ -12,6 +12,7 @@
  *   ema.js run [--channel <id>] [--session <id>] [--watch] [--watch-for <duration>] [--poll-interval <ms>]
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import {
   createMinimalPrototype,
@@ -19,6 +20,9 @@ import {
   PenguinChannelWorld,
   BilibiliWorld,
   WebWorld,
+  QQWorld,
+  QQLoginManager,
+  createQQCompanionRunner,
   installWebWorkbench,
   BilibiliLoginManager,
   publishBilibiliDynamic,
@@ -44,6 +48,9 @@ Usage:
 
   ema.js web install-workbench --agent <id> [options]
     Install the Web Companion Portal Workbench (companion_portal) into a Penguin agent
+
+  ema.js qq login [options]
+    Interactive QR code login for QQ / OneBot gateway authentication
 
   ema.js bilibili login [options]
     Interactive Playwright QR code login for Bilibili account authentication
@@ -76,8 +83,12 @@ async function main() {
   if (command === "world") {
     const sub = args[1];
 
-    // Parse optional flags (--db, --channel, --message, --parent)
+    // Parse optional flags (--db, --channel, --message, --parent, --qq-gateway, etc.)
     let webDbPath = process.env.EMA_WEB_DB_PATH || ":memory:";
+    let qqGatewayUrl = process.env.SNOWLUMA_GATEWAY_URL || process.env.ONEBOT_GATEWAY_URL;
+    let qqGatewayToken = process.env.SNOWLUMA_TOKEN || process.env.ONEBOT_TOKEN;
+    let qqAllowedUsers;
+    let qqAllowedGroups;
     let flagChannel;
     let flagMessage;
     let flagParent;
@@ -86,12 +97,17 @@ async function main() {
     for (let i = 2; i < args.length; i++) {
       if (args[i] === "--db" && i + 1 < args.length) {
         webDbPath = args[++i];
+      } else if (args[i] === "--qq-gateway" && i + 1 < args.length) {
+        qqGatewayUrl = args[++i];
+      } else if (args[i] === "--qq-token" && i + 1 < args.length) {
+        qqGatewayToken = args[++i];
+      } else if (args[i] === "--qq-allowed-users" && i + 1 < args.length) {
+        qqAllowedUsers = args[++i].split(",").map((s) => s.trim());
+      } else if (args[i] === "--qq-allowed-groups" && i + 1 < args.length) {
+        qqAllowedGroups = args[++i].split(",").map((s) => s.trim());
       } else if ((args[i] === "--channel" || args[i] === "--channel-id") && i + 1 < args.length) {
         flagChannel = args[++i];
-      } else if (
-        (args[i] === "--message" || args[i] === "--text" || args[i] === "-m") &&
-        i + 1 < args.length
-      ) {
+      } else if ((args[i] === "--message" || args[i] === "--text" || args[i] === "-m") && i + 1 < args.length) {
         flagMessage = args[++i];
       } else if ((args[i] === "--parent" || args[i] === "--reply-to") && i + 1 < args.length) {
         flagParent = args[++i];
@@ -117,6 +133,17 @@ async function main() {
       dbPath: webDbPath,
       heartbeatIntervalMs: 0,
     });
+    const qqWorld = new QQWorld({
+      selfId: process.env.SNOWLUMA_SELF_ID || process.env.ONEBOT_SELF_ID || "1835387598",
+      gatewayUrl: qqGatewayUrl,
+      gatewayToken: qqGatewayToken,
+      allowedUsers: qqAllowedUsers,
+      allowedGroups: qqAllowedGroups,
+      groups: ["1044916258", "123456"],
+      privateUsers: ["789012"],
+      passive: true,
+      dbPath: webDbPath,
+    });
 
     const ctx = {
       router,
@@ -127,11 +154,13 @@ async function main() {
     const handle = channelWorld.start(ctx);
     const biliHandle = bilibiliWorld.start(ctx);
     const webHandle = webWorld.start(ctx);
+    const qqHandle = qqWorld.start(ctx);
 
     const disposeAll = () => {
       handle.dispose();
       biliHandle.dispose();
       webHandle.dispose();
+      qqHandle.dispose();
     };
 
     if (sub === "ls") {
@@ -143,6 +172,8 @@ async function main() {
           console.log(`BilibiliWorld ${r.prefix}`);
         } else if (r.prefix.startsWith("/world/web")) {
           console.log(`WebWorld ${r.prefix}`);
+        } else if (r.prefix.startsWith("/world/qq")) {
+          console.log(`QQWorld ${r.prefix}`);
         } else {
           console.log(`${r.worldName || "World"} ${r.prefix}`);
         }
@@ -177,7 +208,7 @@ async function main() {
       const targetPath = positional[0];
       if (!targetPath) {
         console.error(
-          'Error: Missing path argument for \'world post\'. Example: ema.js world post /world/web/actions/message.post \'{"channelId":"web:chatroom:default","message":"Hello"}\'',
+          "Error: Missing path argument for 'world post'. Example: ema.js world post /world/web/actions/message.post '{\"channelId\":\"web:chatroom:default\",\"message\":\"Hello\"}'",
         );
         disposeAll();
         process.exit(1);
@@ -255,6 +286,109 @@ async function main() {
     process.exit(1);
   }
 
+  if (command === "qq" || command === "snowluma") {
+    const sub = args[1];
+    if (sub === "run") {
+      let gateway = process.env.SNOWLUMA_GATEWAY_URL || process.env.ONEBOT_GATEWAY_URL || "http://localhost:13000";
+      let token = process.env.SNOWLUMA_TOKEN || process.env.ONEBOT_TOKEN;
+      let group = "1044916258";
+      let session = "619e98db";
+      let agent = "aoi_rei";
+      let pollInterval = 2000;
+      let watchFor = "";
+      let requireMention = true;
+      let dbPath =
+        process.env.EMA_QQ_DB_PATH ||
+        (fs.existsSync("/home/rei/work/aoi-rei")
+          ? "/home/rei/work/aoi-rei/data/qq-world.sqlite"
+          : path.resolve(process.cwd(), "data", "qq-world.sqlite"));
+
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--gateway" || args[i] === "--url") gateway = args[++i];
+        else if (args[i] === "--token") token = args[++i];
+        else if (args[i] === "--group") group = args[++i];
+        else if (args[i] === "--session") session = args[++i];
+        else if (args[i] === "--agent") agent = args[++i];
+        else if (args[i] === "--poll-interval") pollInterval = parseInt(args[++i], 10);
+        else if (args[i] === "--watch-for") watchFor = args[++i];
+        else if (args[i] === "--all-messages") requireMention = false;
+        else if (args[i] === "--db") dbPath = path.resolve(args[++i]);
+      }
+
+      const durationMs = watchFor ? parseWatchDuration(watchFor) : Infinity;
+      const endTime = Number.isFinite(durationMs) ? Date.now() + durationMs : Infinity;
+
+      console.log("=== EMA QQ Companion Runner (SnowLuma / OneBot 11) ===");
+      console.log(`Gateway:         ${gateway}`);
+      console.log(`Target Group:    ${group} (Ema 同好会)`);
+      console.log(`Backend Session: ${session} (Agent: ${agent})`);
+      console.log(`Mention Filter:  ${requireMention ? "Only reply when @mentioned or replied to" : "Reply to all messages"}`);
+      console.log(`Poll Interval:   ${pollInterval} ms`);
+      console.log(`Watch Duration:  ${Number.isFinite(durationMs) ? `${watchFor} (until ${new Date(endTime).toISOString()})` : "Permanent (persistent companion mode)"}`);
+      console.log(`Local DB:        ${dbPath}`);
+      console.log("------------------------------------------------------");
+
+      const runner = createQQCompanionRunner({
+        gatewayUrl: gateway,
+        gatewayToken: token,
+        groupId: group,
+        session,
+        agentId: agent,
+        pollIntervalMs: pollInterval,
+        requireMentionInGroups: requireMention,
+        dbPath,
+      });
+
+      const shutdown = () => {
+        console.log("\n[QQ Runner] Shutting down companion bridge...");
+        runner.dispose();
+        process.exit(0);
+      };
+
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
+      if (Number.isFinite(durationMs)) {
+        const waitInterval = setInterval(() => {
+          if (Date.now() >= endTime) {
+            clearInterval(waitInterval);
+            console.log(`\n[QQ Runner] Watch duration (${watchFor}) completed. Exiting.`);
+            runner.dispose();
+            process.exit(0);
+          }
+        }, 10000);
+      }
+      return;
+    }
+
+    if (sub === "login") {
+      let qrPath = path.resolve(process.cwd(), ".qq-login-qrcode.png");
+      let credentialPath = path.resolve(process.cwd(), "qq-credentials.json");
+      let gatewayUrl = process.env.ONEBOT_GATEWAY_URL || "http://127.0.0.1:3000";
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--qr-path") qrPath = path.resolve(args[++i]);
+        else if (args[i] === "--credential-path") credentialPath = path.resolve(args[++i]);
+        else if (args[i] === "--gateway" || args[i] === "--url") gatewayUrl = args[++i];
+      }
+      const mgr = new QQLoginManager({
+        outputQrPath: qrPath,
+        credentialSavePath: credentialPath,
+        gatewayHttpUrl: gatewayUrl,
+      });
+      const result = await mgr.loginInteractive();
+      if (result.success) {
+        console.log(`\nLogin successful! Welcome, ${result.nickname} (QQ: ${result.userId})`);
+        console.log(`Credentials saved to: ${credentialPath}`);
+      } else {
+        console.error(`\nLogin failed: ${result.message}`);
+      }
+      process.exit(result.success ? 0 : 1);
+    }
+
+    printUsage();
+    process.exit(1);
+  }
+
   if (command === "bilibili") {
     const sub = args[1];
     if (sub === "login") {
@@ -295,9 +429,7 @@ async function main() {
         else if (args[i] === "--profile") profileDir = args[++i];
       }
       if (!text) {
-        console.error(
-          "Error: Missing text for dynamic post. Example: ema.js bilibili post-dynamic 'Hello from Ema'",
-        );
+        console.error("Error: Missing text for dynamic post. Example: ema.js bilibili post-dynamic 'Hello from Ema'");
         process.exit(1);
       }
       console.log(`Publishing Bilibili dynamic via Playwright browser automation...`);

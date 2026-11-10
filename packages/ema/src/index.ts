@@ -12,6 +12,7 @@ export * from "./router.js";
 export * from "./input-batcher.js";
 export * from "./worlds/penguin-channel-world.js";
 export * from "./worlds/bilibili/index.js";
+export * from "./worlds/qq/index.js";
 export * from "./worlds/web/index.js";
 export * from "./prompts/index.js";
 export * from "./builder.js";
