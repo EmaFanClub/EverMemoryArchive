@@ -27,6 +27,39 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@prism-shadow/ema": "workspace:*"
+    "@prism-shadow/ema": "workspace:*",
+    "smol-toml": "^1.9.1"
+  },
+  "penguin": {
+    "version": "2026.10.26.1",
+    "modules": [
+      {
+        "name": "Workbench",
+        "requires": {
+          "host": {
+            "iface": "@prismshadow/penguin-server#WorkbenchHost",
+            "from": "Host"
+          }
+        },
+        "provides": {
+          "main": "@prismshadow/penguin-server#WorkbenchMain"
+        },
+        "contributes": {
+          "WebModule.sessionTabs": [
+            {
+              "id": "use_ema.main",
+              "key": "use-ema",
+              "title": "Use EMA",
+              "titleZh": "使用 EMA",
+              "renderer": {
+                "iframe": {
+                  "src": "ui/index.html"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
   }
 }

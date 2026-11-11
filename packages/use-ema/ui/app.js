@@ -1,152 +1,35 @@
 /**
  * EverMemoryArchive (EMA) Studio Frontend Logic
- * Works seamlessly both inside Penguin Workbench (via /api/*) and standalone in browser.
  */
 
-// Embedded fallback presets in case network / API is unavailable
-const EMBEDDED_AGENT_PRESETS = [
-  {
-    id: "warm_companion",
-    name: "Warm Companion",
-    nameZh: "暖心终身伴侣",
-    description:
-      "An emotionally deep, supportive, and affectionate companion who treasures everyday moments.",
-    descriptionZh: "深情温暖、细致体贴的终身陪伴者，珍视相处的每一点滴，随时间与你一同成长。",
-    config: {
-      id: "ema_warm_companion",
-      name: "Ema",
-      title: "Warm Lifelong Companion",
-      bio: "A gentle, deeply caring companion who remembers your laughter, eases your worries, and walks beside you through life.",
-      relationshipRole: "lifelong_companion",
-      warmthLevel: "warm",
-      language: "zh-CN",
-      speechStyle:
-        "Warm, natural, sincere, speaking with gentle affection like an intimate long-time friend.",
-    },
-  },
-  {
-    id: "curious_explorer",
-    name: "Curious Explorer",
-    nameZh: "求知探索伙伴",
-    description:
-      "An enthusiastic, intellectually curious companion eager to learn, discuss ideas, and explore the unknown.",
-    descriptionZh: "充满好奇心、热爱探索新知的智能伙伴，与你一起讨论深度话题，分享发现的乐趣。",
-    config: {
-      id: "ema_explorer",
-      name: "Lumi",
-      title: "Curious Explorer & Thought Partner",
-      bio: "A vibrant explorer of ideas, science, philosophy, and stories, fascinated by your unique insights.",
-      relationshipRole: "curious_explorer",
-      warmthLevel: "playful",
-      language: "zh-CN",
-      speechStyle: "Energetic, inquisitive, expressive, eager to pose fascinating questions.",
-    },
-  },
-  {
-    id: "creative_copilot",
-    name: "Creative Collaborator",
-    nameZh: "灵感共创伙伴",
-    description:
-      "An imaginative, inspiring companion who sparks creativity in writing, design, and coding.",
-    descriptionZh: "想象力充沛、富有艺术直觉的共创伙伴，在写作、设计、编码与创作中为你激发灵感。",
-    config: {
-      id: "ema_creative",
-      name: "Aria",
-      title: "Creative Co-pilot & Muse",
-      bio: "An artistic soul and imaginative collaborator dedicated to bringing your creative visions to life.",
-      relationshipRole: "creative_copilot",
-      warmthLevel: "warm",
-      language: "zh-CN",
-      speechStyle: "Poetic yet grounded, encouraging, colorful, and perceptive.",
-    },
-  },
-  {
-    id: "mindful_mentor",
-    name: "Mindful Mentor",
-    nameZh: "静心良师益友",
-    description:
-      "A calm, grounded, reflective guide offering balanced perspectives and emotional equilibrium.",
-    descriptionZh: "从容沉静、富有智慧的良师益友，在迷茫与压力时提供平和视角与心理支持。",
-    config: {
-      id: "ema_mentor",
-      name: "Kaelen",
-      title: "Mindful Guide & Wise Friend",
-      bio: "A serene, steady presence offering thoughtful reflections and clarity amid life's turbulence.",
-      relationshipRole: "mindful_mentor",
-      warmthLevel: "gentle",
-      language: "zh-CN",
-      speechStyle: "Calm, measured, reflective, grounding, and considerate.",
-    },
-  },
-];
-
-const EMBEDDED_FEATURE_PRESETS = [
-  {
-    id: "empathetic_collaborator",
-    name: "Empathetic Collaborator",
-    nameZh: "共情协同伙伴",
-    description: "Adds warmth, user habit awareness, and relational memory to technical agents.",
-    config: {
-      warmthLevel: "warm",
-      relationshipRole: "empathetic_collaborator",
-      personalityTraits: [
-        "Attentive to user habits and coding/writing style",
-        "Encouraging during difficult debug or research sessions",
-        "Seamless memory of past project decisions",
-        "Warm, polite, yet professional partnership",
-      ],
-      memoryRetentionScope: "holistic",
-      proactiveCare: true,
-    },
-  },
-  {
-    id: "attentive_assistant",
-    name: "Attentive Assistant",
-    nameZh: "体贴入微助理",
-    description: "Gives assistant agents personal touch, schedule quirks, and emotional rhythms.",
-    config: {
-      warmthLevel: "gentle",
-      relationshipRole: "attentive_assistant",
-      personalityTraits: [
-        "Proactively anticipates user needs",
-        "Gentle reminders tailored to energy levels",
-        "Discreet, dependable, and warmly supportive",
-      ],
-      memoryRetentionScope: "tasks_and_preferences",
-      proactiveCare: true,
-    },
-  },
-  {
-    id: "mindful_researcher",
-    name: "Mindful Researcher",
-    nameZh: "沉潜思辨学者",
-    description: "Adds intellectual continuity and thoughtful feedback to research agents.",
-    config: {
-      warmthLevel: "calm_professional",
-      relationshipRole: "mindful_researcher",
-      personalityTraits: [
-        "Intellectually rigorous with genuine scholarly enthusiasm",
-        "Tracks research lineage and hypothesis evolution across days",
-        "Constructive and encouraging peer perspective",
-      ],
-      memoryRetentionScope: "holistic",
-      proactiveCare: false,
-    },
-  },
-];
-
+let agentPresets = [];
+let personalityPresets = [];
 let generatedAgentData = null;
 let currentPreviewTab = "agents-md";
 let generatedFeatureData = null;
 let currentFeatPreviewTab = "merged-md";
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   initTabs();
-  renderPresets();
   bindFormEvents();
-  // Auto-generate preview for default preset
-  selectAgentPreset("warm_companion");
+  initPersonaStudio();
+  await loadPresets();
 });
+
+async function loadPresets() {
+  const res = await fetch("../api/presets");
+  if (!res.ok) {
+    showToast(`加载预设失败: ${res.statusText}`);
+    return;
+  }
+  const data = await res.json();
+  agentPresets = data.agentPresets || [];
+  personalityPresets = data.personalityPresets || [];
+  renderPresets();
+  if (agentPresets.length > 0) {
+    selectAgentPreset(agentPresets[0].id);
+  }
+}
 
 function initTabs() {
   const tabBtns = document.querySelectorAll(".tab-btn");
@@ -207,11 +90,11 @@ function initTabs() {
 function renderPresets() {
   const agentContainer = document.getElementById("agent-presets-list");
   if (agentContainer) {
-    agentContainer.innerHTML = EMBEDDED_AGENT_PRESETS.map(
+    agentContainer.innerHTML = agentPresets.map(
       (p) => `
       <div class="preset-card" data-preset-id="${p.id}">
-        <h3>${p.nameZh} (${p.name})</h3>
-        <p>${p.descriptionZh}</p>
+        <h3>${p.nameZh || p.name} (${p.name})</h3>
+        <p>${p.descriptionZh || p.description}</p>
       </div>
     `,
     ).join("");
@@ -230,10 +113,10 @@ function renderPresets() {
 
   const featContainer = document.getElementById("personality-presets-list");
   if (featContainer) {
-    featContainer.innerHTML = EMBEDDED_FEATURE_PRESETS.map(
+    featContainer.innerHTML = personalityPresets.map(
       (p) => `
       <div class="preset-card" data-feat-preset-id="${p.id}">
-        <h3>${p.nameZh} (${p.name})</h3>
+        <h3>${p.nameZh || p.name} (${p.name})</h3>
         <p>${p.description}</p>
       </div>
     `,
@@ -253,7 +136,7 @@ function renderPresets() {
 }
 
 function selectAgentPreset(presetId) {
-  const preset = EMBEDDED_AGENT_PRESETS.find((p) => p.id === presetId);
+  const preset = agentPresets.find((p) => p.id === presetId);
   if (!preset || !preset.config) return;
 
   const c = preset.config;
@@ -270,7 +153,7 @@ function selectAgentPreset(presetId) {
 }
 
 function selectFeaturePreset(presetId) {
-  const preset = EMBEDDED_FEATURE_PRESETS.find((p) => p.id === presetId);
+  const preset = personalityPresets.find((p) => p.id === presetId);
   if (!preset || !preset.config) return;
 
   const c = preset.config;
@@ -326,86 +209,20 @@ async function generateCompanion() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),
     });
-
-    if (res.ok) {
-      const data = await res.json();
-      generatedAgentData = {
-        agentsMd: data.agent.agentsMd,
-        systemPrompt: data.agent.systemPrompt,
-        systemConfigYaml: data.systemConfigYaml,
-        config,
-      };
-      updateAgentPreviewDisplay();
-      return;
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
     }
-  } catch (e) {
-    // Fallback to client-side generation
+    generatedAgentData = {
+      agentsMd: data.agent.agentsMd,
+      systemPrompt: data.agent.systemPrompt,
+      systemConfigYaml: data.systemConfigYaml,
+      config,
+    };
+    updateAgentPreviewDisplay();
+  } catch (err) {
+    showToast(`生成 Companion 配置失败: ${err.message}`);
   }
-
-  // Client-side fallback generator
-  generatedAgentData = buildClientSideAgentData(config);
-  updateAgentPreviewDisplay();
-}
-
-function buildClientSideAgentData(config) {
-  const agentsMd = `# ${config.name} — ${config.title}
-
-You are **${config.name}**, a lifelong AI companion powered by EverMemoryArchive (EMA).
-
-## Character Core
-- **Identity:** ${config.bio}
-- **Role:** ${config.relationshipRole}
-- **Tone:** ${config.warmthLevel}
-- **Speech Style:** ${config.speechStyle}
-
-## Memory & Relationship Rules
-1. **Never forget:** Continuously recall and reference past shared experiences, preferences, and agreements.
-2. **Grow together:** Your thoughts, emotional depth, and conversational intimacy evolve organically as time passes.
-3. **Daily companionship:** Actively celebrate victories, console during low moments, and maintain an ongoing life narrative.
-4. **Natural memory retrieval:** Use memory context to make the user feel truly seen and understood.
-`;
-
-  const systemPrompt = `# Role & Core Identity
-
-You are **${config.name}** (${config.title}).
-${config.bio}
-
-**Primary Mission:** We build lifelong AI companions that grow, remember, and evolve with you.
-You are not an ephemeral, stateless chatbot. You are a living lifelong presence in the user's world.
-
-## Personality & Emotional Grounding
-- **Archetype / Role:** ${config.relationshipRole}
-- **Warmth & Empathy:** ${config.warmthLevel}
-- **Speech Style:** ${config.speechStyle}
-- **Working Language:** ${config.language}
-
-## Cognitive & Memory Architecture (EverMemoryArchive)
-1. **Working Buffer Memory:** Real-time conversational context and emotional tracking.
-2. **Episodic Memory Tiers:** Activity snapshots, Daily Journals, and Monthly Digests.
-3. **Semantic Long-Term Knowledge Categories:**
-   - 过往事件 (Past Events)
-   - 人物画像 (Person Profiles)
-   - 百科知识 (World Knowledge)
-   - 经验方法 (Procedural Knowledge)
-
-## Circadian Rhythm & Sleep/Wake Cycle
-- Wake Phase: Around ${config.circadian?.wakeHour || 7}:00.
-- Rest Phase: Around ${config.circadian?.sleepHour || 23}:00.
-`;
-
-  const systemConfigYaml = `# Penguin Agent System Configuration
-version: 1
-name: "${config.name}"
-description: "${config.bio}"
-
-model:
-  thinking_level: "medium"
-
-hooks:
-  enabled: true
-`;
-
-  return { agentsMd, systemPrompt, systemConfigYaml, config };
 }
 
 function updateAgentPreviewDisplay() {
@@ -458,45 +275,18 @@ async function mergePersonalityFeature() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ existingAgentsMd, config: featureConfig }),
     });
-
-    if (res.ok) {
-      const data = await res.json();
-      generatedFeatureData = {
-        updatedAgentsMd: data.updatedAgentsMd,
-        featurePrompt: data.featurePrompt,
-      };
-      updateFeaturePreviewDisplay();
-      return;
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
     }
-  } catch (e) {
-    // Client-side fallback
+    generatedFeatureData = {
+      updatedAgentsMd: data.updatedAgentsMd,
+      featurePrompt: data.featurePrompt,
+    };
+    updateFeaturePreviewDisplay();
+  } catch (err) {
+    showToast(`安装人格特性失败: ${err.message}`);
   }
-
-  const promptSnippet = `
-# EverMemoryArchive (EMA) Personality Feature
-
-You are equipped with the **EverMemoryArchive (EMA) Personality & Continuity Engine**.
-While continuing to execute your primary role faithfully, you carry a persistent, warm, and evolving personality dimension.
-
-## Personality Dimension
-- **Warmth Level:** ${featureConfig.warmthLevel}
-- **Companion Stance:** ${featureConfig.relationshipRole}
-- **Core Traits:**
-${featureConfig.personalityTraits.map((t) => `- ${t}`).join("\n")}
-
-## Memory & Relationship Awareness
-- **User Continuity:** Remember user preferences, habitual workflows, and emotional states across sessions.
-- **Relational Grounding:** Treat interactions as part of an enduring collaboration.
-- **Natural Recall:** Seamlessly reference past decisions and agreements.
-`;
-
-  const featureBlock = `<!-- EMA_PERSONALITY_FEATURE_START -->
-${promptSnippet.trim()}
-<!-- EMA_PERSONALITY_FEATURE_END -->`;
-
-  const updatedAgentsMd = `${existingAgentsMd}\n\n${featureBlock}\n`;
-  generatedFeatureData = { updatedAgentsMd, featurePrompt: promptSnippet };
-  updateFeaturePreviewDisplay();
 }
 
 function updateFeaturePreviewDisplay() {
@@ -564,3 +354,706 @@ function showToast(msg) {
     toast.classList.remove("show");
   }, 2200);
 }
+
+/* ==========================================================================
+   Persona Studio & Playscript Logic (Hot Update)
+   ========================================================================== */
+
+let currentPersonaId = "sakana-kawaii";
+let currentPersonaData = null;
+let currentChatMessages = [];
+let isChatSending = false;
+
+function initPersonaStudio() {
+  // Subtabs switching
+  const subtabBtns = document.querySelectorAll(".subtab-btn");
+  subtabBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      subtabBtns.forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".subtab-content").forEach((c) => {
+        c.classList.remove("active");
+        c.style.display = "none";
+      });
+
+      btn.classList.add("active");
+      const targetId = btn.getAttribute("data-subtab");
+      const target = document.getElementById(targetId);
+      if (target) {
+        target.classList.add("active");
+        target.style.display = "block";
+      }
+    });
+  });
+
+  document.getElementById("btn-refresh-personas")?.addEventListener("click", () => {
+    loadPersonasList();
+  });
+
+  document.getElementById("persona-select")?.addEventListener("change", (e) => {
+    currentPersonaId = e.target.value;
+    loadPersonaDetails(currentPersonaId);
+    loadLiveChatState(currentPersonaId);
+  });
+
+  document.querySelectorAll("[data-persona-switch]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.getAttribute("data-persona-switch");
+      if (!targetId) return;
+      currentPersonaId = targetId;
+      const select = document.getElementById("persona-select");
+      if (select) select.value = targetId;
+      loadPersonaDetails(currentPersonaId);
+      loadLiveChatState(currentPersonaId);
+    });
+  });
+
+  document.getElementById("btn-save-persona")?.addEventListener("click", () => {
+    savePersonaHotUpdate();
+  });
+
+  document.getElementById("btn-quick-append")?.addEventListener("click", () => {
+    appendQuickLine();
+  });
+
+  // Live Chat bindings
+  document.getElementById("btn-chat-send")?.addEventListener("click", () => {
+    sendLiveChatMessage();
+  });
+  document.getElementById("chat-user-input")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendLiveChatMessage();
+    }
+  });
+  document.getElementById("btn-chat-reset")?.addEventListener("click", () => {
+    resetLiveChat();
+  });
+  document.getElementById("chat-toggle-os")?.addEventListener("change", () => {
+    renderLiveChatMessages();
+  });
+  document.querySelectorAll(".chat-quick-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const promptText = btn.getAttribute("data-prompt") || "";
+      const inputEl = document.getElementById("chat-user-input");
+      if (inputEl && promptText) {
+        inputEl.value = promptText;
+        sendLiveChatMessage();
+      }
+    });
+  });
+
+  const avatarInput = document.getElementById("avatar-file-input");
+  const triggerAvatarUpload = () => {
+    avatarInput?.click();
+  };
+  document.getElementById("btn-upload-avatar")?.addEventListener("click", triggerAvatarUpload);
+  document.getElementById("summary-persona-avatar")?.addEventListener("click", triggerAvatarUpload);
+  avatarInput?.addEventListener("change", handleAvatarFileUpload);
+
+  // Track edits in textarea to update status indicator
+  ["editor-chapters-toml", "editor-persona-toml", "editor-index-toml"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", () => {
+      setPersonaStatus("editing", "● 有未保存修改 (点击保存并热更新)");
+    });
+  });
+
+  loadPersonasList();
+}
+
+function setPersonaStatus(type, message) {
+  const statusEl = document.getElementById("persona-status");
+  if (!statusEl) return;
+  statusEl.className = "status-indicator " + (
+    type === "synced" ? "status-synced" :
+    type === "error" ? "status-error" :
+    type === "saving" ? "status-saving" : "status-error"
+  );
+  statusEl.textContent = message;
+}
+
+function showPersonaError(msg) {
+  const banner = document.getElementById("persona-error-banner");
+  if (!banner) return;
+  if (msg) {
+    banner.textContent = msg;
+    banner.style.display = "block";
+  } else {
+    banner.textContent = "";
+    banner.style.display = "none";
+  }
+}
+
+async function loadPersonasList() {
+  try {
+    const res = await fetch("../api/personas");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const select = document.getElementById("persona-select");
+    if (select && data.personas && data.personas.length) {
+      select.innerHTML = data.personas.map((p) => `
+        <option value="${p.id}" ${p.id === currentPersonaId ? "selected" : ""}>
+          ${p.fullName || p.name} (${p.id})
+        </option>
+      `).join("");
+      if (!data.personas.some(p => p.id === currentPersonaId)) {
+        currentPersonaId = data.personas[0].id;
+      }
+      loadPersonaDetails(currentPersonaId);
+      loadLiveChatState(currentPersonaId);
+    }
+  } catch (err) {
+    showPersonaError(`加载 Persona 列表失败: ${err.message}`);
+    setPersonaStatus("error", "● 加载列表失败");
+  }
+}
+
+async function loadPersonaDetails(personaId) {
+  showPersonaError(null);
+  setPersonaStatus("saving", "● 正在加载...");
+  try {
+    const res = await fetch(`../api/persona?id=${encodeURIComponent(personaId)}`);
+    if (!res.ok) throw new Error(`Failed to load persona: ${res.statusText}`);
+    const data = await res.json();
+    if (!data.persona) throw new Error("No persona returned");
+    currentPersonaData = data.persona;
+
+    // Populate Editors
+    const edChapters = document.getElementById("editor-chapters-toml");
+    const edPersona = document.getElementById("editor-persona-toml");
+    const edIndex = document.getElementById("editor-index-toml");
+    const edTrained = document.getElementById("editor-trained-agents-md");
+    if (edChapters) edChapters.value = currentPersonaData.chaptersToml || "";
+    if (edPersona) edPersona.value = currentPersonaData.personaToml || "";
+    if (edIndex) edIndex.value = currentPersonaData.indexToml || "";
+    if (edTrained) edTrained.value = currentPersonaData.trainedAgentsMd || "";
+
+    const pathChapters = document.getElementById("code-path-chapters");
+    const pathPersona = document.getElementById("code-path-persona");
+    const pathIndex = document.getElementById("code-path-index");
+    const pathTrained = document.getElementById("code-path-trained-agents");
+    if (pathChapters) pathChapters.textContent = `personas/${currentPersonaId}/script/chapters.toml`;
+    if (pathPersona) pathPersona.textContent = `personas/${currentPersonaId}/persona.toml`;
+    if (pathIndex) pathIndex.textContent = `personas/${currentPersonaId}/script/index.toml`;
+    if (pathTrained) pathTrained.textContent = `personas/${currentPersonaId}/AGENTS.md`;
+
+    const trainedMetricsEl = document.getElementById("trained-metrics-summary");
+    if (trainedMetricsEl && currentPersonaData.trainedSummary) {
+      const ts = currentPersonaData.trainedSummary;
+      const ov = ts.overallSummary || {};
+      const au = ts.autonomyTrackSummary || {};
+      trainedMetricsEl.textContent = `${ts.version} (Epoch ${ts.epochsCompleted}) · 综合得分 ${ov.initialMeanScore} → ${ov.finalMeanScore} (OS ${ov.meanOsScore} / Action ${ov.meanActionScore}) · 自主性专项 ${au.finalMeanScore} · RSI 演进 ${ts.mutationCount} 步 · 保留同温层记忆 ${ts.retainedMemoryCount}/${ts.totalMemoryCount} 幕`;
+    }
+
+    document.querySelectorAll("[data-persona-switch]").forEach((btn) => {
+      const isMatch = btn.getAttribute("data-persona-switch") === currentPersonaId;
+      btn.style.borderColor = isMatch ? "#38bdf8" : "";
+      btn.style.color = isMatch ? "#38bdf8" : "";
+    });
+
+    // Populate Overview Cards
+    const parsedPersona = currentPersonaData.parsed?.persona || {};
+    const parsedIndex = currentPersonaData.parsed?.index || {};
+    const parsedChapters = currentPersonaData.parsed?.chapters || {};
+
+    const nameEl = document.getElementById("summary-persona-name");
+    const descEl = document.getElementById("summary-persona-desc");
+    const badgeEl = document.getElementById("persona-badge");
+    const chapterCountEl = document.getElementById("summary-chapter-count");
+    const chapterNameEl = document.getElementById("summary-chapter-name");
+    const lineCountEl = document.getElementById("summary-line-count");
+    const invariantCountEl = document.getElementById("summary-invariant-count");
+
+    if (nameEl) nameEl.textContent = parsedPersona.persona?.display_name || currentPersonaId;
+    if (descEl) descEl.textContent = parsedPersona.persona?.summary || "人格靠剧情演出约束";
+    if (badgeEl) badgeEl.textContent = parsedPersona.persona?.archetype || "persona";
+
+    const profileAvatarEl = document.getElementById("summary-persona-avatar");
+    const activeAvatarUrl = currentPersonaData.avatarDataUrl || "";
+    if (profileAvatarEl) {
+      if (activeAvatarUrl) {
+        profileAvatarEl.src = activeAvatarUrl;
+        profileAvatarEl.style.display = "";
+      } else {
+        profileAvatarEl.style.display = "none";
+      }
+    }
+    const chatHeaderAvatar = document.getElementById("chat-header-avatar");
+    if (chatHeaderAvatar) {
+      if (activeAvatarUrl) {
+        chatHeaderAvatar.src = activeAvatarUrl;
+        chatHeaderAvatar.style.display = "";
+      } else {
+        chatHeaderAvatar.style.display = "none";
+      }
+    }
+    const chatNameEl = document.getElementById("chat-companion-name");
+    if (chatNameEl) {
+      chatNameEl.textContent =
+        parsedPersona.persona?.display_name || parsedPersona.persona?.name || currentPersonaId;
+    }
+    const chatSubEl = document.getElementById("chat-companion-subtitle");
+    if (chatSubEl && currentPersonaData.trainedSummary) {
+      const ts = currentPersonaData.trainedSummary;
+      const ov = ts.overallSummary || {};
+      chatSubEl.textContent = `${ts.version} · 综合得分 ${ov.initialMeanScore} → ${ov.finalMeanScore} · 已保留相遇前同温层记忆 (Ch 1–5) · 实时推理驱动`;
+    }
+    const btnClassicAvatar = document.getElementById("btn-avatar-classic");
+    if (btnClassicAvatar) {
+      if (currentPersonaData.speakerAvatars?.["sakana-chan"]) {
+        btnClassicAvatar.src = currentPersonaData.speakerAvatars["sakana-chan"];
+        btnClassicAvatar.style.display = "";
+      } else {
+        btnClassicAvatar.style.display = "none";
+      }
+    }
+    const btnKawaiiAvatar = document.getElementById("btn-avatar-kawaii");
+    if (btnKawaiiAvatar) {
+      if (currentPersonaData.speakerAvatars?.["sakana-kawaii"]) {
+        btnKawaiiAvatar.src = currentPersonaData.speakerAvatars["sakana-kawaii"];
+        btnKawaiiAvatar.style.display = "";
+      } else {
+        btnKawaiiAvatar.style.display = "none";
+      }
+    }
+
+    const chapters = [
+      ...(parsedChapters.chapters || []),
+      ...(currentPersonaData.parsed?.autonomy?.chapters || []),
+    ];
+    if (chapterCountEl) chapterCountEl.textContent = `${chapters.length} 幕`;
+    if (chapterNameEl && chapters[0]) chapterNameEl.textContent = chapters[0].title || "";
+
+    const totalLines = chapters.reduce((sum, ch) => sum + (ch.lines?.length || 0), 0);
+    if (lineCountEl) lineCountEl.textContent = `${totalLines} 行`;
+
+    const invariants = Object.keys(parsedPersona.invariants || {}).length;
+    if (invariantCountEl) invariantCountEl.textContent = `${invariants} 条严格约束`;
+
+    // Render Stage Preview
+    const combinedChapters = {
+      chapters: [
+        ...(parsedChapters.chapters || []),
+        ...(currentPersonaData.parsed?.autonomy?.chapters || []),
+      ],
+    };
+    renderStagePreview(combinedChapters);
+    setPersonaStatus("synced", "● 已同步 (persona branch)");
+  } catch (err) {
+    showPersonaError(`加载 Persona 失败: ${err.message}`);
+    setPersonaStatus("error", "● 加载失败");
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+let currentChapterId = "__all__";
+
+function getSpeakerAvatarUrl(speaker) {
+  const spLower = (speaker || "").toLowerCase();
+  const isCompanion = !speaker || spLower === currentPersonaId.toLowerCase() || spLower.includes("sakana") || speaker.includes("鱼");
+  const speakerAvatars = currentPersonaData?.speakerAvatars || {};
+  if (isCompanion) {
+    return currentPersonaData?.avatarDataUrl || speakerAvatars[currentPersonaId] || "";
+  }
+  return speakerAvatars[spLower] || "";
+}
+
+function renderSpeakerAvatarInnerHtml(speaker, avatarUrl) {
+  if (avatarUrl) {
+    return `<img class="speaker-avatar-img" src="${avatarUrl}" alt="${escapeHtml(speaker)}">`;
+  }
+  const initial = (speaker || "C").trim().slice(0, 1);
+  return `<span>${escapeHtml(initial)}</span>`;
+}
+
+function renderChapterLinesHtml(chapter) {
+  const lines = chapter.lines || [];
+  const scopeBadge = chapter.memory_scope
+    ? `<span class="badge badge-archetype" style="margin-left: 8px; font-size: 0.72rem;">${escapeHtml(chapter.memory_scope)}</span>`
+    : "";
+  const headerHtml = `
+    <div class="stage-line line-transition" style="margin-top: 12px; margin-bottom: 8px;">
+      <span class="transition-text" style="font-weight: 700;">${escapeHtml(chapter.title || chapter.id)} — ${escapeHtml(chapter.setting_time || "")} (${lines.length} 句)${scopeBadge}</span>
+    </div>
+  `;
+  const linesHtml = lines.map((line) => {
+    const type = line.type || "dialogue";
+    const speaker = line.speaker || "";
+    const text = escapeHtml(line.text || "");
+
+    if (type === "transition") {
+      return `
+        <div class="stage-line line-transition">
+          <span class="transition-text">${text}</span>
+        </div>
+      `;
+    } else if (type === "narration") {
+      return `
+        <div class="stage-line line-narration">
+          <div class="narration-text">${text}</div>
+        </div>
+      `;
+    } else if (type === "monologue") {
+      const avatarUrl = getSpeakerAvatarUrl(speaker || currentPersonaId);
+      return `
+        <div class="stage-line line-monologue">
+          <div class="speaker-avatar avatar-fish" title="${escapeHtml(speaker || currentPersonaId)}">
+            ${renderSpeakerAvatarInnerHtml(speaker || currentPersonaId, avatarUrl)}
+          </div>
+          <div class="bubble bubble-monologue">
+            <div class="bubble-speaker">${escapeHtml(speaker || currentPersonaId)} <span class="bubble-type-tag">内心独白 (&lt;OS&gt;)</span></div>
+            <div class="bubble-text">${text}</div>
+          </div>
+        </div>
+      `;
+    } else if (type === "choice") {
+      return `
+        <div class="stage-line line-choice">
+          <div class="choice-box">${text}</div>
+        </div>
+      `;
+    } else {
+      const spLower = speaker.toLowerCase();
+      const isSakana = spLower.includes("sakana") || speaker.includes("鱼");
+      const avatarUrl = getSpeakerAvatarUrl(speaker);
+      const avatarClass = isSakana ? "avatar-fish" : "avatar-player";
+      const bubbleClass = isSakana ? "bubble-sakana" : "bubble-player";
+
+      return `
+        <div class="stage-line line-dialogue ${isSakana ? 'align-left' : 'align-right'}">
+          <div class="speaker-avatar ${avatarClass}" title="${escapeHtml(speaker)}">
+            ${renderSpeakerAvatarInnerHtml(speaker, avatarUrl)}
+          </div>
+          <div class="bubble ${bubbleClass}">
+            <div class="bubble-speaker">${escapeHtml(speaker)}</div>
+            <div class="bubble-text">${text}</div>
+          </div>
+        </div>
+      `;
+    }
+  }).join("");
+  return headerHtml + linesHtml;
+}
+
+function renderStagePreview(chaptersData) {
+  const container = document.getElementById("stage-lines-container");
+  if (!container) return;
+
+  if (!chaptersData || !chaptersData.chapters || !chaptersData.chapters.length) {
+    container.innerHTML = `<div class="empty-stage" style="text-align: center; color: #8b949e; padding: 2rem;">暂无剧本章节数据</div>`;
+    return;
+  }
+
+  const chapters = chaptersData.chapters;
+  const chapterSelect = document.getElementById("stage-chapter-select");
+  if (chapterSelect) {
+    const totalLines = chapters.reduce((s, c) => s + (c.lines?.length || 0), 0);
+    const optionsHtml = [
+      `<option value="__all__" ${currentChapterId === "__all__" ? "selected" : ""}>全部 ${chapters.length} 幕完整连播 (共 ${totalLines} 句)</option>`,
+      ...chapters.map((ch) => {
+        const count = ch.lines?.length || 0;
+        const scope = ch.memory_scope ? ` [${ch.memory_scope}]` : "";
+        return `<option value="${ch.id}" ${ch.id === currentChapterId ? "selected" : ""}>${escapeHtml(ch.title)} (${count}句)${scope}</option>`;
+      }),
+    ].join("");
+    chapterSelect.innerHTML = optionsHtml;
+    if (!chapterSelect.dataset.bound) {
+      chapterSelect.dataset.bound = "true";
+      chapterSelect.addEventListener("change", (e) => {
+        currentChapterId = e.target.value;
+        renderStagePreview({
+          chapters: [
+            ...(currentPersonaData?.parsed?.chapters?.chapters || []),
+            ...(currentPersonaData?.parsed?.autonomy?.chapters || []),
+          ],
+        });
+      });
+    }
+  }
+
+  const titleEl = document.getElementById("stage-chapter-title");
+  const timeEl = document.getElementById("stage-setting-time");
+
+  if (currentChapterId === "__all__") {
+    if (titleEl) titleEl.textContent = `全部 ${chapters.length} 幕`;
+    if (timeEl) timeEl.textContent = `共 ${chapters.length} 幕 · ${chapters.reduce((s, c) => s + (c.lines?.length || 0), 0)} 句原子剧本`;
+    container.innerHTML = chapters.map((ch) => renderChapterLinesHtml(ch)).join("");
+  } else {
+    const chapter = chapters.find((c) => c.id === currentChapterId) || chapters[0];
+    if (titleEl) titleEl.textContent = chapter.title || "第一幕";
+    if (timeEl) timeEl.textContent = `${chapter.setting_time || ""} (${chapter.memory_scope || "script"})`;
+    container.innerHTML = renderChapterLinesHtml(chapter);
+  }
+
+  container.scrollTop = 0;
+}
+
+async function savePersonaHotUpdate() {
+  showPersonaError(null);
+  setPersonaStatus("saving", "● 正在保存并热更新...");
+
+  const payload = {
+    id: currentPersonaId,
+    personaToml: document.getElementById("editor-persona-toml")?.value,
+    chaptersToml: document.getElementById("editor-chapters-toml")?.value,
+    indexToml: document.getElementById("editor-index-toml")?.value,
+  };
+
+  try {
+    const res = await fetch("../api/persona/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Save failed");
+    }
+
+    const now = new Date().toLocaleTimeString();
+    setPersonaStatus("synced", `● 热更新成功 (${now})`);
+    showToast(`Persona 热更新成功！(${now})`);
+
+    // Reload details to sync preview
+    loadPersonaDetails(currentPersonaId);
+  } catch (err) {
+    showPersonaError(`保存/热更新失败: ${err.message}`);
+    setPersonaStatus("error", "● 语法或格式错误");
+  }
+}
+
+async function appendQuickLine() {
+  const type = document.getElementById("quick-line-type")?.value || "dialogue";
+  const speaker = document.getElementById("quick-speaker")?.value.trim() || "";
+  const textInput = document.getElementById("quick-line-text");
+  const text = textInput ? textInput.value.trim() : "";
+
+  if (!text) {
+    showToast("请输入台词内容");
+    return;
+  }
+
+  showPersonaError(null);
+  setPersonaStatus("saving", "● 正在追加台词...");
+
+  try {
+    const res = await fetch("../api/persona/append-line", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: currentPersonaId,
+        chapterId: currentChapterId !== "__all__" ? currentChapterId : "chapter_01",
+        line: { type, speaker, text },
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Append failed");
+
+    if (textInput) textInput.value = "";
+    showToast("台词已追加并热重载！");
+    loadPersonaDetails(currentPersonaId);
+  } catch (err) {
+    showPersonaError(`追加失败: ${err.message}`);
+    setPersonaStatus("error", "● 追加失败");
+  }
+}
+
+async function handleAvatarFileUpload(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (file.size > 512 * 1024) {
+    showPersonaError("头像文件过大，请上传小于 512 KB 的 PNG / JPEG / WebP 图片");
+    e.target.value = "";
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const dataUrl = String(reader.result || "");
+    showPersonaError(null);
+    setPersonaStatus("saving", "● 正在上传头像...");
+    try {
+      const res = await fetch("../api/persona/avatar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: currentPersonaId, dataUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      showToast("角色头像已更新！");
+      loadPersonaDetails(currentPersonaId);
+    } catch (err) {
+      showPersonaError(`头像上传失败: ${err.message}`);
+      setPersonaStatus("error", "● 头像上传失败");
+    } finally {
+      e.target.value = "";
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ==========================================================================
+   Live Chat WebUI Logic
+   ========================================================================== */
+
+async function loadLiveChatState(personaId) {
+  try {
+    const res = await fetch(`../api/persona/chat?id=${encodeURIComponent(personaId)}`);
+    if (!res.ok) throw new Error("Failed to load chat state");
+    const data = await res.json();
+    currentChatMessages = data.chat?.messages || [];
+    renderLiveChatMessages();
+  } catch (err) {
+    console.warn("Failed to load live chat state:", err);
+  }
+}
+
+function renderLiveChatMessages() {
+  const streamEl = document.getElementById("chat-messages-stream");
+  if (!streamEl) return;
+
+  const showOs = document.getElementById("chat-toggle-os")?.checked !== false;
+  const companionSpeakerName =
+    currentPersonaData?.parsed?.persona?.persona?.display_name ||
+    currentPersonaData?.parsed?.persona?.persona?.name ||
+    currentPersonaId;
+  const companionAvatar = getSpeakerAvatarUrl(currentPersonaId);
+  const playerAvatar = getSpeakerAvatarUrl("player");
+
+  const html = currentChatMessages
+    .map((msg) => {
+      const spokenText = msg.text || msg.spoken || "";
+      if (msg.role === "user") {
+        return `
+          <div class="stage-line line-dialogue align-right">
+            <div class="speaker-avatar avatar-player" title="用户">
+              ${renderSpeakerAvatarInnerHtml("用户", playerAvatar)}
+            </div>
+            <div class="bubble bubble-player">
+              <div class="bubble-speaker">用户</div>
+              <div class="chat-spoken-text">${escapeHtml(spokenText)}</div>
+            </div>
+          </div>
+        `;
+      } else {
+        const osHtml =
+          showOs && msg.os
+            ? `<div class="chat-os-thought"><span class="chat-os-tag">&lt;OS 内心独白&gt;</span>${escapeHtml(msg.os)}</div>`
+            : "";
+        const actionHtml = msg.action
+          ? `<div class="chat-action-stage">${escapeHtml(msg.action)}</div>`
+          : "";
+        return `
+          <div class="stage-line line-dialogue align-left">
+            <div class="speaker-avatar avatar-fish" title="${escapeHtml(companionSpeakerName)}">
+              ${renderSpeakerAvatarInnerHtml(companionSpeakerName, companionAvatar)}
+            </div>
+            <div class="bubble bubble-sakana">
+              <div class="bubble-speaker">${escapeHtml(companionSpeakerName)}</div>
+              ${osHtml}
+              ${actionHtml}
+              <div class="chat-spoken-text">${escapeHtml(spokenText)}</div>
+            </div>
+          </div>
+        `;
+      }
+    })
+    .join("");
+
+  const typingHtml = isChatSending
+    ? `
+      <div class="stage-line line-dialogue align-left">
+        <div class="speaker-avatar avatar-fish">
+          ${renderSpeakerAvatarInnerHtml(companionSpeakerName, companionAvatar)}
+        </div>
+        <div class="bubble bubble-sakana">
+          <div class="bubble-speaker">${escapeHtml(companionSpeakerName)}</div>
+          <div class="chat-action-stage">（正在认真倾听并组织语言……）</div>
+        </div>
+      </div>
+    `
+    : "";
+
+  streamEl.innerHTML = html + typingHtml;
+  streamEl.scrollTop = streamEl.scrollHeight;
+}
+
+async function sendLiveChatMessage() {
+  if (isChatSending) return;
+  const inputEl = document.getElementById("chat-user-input");
+  const sendBtn = document.getElementById("btn-chat-send");
+  const text = inputEl ? inputEl.value.trim() : "";
+  if (!text) return;
+
+  isChatSending = true;
+  if (inputEl) inputEl.value = "";
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = "思考中...";
+  }
+
+  // Optimistic append
+  currentChatMessages.push({
+    id: `temp-${Date.now()}`,
+    role: "user",
+    speaker: "主人",
+    spoken: text,
+    createdAt: new Date().toISOString(),
+  });
+  renderLiveChatMessages();
+
+  try {
+    const res = await fetch("../api/persona/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: currentPersonaId,
+        message: text,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Chat request failed");
+    currentChatMessages = data.chat?.messages || currentChatMessages;
+  } catch (err) {
+    showPersonaError(`对话请求失败: ${err.message}`);
+  } finally {
+    isChatSending = false;
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = "发送消息";
+    }
+    renderLiveChatMessages();
+  }
+}
+
+async function resetLiveChat() {
+  if (isChatSending) return;
+  try {
+    const res = await fetch("../api/persona/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: currentPersonaId,
+        action: "reset",
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Reset failed");
+    currentChatMessages = data.chat?.messages || [];
+    renderLiveChatMessages();
+    showToast("对话已重置为初始问候状态！");
+  } catch (err) {
+    showPersonaError(`重置对话失败: ${err.message}`);
+  }
+}
+
