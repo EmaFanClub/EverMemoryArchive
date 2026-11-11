@@ -56,6 +56,9 @@ export interface EmaCompactorConfig {
   l0RollupThreshold?: number;
   /** Number of oldest active L0 scenes to fold into one L1 Epoch item per rollup (default: 10) */
   l0RollupBatchSize?: number;
+  /** SQLite database file path for persistent cold memory archive (RFC-0006) */
+  archiveDbPath?: string;
+  /** @deprecated Alias for archiveDbPath */
   archiveJsonlPath?: string;
   statePath?: string;
   syncAgentOnDisk?: boolean;
@@ -436,8 +439,9 @@ export class EmaMemoryCompactor {
       );
 
       let archiveRef: string | undefined;
-      if (this.config.archiveJsonlPath) {
-        archiveRef = appendColdArchiveRecord(this.config.archiveJsonlPath, {
+      const archiveDbPath = this.config.archiveDbPath || this.config.archiveJsonlPath;
+      if (archiveDbPath) {
+        archiveRef = appendColdArchiveRecord(archiveDbPath, {
           archiveId: `${scene.sceneId}@${Date.now()}`,
           sceneId: scene.sceneId,
           title: scene.title,

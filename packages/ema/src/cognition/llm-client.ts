@@ -235,7 +235,7 @@ export class PenguinServerLLMClient {
       }
     }
 
-    const fullId = resolvedMeta?.sessionId || sessionIdOrSuffix;
+    let fullId = resolvedMeta?.sessionId || sessionIdOrSuffix;
     const appDataDir =
       process.env.PENGUIN_APP_DATA_DIR ||
       path.join(os.homedir(), ".penguin", "data", projectId);
@@ -250,6 +250,12 @@ export class PenguinServerLLMClient {
           .filter((f) => f.includes(fullId) && f.endsWith(".jsonl"))
           .sort();
         for (const f of files) {
+          if (!fullId.startsWith("session-")) {
+            const m = f.match(
+              /(session-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-[a-zA-Z0-9]+)/,
+            );
+            if (m) fullId = m[1];
+          }
           shardPaths.push(path.join(subDir, f));
         }
       }
@@ -294,11 +300,12 @@ export class PenguinServerLLMClient {
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 1000));
       try {
-        const check = await this.requestJson<{ session: { status: string } }>(
+        const check = await this.requestJson<any>(
           "GET",
           `/api/sessions/${encodeURIComponent(fullSessionId)}`,
         );
-        if (check?.session?.status === "idle") {
+        const st = check?.session?.status || check?.status;
+        if (st === "idle") {
           return true;
         }
       } catch {

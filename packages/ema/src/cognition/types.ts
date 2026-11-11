@@ -185,7 +185,7 @@ export interface SceneMemoryIndexItem {
   keyFacts: string[];
   /** Optional reflection score (0-100) measuring reconstructibility */
   reflectionScore?: number;
-  /** Optional pointer to cold archive JSONL record ID or byte/turn range (RFC-0006) */
+  /** Optional logical pointer to the persistent cold archive record (RFC-0006) */
   archiveRef?: string;
   /** Optional parent Level-1 epoch ID once rolled up into MemoryIndex_{1,y} (RFC-0006) */
   rolledUpIntoEpochId?: string;
@@ -300,9 +300,9 @@ export interface LiveConversationTurn {
   channel: string;
   /** User input text */
   inputText: string;
-  /** Companion's latent inner monologue (from <OS> tag or native thinking block) */
+  /** Companion's latent inner monologue extracted from the emitted <OS>...</OS> tag */
   latentOS: string;
-  /** Companion's external reply / action text */
+  /** Companion's external reply / action text extracted from the emitted <Action>...</Action> tag */
   actionText: string;
 }
 

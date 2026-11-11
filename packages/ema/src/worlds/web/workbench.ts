@@ -66,7 +66,7 @@ export function buildWebChannelProtocolSection(options: {
     `   node ${emaCliPath} world post /world/web/actions/message.post --db ${options.dbPath} --channel ${channelId} --parent <回复的目标消息ID> --message "<你的温柔回复内容>"`,
     "   ```",
     "3. **完成回合**：",
-    `   成功通过 \`world post\` 将消息发布到 \`${channelId}\` 频道后，直接输出你刚才发送的那句回复内容结束当前回合（不要输出“我已发送到频道”等元解释）。`,
+    `   成功通过 \`world post\` 将消息发布到 \`${channelId}\` 频道后，按 \`<OS>...</OS><Action>...</Action>\` 格式输出你的第一人称内心独白与刚才发送的那句回复内容以结束当前回合（不要输出“我已发送到频道”等元解释）。`,
     WEB_CHANNEL_PROTOCOL_END_MARKER,
   ].join("\n");
 }

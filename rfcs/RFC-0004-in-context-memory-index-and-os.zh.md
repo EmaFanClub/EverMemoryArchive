@@ -17,7 +17,7 @@
 本 RFC 定义 EverMemoryArchive（EMA）伴侣智能体的第一版运行时认知与记忆建模架构，直接解决 [RFC-0003](RFC-0003-ema-training-meta-theory.zh.md) 留下的待决问题 1（`记忆的具体格式`）、问题 2（`记忆中应当包含哪些内容`）以及问题 3 的结构化建模部分（`人格的具体格式`）。
 
 具体而言，本规范确立了以下三项核心机制：
-1. **两阶段潜变量认知前向方程**：形式化定义 $`\text{Input}_t \xrightarrow{P, M} \text{OS}_t \xrightarrow{P, M, \text{Input}_t} \text{Action}_t`$，将监督训练期显式的 `<OS>` / `<Action>` XML 双标签输出与日常陪伴期模型原生 `thinking` 通道无缝统一，并确立**非读心视角边界铁律（Non-Mind-Reading Perspective Boundary Invariant）**；
+1. **两阶段潜变量认知前向方程**：形式化定义 $`\text{Input}_t \xrightarrow{P, M} \text{OS}_t \xrightarrow{P, M, \text{Input}_t} \text{Action}_t`$，要求伴侣智能体在监督训练期与线上实时陪伴期统一显式发送结构化的 `<OS>...</OS>` 与 `<Action>...</Action>` 标签，并确立**非读心视角边界铁律（Non-Mind-Reading Perspective Boundary Invariant）**；
 2. **六槽位结构化人格档案（`CompanionPersonality`）与单源前缀注入**：定义由 `coreIdentity`、`emotionalDynamics`、`speechStyleRules`、`cognitiveOSPatterns`、`behavioralHabits`、`antiOocConstraints` 与 `mutationHistory` 组成的人格 Schema，并通过单源同步至 `AGENTS.md` 系统前缀消除 System/User 双重注入的 Token 膨胀，实现 $`\gt 90\%`$ 的 KV 缓存命中率；
 3. **原子记忆项（`MemoryItem`）、单层情景记忆索引（`SceneMemoryIndexItem`）与闭环可重构性度量**：定义三元组 $`\langle \text{Input}_t, \text{committedOS}_t, \text{Action}_t^{\ast} \rangle`$、包含第一人称 `summary`、`innerOSArc`、`keyFacts` 与 `archiveRef` 的单层索引项 $`\text{MemoryIndex}_{0,x}`$，以及通过 `compact` + `reflect` 闭环训练压缩算子 $`C`$ 的可重构性评分函数 $`\mathcal{R}(\text{MemoryIndex}_{0,x}, w_x) \in [0, 100]`$。
 
@@ -77,15 +77,15 @@
  严格遵循角色句长、语调口癖与反 OOC 约束，输出实际说出口的台词与神态小动作。
 ```
 
-#### (1) 双模态潜变量承载：训练期显式 XML 标签 vs. 线上原生 `thinking` 通道
+#### (1) 训练期与实时陪伴期统一的 `<OS>` / `<Action>` 显式认知输出协议
 
-EMA 在训练评测期与线上陪伴期共享完全一致的认知拓扑，仅在外层帧格式（Framing）上按需切换：
-- **监督训练与评测模式（Training / Evaluation Mode）**：Student 提示词要求模型显式输出 `<OS>` 与 `<Action>` XML 标签，以便 Teacher 审稿器能够独立观测并分别评估心理动机一致性与外显台词还原度：
-  ```xml
-  <OS>明明身体已经很勉强了却还在装作若无其事，我得找个借口留在他身边盯紧他。</OS>
-  <Action>「……哼。别误会，我只是刚好顺路走这边而已。」</Action>
-  ```
-- **线上实时陪伴模式（Live Companion Mode）**：当用户在 PenguinHarness 中与伴侣日常对话时（见 `AGENTS.md` 第 8 节交互准则），伴侣在底层模型的原生推理通道（`thinking` channel，默认配置 `thinking_level: medium`）中完成潜变量 `<OS>` 推演，而在可见回复流中直接以自然的角色台词与神态动作回应，不暴露任何 XML 标签或系统元信息。
+EMA 在离线监督训练、梦境重放以及线上实时陪伴（见 `AGENTS.md` 第 8 节交互准则）中执行完全一致的两阶段显式输出协议——伴侣在每一回合均显式发送 `<OS>` 与 `<Action>`：
+```xml
+<OS>明明身体已经很勉强了却还在装作若无其事，我得找个借口留在他身边盯紧他。</OS>
+<Action>「……哼。别误会，我只是刚好顺路走这边而已。」</Action>
+```
+- **监督训练、评测与梦境重放**：Teacher 审稿器与记忆压缩器直接读取并独立评估伴侣输出的 `<OS>`（心理动机一致性）与 `<Action>`（外显台词与神态还原度）。
+- **线上实时陪伴与多渠道投递**：伴侣在每个实时回合均先输出 `<OS>...</OS>`（角色第一人称内心独白），再输出 `<Action>...</Action>`（外显神态动作与台词）。完整输出直接记入会话轨迹，天然构成可供 `compact` 与 `dream` 消费的原子记忆三元组 $`\langle \text{Input}_t, \text{OS}_t, \text{Action}_t \rangle`$；外部社交渠道适配器在向群聊或聊天室转发时仅解包投递 `<Action>` 内容。
 
 #### (2) 非读心视角边界（Non-Mind-Reading Perspective Boundary）示例解析
 
@@ -155,7 +155,7 @@ EMA 在训练评测期与线上陪伴期共享完全一致的认知拓扑，仅�
     "重要约定：下午课程结束后在钟楼天台碰面",
     "Bob 和我一样讨厌喧闹的仪式场合"
   ],
-  "archiveRef": "episodes/005_ch01_05.jsonl",
+  "archiveRef": "archive://L0/005_ch01_05",
   "reflectionScore": 92
 }
 ```
@@ -361,11 +361,11 @@ export interface CompressionPromptConfig {
 
 叙事剧本常在 `[旁白]` 中向读者展示主角的私密心理。若伴侣越界回应未公开的内心独白，两个独立心智之间的因果边界将彻底崩塌，导致严重的角色扮演穿帮。
 
-### dual-mode-latent-os-framing
+### explicit-latent-os-and-action-framing
 
-> **伴侣的每一次交互响应必须遵循 $`\text{Input}_t \to \text{OS}_t \to \text{Action}_t`$ 的两阶段认知跃迁：在监督训练与评测中显式具象为 `<OS>` 与 `<Action>` 标签，在日常陪伴交互中则内化于模型的原生 `thinking` 通道与可见回复流。**
+> **伴侣的每一次交互响应——无论在离线监督训练还是线上实时陪伴中——必须严格遵循 $`\text{Input}_t \to \text{OS}_t \to \text{Action}_t`$ 的两阶段认知跃迁，显式输出结构化的 `<OS>...</OS>` 与 `<Action>...</Action>` 标签。**
 
-保持训练期与运行期认知拓扑的严格同构，能够确保离线 RSI 训练提炼出的 `cognitiveOSPatterns` 在日常对话中持续生效，同时避免向终端用户泄露生硬的训练标签。
+保持训练期、实时交互期、记忆压缩期与梦境自省期输出契约的严格一致，确保了每一个实时对话回合都能原生沉淀出完整的原子记忆三元组 $`\langle \text{Input}_t, \text{OS}_t, \text{Action}_t \rangle`$，而不依赖于特定基座模型私有的内部推理流格式。
 
 ### single-source-prefix-canonicality
 

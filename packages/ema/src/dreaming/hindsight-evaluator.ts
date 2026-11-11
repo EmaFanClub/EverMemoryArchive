@@ -77,10 +77,10 @@ export async function evaluateSceneInHindsight(options: {
     const prompt = [
       `你是 EverMemoryArchive (EMA) 梦境自省引擎（RFC-0007 Dreaming Engine）的 **事后自省评估器 (Hindsight Evaluator)**。`,
       `当前伴侣角色「${target}」正在睡眠/后台梦境中回顾她与「${protagonist}」（及群友）在场景 \`${sceneId}\` 《${sceneTitle}》(${sceneSetting}) 中的真实对话记录。`,
+      `每个回合中，「${target}」都显式输出了潜变量内心独白 \`<OS>\` (\`observedOS\`) 与外显动作台词 \`<Action>\` (\`observedAction\`)。`,
       `与离线剧本训练不同，真实对话没有预设剧本标准答案。请你结合：`,
-      `1. **事后用户反馈 (subsequentUserReaction)**：观察「${target}」说出 \`observedAction\` 后，对方在下一轮的反应是温暖共鸣、自然延续，还是困惑、纠正或冷场；`,
-      `2. **锚点人格法则 (Anchor Personality Invariants)**：重点检查外显回复 \`observedAction\` 是否出现了人设漂移（例如：回复过于冗长说教、出现 AI 客服套话、记忆事实错误、或丢失了「${target}」温柔细腻的神态语气）。`,
-      `3. **关于原生 Thinking 通道的特别说明**：在实时会话中，\`observedOS\` 可能直接提取自模型底层的原生英文 Thinking 思维链。只要其思考意图与情感方向合理，**切勿因为 \`observedOS\` 是英文或带有分析式措辞而扣分或判定为漂移**；只需在 \`synthesizedDreamOS\` 中将其提炼转化为「${target}」第一人称中文内心独白即可。\`driftDetected\` 仅当外显回复 \`observedAction\` 违背人设或引发用户负面反馈时才设为 \`true\`。`,
+      `1. **事后用户反馈 (subsequentUserReaction)**：观察「${target}」发出 \`observedAction\` 后，对方在下一轮的反应是温暖共鸣、自然延续，还是困惑、纠正或冷场；`,
+      `2. **锚点人格法则 (Anchor Personality Invariants)**：同时检查内心独白 \`observedOS\`（是否符合第一人称性格逻辑与非读心视角边界）与外显回复 \`observedAction\`（是否出现了回复冗长说教、AI 客服套话、记忆事实错误、或丢失了「${target}」温柔细腻的神态语气）。`,
       ``,
       `## 核心锚点人格 (${anchorPersonality.version}) 与当前人格 (${currentPersonality.version})`,
       `- 核心身份: ${anchorPersonality.coreIdentity}`,

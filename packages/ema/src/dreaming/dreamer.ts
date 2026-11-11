@@ -72,6 +72,9 @@ export interface EmaDreamerConfig {
   forcePersonaRefinement?: boolean;
   /** Maximum un-dreamed scenes to evaluate in a single dream cycle (default: 3) */
   maxScenesPerDreamCycle?: number;
+  /** SQLite database file path for persistent cold memory archive */
+  archiveDbPath?: string;
+  /** @deprecated Alias for archiveDbPath */
   archiveJsonlPath?: string;
   statePath?: string;
   syncAgentOnDisk?: boolean;
@@ -137,7 +140,7 @@ export class EmaDreamEngine {
           model: this.config.teacherModel,
           evaluatorAgentId: this.config.evaluatorAgentId,
           companionAgentId: this.config.companionAgentId,
-          archiveJsonlPath: this.config.archiveJsonlPath,
+          archiveDbPath: this.config.archiveDbPath || this.config.archiveJsonlPath,
           statePath: this.config.statePath,
           syncAgentOnDisk: false,
           ...this.config.compactorConfig,
@@ -239,9 +242,10 @@ export class EmaDreamEngine {
 
     const consolidatedFactCount = this.consolidateMemoryIndexFacts(state);
 
-    // Gather un-dreamed scene trajectories from cold archive (or synthesize from recent L0 items)
-    const archivedRecords = this.config.archiveJsonlPath
-      ? readColdArchiveRecords(this.config.archiveJsonlPath)
+    // Gather un-dreamed scene trajectories from SQLite cold archive (or synthesize from recent L0 items)
+    const archiveDbPath = this.config.archiveDbPath || this.config.archiveJsonlPath;
+    const archivedRecords = archiveDbPath
+      ? readColdArchiveRecords(archiveDbPath)
       : [];
     const dreamedSet = new Set(state.dreamedSceneIds || []);
 

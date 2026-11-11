@@ -19,7 +19,7 @@ This RFC specifies the **Memory Compaction and Hierarchical Indexing Engine (`co
 While offline script training operates over pre-segmented narrative scenes, a live lifelong companion faces an unbounded stream of multi-channel interactions without predefined scene markers. This specification introduces four core mechanisms to bridge training-time compression and lifelong runtime operation:
 1. **Dynamic Episodic Boundary Detection**: Slicing active uncompacted turns $`\lbrace \text{MemoryItem}_t \rbrace`$ into coherent episodic windows $`w_x`$ via a composite trigger over turn/token watermarks ($`N_{\text{max}}`$), temporal idle gaps ($`\Delta t_{\text{idle}}`$), and semantic/channel context shifts;
 2. **Self-Healing `compact + reflect` Closed Loop**: Folding $`w_x \xrightarrow{C} \text{MemoryIndex}_{0,x}`$ (`summary`, `innerOSArc`, `keyFacts`, `archiveRef`), scoring reconstructibility $`\mathcal{R}(\text{MemoryIndex}_{0,x}, w_x)`$, automatically re-compacting with injected `missingDetail` diagnostics whenever $`\mathcal{R} \lt \tau_{\text{reflect}}`$, and mutating the compression prompt policy $`C \to C'`$ when recurring detail loss is detected;
-3. **Hierarchical Multi-Level Rollup ($`\text{MemoryIndex}_{0,x} \to \text{MemoryIndex}_{1,y}`$)**: Recursively applying the `compact + reflect` operator across memory tiers so that when L0 scene indices exceed capacity $`K_{\text{L0}}`$, contiguous L0 batches fold into L1 chapter/epoch indices $`\text{MemoryIndex}_{1,y}`$ while keeping recent L0 indices in hot context (`AGENTS.md`) and archiving raw trajectories to cold JSONL storage (`archiveRef`);
+3. **Hierarchical Multi-Level Rollup ($`\text{MemoryIndex}_{0,x} \to \text{MemoryIndex}_{1,y}`$)**: Recursively applying the `compact + reflect` operator across memory tiers so that when L0 scene indices exceed capacity $`K_{\text{L0}}`$, contiguous L0 batches fold into L1 chapter/epoch indices $`\text{MemoryIndex}_{1,y}`$ while keeping recent L0 indices in hot context (`AGENTS.md`) and archiving raw trajectories to a persistent cold memory store addressed via `archiveRef`;
 4. **Cursor-Idempotent Incremental Compaction**: Tracking a monotonic `lastCompactedCursor` ledger so repeated, retried, or background compaction runs over an active session never duplicate memory indices.
 
 ---
@@ -43,7 +43,7 @@ In [RFC-0003](RFC-0003-ema-training-meta-theory.md), reflective reconstruction $
 
 As established in [RFC-0003](RFC-0003-ema-training-meta-theory.md), a single-level L0 `MemoryIndex` comfortably holds $`100\text{--}200`$ scenes (~$`3\text{k--}5\text{k}`$ tokens), covering an entire visual novel or several weeks of daily companionship. Yet a lifelong companion operating over years will accumulate thousands of L0 scene indices. Placing thousands of L0 entries directly into `AGENTS.md` eventually exhausts the hot context budget and degrades attention precision.
 
-Rather than abandoning in-context indexing for opaque vector-only RAG, EMA introduces **Hierarchical Multi-Level Rollup**: recursively applying the exact same verifiable `compact + reflect` operator to fold contiguous batches of older L0 scene indices into L1 chapter/epoch indices $`\text{MemoryIndex}_{1,y}`$, while keeping recent L0 indices hot and linking every index tier down to cold JSONL archives via `archiveRef`.
+Rather than abandoning in-context indexing for opaque vector-only RAG, EMA introduces **Hierarchical Multi-Level Rollup**: recursively applying the exact same verifiable `compact + reflect` operator to fold contiguous batches of older L0 scene indices into L1 chapter/epoch indices $`\text{MemoryIndex}_{1,y}`$, while keeping recent L0 indices hot and linking every index tier down to the persistent cold memory archive via `archiveRef`.
 
 ### 4. Concurrency and Crash Safety in Incremental Compaction
 
@@ -87,7 +87,7 @@ The runtime compaction engine operates on three primary artifacts:
        "Companion promised to wake User at 10:00 AM tomorrow with hand-drip coffee."
      ],
      "reflectionScore": 92,
-     "archiveRef": "archive/L0/L0-scene-0018.jsonl"
+     "archiveRef": "archive://L0/L0-scene-0018"
    }
    ```
 
@@ -108,7 +108,7 @@ The runtime compaction engine operates on three primary artifacts:
        "Pending promise: weekend break following the defense."
      ],
      "reflectionScore": 89,
-     "archiveRef": "archive/L1/L1-epoch-0003-children.json"
+     "archiveRef": "archive://L1/L1-epoch-0003"
    }
    ```
 
@@ -142,8 +142,8 @@ Live Session Stream: {MemoryItem_t} (cursor c_t > lastCompactedCursor)
   ──> If recurring 1st-pass failures across windows: mutate C ──> C'
 
 [Step 3: Cold Archive Persistence & Cursor Advancement]
-  1. Write raw w_x items to cold storage: archive/L0/L0-scene-{x}.jsonl
-  2. Set MemoryIndex_{0,x}.archiveRef = "archive/L0/L0-scene-{x}.jsonl"
+  1. Persist raw w_x items to cold memory store under key archive://L0/L0-scene-{x}
+  2. Set MemoryIndex_{0,x}.archiveRef = "archive://L0/L0-scene-{x}"
   3. Advance lastCompactedCursor = b
 
 [Step 4: Hierarchical Multi-Level Rollup (L0 ──> L1)]
@@ -151,7 +151,7 @@ Live Session Stream: {MemoryItem_t} (cursor c_t > lastCompactedCursor)
     Select oldest contiguous batch B_x = {MemoryIndex_{0,j}}_{j=p..q} (size B_{L0})
     Run self-healing (compact + reflect) over B_x:
       MemoryIndex_{1,y} = compress_C_L1(B_x)  with R(MemoryIndex_{1,y}, B_x) >= tau_reflect
-    Archive B_x to archive/L1/L1-epoch-{y}-children.json
+    Archive B_x under cold reference archive://L1/L1-epoch-{y}
     Replace B_x in hot AGENTS.md with MemoryIndex_{1,y}
 ```
 
@@ -246,10 +246,10 @@ The hot memory state $`M_{\text{hot}}`$ rendered into `AGENTS.md` is then update
 M_{\text{hot}}' = \big(\mathcal{I}_{\text{L1}}^{\text{hot}} \cup \lbrace \text{MemoryIndex}_{1,y} \rbrace, \; \mathcal{I}_{\text{L0}}^{\text{retain}}, \; H_{\text{active}}\big)
 ```
 
-while $`B_y`$ is persisted to `archive/L1/L1-epoch-{y}-children.json`. Thus, any historical turn $`t`$ remains reachable in $`\mathcal{O}(1)`$ pointer hops via the three-tier hierarchy:
+while $`B_y`$ is persisted to the cold memory archive under `archive://L1/L1-epoch-{y}`. Thus, any historical turn $`t`$ remains reachable in $`\mathcal{O}(1)`$ pointer hops via the three-tier hierarchy:
 
 ```math
-\text{MemoryIndex}_{1,y} \xrightarrow{\text{archiveRef}} \text{MemoryIndex}_{0,x} \xrightarrow{\text{archiveRef}} \text{MemoryItem}_t \text{ (JSONL)}
+\text{MemoryIndex}_{1,y} \xrightarrow{\text{archiveRef}} \text{MemoryIndex}_{0,x} \xrightarrow{\text{archiveRef}} \text{MemoryItem}_t
 ```
 
 ---
@@ -261,11 +261,11 @@ Let the persistent compaction ledger state be $`\Sigma = \langle c_{\text{last}}
 For any compaction invocation `RunCompact`($`\Sigma, \mathcal{S}`$):
 1. If $`\max_{m_t \in \mathcal{S}} c_t \le c_{\text{last}}`$ or $`\forall i, \; \mathcal{B}(U(c_{\text{last}}), i) = 0`$, then `RunCompact`($`\Sigma, \mathcal{S}`$) $`= \Sigma`$ (no-op).
 2. When window $`w_x = \lbrace m_a, \dots, m_b \rbrace`$ with $`c_a \gt c_{\text{last}}`$ is compacted:
-   - Write cold archive file `archive/L0/L0-scene-{s_L0 + 1}.jsonl` first (idempotent overwrite by deterministic scene ID);
+   - Persist the cold archive record for `L0-scene-{s_L0 + 1}` first (idempotent upsert by deterministic scene ID);
    - Construct $`\Sigma' = \langle c_b, s_{\text{L0}} + 1, s_{\text{L1}}', M_{\text{hot}}' \rangle`$;
-   - Write updated `memory-state.json.tmp` and `AGENTS.md.tmp` and atomically rename (`rename(2)`) to their canonical targets.
+   - Atomically commit the updated cognitive state $`\Sigma'`$ and synchronized `AGENTS.md`.
 
-Because $`c_b \gt c_{\text{last}}`$ strictly advances only inside the atomic state commit, any crash prior to the rename leaves $`c_{\text{last}}`$ unchanged and safely re-runs `w_x` on recovery, whereas any duplicate invocation after the rename observes $`c_t \le c_b`$ for all items in $`w_x`$ and skips them immediately.
+Because $`c_b \gt c_{\text{last}}`$ strictly advances only inside the atomic state commit, any crash prior to the commit leaves $`c_{\text{last}}`$ unchanged and safely re-runs `w_x` on recovery, whereas any duplicate invocation after the commit observes $`c_t \le c_b`$ for all items in $`w_x`$ and skips them immediately.
 
 ---
 
@@ -280,9 +280,9 @@ Unverified single-pass summarization silently drops causal promises and inner ps
 
 ### lossless-cold-archive-reachability
 
-> **Every compacted `MemoryIndex` entry at any hierarchy level must carry a valid `archiveRef` pointer resolving to its underlying lower-level records on disk (`L1 -> L0 batch JSON -> L0 raw MemoryItem JSONL`), and raw `MemoryItem` records must never be deleted during compaction.**
+> **Every compacted `MemoryIndex` entry at any hierarchy level must carry a valid `archiveRef` pointer resolving to its underlying lower-level records in the persistent cold memory archive (`L1 -> L0 batch -> L0 raw MemoryItem sequence`), and raw `MemoryItem` records must never be deleted during compaction.**
 
-Compaction reduces *in-context token footprint*, not *total historical knowledge*. Preserving immutable cold JSONL archives behind `archiveRef` guarantees that the companion can always decompress and recall exact verbatim exchanges when a conversation references deep history.
+Compaction reduces *in-context token footprint*, not *total historical knowledge*. Preserving immutable cold archive records behind `archiveRef` guarantees that the companion can always decompress and recall exact verbatim exchanges when a conversation references deep history.
 
 ### cursor-monotonic-idempotence
 

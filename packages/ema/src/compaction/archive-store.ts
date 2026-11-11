@@ -1,13 +1,14 @@
 /**
- * @prism-shadow/ema - Cold Archive & Cognitive State Persistence (RFC-0006 / RFC-0007)
+ * @prism-shadow/ema - Cold Archive SQLite Store & Cognitive State Persistence (RFC-0006 / RFC-0007)
  *
  * Manages:
- * - Cold storage JSONL archiving of raw compacted turns (`archiveRef`)
+ * - Persistent SQLite cold memory archive (`archiveRef`) for raw compacted turns (`cold_archive_scenes`, `cold_archive_items`)
  * - Atomic loading and saving of `CompanionCognitiveState` (`ema-state.json`)
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import type {
   CompanionCognitiveState,
   CompanionPersonality,
@@ -27,42 +28,162 @@ export interface ColdArchiveEntry {
   items: MemoryItem[];
 }
 
-/**
- * Appends a compacted scene's raw `MemoryItem[]` trajectory to the cold archive JSONL file
- * and returns a stable `archiveRef` pointer (`<file>#<archiveId>`).
- */
-export function appendColdArchiveRecord(
-  archiveJsonlPath: string,
-  entry: Omit<ColdArchiveEntry, "archivedAt">,
-): string {
-  fs.mkdirSync(path.dirname(archiveJsonlPath), { recursive: true });
-  const record: ColdArchiveEntry = {
-    ...entry,
-    archivedAt: new Date().toISOString(),
-  };
-  fs.appendFileSync(archiveJsonlPath, JSON.stringify(record) + "\n", "utf8");
-  return `${path.basename(archiveJsonlPath)}#${entry.archiveId}`;
+function openColdArchiveDb(archiveDbPath: string): DatabaseSync {
+  if (archiveDbPath !== ":memory:") {
+    fs.mkdirSync(path.dirname(archiveDbPath), { recursive: true });
+  }
+  const db = new DatabaseSync(archiveDbPath);
+  db.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = NORMAL;
+
+    CREATE TABLE IF NOT EXISTS cold_archive_scenes (
+      archive_id TEXT PRIMARY KEY,
+      scene_id TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      setting TEXT NOT NULL,
+      archived_at TEXT NOT NULL,
+      items_json TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cold_archive_items (
+      turn_id TEXT PRIMARY KEY,
+      scene_id TEXT NOT NULL,
+      turn_index_in_scene INTEGER NOT NULL,
+      input_text TEXT NOT NULL,
+      committed_os TEXT NOT NULL,
+      action_text TEXT NOT NULL,
+      archived_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cold_archive_items_scene_id
+      ON cold_archive_items(scene_id, turn_index_in_scene);
+  `);
+  return db;
 }
 
 /**
- * Reads archived scene trajectories from the cold archive JSONL file.
+ * Persists a compacted scene's raw `MemoryItem[]` trajectory into the SQLite cold memory archive
+ * and returns a stable logical `archiveRef` pointer (`archive://L0/<sceneId>`).
  */
-export function readColdArchiveRecords(archiveJsonlPath: string): ColdArchiveEntry[] {
-  if (!fs.existsSync(archiveJsonlPath)) return [];
-  const lines = fs
-    .readFileSync(archiveJsonlPath, "utf8")
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const entries: ColdArchiveEntry[] = [];
-  for (const line of lines) {
+export function appendColdArchiveRecord(
+  archiveDbPath: string,
+  entry: Omit<ColdArchiveEntry, "archivedAt">,
+): string {
+  const archivedAt = new Date().toISOString();
+  const db = openColdArchiveDb(archiveDbPath);
+  try {
+    db.exec("BEGIN IMMEDIATE");
     try {
-      entries.push(JSON.parse(line) as ColdArchiveEntry);
-    } catch {
-      // skip malformed line
+      const upsertScene = db.prepare(`
+        INSERT INTO cold_archive_scenes (
+          archive_id, scene_id, title, setting, archived_at, items_json
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(scene_id) DO UPDATE SET
+          archive_id = excluded.archive_id,
+          title = excluded.title,
+          setting = excluded.setting,
+          archived_at = excluded.archived_at,
+          items_json = excluded.items_json
+      `);
+      upsertScene.run(
+        entry.archiveId,
+        entry.sceneId,
+        entry.title,
+        entry.setting,
+        archivedAt,
+        JSON.stringify(entry.items),
+      );
+
+      const upsertItem = db.prepare(`
+        INSERT OR REPLACE INTO cold_archive_items (
+          turn_id, scene_id, turn_index_in_scene, input_text, committed_os, action_text, archived_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const item of entry.items) {
+        upsertItem.run(
+          item.turnId,
+          entry.sceneId,
+          item.turnIndexInScene,
+          item.inputText,
+          item.committedOS || item.predictedOS || "",
+          item.gtActionText || item.predictedAction || "",
+          archivedAt,
+        );
+      }
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
     }
+  } finally {
+    db.close();
   }
-  return entries;
+  return `archive://L0/${entry.sceneId}`;
+}
+
+/**
+ * Reads archived scene trajectories from the SQLite cold memory archive.
+ */
+export function readColdArchiveRecords(
+  archiveDbPath: string,
+  sceneIdFilter?: string,
+): ColdArchiveEntry[] {
+  if (archiveDbPath !== ":memory:" && !fs.existsSync(archiveDbPath)) {
+    return [];
+  }
+  const db = openColdArchiveDb(archiveDbPath);
+  try {
+    const rows = sceneIdFilter
+      ? (db
+          .prepare(
+            `SELECT archive_id, scene_id, title, setting, archived_at, items_json
+             FROM cold_archive_scenes
+             WHERE scene_id = ?
+             ORDER BY rowid ASC`,
+          )
+          .all(sceneIdFilter) as Array<{
+          archive_id: string;
+          scene_id: string;
+          title: string;
+          setting: string;
+          archived_at: string;
+          items_json: string;
+        }>)
+      : (db
+          .prepare(
+            `SELECT archive_id, scene_id, title, setting, archived_at, items_json
+             FROM cold_archive_scenes
+             ORDER BY rowid ASC`,
+          )
+          .all() as Array<{
+          archive_id: string;
+          scene_id: string;
+          title: string;
+          setting: string;
+          archived_at: string;
+          items_json: string;
+        }>);
+
+    const entries: ColdArchiveEntry[] = [];
+    for (const row of rows) {
+      try {
+        entries.push({
+          archiveId: row.archive_id,
+          sceneId: row.scene_id,
+          title: row.title,
+          setting: row.setting,
+          archivedAt: row.archived_at,
+          items: JSON.parse(row.items_json) as MemoryItem[],
+        });
+      } catch {
+        // skip malformed entry
+      }
+    }
+    return entries;
+  } finally {
+    db.close();
+  }
 }
 
 /**

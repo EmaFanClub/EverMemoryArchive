@@ -243,7 +243,7 @@ The state transition rule committed to `AGENTS.md` is therefore:
 | Specification | Lifecycle Stage | Supervision Source | Execution Mode | State Output |
 | --- | --- | --- | --- | --- |
 | **[RFC-0003](RFC-0003-ema-training-meta-theory.md) / RFC-0004 / RFC-0005** | Offline Pre-Service Training (`train`) | Authored Script Ground Truth $`A_t^\ast`$ | Synchronous windowed line-search & multi-epoch rollouts | Initial soul $`P_{0,0} = P^\ast`$, baseline memory $`M_0`$, trained compressor $`C^\ast`$ |
-| **[RFC-0006](RFC-0006-memory-compaction.md)** | Runtime & Session-Boundary Compaction (`compact`) | Self-healing reflective reconstruction $`\mathcal{R}(\text{MemoryIndex}, w_x) \ge \tau_{\text{reflect}}`$ | Incremental cursor-idempotent background/boundary folding | Multi-level hot indices (`L0`, `L1`) + cold JSONL `archiveRef` |
+| **[RFC-0006](RFC-0006-memory-compaction.md)** | Runtime & Session-Boundary Compaction (`compact`) | Self-healing reflective reconstruction $`\mathcal{R}(\text{MemoryIndex}, w_x) \ge \tau_{\text{reflect}}`$ | Incremental cursor-idempotent background/boundary folding | Multi-level hot indices (`L0`, `L1`) + cold archive `archiveRef` |
 | **RFC-0007 (This Document)** | Live Parallel & Circadian Consolidation (`dream`) | Delayed future trajectory $`F_{t,k}`$ + hindsight targets $`\langle \text{OS}_t^\ast, a_t^{\text{dream}} \rangle`$ + $`D_{\text{anchor}}`$ | Non-blocking parallel ephemeral worker sessions | Evolved state $`\lbrace P_{u+1,0}, M' \rbrace`$ atomically hot-swapped into `AGENTS.md` |
 
 ---

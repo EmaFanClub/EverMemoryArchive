@@ -19,7 +19,7 @@
 不同于自带静态幕次切分的离线剧本训练，真实运行态下的终身伴侣面对的是无预设边界、跨越多渠道与漫长物理时间的连续交互流。本规范通过四大核心机制打通训练态压缩与终身运行态记忆管理：
 1. **动态情节边界检测（Dynamic Episodic Boundary Detection）**：以回合/Token 水位线（$`N_{\text{max}}`$）、时间静默间隔（$`\Delta t_{\text{idle}}`$）以及语义/渠道上下文切换构成复合触发器，将活跃未压缩回合流 $`\lbrace \text{MemoryItem}_t \rbrace`$ 动态切分为语义完整的独立情节窗口 $`w_x`$；
 2. **自愈式 `compact + reflect` 闭环（Self-Healing `compact + reflect` Closed Loop）**：将情节窗口折叠为 $`w_x \xrightarrow{C} \text{MemoryIndex}_{0,x}`$（含 `summary`、`innerOSArc`、`keyFacts`、`archiveRef`），即时评测其反射重构度 $`\mathcal{R}(\text{MemoryIndex}_{0,x}, w_x)`$；当 $`\mathcal{R} \lt \tau_{\text{reflect}}`$ 时自动注入缺失细节诊断 `missingDetail` 重新压缩，并在检测到周期性细节丢失时自动变异升级压缩提示词策略 $`C \to C'`$；
-3. **多级层次记忆归并（$`\text{MemoryIndex}_{0,x} \to \text{MemoryIndex}_{1,y}`$）**：在记忆层级间递归复用 `compact + reflect` 算子——当 L0 场景索引超出容量阈值 $`K_{\text{L0}}`$ 时，将早期的连续 L0 批次折叠归并为 L1 章节/纪元索引 $`\text{MemoryIndex}_{1,y}`$，同时在热上下文（`AGENTS.md`）中保留近期 L0 索引，并将原始交互轨迹归档至冷 JSONL 存储（`archiveRef`）；
+3. **多级层次记忆归并（$`\text{MemoryIndex}_{0,x} \to \text{MemoryIndex}_{1,y}`$）**：在记忆层级间递归复用 `compact + reflect` 算子——当 L0 场景索引超出容量阈值 $`K_{\text{L0}}`$ 时，将早期的连续 L0 批次折叠归并为 L1 章节/纪元索引 $`\text{MemoryIndex}_{1,y}`$，同时在热上下文（`AGENTS.md`）中保留近期 L0 索引，并将原始交互轨迹归档至由 `archiveRef` 寻址的持久化冷记忆存储；
 4. **基于游标的幂等增量压缩（Cursor-Idempotent Incremental Compaction）**：持久化单调递增的压缩游标 `lastCompactedCursor`，确保对活跃会话的重复调用、异常重试或后台并发运行绝不产生重复的记忆索引。
 
 ---
@@ -43,7 +43,7 @@
 
 如 [RFC-0003](RFC-0003-ema-training-meta-theory.zh.md) 所述，单级 L0 `MemoryIndex` 可轻松容纳 $`100\text{--}200`$ 个场景（约 $`3\text{k--}5\text{k}`$ Tokens），足以覆盖整部视觉小说或数周的日常陪伴。但当伴侣陪伴用户跨越数月乃至数年、累积数千个 L0 场景索引时，将所有 L0 条目平铺在 `AGENTS.md` 中终将撑爆热上下文预算并稀释注意力精度。
 
-EMA 不采用丢弃全局时间线的纯向量检索（Vector-Only RAG），而是引入**多级层次归并（Hierarchical Multi-Level Rollup）**：在层级间递归应用完全相同的可验证 `compact + reflect` 算子，将超出容量 $`K_{\text{L0}}`$ 的早期连续 L0 场景批次折叠为 L1 章节/纪元索引 $`\text{MemoryIndex}_{1,y}`$，在热上下文中保持「全量 L1 纪元索引 + 近期 L0 场景索引 + 活跃未压缩回合」的紧凑结构，并通过 `archiveRef` 维持向底层冷 JSONL 档案的无损回溯链路。
+EMA 不采用丢弃全局时间线的纯向量检索（Vector-Only RAG），而是引入**多级层次归并（Hierarchical Multi-Level Rollup）**：在层级间递归应用完全相同的可验证 `compact + reflect` 算子，将超出容量 $`K_{\text{L0}}`$ 的早期连续 L0 场景批次折叠为 L1 章节/纪元索引 $`\text{MemoryIndex}_{1,y}`$，在热上下文中保持「全量 L1 纪元索引 + 近期 L0 场景索引 + 活跃未压缩回合」的紧凑结构，并通过 `archiveRef` 维持向底层持久化冷记忆档案的无损回溯链路。
 
 ### 4. 增量压缩的并发与崩溃幂等性
 
@@ -87,7 +87,7 @@ EMA 不采用丢弃全局时间线的纯向量检索（Vector-Only RAG），而�
        "Companion 承诺明早 10:00 用手冲咖啡叫 User 起床。"
      ],
      "reflectionScore": 92,
-     "archiveRef": "archive/L0/L0-scene-0018.jsonl"
+     "archiveRef": "archive://L0/L0-scene-0018"
    }
    ```
 
@@ -108,7 +108,7 @@ EMA 不采用丢弃全局时间线的纯向量检索（Vector-Only RAG），而�
        "待兑现约定：答辩结束后的完整周末休假。"
      ],
      "reflectionScore": 89,
-     "archiveRef": "archive/L1/L1-epoch-0003-children.json"
+     "archiveRef": "archive://L1/L1-epoch-0003"
    }
    ```
 
@@ -142,8 +142,8 @@ EMA 不采用丢弃全局时间线的纯向量检索（Vector-Only RAG），而�
   ──> 若跨多个窗口频繁发生首轮反射未达标：自动变异压缩提示词 C ──> C'
 
 [阶段 3: 冷档案持久化与游标原子推进]
-  1. 将原始窗口 w_x 写入冷存储: archive/L0/L0-scene-{x}.jsonl
-  2. 绑定指针 MemoryIndex_{0,x}.archiveRef = "archive/L0/L0-scene-{x}.jsonl"
+  1. 将原始窗口 w_x 持久化至冷记忆归档存储: archive://L0/L0-scene-{x}
+  2. 绑定指针 MemoryIndex_{0,x}.archiveRef = "archive://L0/L0-scene-{x}"
   3. 原子推进游标 lastCompactedCursor = b
 
 [阶段 4: 多级层次归并 (L0 ──> L1 Rollup)]
@@ -151,7 +151,7 @@ EMA 不采用丢弃全局时间线的纯向量检索（Vector-Only RAG），而�
     选取最早的连续批次 B_x = {MemoryIndex_{0,j}}_{j=p..q}（批量大小 B_{L0}）
     对 B_x 执行相同的自愈式 (compact + reflect) 算子:
       MemoryIndex_{1,y} = compress_C_L1(B_x)，满足 R(MemoryIndex_{1,y}, B_x) >= tau_reflect
-    将 B_x 归档至 archive/L1/L1-epoch-{y}-children.json
+    将 B_x 归档绑定至冷引用 archive://L1/L1-epoch-{y}
     在热上下文 AGENTS.md 中以 MemoryIndex_{1,y} 替换 B_x
 ```
 
@@ -246,10 +246,10 @@ B_y = \lbrace \text{MemoryIndex}_{0,1}, \dots, \text{MemoryIndex}_{0,B_{\text{L0
 M_{\text{hot}}' = \big(\mathcal{I}_{\text{L1}}^{\text{hot}} \cup \lbrace \text{MemoryIndex}_{1,y} \rbrace, \; \mathcal{I}_{\text{L0}}^{\text{retain}}, \; H_{\text{active}}\big)
 ```
 
-同时将原始 L0 批次 $`B_y`$ 持久化归档至 `archive/L1/L1-epoch-{y}-children.json`。由此，任意历史时刻的交互回合 $`t`$ 均可通过三级指针链在 $`\mathcal{O}(1)`$ 跳转内无损回溯：
+同时将原始 L0 批次 $`B_y`$ 持久化归档至冷记忆存储引用 `archive://L1/L1-epoch-{y}`。由此，任意历史时刻的交互回合 $`t`$ 均可通过三级指针链在 $`\mathcal{O}(1)`$ 跳转内无损回溯：
 
 ```math
-\text{MemoryIndex}_{1,y} \xrightarrow{\text{archiveRef}} \text{MemoryIndex}_{0,x} \xrightarrow{\text{archiveRef}} \text{MemoryItem}_t \text{ (JSONL)}
+\text{MemoryIndex}_{1,y} \xrightarrow{\text{archiveRef}} \text{MemoryIndex}_{0,x} \xrightarrow{\text{archiveRef}} \text{MemoryItem}_t
 ```
 
 ---
@@ -261,11 +261,11 @@ M_{\text{hot}}' = \big(\mathcal{I}_{\text{L1}}^{\text{hot}} \cup \lbrace \text{M
 对于任意压缩调用 `RunCompact`($`\Sigma, \mathcal{S}`$)：
 1. 若 $`\max_{m_t \in \mathcal{S}} c_t \le c_{\text{last}}`$ 或 $`\forall i, \; \mathcal{B}(U(c_{\text{last}}), i) = 0`$，则 `RunCompact`($`\Sigma, \mathcal{S}`$) $`= \Sigma`$（幂等空操作）。
 2. 当满足 $`c_a \gt c_{\text{last}}`$ 的窗口 $`w_x = \lbrace m_a, \dots, m_b \rbrace`$ 完成自愈压缩时：
-   - 先写入冷归档文件 `archive/L0/L0-scene-{s_L0 + 1}.jsonl`（按确定性场景编号幂等覆盖）；
+   - 先在冷记忆归档存储中幂等写入 `L0-scene-{s_L0 + 1}` 的原始记录（按确定性场景编号幂等覆盖）；
    - 构造新状态 $`\Sigma' = \langle c_b, s_{\text{L0}} + 1, s_{\text{L1}}', M_{\text{hot}}' \rangle`$；
-   - 将更新写入临时文件 `memory-state.json.tmp` 与 `AGENTS.md.tmp`，并通过操作系统级原子重命名（`rename(2)`）替换目标文件。
+   - 原子提交更新后的认知状态 $`\Sigma'`$ 与同步生成的 `AGENTS.md`。
 
-由于游标 $`c_b \gt c_{\text{last}}`$ 仅在最终原子重命名时一并生效，重命名前的任何进程崩溃均保持 $`c_{\text{last}}`$ 不变，恢复后可安全重算 $`w_x`$；而重命名完成后的任何重复触发均会观测到 $`w_x`$ 内所有条目满足 $`c_t \le c_b`$ 并立即跳过。
+由于游标 $`c_b \gt c_{\text{last}}`$ 仅在最终原子提交时一并生效，提交前的任何进程中断均保持 $`c_{\text{last}}`$ 不变，恢复后可安全重算 $`w_x`$；而提交完成后的任何重复触发均会观测到 $`w_x`$ 内所有条目满足 $`c_t \le c_b`$ 并立即跳过。
 
 ---
 
@@ -280,9 +280,9 @@ M_{\text{hot}}' = \big(\mathcal{I}_{\text{L1}}^{\text{hot}} \cup \lbrace \text{M
 
 ### lossless-cold-archive-reachability
 
-> **任意层级的 `MemoryIndex` 条目必须携带有效的 `archiveRef` 指针以指向磁盘上的下层记录（`L1 -> L0 批次 JSON -> L0 原始 MemoryItem JSONL`），且原始 `MemoryItem` 记录在压缩过程中绝不可被删除。**
+> **任意层级的 `MemoryIndex` 条目必须携带有效的 `archiveRef` 指针以指向持久化冷记忆归档存储中的下层记录（`L1 -> L0 批次 -> L0 原始 MemoryItem 序列`），且原始 `MemoryItem` 记录在压缩过程中绝不可被删除。**
 
-记忆压缩的目标是缩减**常驻热上下文的 Token 开销**，而非抹除历史全集。通过 `archiveRef` 保留不可变的冷 JSONL 档案，保证了伴侣在需要精确回忆久远细节时始终具备无损解压能力。
+记忆压缩的目标是缩减**常驻热上下文的 Token 开销**，而非抹除历史全集。通过 `archiveRef` 保留不可变的冷记忆归档，保证了伴侣在需要精确回忆久远细节时始终具备无损解压能力。
 
 ### cursor-monotonic-idempotence
 

@@ -665,7 +665,7 @@ async function main() {
       statePath = path.resolve(process.cwd(), "data", `${agentId}-ema-state.json`);
     }
     if (!archivePath) {
-      archivePath = path.resolve(path.dirname(statePath), `${agentId}-memory-archive.jsonl`);
+      archivePath = path.resolve(path.dirname(statePath), `${agentId}-memory-archive.sqlite`);
     }
 
     const state = loadOrCreateCognitiveState({
@@ -681,7 +681,7 @@ async function main() {
       model: { provider: "penguin-go", modelId, thinkingLevel: "medium" },
       companionAgentId: agentId,
       l0RollupThreshold: rollupThreshold,
-      archiveJsonlPath: archivePath,
+      archiveDbPath: archivePath,
       statePath,
       syncAgentOnDisk: true,
     });
@@ -728,7 +728,7 @@ async function main() {
       statePath = path.resolve(process.cwd(), "data", `${agentId}-ema-state.json`);
     }
     if (!archivePath) {
-      archivePath = path.resolve(path.dirname(statePath), `${agentId}-memory-archive.jsonl`);
+      archivePath = path.resolve(path.dirname(statePath), `${agentId}-memory-archive.sqlite`);
     }
 
     const state = loadOrCreateCognitiveState({
@@ -743,7 +743,7 @@ async function main() {
       studentModel: { provider: "penguin-go", modelId, thinkingLevel: "medium" },
       teacherModel: { provider: "penguin-go", modelId, thinkingLevel: "medium" },
       forcePersonaRefinement: forceRefine,
-      archiveJsonlPath: archivePath,
+      archiveDbPath: archivePath,
       statePath,
       syncAgentOnDisk: true,
     });

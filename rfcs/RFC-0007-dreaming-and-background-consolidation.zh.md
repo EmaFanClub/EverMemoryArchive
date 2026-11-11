@@ -243,7 +243,7 @@ P_{u,v}' = P_{0,0} \oplus \text{Modulate}\Big(\Phi_{u,v}, \; \lbrace \langle \te
 | 规范编号 | 生命周期阶段 | 监督信号来源 | 执行架构模式 | 核心状态产出 |
 | --- | --- | --- | --- | --- |
 | **[RFC-0003](RFC-0003-ema-training-meta-theory.zh.md) / RFC-0004 / RFC-0005** | 离线服役前训练（`train`） | 原著剧本 Ground Truth $`A_t^\ast`$ | 同步窗口局部搜索与多 Epoch 全局择优 | 初始角色灵魂 $`P_{0,0} = P^\ast`$、基线记忆 $`M_0`$、训练后压缩器 $`C^\ast`$ |
-| **[RFC-0006](RFC-0006-memory-compaction.zh.md)** | 运行态与会话边界压缩（`compact`） | 自愈式反射重构分 $`\mathcal{R}(\text{MemoryIndex}, w_x) \ge \tau_{\text{reflect}}`$ | 基于游标幂等的增量折叠与多级归并 | 多级热索引（`L0`、`L1`）+ 冷 JSONL 档案指针 `archiveRef` |
+| **[RFC-0006](RFC-0006-memory-compaction.zh.md)** | 运行态与会话边界压缩（`compact`） | 自愈式反射重构分 $`\mathcal{R}(\text{MemoryIndex}, w_x) \ge \tau_{\text{reflect}}`$ | 基于游标幂等的增量折叠与多级归并 | 多级热索引（`L0`、`L1`）+ 冷归档指针 `archiveRef` |
 | **RFC-0007（本篇）** | 实时并行与昼夜节律巩固（`dream`） | 延迟后续轨迹 $`F_{t,k}`$ + 后验合成目标 $`\langle \text{OS}_t^\ast, a_t^{\text{dream}} \rangle`$ + 锚定集 $`D_{\text{anchor}}`$ | 非阻塞前台路由会话 + 隔离临时后台工作会话 | 经双门控验证的演化状态 $`\lbrace P_{u+1,0}, M' \rbrace`$ 原子热更新至 `AGENTS.md` |
 
 ---

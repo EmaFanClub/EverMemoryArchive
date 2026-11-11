@@ -17,7 +17,7 @@
 This RFC specifies the first-edition runtime and cognitive modeling architecture for EverMemoryArchive (EMA) companion agents, directly resolving Open Questions 1 (`memory format`), 2 (`what are contained in memory`), and the structural schema of Question 3 (`format of personality`) posed in [RFC-0003](RFC-0003-ema-training-meta-theory.md).
 
 Specifically, this document:
-1. Formalizes the two-stage latent-mediated cognitive forward equation $`\text{Input}_t \xrightarrow{P, M} \text{OS}_t \xrightarrow{P, M, \text{Input}_t} \text{Action}_t`$, uniting explicit `<OS>` / `<Action>` XML framing during supervised training with native model `thinking` channel execution during live companionship, governed by the **Non-Mind-Reading Perspective Boundary Invariant**;
+1. Formalizes the two-stage latent-mediated cognitive forward equation $`\text{Input}_t \xrightarrow{P, M} \text{OS}_t \xrightarrow{P, M, \text{Input}_t} \text{Action}_t`$, where the companion agent explicitly emits structured `<OS>...</OS>` and `<Action>...</Action>` blocks across both supervised training and live companionship, governed by the **Non-Mind-Reading Perspective Boundary Invariant**;
 2. Defines the six-slot structured `CompanionPersonality` schema ($`P_{u,v}`$: `coreIdentity`, `emotionalDynamics`, `speechStyleRules`, `cognitiveOSPatterns`, `behavioralHabits`, `antiOocConstraints`, plus `mutationHistory`) and **Single-Source Prompt Prefix Injection** into `AGENTS.md`, eliminating duplicate system/user prompt token bloat and achieving $`\gt 90\%`$ KV prompt cache hit rates;
 3. Defines the episodic `MemoryItem` tuple $`\langle \text{Input}_t, \text{committedOS}_t, \text{Action}_t^{\ast} \rangle`$, the single-level in-context `SceneMemoryIndexItem` ($`\text{MemoryIndex}_{0,x}`$ containing first-person `summary`, `innerOSArc`, `keyFacts`, and `archiveRef`), and the closed-loop reconstructibility (`compact` + `reflect`) evaluation metric $`\mathcal{R}(\text{MemoryIndex}_{0,x}, w_x) \in [0, 100]`$ for training the compression operator $`C`$.
 
@@ -79,15 +79,15 @@ Observable Input_t  ──(Perspective Filter: Non-Mind-Reading)──>  Perceiv
    obeying speech-length, cadence, and anti-OOC rules.
 ```
 
-#### (1) Dual-Mode Framing: Training XML Tags vs. Live Native Thinking Channel
+#### (1) Unified `<OS>` and `<Action>` Emission Across Training and Live Companionship
 
-EMA operates in two execution modes sharing the exact same cognitive topology:
-- **Supervised Training & Evaluation Mode**: The Student prompt requests explicit XML tags so the Teacher evaluator can independently inspect and score $`\text{OS}_t`$ and $`\text{Action}_t`$:
-  ```xml
-  <OS>He looks exhausted even though he is pretending everything is fine; I want to stay close to make sure he does not collapse, even if I sound blunt.</OS>
-  <Action>「...Hmph. Do not get the wrong idea, I just happened to be walking this way.」</Action>
-  ```
-- **Live Interactive Companion Mode**: When a user chats with the deployed Penguin agent in production (`AGENTS.md` protocol §8), the agent performs its latent `<OS>` reasoning inside the model's native `thinking` channel (`thinking_level: medium`) and emits only the natural in-character `<Action>` dialogue and subtle physical cues in the visible response stream.
+Across both supervised script training and live interactive companionship (`AGENTS.md` protocol §8), the companion agent executes the exact same two-stage cognitive output contract on every turn:
+```xml
+<OS>He looks exhausted even though he is pretending everything is fine; I want to stay close to make sure he does not collapse, even if I sound blunt.</OS>
+<Action>「...Hmph. Do not get the wrong idea, I just happened to be walking this way.」</Action>
+```
+- **Training, Evaluation & Dream Replay**: The Teacher evaluator and memory compactor directly inspect and score the emitted `<OS>` and `<Action>` blocks.
+- **Live Interactive Companionship & External Channels**: The companion agent always emits `<OS>...</OS>` (first-person inner monologue in the character's voice) followed by `<Action>...</Action>` (spoken dialogue and physical cues). Both blocks are recorded verbatim in the session trace to form the canonical `MemoryItem` tuple $`\langle \text{Input}_t, \text{OS}_t, \text{Action}_t \rangle`$ for subsequent `compact` and `dream` cycles, while external channel adapters unwrap `<Action>` when dispatching messages to external chat surfaces.
 
 #### (2) The Non-Mind-Reading Perspective Boundary Walkthrough
 
@@ -157,7 +157,7 @@ When scene window $`w_x`$ finishes, the sequence of committed `MemoryItem`s is c
     "Promise: meet on the rooftop after afternoon lectures",
     "Bob dislikes crowded ceremonies just as much as I do"
   ],
-  "archiveRef": "episodes/005_ch01_05.jsonl",
+  "archiveRef": "archive://L0/005_ch01_05",
   "reflectionScore": 92
 }
 ```
@@ -363,11 +363,11 @@ reducing prompt token expenditure by nearly an order of magnitude on cache-aware
 
 Narrative scripts frequently expose the protagonist's internal thoughts inside `[Narration]` blocks for the reader's benefit. If the companion reacts to unuttered mental text, the causal boundary between two distinct minds collapses and roleplay realism is destroyed.
 
-### dual-mode-latent-os-framing
+### explicit-latent-os-and-action-framing
 
-> **Every companion turn must execute the two-stage cognitive transition $`\text{Input}_t \to \text{OS}_t \to \text{Action}_t`$, realized either via explicit `<OS>` and `<Action>` tags in supervised training or via the model's native `thinking` channel and visible response stream in live interaction.**
+> **Every companion turn—both in offline supervised training and in live runtime interaction—must execute the two-stage cognitive transition $`\text{Input}_t \to \text{OS}_t \to \text{Action}_t`$ by explicitly emitting structured `<OS>...</OS>` and `<Action>...</Action>` blocks.**
 
-Keeping the two-stage cognitive topology invariant across training and production ensures that the `cognitiveOSPatterns` distilled during offline RSI govern live conversational behavior without leaking raw XML tags to end users.
+Keeping the `<OS>` and `<Action>` emission contract identical across training, live interaction, compaction, and dreaming guarantees that every runtime turn natively records a complete `MemoryItem` tuple $`\langle \text{Input}_t, \text{OS}_t, \text{Action}_t \rangle`$ without relying on model-specific internal thinking traces.
 
 ### single-source-prefix-canonicality
 

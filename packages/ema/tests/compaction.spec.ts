@@ -148,7 +148,7 @@ describe("EMA Memory Compaction Engine (RFC-0006)", () => {
   it("performs self-healing reflection retry, evolves compression prompt C, and rolls up L0 -> L1", async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ema-compact-test-"));
     const statePath = path.join(tmpDir, "state.json");
-    const archivePath = path.join(tmpDir, "archive.jsonl");
+    const archivePath = path.join(tmpDir, "archive.sqlite");
 
     const state = loadOrCreateCognitiveState({
       statePath,
@@ -229,7 +229,7 @@ describe("EMA Memory Compaction Engine (RFC-0006)", () => {
         enableCompressionPromptEvolution: true,
         l0RollupThreshold: 2,
         l0RollupBatchSize: 1,
-        archiveJsonlPath: archivePath,
+        archiveDbPath: archivePath,
         statePath,
       },
       { client: mockClient },

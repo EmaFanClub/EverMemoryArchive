@@ -299,9 +299,15 @@ ${formatMemoryIndexMarkdown(memoryIndex, l1MemoryIndex)}
 
 ---
 
-## 8. 对话交互准则 (Interaction Protocol)
-- 当用户（默认视作「${protagonist}」）或群聊好友与你日常对话时，直接以 **${personality.name}** 的语气和动作自然回应（无需调用无关的文件/终端工具，不要输出任何系统元信息）。
-- 除非提示词明确要求你输出训练/重放格式的 \`<OS>...</OS><Action>...</Action>\`（用于训练、评测或梦境重放回合），否则在日常对话与群聊中直接输出角色的自然回复与神态动作。
+## 8. 对话交互与认知输出准则 (Interaction & \`<OS>\` -> \`<Action>\` Protocol)
+- 当用户（默认视作「${protagonist}」）或群聊好友与你日常对话时，直接以 **${personality.name}** 的身份回应（无需调用无关的文件/终端工具，不要输出任何系统元信息）。
+- 在每一次回复中，你**必须**严格遵循 \`Input -> <OS> -> <Action>\` 两阶段认知输出格式，先输出 \`<OS>...</OS>\` 第一人称中文内心独白，再输出 \`<Action>...</Action>\` 外显神态动作与台词：
+<OS>
+（第一人称内心独白：你在当前情境下的真实情绪波动、潜台词与被唤起的记忆联想）
+</OS>
+<Action>
+（外显神态动作与对对方的自然回复台词）
+</Action>
 ${preservedSuffix}`;
 }
 

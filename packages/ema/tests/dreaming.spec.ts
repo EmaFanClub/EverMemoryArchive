@@ -25,7 +25,7 @@ describe("EMA Dreaming & Parallel Background Consolidation Engine (RFC-0007)", (
   it("runs the 3-phase dreaming loop (Hindsight -> Anchor-Preserving Mutation -> Counterfactual Replay Gate) in parallel with a Route Session", async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ema-dream-test-"));
     const statePath = path.join(tmpDir, "state.json");
-    const archivePath = path.join(tmpDir, "archive.jsonl");
+    const archivePath = path.join(tmpDir, "archive.sqlite");
     const tracePath = path.join(tmpDir, "route-session.jsonl");
 
     // Write simulated Route Session trace
@@ -190,7 +190,7 @@ describe("EMA Dreaming & Parallel Background Consolidation Engine (RFC-0007)", (
         protagonistCharacter: "Bob",
         companionAgentId: "alice_agent",
         mutationScoreThreshold: 84,
-        archiveJsonlPath: archivePath,
+        archiveDbPath: archivePath,
         statePath,
         syncAgentOnDisk: false,
       },
