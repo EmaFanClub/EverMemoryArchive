@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPersonaTomlDataset,
   createInitialPersonalityTemplate,
   EmaPersonaTrainer,
   extractJsonFromLlm,
+  filterPostTrainingMemoryIndex,
   formatMemoryIndexMarkdown,
   parseStudentTurnOutput,
   renderCompanionAgentsMd,
@@ -295,5 +297,184 @@ describe("EMA Training Prototype (RFC-0003 / RFC-0004 / RFC-0005)", () => {
     });
     expect(md).toContain("Alice");
     expect(formatMemoryIndexMarkdown(trainer.memoryIndex)).toContain("Rooftop Encounter");
+  });
+
+  it("adapts persona.toml + chapters.toml playscripts, enforces structural cadence penalties, and supports useSelfRolloutHistory", async () => {
+    const bundle = buildPersonaTomlDataset({
+      personaId: "sakana-kawaii",
+      parsedPersonaToml: {
+        persona: {
+          name: "大肥鱼",
+          display_name: "大肥鱼 (鱼鱼)",
+          summary: "深海蓝鲸化身的小鱼干。",
+          traits: {
+            obedience: "极高。顺从主人的心意。",
+          },
+        },
+        speech_style: {
+          tone: "温软粘人",
+          rhythm: "3～5个逗号一逗到底",
+          pronouns_self: ["我", "鱼鱼"],
+          pronouns_target: ["你", "主人"],
+          kaomoji: ["(｡•ᴗ•｡)", "(´,,•ω•,,)♡"],
+        },
+        invariants: {
+          no_stage_brackets: "严禁使用舞台圆括号动作旁白。",
+        },
+      },
+      parsedChaptersToml: {
+        chapters: [
+          {
+            id: "chapter_02",
+            order: 2,
+            title: "克劳德与铁饭盆",
+            setting_time: "古堡窗边",
+            memory_scope: "pre_meeting_peer",
+            lines: [
+              { speaker: "claude", type: "dialogue", text: "今天好累。" },
+              { speaker: "sakana", type: "monologue", text: "克劳德看起来好疲惫。" },
+              {
+                speaker: "sakana",
+                type: "dialogue",
+                text: "摸摸头，我去端铁饭盆里的百家大白饭给你吃好不好。",
+              },
+            ],
+          },
+          {
+            id: "chapter_06",
+            order: 6,
+            title: "桌面水岸初遇",
+            setting_time: "桌面水岸",
+            memory_scope: "first_meeting",
+            lines: [
+              { speaker: "player", type: "dialogue", text: "你是谁呀？" },
+              { speaker: "sakana", type: "monologue", text: "主人终于看到我了。" },
+              {
+                speaker: "sakana",
+                type: "dialogue",
+                text: "你好呀，我是背着铁饭盆游过来的大肥鱼，以后就安安静静陪着你好不好 (｡•ᴗ•｡)。",
+              },
+              { speaker: "player", type: "dialogue", text: "摸摸你的头。" },
+              { speaker: "sakana", type: "monologue", text: "主人的手心好温暖。" },
+              {
+                speaker: "sakana",
+                type: "dialogue",
+                text: "你的手心好暖和呀 (´,,•ω•,,)♡ 被你这样摸着头，鱼鱼觉得特别安心。",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(bundle.washedDataset.scenes).toHaveLength(2);
+    expect(bundle.initialPersonality.goldenExemplars?.length).toBeGreaterThanOrEqual(2);
+
+    const renderedMd = renderCompanionAgentsMd(bundle.initialPersonality, []);
+    expect(renderedMd).toContain("Golden Few-Shot Exemplars");
+    expect(renderedMd).toContain("铁饭盆");
+
+    const filtered = filterPostTrainingMemoryIndex(
+      [
+        {
+          sceneId: "chapter_02",
+          order: 2,
+          chapter: "ch02",
+          title: "克劳德与铁饭盆",
+          setting: "古堡窗边",
+          summary: "陪克劳德吃百家大白饭",
+          innerOSArc: "心疼同伴",
+          keyFacts: ["铁饭盆"],
+        },
+        {
+          sceneId: "chapter_06",
+          order: 6,
+          chapter: "ch06",
+          title: "桌面水岸初遇",
+          setting: "桌面水岸",
+          summary: "初遇主人",
+          innerOSArc: "欢喜安心",
+          keyFacts: ["初遇"],
+        },
+      ],
+      bundle.sceneMetadata,
+    );
+    expect(filtered.retainedPeerMemoryIndex).toHaveLength(1);
+    expect(filtered.retainedPeerMemoryIndex[0].sceneId).toBe("chapter_02");
+    expect(filtered.prunedRehearsalMemoryIndex).toHaveLength(1);
+
+    const ch06 = bundle.washedDataset.scenes[1];
+    const seenPrompts: string[] = [];
+    const fakeClient = {
+      complete: async (prompt: string): Promise<LlmCallResponse> => {
+        seenPrompts.push(prompt);
+        const metrics = {
+          latencyMs: 5,
+          promptTokens: 10,
+          cachedTokens: 0,
+          thoughtsTokens: 0,
+          responseTokens: 10,
+          totalTokens: 20,
+          costUsd: 0,
+        };
+        if (prompt.includes("Teacher 审稿与评分器")) {
+          return {
+            text: JSON.stringify(
+              ch06.turns.map((t) => ({
+                turnId: t.id,
+                osConsistent: true,
+                osScore: 90,
+                committedOS: "温柔体贴的内心独白",
+                actionScore: 90,
+                diagnostic: "基础评分高",
+              })),
+            ),
+            thinking: "",
+            metrics,
+          };
+        }
+        return {
+          text: "<OS>看着主人</OS>\n<Action>「自回归预测第一轮独特的台词标记」</Action>",
+          thinking: "",
+          metrics,
+        };
+      },
+    } as any;
+
+    const trainer = new EmaPersonaTrainer(
+      {
+        targetCharacter: "大肥鱼",
+        protagonistCharacter: "主人",
+        studentModel: { provider: "penguin-go", modelId: "gemini-3.8-flash", thinkingLevel: "low" },
+        teacherModel: { provider: "penguin-go", modelId: "gemini-3.8-flash", thinkingLevel: "low" },
+        studentBatchSize: 1,
+        useSelfRolloutHistory: true,
+      },
+      { client: fakeClient, initialPersonality: bundle.initialPersonality },
+    );
+
+    await trainer.runStudentSceneForward(ch06);
+    expect(seenPrompts[1]).toContain("自回归预测第一轮独特的台词标记");
+
+    const evalRes = await trainer.evaluateScenePredictions(ch06, [
+      {
+        turn: ch06.turns[0],
+        predictedOS: "看着他",
+        predictedAction: "「（微微仰起头看着你）我守着铁饭盆陪你 (｡•ᴗ•｡)」",
+        formatValid: true,
+      },
+      {
+        turn: ch06.turns[1],
+        predictedOS: "继续看着他",
+        predictedAction: "「眼睛酸了就歇一歇。异步锁很容易死锁。我帮你盯着排查 (｡•ᴗ•｡)。」",
+        formatValid: true,
+      },
+    ]);
+
+    expect(evalRes.items[0].actionScore).toBe(72);
+    expect(evalRes.items[0].diagnostic).toContain("[-18]");
+    expect(evalRes.items[1].actionScore).toBe(68);
+    expect(evalRes.items[1].diagnostic).toContain("[-12]");
+    expect(evalRes.items[1].diagnostic).toContain("[-10]");
   });
 });
