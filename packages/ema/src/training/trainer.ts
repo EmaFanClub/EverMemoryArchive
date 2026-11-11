@@ -72,6 +72,12 @@ export interface TrainerConfig {
   enableReflectionCheck?: boolean;
   /** Sync companion AGENTS.md on disk after each scene window (default: false) */
   syncAgentOnDisk?: boolean;
+  /**
+   * When true, feeds the Student's own predicted Action_t (instead of Ground Truth Action_t^*)
+   * into `priorTurnsInScene` for subsequent turns in the same scene, eliminating exposure bias
+   * and testing multi-turn cadence/kaomoji/metaphor variation (default: false).
+   */
+  useSelfRolloutHistory?: boolean;
 }
 
 export class EmaPersonaTrainer {
@@ -106,6 +112,7 @@ export class EmaPersonaTrainer {
       studentBatchSize: 4,
       enableReflectionCheck: true,
       syncAgentOnDisk: false,
+      useSelfRolloutHistory: false,
       ...config,
     };
 
@@ -268,6 +275,7 @@ export class EmaPersonaTrainer {
       batchSize: this.config.studentBatchSize,
       syncAgentOnDisk: this.config.syncAgentOnDisk,
       companionAgentId: this.config.companionAgentId,
+      useSelfRolloutHistory: this.config.useSelfRolloutHistory,
     });
   }
 

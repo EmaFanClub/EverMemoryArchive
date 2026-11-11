@@ -116,6 +116,13 @@ export interface CompanionPersonality {
   behavioralHabits: string[];
   /** Anti-OOC negative constraints accumulated via Teacher RSI / Dreaming diagnostics */
   antiOocConstraints: string[];
+  /** Concrete ground-truth <Input -> OS -> Action> few-shot exemplars anchoring syntax, length, and tone */
+  goldenExemplars?: Array<{
+    scenario: string;
+    input: string;
+    os: string;
+    action: string;
+  }>;
   /** Evolution changelog across training and dreaming windows */
   mutationHistory: Array<{
     fromVersion: string;
