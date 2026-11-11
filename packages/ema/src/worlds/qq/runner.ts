@@ -52,6 +52,14 @@ export function cleanLlmReplyText(raw: string): string {
     }
   }
 
+  // If the model emitted <OS>...</OS> and/or <Action>...</Action> blocks, extract only <Action>
+  const actionMatch = text.match(/<Action>([\s\S]*?)<\/Action>/i);
+  if (actionMatch) {
+    text = actionMatch[1].trim();
+  } else {
+    text = text.replace(/<OS>[\s\S]*?<\/OS>/gi, "").replace(/<\/?Action>/gi, "").trim();
+  }
+
   return text.trim();
 }
 
@@ -193,7 +201,7 @@ export function createQQCompanionRunner(
           }
         }
         promptLines.push(
-          `\n请以伴侣身份简明、自然地直接回复群友（无需输出前缀，无需解释系统状态）：`,
+          `\n请以伴侣身份按 <OS>...</OS> 与 <Action>...</Action> 格式回复群友（系统会自动提取 <Action> 发送至群聊，无需输出其他前缀或系统状态）：`,
         );
 
         const promptText = promptLines.join("\n");
