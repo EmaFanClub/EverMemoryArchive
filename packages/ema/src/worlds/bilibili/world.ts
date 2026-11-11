@@ -190,10 +190,6 @@ export class BilibiliWorld extends EmaWorld {
   private selectSocialItemsByChannelStmt: StatementSync | null = null;
   private selectSocialRepliesStmt: StatementSync | null = null;
 
-  private fallbackNodes = new Map<string, EmaNode>();
-  private fallbackChannels = new Map<string, BilibiliChannel>();
-  private fallbackItems = new Map<string, EmaChannelItem>();
-
   private runtimeCtx: EmaCtx | null = null;
 
   constructor(options: BilibiliWorldOptions = {}) {
@@ -228,16 +224,10 @@ export class BilibiliWorld extends EmaWorld {
     }
 
     const defaultStatePath = path.resolve(process.cwd(), "bilibili-storage-state.json");
-    const fallbackStatePath = path.resolve("/home/rei/worktrees/EverMemoryArchive/next/bilibili-storage-state.json");
-    const statePath =
-      options.storageStatePath ??
-      (fs.existsSync(defaultStatePath) ? defaultStatePath : fallbackStatePath);
+    const statePath = options.storageStatePath ?? defaultStatePath;
 
     const defaultCookiePath = path.resolve(process.cwd(), "bilibili-cookies.json");
-    const fallbackCookiePath = path.resolve("/home/rei/worktrees/EverMemoryArchive/next/bilibili-cookies.json");
-    const cookiePath =
-      options.cookiePath ??
-      (fs.existsSync(defaultCookiePath) ? defaultCookiePath : fallbackCookiePath);
+    const cookiePath = options.cookiePath ?? defaultCookiePath;
 
     if (!this.cookies) {
       const mergedCookies: Record<string, string> = {};
@@ -582,79 +572,65 @@ export class BilibiliWorld extends EmaWorld {
   indexSocialNode(node: EmaNode): EmaNode {
     const fetchedAtMs = Date.now();
     if (this.db && this.insertSocialNodeStmt) {
-      try {
-        this.insertSocialNodeStmt.run(
-          node.id,
-          node.world,
-          node.node_kind,
-          node.name,
-          node.handle ?? null,
-          node.avatarUrl ?? null,
-          node.metadata ? JSON.stringify(node.metadata) : null,
-          fetchedAtMs,
-        );
-      } catch (err) {
-        console.error("[BilibiliWorld] Failed to insert social node:", err);
-      }
+      this.insertSocialNodeStmt.run(
+        node.id,
+        node.world,
+        node.node_kind,
+        node.name,
+        node.handle ?? null,
+        node.avatarUrl ?? null,
+        node.metadata ? JSON.stringify(node.metadata) : null,
+        fetchedAtMs,
+      );
     }
-    this.fallbackNodes.set(node.id, node);
     return node;
   }
 
   getSocialNode(id: string): EmaNode | null {
     if (this.db && this.selectSocialNodeStmt) {
-      try {
-        let row = this.selectSocialNodeStmt.get(id) as Record<string, unknown> | undefined;
-        if (!row && !id.startsWith("bilibili:person:")) {
-          row = this.selectSocialNodeStmt.get(`bilibili:person:${id}`) as Record<string, unknown> | undefined;
-        }
-        if (!row && this.selectSocialNodeByHandleStmt) {
-          row = this.selectSocialNodeByHandleStmt.get(id) as Record<string, unknown> | undefined;
-        }
-        if (row) {
-          const channelRows = this.selectAllSocialChannelsStmt?.all() as Array<Record<string, unknown>> | undefined;
-          const channelIds = (channelRows || [])
-            .filter((c) => c.owner_node_id === row!.id)
-            .map((c) => String(c.id));
+      let row = this.selectSocialNodeStmt.get(id) as Record<string, unknown> | undefined;
+      if (!row && !id.startsWith("bilibili:person:")) {
+        row = this.selectSocialNodeStmt.get(`bilibili:person:${id}`) as Record<string, unknown> | undefined;
+      }
+      if (!row && this.selectSocialNodeByHandleStmt) {
+        row = this.selectSocialNodeByHandleStmt.get(id) as Record<string, unknown> | undefined;
+      }
+      if (row) {
+        const channelRows = this.selectAllSocialChannelsStmt?.all() as Array<Record<string, unknown>> | undefined;
+        const channelIds = (channelRows || [])
+          .filter((c) => c.owner_node_id === row!.id)
+          .map((c) => String(c.id));
 
-          return {
-            id: String(row.id),
-            world: String(row.world),
-            node_kind: String(row.node_kind),
-            name: String(row.name),
-            handle: row.handle ? String(row.handle) : undefined,
-            avatarUrl: row.avatar_url ? String(row.avatar_url) : undefined,
-            channelIds: channelIds.length > 0 ? channelIds : undefined,
-            metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
-          };
-        }
-      } catch (err) {
-        console.error("[BilibiliWorld] Failed to get social node:", err);
+        return {
+          id: String(row.id),
+          world: String(row.world),
+          node_kind: String(row.node_kind),
+          name: String(row.name),
+          handle: row.handle ? String(row.handle) : undefined,
+          avatarUrl: row.avatar_url ? String(row.avatar_url) : undefined,
+          channelIds: channelIds.length > 0 ? channelIds : undefined,
+          metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
+        };
       }
     }
-    return this.fallbackNodes.get(id) || null;
+    return null;
   }
 
   indexSocialChannel(channel: BilibiliChannel): BilibiliChannel {
     const fetchedAtMs = Date.now();
     if (this.db && this.insertSocialChannelStmt) {
-      try {
-        this.insertSocialChannelStmt.run(
-          channel.id,
-          channel.world,
-          channel.channel_kind,
-          channel.ownerNodeId ?? null,
-          channel.name,
-          channel.description ?? null,
-          channel.linkedChannelIds ? JSON.stringify(channel.linkedChannelIds) : null,
-          channel.metadata ? JSON.stringify(channel.metadata) : null,
-          fetchedAtMs,
-        );
-      } catch (err) {
-        console.error("[BilibiliWorld] Failed to insert social channel:", err);
-      }
+      this.insertSocialChannelStmt.run(
+        channel.id,
+        channel.world,
+        channel.channel_kind,
+        channel.ownerNodeId ?? null,
+        channel.name,
+        channel.description ?? null,
+        channel.linkedChannelIds ? JSON.stringify(channel.linkedChannelIds) : null,
+        channel.metadata ? JSON.stringify(channel.metadata) : null,
+        fetchedAtMs,
+      );
     }
-    this.fallbackChannels.set(channel.id, channel);
     return channel;
   }
 
@@ -697,25 +673,21 @@ export class BilibiliWorld extends EmaWorld {
 
   listSocialChannels(): BilibiliChannel[] {
     if (this.db && this.selectAllSocialChannelsStmt) {
-      try {
-        const rows = this.selectAllSocialChannelsStmt.all() as Array<Record<string, unknown>>;
-        if (rows && rows.length > 0) {
-          return rows.map((row) => ({
-            id: String(row.id),
-            world: "bilibili" as const,
-            channel_kind: String(row.channel_kind) as BilibiliChannelKind,
-            ownerNodeId: row.owner_node_id ? String(row.owner_node_id) : undefined,
-            name: String(row.name),
-            description: row.description ? String(row.description) : undefined,
-            linkedChannelIds: row.linked_channels_json ? JSON.parse(String(row.linked_channels_json)) : undefined,
-            metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
-          }));
-        }
-      } catch (err) {
-        console.error("[BilibiliWorld] Failed to list social channels:", err);
+      const rows = this.selectAllSocialChannelsStmt.all() as Array<Record<string, unknown>>;
+      if (rows && rows.length > 0) {
+        return rows.map((row) => ({
+          id: String(row.id),
+          world: "bilibili" as const,
+          channel_kind: String(row.channel_kind) as BilibiliChannelKind,
+          ownerNodeId: row.owner_node_id ? String(row.owner_node_id) : undefined,
+          name: String(row.name),
+          description: row.description ? String(row.description) : undefined,
+          linkedChannelIds: row.linked_channels_json ? JSON.parse(String(row.linked_channels_json)) : undefined,
+          metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
+        }));
       }
     }
-    return [...this.fallbackChannels.values()];
+    return [];
   }
 
   indexSocialItem(item: {
@@ -738,23 +710,19 @@ export class BilibiliWorld extends EmaWorld {
     const fetchedAtMs = item.fetchedAtMs ?? Date.now();
 
     if (this.db && this.insertSocialItemStmt) {
-      try {
-        this.insertSocialItemStmt.run(
-          item.id,
-          item.channelId,
-          item.authorNodeId,
-          item.name ?? null,
-          item.content,
-          createdAtIso,
-          createdAtMs,
-          fetchedAtMs,
-          item.parentItemId ?? null,
-          item.url ?? null,
-          item.metadata ? JSON.stringify(item.metadata) : null,
-        );
-      } catch (err) {
-        console.error("[BilibiliWorld] Failed to insert social item:", err);
-      }
+      this.insertSocialItemStmt.run(
+        item.id,
+        item.channelId,
+        item.authorNodeId,
+        item.name ?? null,
+        item.content,
+        createdAtIso,
+        createdAtMs,
+        fetchedAtMs,
+        item.parentItemId ?? null,
+        item.url ?? null,
+        item.metadata ? JSON.stringify(item.metadata) : null,
+      );
     }
 
     const resultItem: EmaChannelItem = {
@@ -771,49 +739,25 @@ export class BilibiliWorld extends EmaWorld {
       url: item.url,
       metadata: item.metadata,
     };
-    this.fallbackItems.set(item.id, resultItem);
     return resultItem;
   }
 
   listSocialItems(channelId: string, referenceMs: number = Date.now()): EmaChannelItem[] {
     if (this.db && this.selectSocialItemsByChannelStmt) {
-      try {
-        const rows = this.selectSocialItemsByChannelStmt.all(channelId) as Array<Record<string, unknown>>;
-        if (rows) {
-          return rows.map((row) => this.mapRowToChannelItem(row, referenceMs));
-        }
-      } catch (err) {
-        console.error("[BilibiliWorld] Failed to list social items:", err);
+      const rows = this.selectSocialItemsByChannelStmt.all(channelId) as Array<Record<string, unknown>>;
+      if (rows) {
+        return rows.map((row) => this.mapRowToChannelItem(row, referenceMs));
       }
     }
-    return [...this.fallbackItems.values()]
-      .filter((i) => i.channelId === channelId)
-      .sort((a, b) => new Date(b.createdAtIso).getTime() - new Date(a.createdAtIso).getTime())
-      .map((i) => ({
-        ...i,
-        createdAt: formatAgentRelativeTime(new Date(i.createdAtIso).getTime(), referenceMs),
-        fetchedAt: formatAgentRelativeTime(i.fetchedAtMs, referenceMs),
-      }));
+    return [];
   }
 
   getSocialItem(id: string, referenceMs: number = Date.now()): EmaChannelItem | null {
     if (this.db && this.selectSocialItemStmt) {
-      try {
-        const row = this.selectSocialItemStmt.get(id) as Record<string, unknown> | undefined;
-        if (row) {
-          return this.mapRowToChannelItem(row, referenceMs);
-        }
-      } catch (err) {
-        console.error("[BilibiliWorld] Failed to get social item:", err);
+      const row = this.selectSocialItemStmt.get(id) as Record<string, unknown> | undefined;
+      if (row) {
+        return this.mapRowToChannelItem(row, referenceMs);
       }
-    }
-    const fallback = this.fallbackItems.get(id);
-    if (fallback) {
-      return {
-        ...fallback,
-        createdAt: formatAgentRelativeTime(new Date(fallback.createdAtIso).getTime(), referenceMs),
-        fetchedAt: formatAgentRelativeTime(fallback.fetchedAtMs, referenceMs),
-      };
     }
     return null;
   }

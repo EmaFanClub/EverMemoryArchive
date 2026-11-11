@@ -67,11 +67,6 @@ export class WebWorld extends EmaWorld {
   private listeners: Map<string, Set<(event: WebOutboundEvent) => void>> = new Map();
   private messageHistory: Map<string, EmaInput | WebOutboundEvent> = new Map();
 
-  // RFC-0002 in-memory fallback maps
-  private fallbackNodes: Map<string, EmaNode> = new Map();
-  private fallbackChannels: Map<string, WebChannel> = new Map();
-  private fallbackItems: Map<string, EmaChannelItem> = new Map();
-
   private active = false;
   private ctx: EmaCtx | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -108,6 +103,7 @@ export class WebWorld extends EmaWorld {
     this.timezone = options.timezone ?? "UTC";
 
     this.initSqlite();
+    this.hydrateIdentityFromDb(options);
     this.initSocialPrimitives(options.initialSessions ?? ["default"]);
 
     // Register initial sessions if provided
@@ -261,6 +257,50 @@ export class WebWorld extends EmaWorld {
       this.loadPersistedSessions();
     } catch (err) {
       console.error("[WebWorld] Failed to initialize SQLite database:", err);
+    }
+  }
+
+  private hydrateIdentityFromDb(options: WebWorldOptions): void {
+    if (!this.db) return;
+    try {
+      if (options.companionId) {
+        this.db
+          .prepare(
+            "DELETE FROM seen_social_nodes WHERE world = 'web' AND node_kind = 'bot' AND id != ?",
+          )
+          .run(`web:bot:${options.companionId}`);
+      }
+      if (!options.companionId || !options.companionName) {
+        const botRow = this.db
+          .prepare(
+            "SELECT id, name, handle FROM seen_social_nodes WHERE world = 'web' AND node_kind = 'bot' ORDER BY CASE WHEN handle = 'aoi_rei' THEN 1 ELSE 0 END ASC, fetched_at_ms DESC LIMIT 1",
+          )
+          .get() as { id?: string; name?: string; handle?: string } | undefined;
+        if (botRow) {
+          if (!options.companionId) {
+            const derivedId =
+              typeof botRow.id === "string" && botRow.id.startsWith("web:bot:")
+                ? botRow.id.slice("web:bot:".length)
+                : botRow.handle || "";
+            if (derivedId) this.companionId = derivedId;
+          }
+          if (!options.companionName && botRow.name) {
+            this.companionName = String(botRow.name);
+          }
+        }
+      }
+      if (!options.ownerName) {
+        const ownerRow = this.db
+          .prepare(
+            "SELECT name FROM seen_social_nodes WHERE world = 'web' AND node_kind = 'person' ORDER BY CASE WHEN name = 'Rei' THEN 1 ELSE 0 END ASC, fetched_at_ms DESC LIMIT 1",
+          )
+          .get() as { name?: string } | undefined;
+        if (ownerRow?.name) {
+          this.ownerName = String(ownerRow.name);
+        }
+      }
+    } catch {
+      // ignore if table is empty or unavailable
     }
   }
 
@@ -449,114 +489,91 @@ export class WebWorld extends EmaWorld {
   public indexSocialNode(node: EmaNode): EmaNode {
     const fetchedAtMs = Date.now();
     if (this.db && this.insertSocialNodeStmt) {
-      try {
-        this.insertSocialNodeStmt.run(
-          node.id,
-          node.world,
-          node.node_kind,
-          node.name,
-          node.handle ?? null,
-          node.avatarUrl ?? null,
-          node.metadata ? JSON.stringify(node.metadata) : null,
-          fetchedAtMs,
-        );
-      } catch (err) {
-        console.error("[WebWorld] Failed to insert social node:", err);
-      }
+      this.insertSocialNodeStmt.run(
+        node.id,
+        node.world,
+        node.node_kind,
+        node.name,
+        node.handle ?? null,
+        node.avatarUrl ?? null,
+        node.metadata ? JSON.stringify(node.metadata) : null,
+        fetchedAtMs,
+      );
     }
-    this.fallbackNodes.set(node.id, node);
     return node;
   }
 
   public getSocialNode(id: string): EmaNode | null {
     if (this.db && this.selectSocialNodeStmt) {
-      try {
-        let row = this.selectSocialNodeStmt.get(id) as Record<string, unknown> | undefined;
-        if (!row && !id.startsWith("web:")) {
-          row =
-            (this.selectSocialNodeStmt.get(`web:person:${id}`) as
-              Record<string, unknown> | undefined) ??
-            (this.selectSocialNodeStmt.get(`web:bot:${id}`) as Record<string, unknown> | undefined);
-        }
-        if (!row && this.selectSocialNodeByHandleStmt) {
-          row = this.selectSocialNodeByHandleStmt.get(id) as Record<string, unknown> | undefined;
-        }
-        if (row) {
-          const channelRows = this.selectAllSocialChannelsStmt?.all() as
-            Array<Record<string, unknown>> | undefined;
-          const channelIds = (channelRows || [])
-            .filter((c) => c.owner_node_id === row!.id)
-            .map((c) => String(c.id));
+      let row = this.selectSocialNodeStmt.get(id) as Record<string, unknown> | undefined;
+      if (!row && !id.startsWith("web:")) {
+        row =
+          (this.selectSocialNodeStmt.get(`web:person:${id}`) as
+            Record<string, unknown> | undefined) ??
+          (this.selectSocialNodeStmt.get(`web:bot:${id}`) as Record<string, unknown> | undefined);
+      }
+      if (!row && this.selectSocialNodeByHandleStmt) {
+        row = this.selectSocialNodeByHandleStmt.get(id) as Record<string, unknown> | undefined;
+      }
+      if (row) {
+        const channelRows = this.selectAllSocialChannelsStmt?.all() as
+          Array<Record<string, unknown>> | undefined;
+        const channelIds = (channelRows || [])
+          .filter((c) => c.owner_node_id === row!.id)
+          .map((c) => String(c.id));
 
-          return {
-            id: String(row.id),
-            world: String(row.world),
-            node_kind: String(row.node_kind),
-            name: String(row.name),
-            handle: row.handle ? String(row.handle) : undefined,
-            avatarUrl: row.avatar_url ? String(row.avatar_url) : undefined,
-            channelIds: channelIds.length > 0 ? channelIds : undefined,
-            metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
-          };
-        }
-      } catch (err) {
-        console.error("[WebWorld] Failed to get social node:", err);
+        return {
+          id: String(row.id),
+          world: String(row.world),
+          node_kind: String(row.node_kind),
+          name: String(row.name),
+          handle: row.handle ? String(row.handle) : undefined,
+          avatarUrl: row.avatar_url ? String(row.avatar_url) : undefined,
+          channelIds: channelIds.length > 0 ? channelIds : undefined,
+          metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
+        };
       }
     }
-    return (
-      this.fallbackNodes.get(id) ||
-      this.fallbackNodes.get(`web:person:${id}`) ||
-      this.fallbackNodes.get(`web:bot:${id}`) ||
-      null
-    );
+    return null;
   }
 
   public indexSocialChannel(channel: WebChannel): WebChannel {
     const fetchedAtMs = Date.now();
     if (this.db && this.insertSocialChannelStmt) {
-      try {
-        this.insertSocialChannelStmt.run(
-          channel.id,
-          channel.world,
-          channel.channel_kind,
-          channel.ownerNodeId ?? null,
-          channel.name,
-          channel.description ?? null,
-          channel.linkedChannelIds ? JSON.stringify(channel.linkedChannelIds) : null,
-          channel.metadata ? JSON.stringify(channel.metadata) : null,
-          fetchedAtMs,
-        );
-      } catch (err) {
-        console.error("[WebWorld] Failed to insert social channel:", err);
-      }
+      this.insertSocialChannelStmt.run(
+        channel.id,
+        channel.world,
+        channel.channel_kind,
+        channel.ownerNodeId ?? null,
+        channel.name,
+        channel.description ?? null,
+        channel.linkedChannelIds ? JSON.stringify(channel.linkedChannelIds) : null,
+        channel.metadata ? JSON.stringify(channel.metadata) : null,
+        fetchedAtMs,
+      );
     }
-    this.fallbackChannels.set(channel.id, channel);
     return channel;
   }
 
   public listSocialChannels(): WebChannel[] {
     if (this.db && this.selectAllSocialChannelsStmt) {
-      try {
-        const rows = this.selectAllSocialChannelsStmt.all() as Array<Record<string, unknown>>;
-        if (rows && rows.length > 0) {
-          return rows.map((row) => ({
-            id: String(row.id),
-            world: "web" as const,
-            channel_kind: String(row.channel_kind) as WebChannelKind,
-            ownerNodeId: row.owner_node_id ? String(row.owner_node_id) : undefined,
-            name: String(row.name),
-            description: row.description ? String(row.description) : undefined,
-            linkedChannelIds: row.linked_channels_json
-              ? JSON.parse(String(row.linked_channels_json))
-              : undefined,
-            metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
-          }));
-        }
-      } catch (err) {
-        console.error("[WebWorld] Failed to list social channels:", err);
+      const rows = this.selectAllSocialChannelsStmt.all() as Array<Record<string, unknown>>;
+      if (rows && rows.length > 0) {
+        return rows.map((row) => ({
+          id: String(row.id),
+          world: "web" as const,
+          channel_kind: String(row.channel_kind) as WebChannelKind,
+          ownerNodeId: row.owner_node_id ? String(row.owner_node_id) : undefined,
+          name: String(row.name),
+          description: row.description ? String(row.description) : undefined,
+          linkedChannelIds: row.linked_channels_json
+            ? JSON.parse(String(row.linked_channels_json))
+            : undefined,
+          metadata: row.metadata_json ? JSON.parse(String(row.metadata_json)) : undefined,
+        }));
       }
     }
-    return [...this.fallbackChannels.values()];
+    return [];
   }
 
   public getSocialChannel(id: string): WebChannel | null {
@@ -605,23 +622,19 @@ export class WebWorld extends EmaWorld {
     const fetchedAtMs = item.fetchedAtMs ?? Date.now();
 
     if (this.db && this.insertSocialItemStmt) {
-      try {
-        this.insertSocialItemStmt.run(
-          item.id,
-          canonicalChannelId,
-          item.authorNodeId,
-          item.name ?? null,
-          item.content,
-          createdAtIso,
-          createdAtMs,
-          fetchedAtMs,
-          item.parentItemId ?? null,
-          item.url ?? null,
-          item.metadata ? JSON.stringify(item.metadata) : null,
-        );
-      } catch (err) {
-        console.error("[WebWorld] Failed to insert social item:", err);
-      }
+      this.insertSocialItemStmt.run(
+        item.id,
+        canonicalChannelId,
+        item.authorNodeId,
+        item.name ?? null,
+        item.content,
+        createdAtIso,
+        createdAtMs,
+        fetchedAtMs,
+        item.parentItemId ?? null,
+        item.url ?? null,
+        item.metadata ? JSON.stringify(item.metadata) : null,
+      );
     }
 
     const resultItem: EmaChannelItem = {
@@ -638,52 +651,28 @@ export class WebWorld extends EmaWorld {
       url: item.url,
       metadata: item.metadata,
     };
-    this.fallbackItems.set(item.id, resultItem);
     return resultItem;
   }
 
   public listSocialItems(channelId: string, referenceMs: number = Date.now()): EmaChannelItem[] {
     const canonicalChannelId = this.normalizeChannelId(channelId);
     if (this.db && this.selectSocialItemsByChannelStmt) {
-      try {
-        const rows = this.selectSocialItemsByChannelStmt.all(canonicalChannelId) as Array<
-          Record<string, unknown>
-        >;
-        if (rows) {
-          return rows.map((row) => this.mapRowToChannelItem(row, referenceMs));
-        }
-      } catch (err) {
-        console.error("[WebWorld] Failed to list social items:", err);
+      const rows = this.selectSocialItemsByChannelStmt.all(canonicalChannelId) as Array<
+        Record<string, unknown>
+      >;
+      if (rows) {
+        return rows.map((row) => this.mapRowToChannelItem(row, referenceMs));
       }
     }
-    return [...this.fallbackItems.values()]
-      .filter((i) => i.channelId === canonicalChannelId)
-      .sort((a, b) => new Date(a.createdAtIso).getTime() - new Date(b.createdAtIso).getTime())
-      .map((i) => ({
-        ...i,
-        createdAt: formatAgentRelativeTime(new Date(i.createdAtIso).getTime(), referenceMs),
-        fetchedAt: formatAgentRelativeTime(i.fetchedAtMs, referenceMs),
-      }));
+    return [];
   }
 
   public getSocialItem(id: string, referenceMs: number = Date.now()): EmaChannelItem | null {
     if (this.db && this.selectSocialItemStmt) {
-      try {
-        const row = this.selectSocialItemStmt.get(id) as Record<string, unknown> | undefined;
-        if (row) {
-          return this.mapRowToChannelItem(row, referenceMs);
-        }
-      } catch (err) {
-        console.error("[WebWorld] Failed to get social item:", err);
+      const row = this.selectSocialItemStmt.get(id) as Record<string, unknown> | undefined;
+      if (row) {
+        return this.mapRowToChannelItem(row, referenceMs);
       }
-    }
-    const fallback = this.fallbackItems.get(id);
-    if (fallback) {
-      return {
-        ...fallback,
-        createdAt: formatAgentRelativeTime(new Date(fallback.createdAtIso).getTime(), referenceMs),
-        fetchedAt: formatAgentRelativeTime(fallback.fetchedAtMs, referenceMs),
-      };
     }
     return null;
   }
