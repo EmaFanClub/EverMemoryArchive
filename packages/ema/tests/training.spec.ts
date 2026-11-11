@@ -5,7 +5,9 @@ import {
   EmaPersonaTrainer,
   extractJsonFromLlm,
   filterPostTrainingMemoryIndex,
+  formatInputLine,
   formatMemoryIndexMarkdown,
+  formatTargetActionLines,
   parseStudentTurnOutput,
   renderCompanionAgentsMd,
   washGalgameScript,
@@ -455,26 +457,58 @@ describe("EMA Training Prototype (RFC-0003 / RFC-0004 / RFC-0005)", () => {
 
     await trainer.runStudentSceneForward(ch06);
     expect(seenPrompts[1]).toContain("自回归预测第一轮独特的台词标记");
+  });
 
-    const evalRes = await trainer.evaluateScenePredictions(ch06, [
+  it("fails fast on malformed <OS>/<Action> or broken LLM JSON instead of fabricating fallback defaults, and deduplicates script brackets", () => {
+    expect(() => parseStudentTurnOutput("Just plain text without OS or Action tags")).toThrow(
+      /missing <OS> or <Action>/,
+    );
+    expect(() => parseStudentTurnOutput("<OS></OS><Action>「……」</Action>")).toThrow(
+      /empty <OS> or <Action>/,
+    );
+
+    const brokenJson = `\`\`\`json
+[
+  {
+    "turnId": "ch02#turn-01",
+    "os": "未转义的双引号"直接破坏JSON语法",
+    "action": "「……」",
+  }
+]
+\`\`\``;
+    expect(() => extractJsonFromLlm(brokenJson)).toThrow();
+
+    // Deduplicate outer quotes/brackets in formatInputLine & formatTargetActionLines
+    expect(
+      formatInputLine({
+        index: 1,
+        global_index: 1,
+        type: "dialogue",
+        speaker: "主人",
+        text: "「已经带了引号的台词」",
+        raw: "「已经带了引号的台词」",
+      }),
+    ).toBe("【主人】: 「已经带了引号的台词」");
+
+    const targetFormatted = formatTargetActionLines([
       {
-        turn: ch06.turns[0],
-        predictedOS: "看着他",
-        predictedAction: "「（微微仰起头看着你）我守着铁饭盆陪你 (｡•ᴗ•｡)」",
-        formatValid: true,
+        index: 2,
+        global_index: 2,
+        type: "monologue",
+        speaker: "大肥鱼",
+        text: "（已经带了圆括号的独白）",
+        raw: "（已经带了圆括号的独白）",
       },
       {
-        turn: ch06.turns[1],
-        predictedOS: "继续看着他",
-        predictedAction: "「眼睛酸了就歇一歇。异步锁很容易死锁。我帮你盯着排查 (｡•ᴗ•｡)。」",
-        formatValid: true,
+        index: 3,
+        global_index: 3,
+        type: "narration",
+        speaker: "大肥鱼",
+        text: "（静静把温暖的汤卡推到屏幕角落）",
+        raw: "（静静把温暖的汤卡推到屏幕角落）",
       },
     ]);
-
-    expect(evalRes.items[0].actionScore).toBe(72);
-    expect(evalRes.items[0].diagnostic).toContain("[-18]");
-    expect(evalRes.items[1].actionScore).toBe(68);
-    expect(evalRes.items[1].diagnostic).toContain("[-12]");
-    expect(evalRes.items[1].diagnostic).toContain("[-10]");
+    expect(targetFormatted.explicitOS).toBe("已经带了圆括号的独白");
+    expect(targetFormatted.gtActionText).toBe("（静静把温暖的汤卡推到屏幕角落）");
   });
 });

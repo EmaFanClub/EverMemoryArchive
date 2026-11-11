@@ -514,33 +514,38 @@ export class EmaPersonaTrainer {
     ].join("\n");
 
     const res = await this.client.complete(prompt, this.teacherCallOptions());
-    let parsedArr: Array<{
-      sceneId?: string;
-      summary?: string;
-      innerOSArc?: string;
-      keyFacts?: string[];
-    }> = [];
-    try {
-      parsedArr = extractJsonFromLlm(res.text);
-    } catch {
-      parsedArr = [];
+    const parsedArr = extractJsonFromLlm<
+      Array<{
+        sceneId?: string;
+        summary?: string;
+        innerOSArc?: string;
+        keyFacts?: string[];
+      }>
+    >(res.text);
+    if (!Array.isArray(parsedArr)) {
+      throw new Error(
+        `Expected JSON array from batch scene compaction, got: ${res.text.slice(0, 200)}`,
+      );
     }
 
     const items: SceneMemoryIndexItem[] = scenes.map((s, idx) => {
-      const m =
-        (Array.isArray(parsedArr) &&
-          (parsedArr.find((x) => x?.sceneId === s.sceneId) || parsedArr[idx])) ||
-        {};
+      const m = parsedArr.find((x) => x?.sceneId === s.sceneId) || parsedArr[idx];
+      const summary = (m?.summary || "").trim();
+      const innerOSArc = (m?.innerOSArc || "").trim();
+      if (!summary || !innerOSArc) {
+        throw new Error(
+          `Missing valid summary/innerOSArc for scene ${s.sceneId} in batch scene compaction output`,
+        );
+      }
       return {
         sceneId: s.sceneId,
         order: s.order,
         chapter: s.chapter,
         title: s.title,
         setting: s.setting,
-        summary:
-          (m.summary || "").trim() || `在《${s.title}》中，我与${protagonist}在${s.setting}度过了时光。`,
-        innerOSArc: (m.innerOSArc || "").trim() || `内心情绪随互动自然流转。`,
-        keyFacts: Array.isArray(m.keyFacts) ? m.keyFacts.slice(0, 4) : [],
+        summary,
+        innerOSArc,
+        keyFacts: Array.isArray(m?.keyFacts) ? m.keyFacts.slice(0, 4) : [],
       };
     });
 

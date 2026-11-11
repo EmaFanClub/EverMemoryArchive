@@ -173,15 +173,17 @@ export class EmaMemoryCompactor {
       const res = await this.client.complete(buildCompactPrompt(hint), this.callOptions());
       callMetrics.push(res.metrics);
 
-      let parsed: { summary?: string; innerOSArc?: string; keyFacts?: string[] } = {};
-      try {
-        parsed = extractJsonFromLlm(res.text);
-      } catch {
-        parsed = {
-          summary: `在《${scene.title}》中，我与${protagonist}在${scene.setting}经历了互动。`,
-          innerOSArc: `内心情绪随着互动自然流转。`,
-          keyFacts: [`场景 ${scene.sceneId}: ${scene.title}`],
-        };
+      const parsed = extractJsonFromLlm<{
+        summary?: string;
+        innerOSArc?: string;
+        keyFacts?: string[];
+      }>(res.text);
+      const summary = (parsed.summary || "").trim();
+      const innerOSArc = (parsed.innerOSArc || "").trim();
+      if (!summary || !innerOSArc) {
+        throw new Error(
+          `Invalid compaction output for scene ${scene.sceneId}: missing non-empty summary or innerOSArc`,
+        );
       }
 
       return {
@@ -190,8 +192,8 @@ export class EmaMemoryCompactor {
         chapter: scene.chapter,
         title: scene.title,
         setting: scene.setting,
-        summary: (parsed.summary || "").trim() || `与${protagonist}在《${scene.title}》中的经历。`,
-        innerOSArc: (parsed.innerOSArc || "").trim() || `陪伴着${protagonist}。`,
+        summary,
+        innerOSArc,
         keyFacts: Array.isArray(parsed.keyFacts)
           ? parsed.keyFacts.slice(0, Math.max(1, this.compressionPrompt.maxKeyFacts))
           : [],
@@ -228,18 +230,17 @@ export class EmaMemoryCompactor {
 
         const refRes = await this.client.complete(reflectPrompt, this.callOptions());
         callMetrics.push(refRes.metrics);
-        try {
-          const refParsed = extractJsonFromLlm<{
-            reflectionScore?: number;
-            missingDetail?: string;
-          }>(refRes.text);
-          return {
-            score: Math.max(0, Math.min(100, Number(refParsed.reflectionScore ?? 85))),
-            missing: (refParsed.missingDetail || "").trim(),
-          };
-        } catch {
-          return { score: 85, missing: "无" };
+        const refParsed = extractJsonFromLlm<{
+          reflectionScore?: number;
+          missingDetail?: string;
+        }>(refRes.text);
+        if (typeof refParsed.reflectionScore !== "number") {
+          throw new Error("Invalid reflection evaluation output: missing numeric reflectionScore");
         }
+        return {
+          score: Math.max(0, Math.min(100, refParsed.reflectionScore)),
+          missing: (refParsed.missingDetail || "").trim(),
+        };
       };
 
       const firstEval = await evaluateReflect(indexItem);
@@ -357,40 +358,33 @@ export class EmaMemoryCompactor {
     const res = await this.client.complete(prompt, this.callOptions());
     callMetrics.push(res.metrics);
 
-    let parsed: {
+    const parsed = extractJsonFromLlm<{
       title?: string;
       summary?: string;
       emotionalEvolutionArc?: string;
       consolidatedKeyFacts?: string[];
-    } = {};
-    try {
-      parsed = extractJsonFromLlm(res.text);
-    } catch {
-      parsed = {};
-    }
+    }>(res.text);
 
-    const fallbackFacts = [
-      ...new Set(l0Batch.flatMap((s) => s.keyFacts || [])),
-    ].slice(0, 6);
+    const title = (parsed.title || "").trim();
+    const summary = (parsed.summary || "").trim();
+    const emotionalEvolutionArc = (parsed.emotionalEvolutionArc || "").trim();
+    if (!title || !summary || !emotionalEvolutionArc) {
+      throw new Error(
+        `Invalid L1 epoch rollup output for ${epochId}: missing title, summary, or emotionalEvolutionArc`,
+      );
+    }
 
     const epochItem: EpochMemoryIndexItem = {
       epochId,
       order: epochOrder,
-      title: (parsed.title || "").trim() || `${first.title} 至 ${last.title}`,
+      title,
       timeSpan,
       sourceSceneIds: l0Batch.map((s) => s.sceneId),
-      summary:
-        (parsed.summary || "").trim() ||
-        l0Batch.map((s) => s.summary).join(" ").slice(0, 220),
-      emotionalEvolutionArc:
-        (parsed.emotionalEvolutionArc || "").trim() ||
-        l0Batch.map((s) => s.innerOSArc).join(" -> ").slice(0, 80),
-      consolidatedKeyFacts:
-        Array.isArray(parsed.consolidatedKeyFacts) &&
-        parsed.consolidatedKeyFacts.length > 0
-          ? parsed.consolidatedKeyFacts.slice(0, 6)
-          : fallbackFacts,
-      reflectionScore: 90,
+      summary,
+      emotionalEvolutionArc,
+      consolidatedKeyFacts: Array.isArray(parsed.consolidatedKeyFacts)
+        ? parsed.consolidatedKeyFacts.slice(0, 6)
+        : [],
     };
 
     for (const s of l0Batch) {

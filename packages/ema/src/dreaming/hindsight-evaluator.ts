@@ -112,38 +112,42 @@ export async function evaluateSceneInHindsight(options: {
     const res = await client.complete(prompt, teacherCallOptions);
     metrics.push(res.metrics);
 
-    let parsedArr: Array<{
-      turnId?: string;
-      osScore?: number;
-      actionScore?: number;
-      driftDetected?: boolean;
-      diagnostic?: string;
-      synthesizedDreamOS?: string;
-      synthesizedDreamAction?: string;
-    }> = [];
-    try {
-      parsedArr = extractJsonFromLlm(res.text);
-    } catch {
-      parsedArr = [];
+    const parsedArr = extractJsonFromLlm<
+      Array<{
+        turnId?: string;
+        osScore?: number;
+        actionScore?: number;
+        driftDetected?: boolean;
+        diagnostic?: string;
+        synthesizedDreamOS?: string;
+        synthesizedDreamAction?: string;
+      }>
+    >(res.text);
+    if (!Array.isArray(parsedArr)) {
+      throw new Error(
+        `Expected JSON array from Hindsight Dream Evaluator, got: ${res.text.slice(0, 200)}`,
+      );
     }
 
     for (let j = 0; j < chunk.length; j++) {
       const it = chunk[j];
       const p = payload[j];
-      const e =
-        (Array.isArray(parsedArr) &&
-          (parsedArr.find((x) => x?.turnId === it.turnId) || parsedArr[j])) ||
-        {};
+      const e = parsedArr.find((x) => x?.turnId === it.turnId) || parsedArr[j];
+      if (!e || typeof e.osScore !== "number" || typeof e.actionScore !== "number") {
+        throw new Error(
+          `Missing valid numeric osScore/actionScore for turn ${it.turnId} in Hindsight Dream Evaluator output`,
+        );
+      }
 
-      const osScore = Math.max(0, Math.min(100, Number(e.osScore ?? 82)));
-      const actionScore = Math.max(0, Math.min(100, Number(e.actionScore ?? 82)));
+      const osScore = Math.max(0, Math.min(100, e.osScore));
+      const actionScore = Math.max(0, Math.min(100, e.actionScore));
       const combinedScore = Number((0.4 * osScore + 0.6 * actionScore).toFixed(1));
       const driftDetected =
         typeof e.driftDetected === "boolean" ? e.driftDetected : combinedScore < 76;
       const diagnostic =
         typeof e.diagnostic === "string" && e.diagnostic.trim()
           ? e.diagnostic.trim()
-          : "对话自然温和，符合伴侣人设";
+          : "";
       const synthesizedDreamOS =
         typeof e.synthesizedDreamOS === "string" && e.synthesizedDreamOS.trim()
           ? e.synthesizedDreamOS.trim()
