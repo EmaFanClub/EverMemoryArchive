@@ -25,8 +25,9 @@ import type { LlmCallOptions, PenguinServerLLMClient } from "./llm-client.js";
 
 /**
  * Extracts <OS> and <Action> blocks from model output.
+ * Throws if either <OS> or <Action> is missing or empty.
  */
-export function parseStudentTurnOutput(rawText: string, fallbackThinking?: string): {
+export function parseStudentTurnOutput(rawText: string): {
   os: string;
   action: string;
   formatValid: boolean;
@@ -35,48 +36,30 @@ export function parseStudentTurnOutput(rawText: string, fallbackThinking?: strin
   const osMatch = text.match(/<OS>([\s\S]*?)<\/OS>/i);
   const actionMatch = text.match(/<Action>([\s\S]*?)<\/Action>/i);
 
-  if (osMatch && actionMatch) {
-    return {
-      os: osMatch[1].trim(),
-      action: actionMatch[1].trim(),
-      formatValid: true,
-    };
+  if (!osMatch || !actionMatch) {
+    throw new Error(
+      `Invalid Student turn output: missing <OS> or <Action> block in "${text.slice(0, 200)}"`,
+    );
   }
 
-  try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (typeof parsed.os === "string" && typeof parsed.action === "string") {
-        return {
-          os: parsed.os.trim(),
-          action: parsed.action.trim(),
-          formatValid: true,
-        };
-      }
-    }
-  } catch {
-    // ignore
+  const os = osMatch[1].trim();
+  const action = actionMatch[1].trim();
+  if (!os || !action) {
+    throw new Error(
+      `Invalid Student turn output: empty <OS> or <Action> block in "${text.slice(0, 200)}"`,
+    );
   }
-
-  const fallbackOs = osMatch
-    ? osMatch[1].trim()
-    : fallbackThinking?.trim()
-      ? fallbackThinking.replace(/\*\*[^*]+\*\*/g, "").trim().slice(0, 220)
-      : "（静静观察着眼前的情形）";
-  const fallbackAction = actionMatch
-    ? actionMatch[1].trim()
-    : text.replace(/<OS>[\s\S]*?<\/OS>/gi, "").replace(/<\/?Action>/gi, "").trim();
 
   return {
-    os: fallbackOs,
-    action: fallbackAction || "「……」",
-    formatValid: false,
+    os,
+    action,
+    formatValid: true,
   };
 }
 
 /**
  * Extracts a JSON object or array from an LLM response string (stripping markdown fences if present).
+ * Throws immediately if the response is not valid JSON.
  */
 export function extractJsonFromLlm<T = any>(rawText: string): T {
   const cleaned = (rawText || "")
@@ -84,25 +67,7 @@ export function extractJsonFromLlm<T = any>(rawText: string): T {
     .replace(/\s*```$/i, "")
     .trim();
 
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch {
-    const firstBrace = cleaned.indexOf("{");
-    const firstBracket = cleaned.indexOf("[");
-    let start = -1;
-    let end = -1;
-    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-      start = firstBrace;
-      end = cleaned.lastIndexOf("}");
-    } else if (firstBracket !== -1) {
-      start = firstBracket;
-      end = cleaned.lastIndexOf("]");
-    }
-    if (start !== -1 && end > start) {
-      return JSON.parse(cleaned.slice(start, end + 1)) as T;
-    }
-    throw new Error(`Failed to parse JSON from LLM output: ${rawText.slice(0, 240)}`);
-  }
+  return JSON.parse(cleaned) as T;
 }
 
 /**
@@ -480,57 +445,72 @@ export async function mutatePersonalityWithAnchors(options: {
     antiOocConstraints?: string[];
   }>(res.text);
 
-  const mutationReason =
-    parsed.mutationReason || `针对场景 ${scene.sceneId} 的语调与句长偏差进行增量校准`;
+  if (typeof parsed.mutationReason !== "string" || !parsed.mutationReason.trim()) {
+    throw new Error("Invalid mutation output: missing non-empty mutationReason");
+  }
+  const mutationReason = parsed.mutationReason.trim();
 
-  const mergeWithAnchors = (
+  const mergeWithAnchorsAndPrior = (
     anchors: string[],
+    prior: string[],
     additions?: string[],
-    maxAdditions = 3,
+    maxTotal = 6,
   ): string[] => {
-    if (!Array.isArray(additions) || additions.length === 0) return anchors;
-    const merged = [...anchors];
-    for (const rule of additions.slice(0, maxAdditions)) {
-      if (typeof rule === "string" && rule.trim() && !merged.includes(rule.trim())) {
-        merged.push(rule.trim());
+    const merged: string[] = [];
+    for (const a of anchors) {
+      if (typeof a === "string" && a.trim() && !merged.includes(a.trim())) {
+        merged.push(a.trim());
       }
     }
-    return merged;
+    const priorEvolved = prior.filter((r) => !merged.includes(r.trim()));
+    for (const p of priorEvolved.slice(-2)) {
+      if (typeof p === "string" && p.trim()) {
+        merged.push(p.trim());
+      }
+    }
+    if (Array.isArray(additions)) {
+      for (const rule of additions) {
+        if (typeof rule === "string" && rule.trim() && !merged.includes(rule.trim())) {
+          merged.push(rule.trim());
+        }
+      }
+    }
+    return merged.slice(0, maxTotal);
   };
 
   const mutated: CompanionPersonality = {
     version: nextVersionLabel,
     name: currentPersonality.name,
     coreIdentity: anchorPersonality.coreIdentity,
-    emotionalDynamics: mergeWithAnchors(
-      anchorPersonality.emotionalDynamics.slice(0, 1),
+    emotionalDynamics: mergeWithAnchorsAndPrior(
+      anchorPersonality.emotionalDynamics.slice(0, 3),
+      currentPersonality.emotionalDynamics,
       parsed.emotionalDynamics,
-      4,
+      6,
     ),
-    speechStyleRules: mergeWithAnchors(
-      anchorPersonality.speechStyleRules.slice(0, 2),
+    speechStyleRules: mergeWithAnchorsAndPrior(
+      anchorPersonality.speechStyleRules,
+      currentPersonality.speechStyleRules,
       parsed.speechStyleRules,
-      3,
+      6,
     ),
-    cognitiveOSPatterns: mergeWithAnchors(
-      [
-        anchorPersonality.cognitiveOSPatterns[0],
-        anchorPersonality.cognitiveOSPatterns[
-          anchorPersonality.cognitiveOSPatterns.length - 1
-        ],
-      ].filter(Boolean),
+    cognitiveOSPatterns: mergeWithAnchorsAndPrior(
+      anchorPersonality.cognitiveOSPatterns.slice(0, 3),
+      currentPersonality.cognitiveOSPatterns,
       parsed.cognitiveOSPatterns,
-      3,
+      6,
     ),
-    behavioralHabits: mergeWithAnchors(
-      anchorPersonality.behavioralHabits.slice(0, 1),
+    behavioralHabits: mergeWithAnchorsAndPrior(
+      anchorPersonality.behavioralHabits.slice(0, 4),
+      currentPersonality.behavioralHabits,
       parsed.behavioralHabits,
-      3,
+      6,
     ),
-    antiOocConstraints: mergeWithAnchors(
-      anchorPersonality.antiOocConstraints.slice(0, 2),
+    antiOocConstraints: mergeWithAnchorsAndPrior(
+      anchorPersonality.antiOocConstraints.slice(0, 4),
+      currentPersonality.antiOocConstraints,
       parsed.antiOocConstraints,
-      3,
+      6,
     ),
     ...(Array.isArray(anchorPersonality.goldenExemplars) &&
     anchorPersonality.goldenExemplars.length > 0
