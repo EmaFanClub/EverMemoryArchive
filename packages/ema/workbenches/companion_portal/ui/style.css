@@ -153,6 +153,16 @@ body {
   font-weight: 600;
   flex-shrink: 0;
   margin-top: 2px;
+  object-fit: cover;
+}
+
+.header-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--wb-border);
+  flex-shrink: 0;
 }
 
 .group-body {
