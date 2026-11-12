@@ -382,32 +382,30 @@ export class QQWorld extends EmaWorld {
   private deliveryReceipts: Map<string, QQDeliveryReceipt> = new Map();
   private sentHashes: Map<string, number> = new Map();
 
-  // RFC-0002 Social Media Channel Architecture In-Memory / Fallback Maps
-  private socialNodes: Map<string, EmaNode> = new Map();
-  private socialChannels: Map<string, QQChannel> = new Map();
-  private socialItems: Map<string, EmaChannelItem> = new Map();
-
   // Rate limit sliding windows (timestamps in ms)
   private groupSendTimestamps: number[] = [];
   private privateSendTimestamps: number[] = [];
   private qzoneSendTimestamps: number[] = [];
 
-  private db: DatabaseSync | null = null;
-  private insertSeenStmt: StatementSync | null = null;
-  private selectAllSeenStmt: StatementSync | null = null;
-  private upsertIntimacyStmt: StatementSync | null = null;
-  private selectAllIntimacyStmt: StatementSync | null = null;
+  private db!: DatabaseSync;
+  private insertSeenStmt!: StatementSync;
+  private selectAllSeenStmt!: StatementSync;
+  private upsertIntimacyStmt!: StatementSync;
+  private selectAllIntimacyStmt!: StatementSync;
 
   // RFC-0002 SQLite Statements
-  private insertSocialNodeStmt: StatementSync | null = null;
-  private selectSocialNodeStmt: StatementSync | null = null;
-  private selectAllSocialNodesStmt: StatementSync | null = null;
-  private insertSocialChannelStmt: StatementSync | null = null;
-  private selectSocialChannelStmt: StatementSync | null = null;
-  private selectAllSocialChannelsStmt: StatementSync | null = null;
-  private insertSocialItemStmt: StatementSync | null = null;
-  private selectSocialItemStmt: StatementSync | null = null;
-  private selectSocialItemsByChannelStmt: StatementSync | null = null;
+  private insertSocialNodeStmt!: StatementSync;
+  private selectSocialNodeStmt!: StatementSync;
+  private selectAllSocialNodesStmt!: StatementSync;
+  private insertSocialChannelStmt!: StatementSync;
+  private selectSocialChannelStmt!: StatementSync;
+  private selectAllSocialChannelsStmt!: StatementSync;
+  private insertSocialItemStmt!: StatementSync;
+  private selectSocialItemStmt!: StatementSync;
+  private selectSocialItemsByChannelStmt!: StatementSync;
+  private countSocialNodesStmt!: StatementSync;
+  private countSocialChannelsStmt!: StatementSync;
+  private countSocialItemsStmt!: StatementSync;
 
   private activeCtx: EmaCtx | null = null;
   private active = false;
@@ -577,159 +575,141 @@ export class QQWorld extends EmaWorld {
   }
 
   private initSqlite(): void {
-    if (!this.dbPath) return;
-    try {
-      if (this.dbPath !== ":memory:") {
-        const dir = path.dirname(this.dbPath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
+    if (this.dbPath !== ":memory:") {
+      const dir = path.dirname(this.dbPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
       }
-      this.db = new DatabaseSync(this.dbPath);
-      this.db.exec(`
-        PRAGMA journal_mode = WAL;
-        PRAGMA busy_timeout = 5000;
-        CREATE TABLE IF NOT EXISTS seen_messages (
-          id TEXT PRIMARY KEY,
-          channel TEXT,
-          timestamp INTEGER
-        );
-        CREATE TABLE IF NOT EXISTS snowluma_seen_messages (
-          id TEXT PRIMARY KEY,
-          part_id TEXT,
-          timestamp INTEGER
-        );
-        CREATE TABLE IF NOT EXISTS snowluma_intimacy (
-          user_id TEXT PRIMARY KEY,
-          score INTEGER,
-          stage TEXT,
-          quiet_hours_start INTEGER,
-          quiet_hours_end INTEGER,
-          dnd INTEGER,
-          last_interaction_at INTEGER
-        );
-
-        -- RFC-0002 Social Media Channel Architecture Read-Through Cache
-        CREATE TABLE IF NOT EXISTS seen_social_nodes (
-          id TEXT PRIMARY KEY,
-          world TEXT NOT NULL,
-          node_kind TEXT NOT NULL,
-          name TEXT NOT NULL,
-          handle TEXT,
-          avatar_url TEXT,
-          channel_ids TEXT,
-          metadata TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS seen_social_channels (
-          id TEXT PRIMARY KEY,
-          world TEXT NOT NULL,
-          channel_kind TEXT NOT NULL,
-          owner_node_id TEXT,
-          name TEXT NOT NULL,
-          description TEXT,
-          linked_channel_ids TEXT,
-          metadata TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS seen_social_items (
-          id TEXT PRIMARY KEY,
-          channel_id TEXT NOT NULL,
-          author_node_id TEXT NOT NULL,
-          name TEXT,
-          content TEXT NOT NULL,
-          created_at_iso TEXT NOT NULL,
-          created_at_ms INTEGER NOT NULL,
-          fetched_at_ms INTEGER NOT NULL,
-          parent_item_id TEXT,
-          url TEXT,
-          metadata TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_social_items_channel ON seen_social_items (channel_id, created_at_ms);
-      `);
-
-      try {
-        this.db.exec("ALTER TABLE seen_social_nodes ADD COLUMN metadata_json TEXT");
-      } catch {}
-      try {
-        this.db.exec("ALTER TABLE seen_social_nodes ADD COLUMN fetched_at_ms INTEGER");
-      } catch {}
-      try {
-        this.db.exec("ALTER TABLE seen_social_channels ADD COLUMN linked_channels_json TEXT");
-      } catch {}
-      try {
-        this.db.exec("ALTER TABLE seen_social_channels ADD COLUMN metadata_json TEXT");
-      } catch {}
-      try {
-        this.db.exec("ALTER TABLE seen_social_channels ADD COLUMN fetched_at_ms INTEGER");
-      } catch {}
-      try {
-        this.db.exec("ALTER TABLE seen_social_items ADD COLUMN created_at_ms INTEGER");
-      } catch {}
-      try {
-        this.db.exec("ALTER TABLE seen_social_items ADD COLUMN metadata_json TEXT");
-      } catch {}
-
-      this.insertSeenStmt = this.db.prepare(
-        "INSERT OR IGNORE INTO snowluma_seen_messages (id, part_id, timestamp) VALUES (?, ?, ?)",
-      );
-      this.selectAllSeenStmt = this.db.prepare(
-        "SELECT id FROM snowluma_seen_messages",
-      );
-      this.upsertIntimacyStmt = this.db.prepare(`
-        INSERT INTO snowluma_intimacy (user_id, score, stage, quiet_hours_start, quiet_hours_end, dnd, last_interaction_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-          score = excluded.score,
-          stage = excluded.stage,
-          quiet_hours_start = excluded.quiet_hours_start,
-          quiet_hours_end = excluded.quiet_hours_end,
-          dnd = excluded.dnd,
-          last_interaction_at = excluded.last_interaction_at
-      `);
-      this.selectAllIntimacyStmt = this.db.prepare(
-        "SELECT * FROM snowluma_intimacy",
-      );
-
-      // RFC-0002 Statements
-      this.insertSocialNodeStmt = this.db.prepare(`
-        INSERT OR REPLACE INTO seen_social_nodes (id, world, node_kind, name, handle, avatar_url, channel_ids, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      this.selectSocialNodeStmt = this.db.prepare(
-        "SELECT * FROM seen_social_nodes WHERE id = ?",
-      );
-      this.selectAllSocialNodesStmt = this.db.prepare(
-        "SELECT * FROM seen_social_nodes",
-      );
-
-      this.insertSocialChannelStmt = this.db.prepare(`
-        INSERT OR REPLACE INTO seen_social_channels (id, world, channel_kind, owner_node_id, name, description, linked_channel_ids, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      this.selectSocialChannelStmt = this.db.prepare(
-        "SELECT * FROM seen_social_channels WHERE id = ?",
-      );
-      this.selectAllSocialChannelsStmt = this.db.prepare(
-        "SELECT * FROM seen_social_channels",
-      );
-
-      this.insertSocialItemStmt = this.db.prepare(`
-        INSERT OR REPLACE INTO seen_social_items (id, channel_id, author_node_id, name, content, created_at_iso, created_at_ms, fetched_at_ms, parent_item_id, url, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      this.selectSocialItemStmt = this.db.prepare(
-        "SELECT * FROM seen_social_items WHERE id = ?",
-      );
-      this.selectSocialItemsByChannelStmt = this.db.prepare(`
-        SELECT * FROM seen_social_items
-        WHERE channel_id = ?
-        ORDER BY created_at_ms DESC
-        LIMIT 100
-      `);
-    } catch (err) {
-      console.error("[QQWorld] Failed to initialize SQLite database:", err);
     }
+    this.db = new DatabaseSync(this.dbPath);
+    this.db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 5000;
+      CREATE TABLE IF NOT EXISTS seen_messages (
+        id TEXT PRIMARY KEY,
+        channel TEXT,
+        timestamp INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS snowluma_seen_messages (
+        id TEXT PRIMARY KEY,
+        part_id TEXT,
+        timestamp INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS snowluma_intimacy (
+        user_id TEXT PRIMARY KEY,
+        score INTEGER,
+        stage TEXT,
+        quiet_hours_start INTEGER,
+        quiet_hours_end INTEGER,
+        dnd INTEGER,
+        last_interaction_at INTEGER
+      );
+
+      -- RFC-0002 Social Media Channel Architecture Read-Through Cache
+      CREATE TABLE IF NOT EXISTS seen_social_nodes (
+        id TEXT PRIMARY KEY,
+        world TEXT NOT NULL,
+        node_kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        handle TEXT,
+        avatar_url TEXT,
+        channel_ids TEXT,
+        metadata TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS seen_social_channels (
+        id TEXT PRIMARY KEY,
+        world TEXT NOT NULL,
+        channel_kind TEXT NOT NULL,
+        owner_node_id TEXT,
+        name TEXT NOT NULL,
+        description TEXT,
+        linked_channel_ids TEXT,
+        metadata TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS seen_social_items (
+        id TEXT PRIMARY KEY,
+        channel_id TEXT NOT NULL,
+        author_node_id TEXT NOT NULL,
+        name TEXT,
+        content TEXT NOT NULL,
+        created_at_iso TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        fetched_at_ms INTEGER NOT NULL,
+        parent_item_id TEXT,
+        url TEXT,
+        metadata TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_social_items_channel ON seen_social_items (channel_id, created_at_ms);
+    `);
+
+    this.insertSeenStmt = this.db.prepare(
+      "INSERT OR IGNORE INTO snowluma_seen_messages (id, part_id, timestamp) VALUES (?, ?, ?)",
+    );
+    this.selectAllSeenStmt = this.db.prepare(
+      "SELECT id FROM snowluma_seen_messages",
+    );
+    this.upsertIntimacyStmt = this.db.prepare(`
+      INSERT INTO snowluma_intimacy (user_id, score, stage, quiet_hours_start, quiet_hours_end, dnd, last_interaction_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        score = excluded.score,
+        stage = excluded.stage,
+        quiet_hours_start = excluded.quiet_hours_start,
+        quiet_hours_end = excluded.quiet_hours_end,
+        dnd = excluded.dnd,
+        last_interaction_at = excluded.last_interaction_at
+    `);
+    this.selectAllIntimacyStmt = this.db.prepare(
+      "SELECT * FROM snowluma_intimacy",
+    );
+
+    // RFC-0002 Statements
+    this.insertSocialNodeStmt = this.db.prepare(`
+      INSERT OR REPLACE INTO seen_social_nodes (id, world, node_kind, name, handle, avatar_url, channel_ids, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.selectSocialNodeStmt = this.db.prepare(
+      "SELECT * FROM seen_social_nodes WHERE id = ?",
+    );
+    this.selectAllSocialNodesStmt = this.db.prepare(
+      "SELECT * FROM seen_social_nodes",
+    );
+
+    this.insertSocialChannelStmt = this.db.prepare(`
+      INSERT OR REPLACE INTO seen_social_channels (id, world, channel_kind, owner_node_id, name, description, linked_channel_ids, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.selectSocialChannelStmt = this.db.prepare(
+      "SELECT * FROM seen_social_channels WHERE id = ?",
+    );
+    this.selectAllSocialChannelsStmt = this.db.prepare(
+      "SELECT * FROM seen_social_channels",
+    );
+
+    this.insertSocialItemStmt = this.db.prepare(`
+      INSERT OR REPLACE INTO seen_social_items (id, channel_id, author_node_id, name, content, created_at_iso, created_at_ms, fetched_at_ms, parent_item_id, url, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.selectSocialItemStmt = this.db.prepare(
+      "SELECT * FROM seen_social_items WHERE id = ?",
+    );
+    this.selectSocialItemsByChannelStmt = this.db.prepare(`
+      SELECT * FROM seen_social_items
+      WHERE channel_id = ?
+      ORDER BY created_at_ms DESC
+      LIMIT 100
+    `);
+    this.countSocialNodesStmt = this.db.prepare(
+      "SELECT COUNT(*) as count FROM seen_social_nodes WHERE world = 'qq'",
+    );
+    this.countSocialChannelsStmt = this.db.prepare(
+      "SELECT COUNT(*) as count FROM seen_social_channels WHERE world = 'qq'",
+    );
+    this.countSocialItemsStmt = this.db.prepare(
+      "SELECT COUNT(*) as count FROM seen_social_items",
+    );
   }
 
   private initSocialPrimitives(options: QQWorldOptions): void {
@@ -831,123 +811,52 @@ export class QQWorld extends EmaWorld {
   }
 
   private loadState(): void {
-    if (!this.db) return;
-    try {
-      if (this.selectAllSeenStmt) {
-        const seenRows = this.selectAllSeenStmt.all() as Array<{ id: string }>;
-        for (const row of seenRows) {
-          if (row?.id) this.seenIds.add(row.id);
-        }
-      }
+    const seenRows = this.selectAllSeenStmt.all() as Array<{ id: string }>;
+    for (const row of seenRows) {
+      if (row?.id) this.seenIds.add(row.id);
+    }
 
-      if (this.selectAllIntimacyStmt) {
-        const intimacyRows = this.selectAllIntimacyStmt.all() as Array<{
-          user_id: string;
-          score: number;
-          stage: RelationalIntimacyStage;
-          quiet_hours_start: number | null;
-          quiet_hours_end: number | null;
-          dnd: number | null;
-          last_interaction_at: number | null;
-        }>;
-        for (const row of intimacyRows) {
-          this.intimacyProfiles.set(row.user_id, {
-            userId: row.user_id,
-            score: row.score,
-            stage: row.stage,
-            quietHours:
-              row.quiet_hours_start !== null && row.quiet_hours_end !== null
-                ? {
-                    startHour: row.quiet_hours_start,
-                    endHour: row.quiet_hours_end,
-                  }
-                : undefined,
-            dnd: Boolean(row.dnd),
-            lastInteractionAt: row.last_interaction_at ?? undefined,
-          });
-        }
-      }
-
-      if (this.selectAllSocialNodesStmt) {
-        const nodeRows = this.selectAllSocialNodesStmt.all() as Array<{
-          id: string;
-          world: string;
-          node_kind: string;
-          name: string;
-          handle: string | null;
-          avatar_url: string | null;
-          channel_ids: string | null;
-          metadata: string | null;
-        }>;
-        for (const r of nodeRows) {
-          this.socialNodes.set(r.id, {
-            id: r.id,
-            world: r.world,
-            node_kind: r.node_kind,
-            name: r.name,
-            handle: r.handle ?? undefined,
-            avatarUrl: r.avatar_url ?? undefined,
-            channelIds: r.channel_ids ? JSON.parse(r.channel_ids) : undefined,
-            metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
-          });
-        }
-      }
-
-      if (this.selectAllSocialChannelsStmt) {
-        const chRows = this.selectAllSocialChannelsStmt.all() as Array<{
-          id: string;
-          world: "qq";
-          channel_kind: QQChannelKind;
-          owner_node_id: string | null;
-          name: string;
-          description: string | null;
-          linked_channel_ids: string | null;
-          metadata: string | null;
-        }>;
-        for (const r of chRows) {
-          this.socialChannels.set(r.id, {
-            id: r.id,
-            world: "qq",
-            channel_kind: r.channel_kind,
-            ownerNodeId: r.owner_node_id ?? undefined,
-            name: r.name,
-            description: r.description ?? undefined,
-            linkedChannelIds: r.linked_channel_ids
-              ? JSON.parse(r.linked_channel_ids)
-              : undefined,
-            metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
-          });
-        }
-      }
-    } catch (err) {
-      console.error("[QQWorld] Failed to load state from SQLite:", err);
+    const intimacyRows = this.selectAllIntimacyStmt.all() as Array<{
+      user_id: string;
+      score: number;
+      stage: RelationalIntimacyStage;
+      quiet_hours_start: number | null;
+      quiet_hours_end: number | null;
+      dnd: number | null;
+      last_interaction_at: number | null;
+    }>;
+    for (const row of intimacyRows) {
+      this.intimacyProfiles.set(row.user_id, {
+        userId: row.user_id,
+        score: row.score,
+        stage: row.stage,
+        quietHours:
+          row.quiet_hours_start !== null && row.quiet_hours_end !== null
+            ? {
+                startHour: row.quiet_hours_start,
+                endHour: row.quiet_hours_end,
+              }
+            : undefined,
+        dnd: Boolean(row.dnd),
+        lastInteractionAt: row.last_interaction_at ?? undefined,
+      });
     }
   }
 
   private saveSeen(id: string, partId: string): void {
-    if (!this.db || !this.insertSeenStmt) return;
-    try {
-      this.insertSeenStmt.run(id, partId, Date.now());
-    } catch (err) {
-      console.error("[QQWorld] Failed to save seen message to SQLite:", err);
-    }
+    this.insertSeenStmt.run(id, partId, Date.now());
   }
 
   private persistIntimacy(profile: UserIntimacyProfile): void {
-    if (!this.db || !this.upsertIntimacyStmt) return;
-    try {
-      this.upsertIntimacyStmt.run(
-        profile.userId,
-        profile.score,
-        profile.stage,
-        profile.quietHours ? profile.quietHours.startHour : null,
-        profile.quietHours ? profile.quietHours.endHour : null,
-        profile.dnd ? 1 : 0,
-        profile.lastInteractionAt ?? null,
-      );
-    } catch (err) {
-      console.error("[QQWorld] Failed to persist intimacy profile to SQLite:", err);
-    }
+    this.upsertIntimacyStmt.run(
+      profile.userId,
+      profile.score,
+      profile.stage,
+      profile.quietHours ? profile.quietHours.startHour : null,
+      profile.quietHours ? profile.quietHours.endHour : null,
+      profile.dnd ? 1 : 0,
+      profile.lastInteractionAt ?? null,
+    );
   }
 
   /**
@@ -1288,26 +1197,8 @@ export class QQWorld extends EmaWorld {
       this.wsClient.dispose();
       this.wsClient = null;
     }
-    if (this.db) {
-      try {
-        this.insertSeenStmt = null;
-        this.selectAllSeenStmt = null;
-        this.upsertIntimacyStmt = null;
-        this.selectAllIntimacyStmt = null;
-        this.insertSocialNodeStmt = null;
-        this.selectSocialNodeStmt = null;
-        this.selectAllSocialNodesStmt = null;
-        this.insertSocialChannelStmt = null;
-        this.selectSocialChannelStmt = null;
-        this.selectAllSocialChannelsStmt = null;
-        this.insertSocialItemStmt = null;
-        this.selectSocialItemStmt = null;
-        this.selectSocialItemsByChannelStmt = null;
-        this.db.close();
-      } catch (err) {
-        console.error("[QQWorld] Error closing SQLite database:", err);
-      }
-      this.db = null;
+    if (this.db.isOpen) {
+      this.db.close();
     }
   }
 
@@ -1361,7 +1252,7 @@ export class QQWorld extends EmaWorld {
             name: `QQ Group ${groupId}`,
           });
         }
-        if (!this.socialChannels.has(socialChannelId)) {
+        if (!this.selectSocialChannelStmt.get(socialChannelId)) {
           this.registerSocialChannel({
             id: socialChannelId,
             world: "qq",
@@ -1382,7 +1273,7 @@ export class QQWorld extends EmaWorld {
             name: event.sender?.card || event.sender?.nickname || `QQ User ${senderIdStr}`,
           });
         }
-        if (!this.socialChannels.has(socialChannelId)) {
+        if (!this.selectSocialChannelStmt.get(socialChannelId)) {
           this.registerSocialChannel({
             id: socialChannelId,
             world: "qq",
@@ -1483,7 +1374,7 @@ export class QQWorld extends EmaWorld {
 
         // Ensure sender Node is registered in RFC-0002 social graph
         const senderNodeId = `qq:person:${senderIdStr}`;
-        if (!this.socialNodes.has(senderNodeId)) {
+        if (!this.selectSocialNodeStmt.get(senderNodeId)) {
           this.registerSocialNode({
             id: senderNodeId,
             world: "qq",
@@ -2032,118 +1923,88 @@ export class QQWorld extends EmaWorld {
    * Registers or updates a social node in the world state.
    */
   registerSocialNode(node: EmaNode): void {
-    this.socialNodes.set(node.id, node);
-    if (this.db && this.insertSocialNodeStmt) {
-      try {
-        this.insertSocialNodeStmt.run(
-          node.id,
-          node.world,
-          node.node_kind,
-          node.name,
-          node.handle ?? null,
-          node.avatarUrl ?? null,
-          node.channelIds ? JSON.stringify(node.channelIds) : null,
-          node.metadata ? JSON.stringify(node.metadata) : null,
-        );
-      } catch (err) {
-        console.error("[QQWorld] Failed to insert social node to SQLite:", err);
-      }
-    }
+    this.insertSocialNodeStmt.run(
+      node.id,
+      node.world,
+      node.node_kind,
+      node.name,
+      node.handle ?? null,
+      node.avatarUrl ?? null,
+      node.channelIds ? JSON.stringify(node.channelIds) : null,
+      node.metadata ? JSON.stringify(node.metadata) : null,
+    );
   }
 
   /**
    * Retrieves a social node by ID.
    */
   getSocialNode(id: string): EmaNode | undefined {
-    let node = this.socialNodes.get(id);
-    if (!node && this.db && this.selectSocialNodeStmt) {
-      try {
-        const row = this.selectSocialNodeStmt.get(id) as {
-          id: string;
-          world: string;
-          node_kind: string;
-          name: string;
-          handle: string | null;
-          avatar_url: string | null;
-          channel_ids: string | null;
-          metadata: string | null;
-        } | null;
-        if (row) {
-          node = {
-            id: row.id,
-            world: row.world,
-            node_kind: row.node_kind,
-            name: row.name,
-            handle: row.handle ?? undefined,
-            avatarUrl: row.avatar_url ?? undefined,
-            channelIds: row.channel_ids ? JSON.parse(row.channel_ids) : undefined,
-            metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-          };
-          this.socialNodes.set(row.id, node);
-        }
-      } catch {}
-    }
-    return node;
+    const row = this.selectSocialNodeStmt.get(id) as {
+      id: string;
+      world: string;
+      node_kind: string;
+      name: string;
+      handle: string | null;
+      avatar_url: string | null;
+      channel_ids: string | null;
+      metadata: string | null;
+    } | null;
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      world: row.world,
+      node_kind: row.node_kind,
+      name: row.name,
+      handle: row.handle ?? undefined,
+      avatarUrl: row.avatar_url ?? undefined,
+      channelIds: row.channel_ids ? JSON.parse(row.channel_ids) : undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+    };
   }
 
   /**
    * Registers or updates a social channel in the world state.
    */
   registerSocialChannel(channel: QQChannel): void {
-    this.socialChannels.set(channel.id, channel);
-    if (this.db && this.insertSocialChannelStmt) {
-      try {
-        this.insertSocialChannelStmt.run(
-          channel.id,
-          channel.world,
-          channel.channel_kind,
-          channel.ownerNodeId ?? null,
-          channel.name,
-          channel.description ?? null,
-          channel.linkedChannelIds ? JSON.stringify(channel.linkedChannelIds) : null,
-          channel.metadata ? JSON.stringify(channel.metadata) : null,
-        );
-      } catch (err) {
-        console.error("[QQWorld] Failed to insert social channel to SQLite:", err);
-      }
-    }
+    this.insertSocialChannelStmt.run(
+      channel.id,
+      channel.world,
+      channel.channel_kind,
+      channel.ownerNodeId ?? null,
+      channel.name,
+      channel.description ?? null,
+      channel.linkedChannelIds ? JSON.stringify(channel.linkedChannelIds) : null,
+      channel.metadata ? JSON.stringify(channel.metadata) : null,
+    );
   }
 
   /**
    * Retrieves a social channel by ID.
    */
   getSocialChannel(id: string): QQChannel | undefined {
-    let ch = this.socialChannels.get(id);
-    if (!ch && this.db && this.selectSocialChannelStmt) {
-      try {
-        const row = this.selectSocialChannelStmt.get(id) as {
-          id: string;
-          world: "qq";
-          channel_kind: QQChannelKind;
-          owner_node_id: string | null;
-          name: string;
-          description: string | null;
-          linked_channel_ids: string | null;
-          metadata: string | null;
-        } | null;
-        if (row) {
-          ch = {
-            id: row.id,
-            world: "qq",
-            channel_kind: row.channel_kind,
-            ownerNodeId: row.owner_node_id ?? undefined,
-            name: row.name,
-            description: row.description ?? undefined,
-            linkedChannelIds: row.linked_channel_ids
-              ? JSON.parse(row.linked_channel_ids)
-              : undefined,
-            metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-          };
-          this.socialChannels.set(row.id, ch);
-        }
-      } catch {}
-    }
-    if (!ch) return undefined;
+    const row = this.selectSocialChannelStmt.get(id) as {
+      id: string;
+      world: "qq";
+      channel_kind: QQChannelKind;
+      owner_node_id: string | null;
+      name: string;
+      description: string | null;
+      linked_channel_ids: string | null;
+      metadata: string | null;
+    } | null;
+    if (!row) return undefined;
+    const ch: QQChannel = {
+      id: row.id,
+      world: "qq",
+      channel_kind: row.channel_kind,
+      ownerNodeId: row.owner_node_id ?? undefined,
+      name: row.name,
+      description: row.description ?? undefined,
+      linkedChannelIds: row.linked_channel_ids
+        ? JSON.parse(row.linked_channel_ids)
+        : undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+    };
     if (!this.authManager.canQueryChannel(ch.id).authorized) {
       return undefined;
     }
@@ -2154,76 +2015,83 @@ export class QQWorld extends EmaWorld {
    * Lists all registered social channels (filtered by authorization policy).
    */
   listSocialChannels(): QQChannel[] {
-    return this.authManager.filterChannels(Array.from(this.socialChannels.values()));
+    const rows = this.selectAllSocialChannelsStmt.all() as Array<{
+      id: string;
+      world: "qq";
+      channel_kind: QQChannelKind;
+      owner_node_id: string | null;
+      name: string;
+      description: string | null;
+      linked_channel_ids: string | null;
+      metadata: string | null;
+    }>;
+    const channels: QQChannel[] = rows.map((row) => ({
+      id: row.id,
+      world: "qq",
+      channel_kind: row.channel_kind,
+      ownerNodeId: row.owner_node_id ?? undefined,
+      name: row.name,
+      description: row.description ?? undefined,
+      linkedChannelIds: row.linked_channel_ids
+        ? JSON.parse(row.linked_channel_ids)
+        : undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+    }));
+    return this.authManager.filterChannels(channels);
   }
 
   /**
    * Indexes a social channel item into persistent SQLite storage.
    */
   indexSocialItem(item: EmaChannelItem): void {
-    this.socialItems.set(item.id, item);
-    if (this.db && this.insertSocialItemStmt) {
-      try {
-        const createdAtMs = new Date(item.createdAtIso).getTime() || Date.now();
-        this.insertSocialItemStmt.run(
-          item.id,
-          item.channelId,
-          item.authorNodeId,
-          item.name ?? null,
-          item.content,
-          item.createdAtIso,
-          createdAtMs,
-          item.fetchedAtMs,
-          item.parentItemId ?? null,
-          item.url ?? null,
-          item.metadata ? JSON.stringify(item.metadata) : null,
-        );
-      } catch (err) {
-        console.error("[QQWorld] Failed to insert social item to SQLite:", err);
-      }
-    }
+    const createdAtMs = new Date(item.createdAtIso).getTime() || Date.now();
+    this.insertSocialItemStmt.run(
+      item.id,
+      item.channelId,
+      item.authorNodeId,
+      item.name ?? null,
+      item.content,
+      item.createdAtIso,
+      createdAtMs,
+      item.fetchedAtMs,
+      item.parentItemId ?? null,
+      item.url ?? null,
+      item.metadata ? JSON.stringify(item.metadata) : null,
+    );
   }
 
   /**
    * Retrieves a social channel item by ID.
    */
   getSocialItem(id: string): EmaChannelItem | undefined {
-    let item = this.socialItems.get(id);
-    if (!item && this.db && this.selectSocialItemStmt) {
-      try {
-        const row = this.selectSocialItemStmt.get(id) as {
-          id: string;
-          channel_id: string;
-          author_node_id: string;
-          name: string | null;
-          content: string;
-          created_at_iso: string;
-          created_at_ms: number;
-          fetched_at_ms: number;
-          parent_item_id: string | null;
-          url: string | null;
-          metadata: string | null;
-        } | null;
-        if (row) {
-          item = {
-            id: row.id,
-            channelId: row.channel_id,
-            authorNodeId: row.author_node_id,
-            name: row.name ?? undefined,
-            content: row.content,
-            createdAtIso: row.created_at_iso,
-            createdAt: formatAgentRelativeTime(row.created_at_ms),
-            fetchedAtMs: row.fetched_at_ms,
-            fetchedAt: formatAgentRelativeTime(row.fetched_at_ms),
-            parentItemId: row.parent_item_id ?? undefined,
-            url: row.url ?? undefined,
-            metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-          };
-          this.socialItems.set(row.id, item);
-        }
-      } catch {}
-    }
-    return item;
+    const row = this.selectSocialItemStmt.get(id) as {
+      id: string;
+      channel_id: string;
+      author_node_id: string;
+      name: string | null;
+      content: string;
+      created_at_iso: string;
+      created_at_ms: number;
+      fetched_at_ms: number;
+      parent_item_id: string | null;
+      url: string | null;
+      metadata: string | null;
+    } | null;
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      channelId: row.channel_id,
+      authorNodeId: row.author_node_id,
+      name: row.name ?? undefined,
+      content: row.content,
+      createdAtIso: row.created_at_iso,
+      createdAt: formatAgentRelativeTime(row.created_at_ms),
+      fetchedAtMs: row.fetched_at_ms,
+      fetchedAt: formatAgentRelativeTime(row.fetched_at_ms),
+      parentItemId: row.parent_item_id ?? undefined,
+      url: row.url ?? undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+    };
   }
 
   /**
@@ -2237,58 +2105,33 @@ export class QQWorld extends EmaWorld {
       );
     }
 
-    const items: EmaChannelItem[] = [];
-
-    if (this.db && this.selectSocialItemsByChannelStmt) {
-      try {
-        const rows = this.selectSocialItemsByChannelStmt.all(channelId) as Array<{
-          id: string;
-          channel_id: string;
-          author_node_id: string;
-          name: string | null;
-          content: string;
-          created_at_iso: string;
-          created_at_ms: number;
-          fetched_at_ms: number;
-          parent_item_id: string | null;
-          url: string | null;
-          metadata: string | null;
-        }>;
-        for (const row of rows) {
-          items.push({
-            id: row.id,
-            channelId: row.channel_id,
-            authorNodeId: row.author_node_id,
-            name: row.name ?? undefined,
-            content: row.content,
-            createdAtIso: row.created_at_iso,
-            createdAt: formatAgentRelativeTime(row.created_at_ms, referenceMs),
-            fetchedAtMs: row.fetched_at_ms,
-            fetchedAt: formatAgentRelativeTime(row.fetched_at_ms, referenceMs),
-            parentItemId: row.parent_item_id ?? undefined,
-            url: row.url ?? undefined,
-            metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-          });
-        }
-      } catch {}
-    }
-
-    if (items.length === 0) {
-      for (const item of this.socialItems.values()) {
-        if (item.channelId === channelId) {
-          items.push({
-            ...item,
-            createdAt: formatAgentRelativeTime(
-              new Date(item.createdAtIso).getTime(),
-              referenceMs,
-            ),
-            fetchedAt: formatAgentRelativeTime(item.fetchedAtMs, referenceMs),
-          });
-        }
-      }
-    }
-
-    return items;
+    const rows = this.selectSocialItemsByChannelStmt.all(channelId) as Array<{
+      id: string;
+      channel_id: string;
+      author_node_id: string;
+      name: string | null;
+      content: string;
+      created_at_iso: string;
+      created_at_ms: number;
+      fetched_at_ms: number;
+      parent_item_id: string | null;
+      url: string | null;
+      metadata: string | null;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      channelId: row.channel_id,
+      authorNodeId: row.author_node_id,
+      name: row.name ?? undefined,
+      content: row.content,
+      createdAtIso: row.created_at_iso,
+      createdAt: formatAgentRelativeTime(row.created_at_ms, referenceMs),
+      fetchedAtMs: row.fetched_at_ms,
+      fetchedAt: formatAgentRelativeTime(row.fetched_at_ms, referenceMs),
+      parentItemId: row.parent_item_id ?? undefined,
+      url: row.url ?? undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+    }));
   }
 
   /**
@@ -2690,13 +2533,16 @@ export class QQWorld extends EmaWorld {
     receiptsCount: number;
     sync: QQSyncStatus;
   } {
+    const channelsRow = this.countSocialChannelsStmt.get() as { count: number } | undefined;
+    const nodesRow = this.countSocialNodesStmt.get() as { count: number } | undefined;
+    const itemsRow = this.countSocialItemsStmt.get() as { count: number } | undefined;
     return {
       world: "qq",
       selfId: this.selfId,
       partsCount: this.parts.size,
-      channelsCount: this.socialChannels.size,
-      nodesCount: this.socialNodes.size,
-      itemsCount: this.socialItems.size,
+      channelsCount: channelsRow?.count ?? 0,
+      nodesCount: nodesRow?.count ?? 0,
+      itemsCount: itemsRow?.count ?? 0,
       seenCount: this.seenIds.size,
       historyCount: this.messageHistory.size,
       receiptsCount: this.deliveryReceipts.size,
