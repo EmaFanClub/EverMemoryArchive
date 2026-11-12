@@ -925,5 +925,35 @@ describe("WebWorld (RFC-0001 / node-mw7row3c-pdfz / node-mw7rpkq4-jwez)", () => 
 
       fs.rmSync(tmpAppDataDir, { recursive: true, force: true });
     });
+
+    it("hydrates companion and owner identity from existing SQLite seen_social_nodes when options omit them", () => {
+      const tmpDir = fs.mkdtempSync("/tmp/ema-web-identity-test-");
+      const dbPath = path.join(tmpDir, "web-world.sqlite");
+
+      const w1 = new WebWorld({
+        dbPath,
+        companionId: "sakana_kawaii",
+        companionName: "大肥鱼 (鱼鱼)",
+        ownerName: "主人",
+        env: mockEnv,
+        heartbeatIntervalMs: 0,
+      });
+      expect(w1.companionId).toBe("sakana_kawaii");
+      expect(w1.companionName).toBe("大肥鱼 (鱼鱼)");
+      w1.dispose();
+
+      // Subsequent CLI instantiation without companionId/companionName must preserve sakana_kawaii
+      const w2 = new WebWorld({
+        dbPath,
+        env: mockEnv,
+        heartbeatIntervalMs: 0,
+      });
+      expect(w2.companionId).toBe("sakana_kawaii");
+      expect(w2.companionName).toBe("大肥鱼 (鱼鱼)");
+      expect(w2.ownerName).toBe("主人");
+      w2.dispose();
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
   });
 });

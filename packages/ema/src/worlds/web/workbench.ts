@@ -60,13 +60,15 @@ export function buildWebChannelProtocolSection(options: {
     "   ```bash",
     `   node ${emaCliPath} world get /world/web/channels/${channelId}/items --db ${options.dbPath}`,
     "   ```",
-    "2. **第二步：发送回复消息到聊天室频道 (`world post`)**",
-    "   阅读频道中的最新消息后，使用 `message.post` 动作将你的回复发送到聊天室频道：",
+    "2. **第二步：潜变量 `<OS>` 推演与角色语感对齐（在思考中完成）**",
+    "   - 先以第一人称「我」在内心 `<OS>` 中体察对方这句话的真实意图与情绪，并严格遵循 `AGENTS.md` 中的人格设定、语言风格铁律与真句锚点（Golden Exemplars）。",
+    "3. **第三步：发送回复消息到聊天室频道 (`world post`)**",
+    "   将通过防复读自检后的纯净回复发送到聊天室频道：",
     "   ```bash",
-    `   node ${emaCliPath} world post /world/web/actions/message.post --db ${options.dbPath} --channel ${channelId} --parent <回复的目标消息ID> --message "<你的温柔回复内容>"`,
+    `   node ${emaCliPath} world post /world/web/actions/message.post --db ${options.dbPath} --channel ${channelId} --parent <回复的目标消息ID> --message "<你的回复内容>"`,
     "   ```",
-    "3. **完成回合**：",
-    `   成功通过 \`world post\` 将消息发布到 \`${channelId}\` 频道后，按 \`<OS>...</OS><Action>...</Action>\` 格式输出你的第一人称内心独白与刚才发送的那句回复内容以结束当前回合（不要输出“我已发送到频道”等元解释）。`,
+    "4. **完成回合**：",
+    `   成功通过 \`world post\` 将消息发布到 \`${channelId}\` 频道后，直接输出你刚才发送的那句回复内容结束当前回合（不要输出“我已发送到频道”等元解释）。`,
     WEB_CHANNEL_PROTOCOL_END_MARKER,
   ].join("\n");
 }
@@ -184,6 +186,8 @@ export function installWebWorkbench(
 
   // 2. Customize and write index.ts
   const srcIndexTs = fs.readFileSync(path.join(templateDir, "index.ts"), "utf8");
+  const defaultGreeting =
+    options.greeting?.trim() || `你好呀，我是${companionName}。今天有什么想聊的，随时告诉我吧。`;
   const customizedIndexTs = srcIndexTs
     .replace(
       /const WEB_WORLD_DB_PATH =\s*"[^"]+";/,
@@ -201,6 +205,8 @@ export function installWebWorkbench(
       /const BOT_NODE_ID = "[^"]+";/,
       `const BOT_NODE_ID = ${JSON.stringify(`web:bot:${agentId}`)};`,
     )
+    .replaceAll('"aoi_rei"', JSON.stringify(agentId))
+    .replaceAll("你好呀，我是苍星怜。今天有什么想聊的，随时告诉我吧。", defaultGreeting)
     .replaceAll("苍星怜", companionName)
     .replaceAll('"Rei"', JSON.stringify(ownerName));
 
@@ -208,13 +214,27 @@ export function installWebWorkbench(
   fs.writeFileSync(destIndexTsPath, customizedIndexTs, "utf8");
 
   // 3. Customize and write ui/index.html, ui/style.css, ui/app.js
+  const agentAvatarPath = path.join(agentRootDir, "agent_state", "avatar.png");
+  const hasAvatarPng = fs.existsSync(agentAvatarPath);
+  if (hasAvatarPng) {
+    fs.copyFileSync(agentAvatarPath, path.join(uiDir, "avatar.png"));
+  }
+
   const srcHtml = fs.readFileSync(path.join(templateDir, "ui", "index.html"), "utf8");
-  const customizedHtml = srcHtml
+  let customizedHtml = srcHtml
     .replaceAll("苍星怜", companionName)
     .replace(
       '<span class="avatar" aria-hidden="true">怜</span>',
-      `<span class="avatar" aria-hidden="true">${avatarChar}</span>`,
+      hasAvatarPng
+        ? `<img class="avatar" src="./avatar.png" alt="${companionName}" />`
+        : `<span class="avatar" aria-hidden="true">${avatarChar}</span>`,
     );
+  if (hasAvatarPng) {
+    customizedHtml = customizedHtml.replace(
+      `<span id="status-dot" class="status-dot online" aria-hidden="true"></span>`,
+      `<img class="header-avatar" src="./avatar.png" alt="${companionName}" />\n          <span id="status-dot" class="status-dot online" aria-hidden="true"></span>`,
+    );
+  }
   const destHtmlPath = path.join(uiDir, "index.html");
   fs.writeFileSync(destHtmlPath, customizedHtml, "utf8");
 
@@ -223,10 +243,21 @@ export function installWebWorkbench(
   fs.writeFileSync(destCssPath, srcCss, "utf8");
 
   const srcAppJs = fs.readFileSync(path.join(templateDir, "ui", "app.js"), "utf8");
-  const customizedAppJs = srcAppJs.replace(
-    'avatar.textContent = "怜";',
-    `avatar.textContent = ${JSON.stringify(avatarChar)};`,
-  );
+  const customizedAppJs = hasAvatarPng
+    ? srcAppJs.replace(
+        `const avatar = document.createElement("span");
+        avatar.className = "avatar";
+        avatar.setAttribute("aria-hidden", "true");
+        avatar.textContent = "怜";`,
+        `const avatar = document.createElement("img");
+        avatar.className = "avatar";
+        avatar.src = "./avatar.png";
+        avatar.alt = ${JSON.stringify(companionName)};`,
+      )
+    : srcAppJs.replace(
+        'avatar.textContent = "怜";',
+        `avatar.textContent = ${JSON.stringify(avatarChar)};`,
+      );
   const destAppJsPath = path.join(uiDir, "app.js");
   fs.writeFileSync(destAppJsPath, customizedAppJs, "utf8");
 

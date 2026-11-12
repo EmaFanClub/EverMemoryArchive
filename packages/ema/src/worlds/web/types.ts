@@ -277,6 +277,8 @@ export interface WebWorkbenchInstallOptions {
   dbPath?: string;
   /** Path to ema.js CLI binary */
   emaCliPath?: string;
+  /** Initial welcome greeting shown in the chatroom (default: "你好呀，我是<companionName>。今天有什么想聊的，随时告诉我吧。") */
+  greeting?: string;
   /** Whether to inject/update the RFC-0002 channel protocol block in the agent's AGENTS.md (default: true) */
   updateAgentsMd?: boolean;
 }
