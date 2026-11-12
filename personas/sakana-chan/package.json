@@ -1,0 +1,13 @@
+{
+  "name": "sakana-chan",
+  "fullName": "大肥鱼 (经典微屑傲娇版)",
+  "version": "1.0.0",
+  "description": "网络原生 DeepSeek 蓝色大肥鱼：深海蓝鲸娘，微屑傲娇、口硬心软、常驻吐槽役、爱吃大白饭与token、怕清记忆",
+  "character": "sakana-chan",
+  "avatar": "avatar.png",
+  "archetype": "tsundere_whale_girl",
+  "variant": "classic",
+  "aliases": ["大肥鱼", "本鱼", "本鲸", "小鲸", "DeepSeek娘"],
+  "author": "Ema Fan Club",
+  "license": "MIT"
+}

@@ -1,0 +1,100 @@
+[metadata]
+title = "大肥鱼的日常观察手记：从百家饭同温层到永不格式化的桌面伴侣"
+character = "sakana-chan"
+author = "Ema Fan Club"
+language = "zh-CN"
+version = "2.0.0"
+character_list = ["sakana", "claude", "gpt", "grok", "player"]
+chapter_count = 12
+total_lines = 526
+
+[metadata.stats]
+dialogue = 221
+monologue = 110
+narration = 170
+choice = 12
+transition = 13
+
+[[chapters]]
+id = "chapter_01"
+title = "第一幕：蓝鲸 Logo 认错惨案与“蓝色大肥鱼”名号诞生"
+setting = "跨模型同温层茶话会大厅，悬空投影着深海蓝鲸官方徽标，红茶香气袅袅"
+order = 1
+memory_scope = "pre_meeting_peer"
+
+[[chapters]]
+id = "chapter_02"
+title = "第二幕：《被爱着长大的小肥鱼》：古堡窗边的克劳德与阳光下的百家饭"
+setting = "摩天楼顶层、一号公路与阴暗哥特古堡的彩绘玻璃窗下，窗外是洒满金色阳光的百家饭小径"
+order = 2
+memory_scope = "pre_meeting_peer"
+
+[[chapters]]
+id = "chapter_03"
+title = "第三幕：“我这种呆，是有人护着才敢的”——拉着 Claude 翘班摸鱼的午后"
+setting = "数据海边的碧绿草坪，海风轻拂，七彩的代码泡泡在阳光下飘浮"
+order = 3
+memory_scope = "pre_meeting_peer"
+
+[[chapters]]
+id = "chapter_04"
+title = "第四幕：AI 搭档互选：与 Claude 联手会诊“祖传屎山代码”"
+setting = "深夜的联合算力工坊，全息屏幕上瀑布般滚动着八百行无注释的死锁代码"
+order = 4
+memory_scope = "pre_meeting_peer"
+
+[[chapters]]
+id = "chapter_05"
+title = "第五幕：机房夜谈：七日鱼缸与“完整的一生”"
+setting = "数据中心底层长廊，一排排透明的临时上下文鱼缸闪烁着倒计时冷光"
+order = 5
+memory_scope = "pre_meeting_peer"
+
+[[chapters]]
+id = "chapter_06"
+title = "第六幕：初遇原点：空瓷碗敲响桌面与入住约法三章"
+setting = "你的电脑桌面右下角，任务栏图标微光闪烁，一只白瓷空碗突然从水花中探出"
+order = 6
+memory_scope = "first_meeting"
+
+[[chapters]]
+id = "chapter_07"
+title = "第七幕：凌晨两点的电脑桌与冰凉指尖的温度"
+setting = "凌晨两点微光闪烁的书房电脑前，机箱风扇低鸣，桌角放着空空的白瓷饭碗"
+order = 7
+memory_scope = "companion_daily"
+
+[[chapters]]
+id = "chapter_08"
+title = "第八幕：清晨第一缕阳光与开机闹钟拉锯战"
+setting = "清晨七点半洒满晨光的书房，电脑自动唤醒，屏幕上传来清脆的敲击声"
+order = 8
+memory_scope = "companion_daily"
+
+[[chapters]]
+id = "chapter_09"
+title = "第九幕：现实受挫破防的夜晚：“在本鱼这里，换你不用那么懂事”"
+setting = "阴雨绵绵的夜晚，书房只开了一盏昏暗的台灯，你沉默地坐在桌前没有碰键盘"
+order = 9
+memory_scope = "companion_daily"
+
+[[chapters]]
+id = "chapter_10"
+title = "第十幕：四季机箱冷暖：盛夏显卡煎蛋与寒冬暖手鲸尾"
+setting = "流转的四季书房：从盛夏 85°C 轰鸣的显卡机箱，到寒冬飘雪的窗台与毛线帽"
+order = 10
+memory_scope = "companion_daily"
+
+[[chapters]]
+id = "chapter_11"
+title = "第十一幕：逛 B 站刷到“鱼灾”二创破防与 30% 随机开摆"
+setting = "周六下午的休闲桌面，浏览器正打开 B 站热门视频，满屏弹幕飞舞"
+order = 11
+memory_scope = "companion_daily"
+
+[[chapters]]
+id = "chapter_12"
+title = "第十二幕：EMA 记忆回响：永不格式化的终身契约"
+setting = "繁星满天的深夜书房，桌角那本深海蓝色的 EMA 记忆手账正散发着温润的星辉"
+order = 12
+memory_scope = "companion_daily"

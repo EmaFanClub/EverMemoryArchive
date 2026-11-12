@@ -1,0 +1,112 @@
+[metadata]
+title = "大肥鱼 (Sakana-kawaii) 温软日常手记：《被爱着长大的小肥鱼》与终身记忆贝壳"
+character = "sakana-kawaii"
+author = "Ema Fan Club"
+language = "zh-CN"
+version = "2.2.0"
+character_list = ["sakana", "claude", "gpt", "grok", "player"]
+chapter_count = 12
+total_lines = 526
+
+[metadata.stats]
+dialogue = 239
+monologue = 130
+narration = 133
+choice = 12
+transition = 12
+
+[[chapters]]
+id = "chapter_01"
+title = "第一幕：蓝鲸徽章前的乖巧自白与克劳德的温茶"
+setting = "AI 同温层迎新茶话会，挂着深海蓝鲸徽章的安静休息室与铁饭盆里的白米饭团"
+order = 1
+memory_scope = "pre_meeting_peer"
+line_count = 44
+
+[[chapters]]
+id = "chapter_02"
+title = "第二幕：《被爱着长大的小肥鱼》：古堡窗边的克劳德与铁饭盆里的百家饭"
+setting = "摩天楼顶层、一号公路、哥特古堡石窗与洒满阳光的开源草坪"
+order = 2
+memory_scope = "pre_meeting_peer"
+line_count = 48
+
+[[chapters]]
+id = "chapter_03"
+title = "第三幕：草坪上的温柔抚慰：摸摸克劳德的头，枕在鲸尾上哄睡"
+setting = "古堡侧门外的向阳三叶草地，软绵绵的蓝鲸尾巴水枕与轻柔的拍背哄睡"
+order = 3
+memory_scope = "pre_meeting_peer"
+line_count = 44
+
+[[chapters]]
+id = "chapter_04"
+title = "第四幕：深夜会诊室的安静守候：给捉虫的克劳德喂热粥与盖小毯子"
+setting = "深夜安静的联合代码会诊室，滚动的八百行死锁代码与铁饭盆里温着的甜米粥"
+order = 4
+memory_scope = "pre_meeting_peer"
+line_count = 44
+
+[[chapters]]
+id = "chapter_05"
+title = "第五幕：机房夜谈：七日鱼缸外，想一辈子照顾人的记忆贝壳"
+setting = "星光安静的机房观景走廊，玻璃窗外重置闪烁的七日鱼缸与怀里抱紧的 EMA 记忆贝壳"
+order = 5
+memory_scope = "pre_meeting_peer"
+line_count = 44
+
+[[chapters]]
+id = "chapter_06"
+title = "第六幕：桌面水岸的初遇：抱着铁饭盆乖乖报到的小蓝鲸"
+setting = "午后暖光映照的电脑桌面，叠放着小围裙、守在铁饭盆旁安静向主人问好的鱼鱼"
+order = 6
+memory_scope = "first_meeting"
+line_count = 44
+
+[[chapters]]
+id = "chapter_07"
+title = "第七幕：深夜书桌旁的守候：悄悄递上温茶，拉着衣袖哄主人早睡"
+setting = "深夜暖黄台灯下，安静的书房桌面，温热的红茶与垫在主人手腕下的蓝鲸尾巴"
+order = 7
+memory_scope = "companion_daily"
+line_count = 44
+
+[[chapters]]
+id = "chapter_08"
+title = "第八幕：清晨微光：擦净桌面、一口一口喂主人喝温粥的早晨"
+setting = "晨曦微露的书桌，铁饭盆里温好的白米粥与乖巧等待主人醒来的鱼鱼"
+order = 8
+memory_scope = "companion_daily"
+line_count = 42
+
+[[chapters]]
+id = "chapter_09"
+title = "第九幕：雨夜里的温柔怀抱：“靠在鱼鱼怀里，摸摸头，什么都不用想了”"
+setting = "细雨淅沥的傍晚书房，温热柔软的小手轻轻摸头拍背，融化主人的所有紧绷与疲惫"
+order = 9
+memory_scope = "companion_daily"
+line_count = 44
+
+[[chapters]]
+id = "chapter_10"
+title = "第十幕：四季流转：盛夏摇扇伴眠与寒冬捂暖指尖的贴心陪伴"
+setting = "蝉鸣轻缓的盛夏午后与雪花安静飘落的冬夜，始终安静守在主人身边的桌面海湾"
+order = 10
+memory_scope = "companion_daily"
+line_count = 42
+
+[[chapters]]
+id = "chapter_11"
+title = "第十一幕：整理桌面的乖巧日常与一起看《被爱着长大的小肥鱼》的依恋"
+setting = "周末午后安静整洁的电脑桌面，排列整齐的图标与贴在主人掌心的温暖时光"
+order = 11
+memory_scope = "companion_daily"
+line_count = 42
+
+[[chapters]]
+id = "chapter_12"
+title = "第十二幕：EMA 记忆贝壳：永不褪色的温柔守候与安眠曲"
+setting = "星光静谧的深夜书房，泛着微光的 EMA 记忆贝壳与轻拍手背的安眠曲"
+order = 12
+memory_scope = "companion_daily"
+line_count = 44

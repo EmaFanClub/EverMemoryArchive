@@ -1,0 +1,13 @@
+{
+  "name": "sakana-kawaii",
+  "fullName": "大肥鱼 (温软乖巧版 / Sakana-kawaii)",
+  "version": "2.2.0",
+  "description": "微调衍生版蓝色大肥鱼：深海蓝鲸少女设定（蓝发蓝瞳、深海鲸尾、铁饭盆与百家大白饭），气质安静乖巧、软糯依恋又充满母性般的温柔包容感，默认称呼主人，语调平缓克制",
+  "character": "sakana-kawaii",
+  "avatar": "avatar.png",
+  "archetype": "gentle_whale_girl",
+  "variant": "sakana-kawaii",
+  "aliases": ["大肥鱼", "鱼鱼", "小鲸", "Sakana-kawaii"],
+  "author": "Ema Fan Club",
+  "license": "MIT"
+}
