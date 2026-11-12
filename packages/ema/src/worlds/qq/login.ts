@@ -7,6 +7,7 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import qrcodeTerminal from "qrcode-terminal";
@@ -94,8 +95,11 @@ export interface QQLoginSession {
  * Ensures shared library paths and fontconfig configuration are available for Playwright Chromium.
  */
 export function ensureQQPlaywrightEnvironment(): void {
-  const libDir = "/home/rei/.local/share/playwright-libs/usr/lib/x86_64-linux-gnu";
-  const fontsConf = "/home/rei/.local/share/playwright-libs/etc/fonts";
+  const baseDir =
+    process.env.PLAYWRIGHT_LIBS_DIR ||
+    path.join(os.homedir(), ".local", "share", "playwright-libs");
+  const libDir = path.join(baseDir, "usr", "lib", "x86_64-linux-gnu");
+  const fontsConf = path.join(baseDir, "etc", "fonts");
 
   if (fs.existsSync(libDir)) {
     const current = process.env.LD_LIBRARY_PATH || "";
@@ -177,28 +181,26 @@ export class QQLoginManager {
       this.options.credentialsSavePath &&
       fs.existsSync(this.options.credentialsSavePath)
     ) {
-      try {
-        const saved = JSON.parse(
-          fs.readFileSync(this.options.credentialsSavePath, "utf8"),
+      const saved = JSON.parse(
+        fs.readFileSync(this.options.credentialsSavePath, "utf8"),
+      );
+      if (saved.uin || saved.token) {
+        const check = await QQLoginManager.verifySession(
+          saved,
+          this.options.gatewayUrl,
         );
-        if (saved.uin || saved.token) {
-          const check = await QQLoginManager.verifySession(
-            saved,
-            this.options.gatewayUrl,
-          );
-          if (check.valid) {
-            return {
-              success: true,
-              uin: check.uin ?? saved.uin,
-              nickname: saved.nickname ?? check.nickname ?? `QQ User ${check.uin}`,
-              token: saved.token,
-              cookies: saved.cookies ?? {},
-              savedPath: this.options.credentialsSavePath,
-              message: "Active authenticated session found in saved credentials.",
-            };
-          }
+        if (check.valid) {
+          return {
+            success: true,
+            uin: check.uin ?? saved.uin,
+            nickname: saved.nickname ?? check.nickname ?? `QQ User ${check.uin}`,
+            token: saved.token,
+            cookies: saved.cookies ?? {},
+            savedPath: this.options.credentialsSavePath,
+            message: "Active authenticated session found in saved credentials.",
+          };
         }
-      } catch {}
+      }
     }
 
     // 2. Check gateway connectivity if configured

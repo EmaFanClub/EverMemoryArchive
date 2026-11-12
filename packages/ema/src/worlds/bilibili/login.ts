@@ -6,6 +6,7 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import qrcodeTerminal from "qrcode-terminal";
@@ -99,8 +100,11 @@ export interface BilibiliLoginSession {
  * Ensures shared library paths and fontconfig configuration are available for Playwright Chromium.
  */
 export function ensurePlaywrightEnvironment(): void {
-  const libDir = "/home/rei/.local/share/playwright-libs/usr/lib/x86_64-linux-gnu";
-  const fontsConf = "/home/rei/.local/share/playwright-libs/etc/fonts";
+  const baseDir =
+    process.env.PLAYWRIGHT_LIBS_DIR ||
+    path.join(os.homedir(), ".local", "share", "playwright-libs");
+  const libDir = path.join(baseDir, "usr", "lib", "x86_64-linux-gnu");
+  const fontsConf = path.join(baseDir, "etc", "fonts");
 
   if (fs.existsSync(libDir)) {
     const current = process.env.LD_LIBRARY_PATH || "";
@@ -139,57 +143,53 @@ export class BilibiliLoginManager {
   async checkExistingSession(): Promise<BilibiliAuthResult | null> {
     // 1. Check storageState file if present
     if (this.options.storageStatePath && fs.existsSync(this.options.storageStatePath)) {
-      try {
-        const state = JSON.parse(fs.readFileSync(this.options.storageStatePath, "utf8"));
-        if (Array.isArray(state.cookies)) {
-          const cookieMap: Record<string, string> = {};
-          for (const c of state.cookies) {
-            cookieMap[c.name] = c.value;
-          }
-          if (cookieMap["SESSDATA"] && cookieMap["DedeUserID"]) {
-            const check = await BilibiliLoginManager.verifySession(cookieMap);
-            if (check.valid) {
-              const cookieString = Object.entries(cookieMap)
-                .map(([k, v]) => `${k}=${v}`)
-                .join("; ");
-              return {
-                success: true,
-                uid: check.uid,
-                uname: check.uname,
-                sessData: cookieMap["SESSDATA"],
-                biliJct: cookieMap["bili_jct"],
-                cookies: cookieMap,
-                cookieString,
-                savedPath: this.options.storageStatePath,
-                message: "Active authenticated session found in storageState.",
-              };
-            }
-          }
+      const state = JSON.parse(fs.readFileSync(this.options.storageStatePath, "utf8"));
+      if (Array.isArray(state.cookies)) {
+        const cookieMap: Record<string, string> = {};
+        for (const c of state.cookies) {
+          cookieMap[c.name] = c.value;
         }
-      } catch {}
-    }
-
-    // 2. Check cookieSavePath if present
-    if (this.options.cookieSavePath && fs.existsSync(this.options.cookieSavePath)) {
-      try {
-        const saved = JSON.parse(fs.readFileSync(this.options.cookieSavePath, "utf8"));
-        if (saved.cookies?.SESSDATA && (saved.cookies?.DedeUserID || saved.uid)) {
-          const check = await BilibiliLoginManager.verifySession(saved.cookies);
+        if (cookieMap["SESSDATA"] && cookieMap["DedeUserID"]) {
+          const check = await BilibiliLoginManager.verifySession(cookieMap);
           if (check.valid) {
+            const cookieString = Object.entries(cookieMap)
+              .map(([k, v]) => `${k}=${v}`)
+              .join("; ");
             return {
               success: true,
               uid: check.uid,
               uname: check.uname,
-              sessData: saved.cookies.SESSDATA,
-              biliJct: saved.cookies.bili_jct,
-              cookies: saved.cookies,
-              cookieString: saved.cookieString,
-              savedPath: this.options.cookieSavePath,
-              message: "Active authenticated session found in saved cookies.",
+              sessData: cookieMap["SESSDATA"],
+              biliJct: cookieMap["bili_jct"],
+              cookies: cookieMap,
+              cookieString,
+              savedPath: this.options.storageStatePath,
+              message: "Active authenticated session found in storageState.",
             };
           }
         }
-      } catch {}
+      }
+    }
+
+    // 2. Check cookieSavePath if present
+    if (this.options.cookieSavePath && fs.existsSync(this.options.cookieSavePath)) {
+      const saved = JSON.parse(fs.readFileSync(this.options.cookieSavePath, "utf8"));
+      if (saved.cookies?.SESSDATA && (saved.cookies?.DedeUserID || saved.uid)) {
+        const check = await BilibiliLoginManager.verifySession(saved.cookies);
+        if (check.valid) {
+          return {
+            success: true,
+            uid: check.uid,
+            uname: check.uname,
+            sessData: saved.cookies.SESSDATA,
+            biliJct: saved.cookies.bili_jct,
+            cookies: saved.cookies,
+            cookieString: saved.cookieString,
+            savedPath: this.options.cookieSavePath,
+            message: "Active authenticated session found in saved cookies.",
+          };
+        }
+      }
     }
 
     return null;
@@ -677,11 +677,9 @@ export async function publishBilibiliDynamic(
   }
 
   const profileDir = path.resolve(options.userDataDir ?? ".bilibili-profile");
-  const storageStatePath = options.storageStatePath
-    ? path.resolve(options.storageStatePath)
-    : (fs.existsSync(path.resolve(process.cwd(), "bilibili-storage-state.json"))
-        ? path.resolve(process.cwd(), "bilibili-storage-state.json")
-        : path.resolve("/home/rei/worktrees/EverMemoryArchive/next/bilibili-storage-state.json"));
+  const storageStatePath = path.resolve(
+    options.storageStatePath ?? path.resolve(process.cwd(), "bilibili-storage-state.json"),
+  );
 
   let browser: Browser | null = null;
   let context: BrowserContext;
