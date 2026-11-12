@@ -206,6 +206,9 @@ importers:
       '@prism-shadow/ema':
         specifier: workspace:*
         version: link:../ema
+      smol-toml:
+        specifier: ^1.9.1
+        version: 1.9.1
 
 packages:
 
