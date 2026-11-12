@@ -71,9 +71,11 @@ export function formatInputLine(line: RawScriptLine): string {
     return `[旁白] ${text}`;
   }
   if (line.type === "monologue") {
-    return `【${line.speaker}】(内心): （${text}）`;
+    const cleanMono = text.replace(/^[（(]+|[）)]+$/g, "").trim();
+    return `【${line.speaker}】(内心): （${cleanMono}）`;
   }
-  return `【${line.speaker}】: 「${text}」`;
+  const cleanDiag = text.replace(/^[“「]+|[”」]+$/g, "").trim();
+  return `【${line.speaker}】: 「${cleanDiag}」`;
 }
 
 /**
@@ -90,9 +92,14 @@ export function formatTargetActionLines(lines: RawScriptLine[]): {
     const text = (line.text || "").trim();
     if (!text) continue;
     if (line.type === "monologue") {
-      osParts.push(text);
+      const cleanMono = text.replace(/^[（(]+|[）)]+$/g, "").trim();
+      osParts.push(cleanMono);
+    } else if (line.type === "narration") {
+      const cleanNarr = text.replace(/^[（(]+|[）)]+$/g, "").trim();
+      spokenParts.push(`（${cleanNarr}）`);
     } else {
-      spokenParts.push(`「${text}」`);
+      const cleanDiag = text.replace(/^[“「]+|[”」]+$/g, "").trim();
+      spokenParts.push(`「${cleanDiag}」`);
     }
   }
 
