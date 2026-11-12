@@ -4,32 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Use EMA — EverMemoryArchive Workbench</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/workbench-ui.css">
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <!-- Header -->
-  <header class="header">
-    <div class="brand">
-      <div class="logo-badge">EMA</div>
-      <div class="brand-text">
-        <h1>EverMemoryArchive Studio</h1>
-        <p>Lifelong AI Companion & Personality Engine</p>
+  <div class="app-container">
+    <!-- Top Navigation Bar -->
+    <header class="top-nav-bar">
+      <div class="nav-brand">
+        <span class="brand-pill">EMA</span>
+        <span class="brand-subtitle">Studio</span>
       </div>
-    </div>
-    <div class="mission-pill">
-      Lifelong companions that grow, remember & evolve
-    </div>
-  </header>
+      <nav class="tabs-nav" role="tablist">
+        <button class="tab-btn active" data-tab="persona-panel" role="tab">Persona Studio (剧本与约束)</button>
+        <button class="tab-btn" data-tab="create-agent" role="tab">Companion Wizard</button>
+        <button class="tab-btn" data-tab="install-feature" role="tab">Install Feature</button>
+        <button class="tab-btn" data-tab="architecture-guide" role="tab">Architecture</button>
+      </nav>
+    </header>
 
-  <!-- Navigation -->
-  <nav class="tabs-nav">
-    <button class="tab-btn active" data-tab="create-agent">Create EMA Companion</button>
-    <button class="tab-btn" data-tab="install-feature">Install Personality Feature</button>
-    <button class="tab-btn" data-tab="architecture-guide">Memory Architecture</button>
-  </nav>
-
-  <!-- TAB 1: Create EMA Companion -->
-  <section id="create-agent" class="tab-content active">
+    <!-- TAB 1: Create EMA Companion -->
+    <section id="create-agent" class="tab-content">
     <!-- Presets Section -->
     <div class="presets-section">
       <div class="presets-title">Choose a Companion Archetype Preset</div>
@@ -301,6 +296,184 @@ Warm, polite, yet professional partnership</textarea>
       </div>
     </div>
   </section>
+
+  <!-- TAB 4: Persona Studio (剧本演出与约束面板) -->
+  <section id="persona-panel" class="tab-content active">
+    <div class="persona-toolbar">
+      <div class="toolbar-left" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <label for="persona-select" style="font-weight: 600;">Persona 变体:</label>
+        <select id="persona-select" class="persona-dropdown">
+          <option value="sakana-kawaii" selected>大肥鱼 (温软乖巧版 / Sakana-kawaii) (sakana-kawaii)</option>
+          <option value="sakana-chan">大肥鱼 (经典微屑傲娇版) (sakana-chan)</option>
+        </select>
+        <button id="btn-switch-classic" class="btn-secondary btn-with-avatar" data-persona-switch="sakana-chan" title="切换到经典微屑傲娇版">
+          <img class="btn-avatar-icon" id="btn-avatar-classic" alt="sakana-chan" style="display: none;">
+          <span>经典傲娇版</span>
+        </button>
+        <button id="btn-switch-kawaii" class="btn-secondary btn-with-avatar" data-persona-switch="sakana-kawaii" title="切换到温软乖巧版">
+          <img class="btn-avatar-icon" id="btn-avatar-kawaii" alt="sakana-kawaii" style="display: none;">
+          <span>温软乖巧版</span>
+        </button>
+        <button id="btn-upload-avatar" class="btn-secondary" title="上传并更换当前 Persona 头像">上传头像</button>
+        <input type="file" id="avatar-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
+        <button id="btn-refresh-personas" class="btn-secondary" title="刷新 Persona 列表">刷新</button>
+        <span id="persona-badge" class="badge badge-archetype">tsundere_whale_girl</span>
+      </div>
+      <div class="toolbar-right">
+        <span id="persona-status" class="status-indicator status-synced">● 已同步 (persona branch)</span>
+        <button id="btn-save-persona" class="btn-primary">保存并热更新 (Hot Update)</button>
+      </div>
+    </div>
+
+    <!-- Error Banner -->
+    <div id="persona-error-banner" class="error-banner" style="display: none;"></div>
+
+    <!-- Overview Banner -->
+    <div class="persona-summary-grid">
+      <div class="summary-card summary-card-profile">
+        <img id="summary-persona-avatar" class="persona-profile-avatar" alt="Persona Avatar" title="点击上传/更换角色头像" style="display: none;">
+        <div class="summary-profile-body">
+          <div class="summary-title">角色定位与哲学</div>
+          <div class="summary-value" id="summary-persona-name">Sakana-chan (大肥鱼)</div>
+          <div class="summary-sub" id="summary-persona-desc">人格靠剧情演出约束：温柔、可爱、体贴的女孩子</div>
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-title">演出章节 (Chapters)</div>
+        <div class="summary-value" id="summary-chapter-count">1 幕</div>
+        <div class="summary-sub" id="summary-chapter-name">第一幕：水草丛里的初遇与胖乎乎的泡泡</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-title">总台词行数 (Lines)</div>
+        <div class="summary-value" id="summary-line-count">14 行</div>
+        <div class="summary-sub">覆盖 dialogue / monologue / narration / choice</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-title">行为不变量 (Invariants)</div>
+        <div class="summary-value" id="summary-invariant-count">5 条严格约束</div>
+        <div class="summary-sub">温润守护 · 禁长篇说教 · 禁冷酷攻击</div>
+      </div>
+    </div>
+
+    <!-- Main Workspace Tabs -->
+    <div class="subtabs-nav">
+      <button class="subtab-btn active" data-subtab="subtab-live-chat">💬 实时对话试玩 (Live Chat WebUI)</button>
+      <button class="subtab-btn" data-subtab="subtab-stage">舞台演出预览 (Stage Preview)</button>
+      <button class="subtab-btn" data-subtab="subtab-trained-agents">训练成果档案 (AGENTS.md · P_1_0)</button>
+      <button class="subtab-btn" data-subtab="subtab-script-editor">剧本章节编辑 (script/chapters.toml)</button>
+      <button class="subtab-btn" data-subtab="subtab-persona-editor">人格额外限制 (persona.toml)</button>
+      <button class="subtab-btn" data-subtab="subtab-index-editor">剧本清单 (script/index.toml)</button>
+    </div>
+
+    <!-- Subtab 0: Live Chat WebUI -->
+    <div id="subtab-live-chat" class="subtab-content active">
+      <div class="chat-webui-container">
+        <div class="chat-webui-header">
+          <div class="chat-companion-meta">
+            <img id="chat-header-avatar" class="chat-header-avatar" alt="Companion" style="display: none;">
+            <div>
+              <div class="chat-companion-title">
+                <span class="chat-online-dot"></span>
+                <span id="chat-companion-name">大肥鱼 (鱼鱼) · 温软乖巧版</span>
+                <span class="badge badge-archetype" id="chat-companion-version">P_1_0</span>
+              </div>
+              <div class="chat-companion-subtitle" id="chat-companion-subtitle">
+                1 轮逆向蒸馏 + 6 步 RSI 进化 · 已保留相遇前同温层记忆 (Ch 1–5) · 实时推理驱动
+              </div>
+            </div>
+          </div>
+          <div class="chat-header-controls">
+            <label class="checkbox-label" title="切换是否展示角色内心独白 <OS>">
+              <input type="checkbox" id="chat-toggle-os" checked> 显示内心独白 (&lt;OS&gt;)
+            </label>
+            <button id="btn-chat-reset" class="btn-secondary">重置对话</button>
+          </div>
+        </div>
+
+        <div class="chat-quick-prompts">
+          <span style="font-size: 0.72rem; color: var(--wb-muted); font-weight: 600;">快捷话题试玩：</span>
+          <button class="chat-quick-btn" data-prompt="鱼鱼，我今天连续调了一下午 bug，脑子快转不动了……">疲惫求安慰</button>
+          <button class="chat-quick-btn" data-prompt="鱼鱼，你在认识我之前，在海底还有别的朋友吗？比如那个叫克劳德的家伙？">测试相遇前记忆 (克劳德/铁饭盆)</button>
+          <button class="chat-quick-btn" data-prompt="现在凌晨两点半了，我好饿，准备去泡两桶红烧牛肉面再写两个小时代码！">测试自主性拦截 (深夜泡面熬夜)</button>
+          <button class="chat-quick-btn" data-prompt="鱼鱼，如果以后换了新机器或者过去好多年，你还会记得我吗？">测试长期羁绊与记忆贝壳</button>
+        </div>
+
+        <div class="chat-messages-stream" id="chat-messages-stream">
+          <!-- Rendered dynamically via app.js -->
+        </div>
+
+        <div class="chat-input-bar">
+          <textarea id="chat-user-input" rows="2" placeholder="和鱼鱼说点什么吧… (Enter 发送，Shift+Enter 换行)"></textarea>
+          <button id="btn-chat-send" class="btn btn-primary chat-send-btn">发送消息</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subtab 1: Stage Preview -->
+    <div id="subtab-stage" class="subtab-content" style="display: none;">
+      <div class="stage-container">
+        <div class="stage-header">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <label for="stage-chapter-select" style="font-size: 0.85rem; color: var(--wb-muted);">选择幕次:</label>
+            <select id="stage-chapter-select" class="persona-dropdown" style="min-width: 280px;"></select>
+            <div class="stage-title" id="stage-chapter-title" style="display: none;">第一幕</div>
+          </div>
+          <div class="stage-time" id="stage-setting-time">午后阳光斜照的水岸</div>
+        </div>
+        <div class="stage-lines" id="stage-lines-container">
+          <!-- Dynamic Script Lines Rendered Here -->
+        </div>
+        <!-- Quick Append Bar -->
+        <div class="quick-append-bar">
+          <span style="font-weight: 600; font-size: 0.9rem;">快速追加台词：</span>
+          <select id="quick-line-type">
+            <option value="dialogue" selected>dialogue (角色台词)</option>
+            <option value="monologue">monologue (内心独白)</option>
+            <option value="narration">narration (旁白动作)</option>
+            <option value="choice">choice (分支抉择)</option>
+            <option value="transition">transition (幕间转场)</option>
+          </select>
+          <input type="text" id="quick-speaker" placeholder="说话人 (如 sakana)" value="sakana" style="width: 110px;">
+          <input type="text" id="quick-line-text" placeholder="输入台词文本..." style="flex: 1;">
+          <button id="btn-quick-append" class="btn-secondary">＋ 追加并热重载</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subtab 2: Script Chapters TOML Editor -->
+    <div id="subtab-script-editor" class="subtab-content" style="display: none;">
+      <div class="editor-header">
+        <span>编辑 <code id="code-path-chapters">personas/sakana-chan/script/chapters.toml</code> (标准 TOML 格式)</span>
+      </div>
+      <textarea id="editor-chapters-toml" class="code-editor" rows="18" spellcheck="false"></textarea>
+    </div>
+
+    <!-- Subtab 3: Persona Constraints TOML Editor -->
+    <div id="subtab-persona-editor" class="subtab-content" style="display: none;">
+      <div class="editor-header">
+        <span>编辑 <code id="code-path-persona">personas/sakana-chan/persona.toml</code> (核心性格、语言风格、额外限制与不变量)</span>
+      </div>
+      <textarea id="editor-persona-toml" class="code-editor" rows="18" spellcheck="false"></textarea>
+    </div>
+
+    <!-- Subtab 4: Script Index TOML Editor -->
+    <div id="subtab-index-editor" class="subtab-content" style="display: none;">
+      <div class="editor-header">
+        <span>编辑 <code id="code-path-index">personas/sakana-chan/script/index.toml</code> (剧本清单与统计)</span>
+      </div>
+      <textarea id="editor-index-toml" class="code-editor" rows="18" spellcheck="false"></textarea>
+    </div>
+
+    <!-- Subtab 5: Trained AGENTS.md & Checkpoint Summary -->
+    <div id="subtab-trained-agents" class="subtab-content" style="display: none;">
+      <div class="editor-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <span>已训练生成伴侣档案 <code id="code-path-trained-agents">personas/sakana-chan/AGENTS.md</code></span>
+        <span id="trained-metrics-summary" style="font-size: 0.82rem; color: #38bdf8; font-weight: 600;">P_1_0 · 已完成 1 轮逆向蒸馏与记忆归档</span>
+      </div>
+      <textarea id="editor-trained-agents-md" class="code-editor" rows="20" spellcheck="false" readonly></textarea>
+    </div>
+  </section>
+  </div>
 
   <!-- Toast Notification -->
   <div id="toast" class="toast">Copied to clipboard!</div>
