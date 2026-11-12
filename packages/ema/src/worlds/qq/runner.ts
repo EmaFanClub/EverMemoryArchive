@@ -114,10 +114,9 @@ export function createQQCompanionRunner(
   const requireMentionInGroups = options.requireMentionInGroups ?? true;
   const dbPath =
     options.dbPath ||
+    env.EMA_QQ_DB_PATH ||
     process.env.EMA_QQ_DB_PATH ||
-    (fs.existsSync("/home/rei/work/aoi-rei")
-      ? "/home/rei/work/aoi-rei/data/qq-world.sqlite"
-      : path.resolve(process.cwd(), "data", "qq-world.sqlite"));
+    path.resolve(process.cwd(), "data", "qq-world.sqlite");
 
   const router = new SimpleEmaRouter();
   const inputBatcher = new SimpleEmaInputBatcher({

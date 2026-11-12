@@ -267,36 +267,6 @@ export class EmaDreamEngine {
       }
     }
 
-    // Fallback if no cold archive file was used: construct synthetic items from un-dreamed L0 scenes
-    if (candidateScenes.length === 0) {
-      for (const l0 of state.memoryIndex) {
-        if (!dreamedSet.has(l0.sceneId)) {
-          candidateScenes.push({
-            sceneId: l0.sceneId,
-            title: l0.title,
-            setting: l0.setting,
-            items: [
-              {
-                turnId: `${l0.sceneId}#turn-01`,
-                sceneId: l0.sceneId,
-                turnIndexInScene: 1,
-                inputText: `【${state.protagonistName}】: （在 ${l0.setting} 与 ${this.config.targetCharacter} 交流《${l0.title}》相关的话题）`,
-                predictedOS: l0.innerOSArc,
-                committedOS: l0.innerOSArc,
-                predictedAction: l0.summary,
-                gtActionText: l0.summary,
-                osConsistent: true,
-                osScore: 85,
-                actionScore: 85,
-                combinedScore: 85,
-                diagnostic: "Synthesized from SceneMemoryIndexItem",
-              },
-            ],
-          });
-        }
-      }
-    }
-
     const scenesToDream = candidateScenes.slice(-this.config.maxScenesPerDreamCycle);
 
     // =========================================================================
