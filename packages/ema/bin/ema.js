@@ -38,13 +38,26 @@ import {
   startParallelRouteSessionConsolidator,
   runModelAndThinkingAblation,
   syncCompanionAgentState,
+  washDatasetFromConfig,
+  trainFromConfig,
+  managePersonaFromConfig,
 } from "../dist/index.js";
 import { execFileSync } from "node:child_process";
 
 function printUsage() {
-  console.log(`EMA Command-Line Interface (RFC-0001 / RFC-0002)
+  console.log(`EMA Command-Line Interface (RFC-0001 .. RFC-0007)
 
-Usage:
+Unified Single-TOML Persona & Training Commands:
+  ema.js wash --config <persona.toml> [--prompt "<what to wash>"]
+    Wash script chapters & autonomy tracks from a single TOML config into a causal dataset
+
+  ema.js train --config <persona.toml> [--prompt "<training focus>"] [--scenes <n>]
+    Execute supervised causal window RSI training from the single TOML config & prompt
+
+  ema.js persona [show|sync|init] --config <persona.toml> [--prompt "<directive>"]
+    Inspect, initialize, or sync a persona's AGENTS.md & workbench from the single TOML config
+
+World & Runtime Commands:
   ema.js world ls [--db <path>]
     List active worlds and their mounted route prefixes
 
@@ -547,20 +560,139 @@ async function main() {
     return;
   }
 
+  if (command === "wash" || command === "dataset") {
+    let configPath = "";
+    let promptText = "";
+    let outPath = "";
+    const positional = [];
+
+    for (let i = 1; i < args.length; i++) {
+      if ((args[i] === "--config" || args[i] === "-c") && i + 1 < args.length) {
+        configPath = args[++i];
+      } else if ((args[i] === "--prompt" || args[i] === "-p") && i + 1 < args.length) {
+        promptText = args[++i];
+      } else if (args[i] === "--out" && i + 1 < args.length) {
+        outPath = args[++i];
+      } else if (!args[i].startsWith("-")) {
+        positional.push(args[i]);
+      }
+    }
+
+    if (!configPath && positional.length > 0) configPath = positional[0];
+    if (!promptText && positional.length > 1) promptText = positional.slice(1).join(" ");
+
+    if (!configPath) {
+      console.error(
+        'Error: Missing --config <persona.toml>. Example: ema.js wash --config personas/sakana-kawaii/persona.toml --prompt "清洗日常与自主意识剧本，对齐第一人称<OS>与一逗到底口语<Action>"',
+      );
+      process.exit(1);
+    }
+
+    const res = washDatasetFromConfig({
+      configPath,
+      prompt: promptText,
+      outPath: outPath || undefined,
+    });
+
+    console.log(`=== EMA Dataset Washer (Single-TOML) ===`);
+    console.log(`Config File:       ${res.configFile}`);
+    console.log(`Persona ID:        ${res.personaId} (${res.targetCharacter} <-> ${res.protagonistCharacter})`);
+    console.log(`Wash Prompt:       ${res.washPrompt || "(default causal alignment & golden exemplars)"}`);
+    console.log(`Washed Scenes:     ${res.totalScenes}`);
+    console.log(`Washed Turns:      ${res.totalTurns} (explicit <OS>: ${res.turnsWithExplicitOS})`);
+    console.log(`Golden Exemplars:  ${res.goldenExemplarCount}`);
+    console.log(`Washed Output:     ${res.washedDatasetPath}`);
+    return;
+  }
+
+  if (command === "persona") {
+    let configPath = "";
+    let action;
+    let promptText = "";
+    let appDataDir;
+    let noWorkbench = false;
+    const positional = [];
+
+    for (let i = 1; i < args.length; i++) {
+      if ((args[i] === "--config" || args[i] === "-c") && i + 1 < args.length) {
+        configPath = args[++i];
+      } else if ((args[i] === "--prompt" || args[i] === "-p") && i + 1 < args.length) {
+        promptText = args[++i];
+      } else if (args[i] === "--app-data-dir" && i + 1 < args.length) {
+        appDataDir = args[++i];
+      } else if (args[i] === "--no-workbench") {
+        noWorkbench = true;
+      } else if (!args[i].startsWith("-")) {
+        positional.push(args[i]);
+      }
+    }
+
+    if (
+      positional.length > 0 &&
+      (positional[0] === "show" || positional[0] === "sync" || positional[0] === "init")
+    ) {
+      action = positional.shift();
+    }
+    if (!configPath && positional.length > 0) configPath = positional.shift();
+    if (!promptText && positional.length > 0) promptText = positional.join(" ");
+
+    if (!configPath) {
+      console.error(
+        'Error: Missing --config <persona.toml>. Example: ema.js persona --config personas/sakana-kawaii/persona.toml',
+      );
+      process.exit(1);
+    }
+
+    const res = managePersonaFromConfig({
+      configPath,
+      action,
+      prompt: promptText || undefined,
+      appDataDir,
+      installWorkbench: !noWorkbench,
+    });
+
+    console.log(`=== EMA Persona Manager (${res.action.toUpperCase()}) ===`);
+    console.log(`Config File:       ${res.configFile}`);
+    console.log(`Persona ID:        ${res.personaId} (Agent: ${res.agentId})`);
+    console.log(`Display Name:      ${res.displayName}`);
+    console.log(`Traits / Rules:    ${res.traitCount} traits, ${res.invariantCount} hard invariants`);
+    console.log(`Script Chapters:   ${res.chaptersCount} daily + ${res.autonomyChaptersCount} autonomy`);
+    console.log(
+      `Checkpoint:        ${res.checkpointExists ? `Yes (${res.checkpointVersion || "P_0_0"})` : "Not trained yet"}`,
+    );
+    console.log(`AGENTS.md Path:    ${res.agentsMdPath}`);
+    if (res.syncedAgentPath) {
+      console.log(`Synced Agent:      ${res.syncedAgentPath}`);
+    }
+    if (res.workbenchInstalled) {
+      console.log(`Workbench:         companion_portal installed`);
+    }
+    return;
+  }
+
   if (command === "train") {
+    let configPath = "";
+    let promptText = "";
     let scriptPath = "";
     let seedPath = "";
     let outPath = "./ema-persona-checkpoint.json";
     let agentId = "";
     let targetCharacter = "";
     let protagonistCharacter = "";
-    let maxScenes = 10;
+    let maxScenes;
     let studentModelId = "gemini-3.8-flash";
     let teacherModelId = "gemini-3.8-flash";
     let thinkingLevel = "medium";
+    let noSync = false;
+    let appDataDir;
+    const positional = [];
 
     for (let i = 1; i < args.length; i++) {
-      if (args[i] === "--script" && i + 1 < args.length) scriptPath = args[++i];
+      if ((args[i] === "--config" || args[i] === "-c") && i + 1 < args.length)
+        configPath = args[++i];
+      else if ((args[i] === "--prompt" || args[i] === "-p") && i + 1 < args.length)
+        promptText = args[++i];
+      else if (args[i] === "--script" && i + 1 < args.length) scriptPath = args[++i];
       else if (args[i] === "--seed" && i + 1 < args.length) seedPath = args[++i];
       else if (args[i] === "--out" && i + 1 < args.length) outPath = args[++i];
       else if (args[i] === "--agent-id" && i + 1 < args.length) agentId = args[++i];
@@ -570,12 +702,59 @@ async function main() {
       else if (args[i] === "--student-model" && i + 1 < args.length) studentModelId = args[++i];
       else if (args[i] === "--teacher-model" && i + 1 < args.length) teacherModelId = args[++i];
       else if (args[i] === "--thinking" && i + 1 < args.length) thinkingLevel = args[++i];
+      else if (args[i] === "--no-sync") noSync = true;
+      else if (args[i] === "--app-data-dir" && i + 1 < args.length) appDataDir = args[++i];
+      else if (!args[i].startsWith("-")) positional.push(args[i]);
+    }
+
+    if (!configPath && !scriptPath && positional.length > 0) {
+      configPath = positional[0];
+    }
+    if (!promptText && positional.length > 1) {
+      promptText = positional.slice(1).join(" ");
+    }
+
+    if (configPath) {
+      console.log(`=== EMA Persona Trainer (Single-TOML) ===`);
+      console.log(`Config File: ${path.resolve(configPath)}`);
+      if (promptText) {
+        console.log(`Prompt:      ${promptText}`);
+      }
+      const res = await trainFromConfig({
+        configPath,
+        prompt: promptText || undefined,
+        maxScenes,
+        syncAgent: noSync ? false : undefined,
+        appDataDir,
+        onSceneProgress: (r, idx, total) => {
+          console.log(
+            `[Train ${idx}/${total}] ${r.sceneId} (${r.title}) | ${r.initialMeanScore} -> ${r.finalMeanScore} | P=${r.personalityMutatedTo || r.personalityVersionUsed} | cost=$${r.metrics.costUsd}`,
+          );
+        },
+      });
+      console.log(`-----------------------------------------`);
+      console.log(
+        `Completed ${res.trainedSceneCount} scene(s) | Mean Score: ${res.initialMeanScore} -> ${res.finalMeanScore} | Final P: ${res.finalPersonalityVersion}`,
+      );
+      console.log(
+        `Memory Policy: retained ${res.retainedMemoryCount} peer scene(s), pruned ${res.prunedMemoryCount} rehearsal scene(s)`,
+      );
+      console.log(`Checkpoint:    ${res.checkpointPath}`);
+      console.log(`AGENTS.md:     ${res.agentsMdPath}`);
+      if (res.syncedAgentPath) {
+        console.log(`Synced Agent:  ${res.syncedAgentPath}`);
+      }
+      return;
     }
 
     if (!scriptPath) {
-      console.error("Error: --script <path> is required for `ema.js train`.");
+      console.error(
+        'Error: --config <persona.toml> is required for `ema.js train`. Example: ema.js train --config personas/sakana-kawaii/persona.toml --prompt "强化一逗到底语感与零括号口语化动作"',
+      );
       process.exit(1);
     }
+
+    const effectiveMaxScenes = maxScenes ?? 10;
 
     const seed = seedPath ? loadExternalPersonaSeed(seedPath) : null;
     const ds = loadGalgameDataset(scriptPath, {
@@ -585,7 +764,7 @@ async function main() {
       sceneSpeakerOverrides: seed?.sceneSpeakerOverrides,
     });
 
-    const selected = ds.scenes.slice(0, maxScenes);
+    const selected = ds.scenes.slice(0, effectiveMaxScenes);
     const trainer = new EmaPersonaTrainer(
       {
         targetCharacter: ds.targetCharacter,

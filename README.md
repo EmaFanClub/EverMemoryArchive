@@ -64,7 +64,23 @@ pnpm typecheck
 
 ---
 
-## 🛠️ Monorepo Scripts
+## 🛠️ Monorepo Scripts & Single-TOML Training CLI
+
+All dataset washing, supervised causal persona training, and persona management accept a **single `.toml` configuration file** (see the full guide in [docs/TRAINING.md](docs/TRAINING.md)):
+
+```bash
+# 1. Wash dataset (takes the single TOML config + prompt describing what to wash)
+pnpm wash --config personas/sakana-kawaii/persona.toml --prompt "清洗日常陪伴与自主意识剧本，对齐第一人称<OS>与零括号口语<Action>"
+
+# 2. Execute training (takes the single TOML config + training prompt)
+pnpm train --config personas/sakana-kawaii/persona.toml --prompt "重点强化一逗到底的绵密逗号语流，零括号动作旁白，把动作100%融进口语台词"
+
+# 3. Manage persona (init / show / sync from the single TOML config)
+pnpm persona --config personas/sakana-kawaii/persona.toml
+pnpm persona sync --config personas/sakana-kawaii/persona.toml --prompt "同步训练结果并安装 companion_portal 工作台"
+```
+
+Workspace build & test scripts:
 
 - `pnpm build`: Compiles TypeScript packages (`@prism-shadow/ema` and `@prism-shadow/use-ema`).
 - `pnpm typecheck`: Performs full type-checking with `tsc --noEmit`.

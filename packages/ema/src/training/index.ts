@@ -6,6 +6,7 @@ export * from "./types.js";
 export * from "./dataset.js";
 export * from "./personality.js";
 export * from "./persona-toml.js";
+export * from "./unified-cli.js";
 export * from "./llm-client.js";
 export * from "./trainer.js";
 export * from "./ablation.js";
