@@ -44,6 +44,11 @@ import {
   loadEmaGlobalConfig,
   loadEmaAgentConfig,
   ensureSharedWorldServer,
+  getEmaSandboxStatus,
+  assertSandboxBinaryAllowed,
+  buildLinuxBwrapWhitelistArgs,
+  buildWindowsWslBwrapWhitelistArgs,
+  buildMacosSeatbeltWhitelistProfile,
 } from "../dist/index.js";
 import { execFileSync } from "node:child_process";
 
@@ -103,6 +108,104 @@ async function main() {
   if (!command || command === "--help" || command === "-h" || command === "help") {
     printUsage();
     process.exit(0);
+  }
+
+  if (command === "sandbox") {
+    const sub = args[1] || "status";
+    let configPath;
+    let agentId;
+    let targetBin;
+    let targetPlatform;
+    let workspaceRoot = "/home/rei/work/org/ema/assistant";
+    let scratchpadDir;
+    let distro = "penguin-sandbox";
+
+    for (let i = 2; i < args.length; i++) {
+      const a = args[i];
+      if (a === "--config" && i + 1 < args.length) {
+        configPath = args[++i];
+      } else if (a === "--agent" && i + 1 < args.length) {
+        agentId = args[++i];
+      } else if (a === "--platform" && i + 1 < args.length) {
+        targetPlatform = args[++i];
+      } else if (a === "--workspace" && i + 1 < args.length) {
+        workspaceRoot = args[++i];
+      } else if (a === "--scratchpad" && i + 1 < args.length) {
+        scratchpadDir = args[++i];
+      } else if (a === "--distro" && i + 1 < args.length) {
+        distro = args[++i];
+      } else if (!a.startsWith("--") && !targetBin) {
+        targetBin = a;
+      }
+    }
+
+    const globalCfg = loadEmaGlobalConfig(configPath);
+    const agentCfg = agentId
+      ? loadEmaAgentConfig(agentId, { globalConfigPath: configPath })
+      : null;
+
+    if (sub === "status") {
+      const status = getEmaSandboxStatus({
+        configPath,
+        agentId,
+        platform: targetPlatform,
+      });
+      console.log(JSON.stringify(status, null, 2));
+      process.exit(0);
+    } else if (sub === "check-bin") {
+      if (!targetBin) {
+        console.error("Usage: ema.js sandbox check-bin <binName> [--agent <id>] [--config <path>]");
+        process.exit(1);
+      }
+      assertSandboxBinaryAllowed(targetBin, globalCfg, agentCfg);
+      console.log(JSON.stringify({ ok: true, bin: targetBin, allowed: true }, null, 2));
+      process.exit(0);
+    } else if (sub === "profile") {
+      const plat = targetPlatform || process.platform;
+      if (plat === "linux") {
+        console.log(
+          JSON.stringify(
+            buildLinuxBwrapWhitelistArgs({
+              workspaceRoot,
+              scratchpadDir,
+              globalCfg,
+              agentCfg,
+            }),
+            null,
+            2,
+          ),
+        );
+      } else if (plat === "win32") {
+        console.log(
+          JSON.stringify(
+            buildWindowsWslBwrapWhitelistArgs({
+              workspaceRoot,
+              scratchpadDir,
+              distro,
+              globalCfg,
+              agentCfg,
+            }),
+            null,
+            2,
+          ),
+        );
+      } else if (plat === "darwin") {
+        console.log(
+          buildMacosSeatbeltWhitelistProfile({
+            workspaceRoot,
+            scratchpadDir,
+            globalCfg,
+            agentCfg,
+          }),
+        );
+      } else {
+        throw new Error(`[EMA Sandbox Panic] Unsupported platform '${plat}'`);
+      }
+      process.exit(0);
+    } else {
+      console.error(`Unknown 'sandbox' subcommand: ${sub}. Use 'status', 'check-bin', or 'profile'.`);
+      process.exit(1);
+    }
   }
 
   if (command === "world") {

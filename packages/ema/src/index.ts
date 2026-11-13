@@ -15,6 +15,7 @@ export * from "./worlds/bilibili/index.js";
 export * from "./worlds/qq/index.js";
 export * from "./worlds/web/index.js";
 export * from "./config.js";
+export * from "./sandbox/index.js";
 export * from "./world-server.js";
 export * from "./prompts/index.js";
 export * from "./builder.js";
