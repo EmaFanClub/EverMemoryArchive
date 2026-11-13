@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import {
   SimpleEmaRouter,
   SimpleEmaInputBatcher,
@@ -367,26 +367,102 @@ describe("Adversarial Issues Verification Suite", () => {
   });
 
   describe("CLI Commands (bin/ema.js)", () => {
+    let hub: any;
+    let tmpDir = "";
+    let tmpConfigPath = "";
+
+    beforeAll(async () => {
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const { ensureSharedWorldServer } = await import("../src/world-server.js");
+
+      tmpDir = fs.mkdtempSync("/tmp/ema-cli-test-fixture-");
+      const worldsDir = path.join(tmpDir, "worlds");
+      fs.mkdirSync(worldsDir, { recursive: true });
+
+      tmpConfigPath = path.join(tmpDir, "config.toml");
+      fs.writeFileSync(
+        tmpConfigPath,
+        `app_data_dir = "/tmp/ema-cli-test-appdata"
+personas_dir = "/tmp/ema-cli-test-personas"
+
+[world]
+host = "127.0.0.1"
+port = 17495
+url = "http://127.0.0.1:17495"
+data_dir = "${worldsDir}"
+
+[world.web]
+db_path = "${path.join(worldsDir, "web-world.sqlite")}"
+initial_sessions = ["default"]
+
+[world.qq]
+db_path = "${path.join(worldsDir, "qq-world.sqlite")}"
+self_id = "1000000001"
+gateway_url = "http://localhost:13000"
+groups = ["2000000001"]
+private_users = ["3000000001"]
+
+[world.bilibili]
+db_path = "${path.join(worldsDir, "bilibili-world.sqlite")}"
+rooms = ["123456"]
+video_targets = ["video:BV1xx411c7mD"]
+dm_targets = ["3000000001"]
+
+[world.channel]
+db_path = "${path.join(worldsDir, "channel-world.sqlite")}"
+channels = ["ch_ema_minimal_test", "default_channel"]
+
+[sandbox]
+owner = "rei"
+allowed_bins = ["node", "bash", "sh", "ls", "grep"]
+`,
+        "utf8",
+      );
+
+      hub = await ensureSharedWorldServer({ configPath: tmpConfigPath });
+    });
+
+    afterAll(async () => {
+      const fs = await import("node:fs");
+      hub?.dispose();
+      if (tmpDir && fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
     it("executes 'world ls' passively without network errors", async () => {
-      const { execFileSync } = await import("child_process");
+      const { execFile } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFile);
       const cliPath = new URL("../bin/ema.js", import.meta.url).pathname;
 
-      const stdout = execFileSync("node", [cliPath, "world", "ls"], {
-        encoding: "utf8",
-        env: { ...process.env, PENGUIN_ORG_ID: "" }, // No org id
-      });
+      const { stdout } = await execFileAsync(
+        "node",
+        [cliPath, "world", "ls", "--config", tmpConfigPath],
+        {
+          encoding: "utf8",
+          env: { ...process.env, PENGUIN_ORG_ID: "" }, // No org id
+        },
+      );
 
       expect(stdout).toContain("PenguinChannelWorld /world/channel/*");
     });
 
     it("executes 'world get' passively to retrieve part list", async () => {
-      const { execFileSync } = await import("child_process");
+      const { execFile } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFile);
       const cliPath = new URL("../bin/ema.js", import.meta.url).pathname;
 
-      const stdout = execFileSync("node", [cliPath, "world", "get", "/world/channel/parts"], {
-        encoding: "utf8",
-        env: { ...process.env, PENGUIN_ORG_ID: "" },
-      });
+      const { stdout } = await execFileAsync(
+        "node",
+        [cliPath, "world", "get", "/world/channel/parts", "--config", tmpConfigPath],
+        {
+          encoding: "utf8",
+          env: { ...process.env, PENGUIN_ORG_ID: "" },
+        },
+      );
 
       const parsed = JSON.parse(stdout);
       expect(parsed.world).toBe("channel");

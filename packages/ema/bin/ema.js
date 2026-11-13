@@ -275,7 +275,14 @@ async function main() {
     const requestWorldOverHttp = async (routePath, init = {}) => {
       const normalizedPath = routePath.startsWith("/") ? routePath : `/${routePath}`;
       const url = `${worldHttpUrl}${normalizedPath}`;
-      const res = await fetch(url, init);
+      let res;
+      try {
+        res = await fetch(url, init);
+      } catch (err) {
+        throw new Error(
+          `[EMA World Panic] Failed to connect to Shared World HTTP Server at ${worldHttpUrl}: ${err?.message || err}. Ensure the server is running with 'ema.js world serve' or check 'world.url' in config.toml.`,
+        );
+      }
       if (res.status === 404) {
         const text = await res.text();
         throw new Error(`Route not found: ${normalizedPath}${text ? ` (${text})` : ""}`);

@@ -70,6 +70,7 @@ export interface SharedWorldHub {
 }
 
 const GLOBAL_HUB_KEY = "__EMA_SHARED_WORLD_HUB_V1__";
+const GLOBAL_HUB_LOCK_KEY = "__EMA_SHARED_WORLD_HUB_LOCK_V1__";
 
 export function createWorldHubInstance(options: SharedWorldHubOptions = {}): SharedWorldHub {
   const cfg = loadEmaGlobalConfig(options.configPath);
@@ -208,66 +209,90 @@ export async function ensureSharedWorldServer(
   options: SharedWorldHubOptions = {},
 ): Promise<SharedWorldHub> {
   const g = globalThis as Record<string, unknown>;
+
+  if (g[GLOBAL_HUB_LOCK_KEY]) {
+    return await (g[GLOBAL_HUB_LOCK_KEY] as Promise<SharedWorldHub>);
+  }
+
   let hub = g[GLOBAL_HUB_KEY] as SharedWorldHub | undefined;
-  if (!hub) {
-    hub = createWorldHubInstance(options);
-    g[GLOBAL_HUB_KEY] = hub;
+  if (hub?.httpServer) {
+    return hub;
   }
 
-  if (!hub.httpServer) {
-    const server = http.createServer(async (req, res) => {
-      try {
-        const reqUrl = new URL(req.url || "/", `http://${hub!.host}:${hub!.port}`);
-        const method = req.method || "GET";
-        let bodyBuf: Buffer | undefined;
-        if (method === "POST" || method === "PUT" || method === "PATCH") {
-          const chunks: Buffer[] = [];
-          for await (const chunk of req) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  const initPromise = (async () => {
+    if (!hub) {
+      hub = createWorldHubInstance(options);
+      g[GLOBAL_HUB_KEY] = hub;
+    }
+
+    if (!hub.httpServer) {
+      const server = http.createServer(async (req, res) => {
+        try {
+          const reqUrl = new URL(req.url || "/", `http://${hub!.host}:${hub!.port}`);
+          const method = req.method || "GET";
+          let bodyBuf: Buffer | undefined;
+          if (method === "POST" || method === "PUT" || method === "PATCH") {
+            const chunks: Buffer[] = [];
+            for await (const chunk of req) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            }
+            bodyBuf = Buffer.concat(chunks);
           }
-          bodyBuf = Buffer.concat(chunks);
+
+          const headers = new Headers();
+          for (const [k, v] of Object.entries(req.headers)) {
+            if (typeof v === "string") headers.set(k, v);
+            else if (Array.isArray(v)) headers.set(k, v.join(", "));
+          }
+
+          const webReq = new Request(reqUrl.toString(), {
+            method,
+            headers,
+            body: bodyBuf && bodyBuf.length > 0 ? new Uint8Array(bodyBuf) : undefined,
+          });
+
+          const webRes = await hub!.router.app.fetch(webReq);
+          res.statusCode = webRes.status;
+          webRes.headers.forEach((val, key) => {
+            res.setHeader(key, val);
+          });
+          const arrayBuf = await webRes.arrayBuffer();
+          res.end(Buffer.from(arrayBuf));
+        } catch (err: any) {
+          res.statusCode = 500;
+          res.setHeader("content-type", "text/plain; charset=utf-8");
+          res.end(err?.message || String(err));
         }
+      });
 
-        const headers = new Headers();
-        for (const [k, v] of Object.entries(req.headers)) {
-          if (typeof v === "string") headers.set(k, v);
-          else if (Array.isArray(v)) headers.set(k, v.join(", "));
-        }
-
-        const webReq = new Request(reqUrl.toString(), {
-          method,
-          headers,
-          body: bodyBuf && bodyBuf.length > 0 ? new Uint8Array(bodyBuf) : undefined,
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once("error", (err) => {
+            reject(
+              new Error(
+                `[EMA World Server Panic] Failed to bind HTTP server on ${hub!.host}:${hub!.port}: ${err.message}`,
+              ),
+            );
+          });
+          server.listen(hub!.port, hub!.host, () => {
+            hub!.httpServer = server;
+            resolve();
+          });
         });
-
-        const webRes = await hub!.router.app.fetch(webReq);
-        res.statusCode = webRes.status;
-        webRes.headers.forEach((val, key) => {
-          res.setHeader(key, val);
-        });
-        const arrayBuf = await webRes.arrayBuffer();
-        res.end(Buffer.from(arrayBuf));
-      } catch (err: any) {
-        res.statusCode = 500;
-        res.setHeader("content-type", "text/plain; charset=utf-8");
-        res.end(err?.message || String(err));
+      } catch (err) {
+        hub.dispose();
+        g[GLOBAL_HUB_KEY] = undefined;
+        throw err;
       }
-    });
+    }
 
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", (err) => {
-        reject(
-          new Error(
-            `[EMA World Server Panic] Failed to bind HTTP server on ${hub!.host}:${hub!.port}: ${err.message}`,
-          ),
-        );
-      });
-      server.listen(hub!.port, hub!.host, () => {
-        hub!.httpServer = server;
-        resolve();
-      });
-    });
+    return hub;
+  })();
+
+  g[GLOBAL_HUB_LOCK_KEY] = initPromise;
+  try {
+    return await initPromise;
+  } finally {
+    g[GLOBAL_HUB_LOCK_KEY] = undefined;
   }
-
-  return hub;
 }

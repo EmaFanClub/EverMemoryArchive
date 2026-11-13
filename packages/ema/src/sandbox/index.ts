@@ -148,6 +148,9 @@ export function buildLinuxBwrapWhitelistArgs(options: EmaSandboxProfileOptions):
     "/usr/local/sbin",
     "/usr/games",
     "/usr/local/games",
+    "/usr/lib/git-core",
+    "/usr/lib/openssh",
+    "/usr/libexec",
   ];
   for (const dir of sysBinDirs) {
     args.push("--tmpfs", dir);
@@ -189,6 +192,10 @@ export function buildLinuxBwrapWhitelistArgs(options: EmaSandboxProfileOptions):
 
   if (options.agentCfg) {
     args.push("--ro-bind", options.agentCfg.configPath, options.agentCfg.configPath);
+  }
+
+  for (const roPath of options.globalCfg.sandbox?.roPaths ?? []) {
+    args.push("--ro-bind-try", roPath, roPath);
   }
 
   // 5. Mount writable roots: workspaceRoot and scratchpadDir ONLY
@@ -255,9 +262,17 @@ export function buildWindowsWslBwrapWhitelistArgs(
   const allowedBins = resolveEffectiveAllowedBins(options.globalCfg, options.agentCfg);
   const resolveBin = options.resolveHostBin ?? ((bin: string) => `/usr/bin/${bin}`);
 
-  const args: string[] = ["--die-with-parent", "--unshare-all"];
-  if (options.network !== "none") {
-    args.push("--share-net");
+  // Bubblewrap does not support --share-net. Unshare namespaces individually.
+  const args: string[] = [
+    "--die-with-parent",
+    "--unshare-user",
+    "--unshare-ipc",
+    "--unshare-pid",
+    "--unshare-uts",
+    "--unshare-cgroup-try",
+  ];
+  if (options.network === "none") {
+    args.push("--unshare-net");
   }
   args.push(
     "--ro-bind",
@@ -279,7 +294,16 @@ export function buildWindowsWslBwrapWhitelistArgs(
   }
 
   // 1. Strict /usr/bin and /etc/ssh whitelist inside the WSL distro
-  const sysBinDirs = ["/etc/ssh", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"];
+  const sysBinDirs = [
+    "/etc/ssh",
+    "/usr/bin",
+    "/usr/sbin",
+    "/usr/local/bin",
+    "/usr/local/sbin",
+    "/usr/lib/git-core",
+    "/usr/lib/openssh",
+    "/usr/libexec",
+  ];
   for (const dir of sysBinDirs) {
     args.push("--tmpfs", dir);
   }
@@ -292,7 +316,11 @@ export function buildWindowsWslBwrapWhitelistArgs(
     args.push("--remount-ro", dir);
   }
 
-  // 2. Blank out /mnt (all Windows drives, C:\Users\<user>\.ssh, etc.) and mount ONLY workspace & scratchpad
+  // 2. Blank out WSL Linux user home to protect ~/.ssh, ~/.penguin, etc.
+  const homeDir = path.resolve(options.homeDir ?? os.homedir());
+  args.push("--tmpfs", homeDir);
+
+  // 3. Blank out /mnt (all Windows drives, C:\Users\<user>\.ssh, etc.) and mount ONLY workspace & scratchpad
   args.push("--tmpfs", "/mnt");
   args.push("--bind", wslWorkspace, wslWorkspace);
   if (wslScratchpad && wslScratchpad !== wslWorkspace) {
@@ -305,6 +333,9 @@ export function buildWindowsWslBwrapWhitelistArgs(
     "--remount-ro",
     "/mnt",
   );
+
+  // 4. Lock homeDir skeleton read-only
+  args.push("--remount-ro", homeDir);
 
   return args;
 }
@@ -362,7 +393,7 @@ export function buildMacosSeatbeltWhitelistProfile(options: EmaSandboxProfileOpt
     rwSubpaths.push(path.resolve(options.scratchpadDir));
   }
   if (options.writableTemp !== false) {
-    rwSubpaths.push("/private/tmp");
+    rwSubpaths.push("/private/tmp", "/tmp", "/private/var/folders", "/var/folders");
   }
   rules.push(
     `(allow file-read* file-write* ${[...new Set(rwSubpaths)]

@@ -53,6 +53,7 @@ export interface EmaWorldChannelConfig {
 export interface EmaGlobalSandboxConfig {
   owner: string;
   allowedBins: string[];
+  roPaths?: string[];
 }
 
 export interface EmaGlobalConfig {
@@ -234,6 +235,15 @@ export function loadEmaGlobalConfig(
               "sandbox.allowed_bins",
               resolvedPath,
             ),
+            ...(Array.isArray(parsed.sandbox.ro_paths)
+              ? {
+                  roPaths: requireStringArray(
+                    parsed.sandbox.ro_paths,
+                    "sandbox.ro_paths",
+                    resolvedPath,
+                  ),
+                }
+              : {}),
           },
         }
       : {}),

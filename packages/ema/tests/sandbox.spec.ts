@@ -56,9 +56,12 @@ describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
       resolveHostBin: (bin) => `/usr/bin/${bin}`,
     });
 
-    // Must blank out /etc/ssh, /usr/bin, and /home/rei
+    // Must blank out /etc/ssh, /usr/bin, /usr/lib/git-core, /usr/lib/openssh, /usr/libexec, and /home/rei
     expect(args).toContain("/etc/ssh");
     expect(args).toContain("/usr/bin");
+    expect(args).toContain("/usr/lib/git-core");
+    expect(args).toContain("/usr/lib/openssh");
+    expect(args).toContain("/usr/libexec");
     expect(args).toContain("/home/rei");
 
     // Must mount whitelisted binaries read-only into /usr/bin and NOT mount /usr/bin/ssh
@@ -92,14 +95,20 @@ describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
 
     const joined = args.join(" ");
     expect(joined).toContain("--tmpfs /mnt");
+    expect(joined).toContain("--tmpfs /home/rei");
     expect(joined).toContain("--tmpfs /usr/bin");
+    expect(joined).toContain("--tmpfs /usr/lib/git-core");
+    expect(joined).toContain("--tmpfs /usr/lib/openssh");
+    expect(joined).toContain("--tmpfs /usr/libexec");
     expect(joined).toContain("--tmpfs /etc/ssh");
     expect(joined).toContain("--bind /mnt/c/Users/rei/work/ema /mnt/c/Users/rei/work/ema");
     expect(joined).toContain(
       "--bind /mnt/c/Users/rei/.penguin/scratchpad/sess-1 /mnt/c/Users/rei/.penguin/scratchpad/sess-1",
     );
     expect(joined).toContain("--remount-ro /mnt");
+    expect(joined).toContain("--remount-ro /home/rei");
     expect(joined).not.toContain("/usr/bin/ssh");
+    expect(joined).not.toContain("--share-net");
   });
 
   it("builds macOS Seatbelt SBPL dual-whitelist profile (deny homeDir/ssh reads + allow RW workspace/scratchpad/tmp + process-exec* whitelist)", () => {
@@ -120,7 +129,7 @@ describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
       '(deny file-read* file-write* (subpath "/Users/rei") (subpath "/private/etc/ssh"))',
     );
     expect(profile).toContain(
-      '(allow file-read* file-write* (subpath "/Users/rei/work/ema") (subpath "/Users/rei/.penguin/scratchpad/sess-1") (subpath "/private/tmp"))',
+      '(allow file-read* file-write* (subpath "/Users/rei/work/ema") (subpath "/Users/rei/.penguin/scratchpad/sess-1") (subpath "/private/tmp") (subpath "/tmp") (subpath "/private/var/folders") (subpath "/var/folders"))',
     );
     expect(profile).toContain("(deny process-exec*)");
     expect(profile).toContain('(allow process-exec* (literal "/usr/bin/sh")');
@@ -133,5 +142,67 @@ describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
     expect(status.backend).toBe("penguin-bwrap (bwrap-whitelist)");
     expect(status.sshBlocked).toBe(true);
     expect(status.writableRoots).toEqual(["<session.workspace>", "<session.scratchpad>", "/tmp"]);
+  });
+
+  it("handles concurrent ensureSharedWorldServer calls safely without EADDRINUSE race", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { ensureSharedWorldServer } = await import("../src/world-server.js");
+
+    const tmpDir = fs.mkdtempSync("/tmp/ema-concurrency-test-");
+    const worldsDir = path.join(tmpDir, "worlds");
+    fs.mkdirSync(worldsDir, { recursive: true });
+
+    const tmpConfigPath = path.join(tmpDir, "config.toml");
+    fs.writeFileSync(
+      tmpConfigPath,
+      `app_data_dir = "/tmp/ema-conc-appdata"
+personas_dir = "/tmp/ema-conc-personas"
+
+[world]
+host = "127.0.0.1"
+port = 17496
+url = "http://127.0.0.1:17496"
+data_dir = "${worldsDir}"
+
+[world.web]
+db_path = "${path.join(worldsDir, "web-world.sqlite")}"
+initial_sessions = ["default"]
+
+[world.qq]
+db_path = "${path.join(worldsDir, "qq-world.sqlite")}"
+self_id = "1000000001"
+gateway_url = "http://localhost:13000"
+groups = ["2000000001"]
+private_users = ["3000000001"]
+
+[world.bilibili]
+db_path = "${path.join(worldsDir, "bilibili-world.sqlite")}"
+rooms = ["123456"]
+video_targets = ["video:BV1xx411c7mD"]
+dm_targets = ["3000000001"]
+
+[world.channel]
+db_path = "${path.join(worldsDir, "channel-world.sqlite")}"
+channels = ["ch_ema_minimal_test", "default_channel"]
+
+[sandbox]
+owner = "rei"
+allowed_bins = ["node", "bash", "sh"]
+`,
+      "utf8",
+    );
+
+    try {
+      const [hub1, hub2] = await Promise.all([
+        ensureSharedWorldServer({ configPath: tmpConfigPath }),
+        ensureSharedWorldServer({ configPath: tmpConfigPath }),
+      ]);
+      expect(hub1).toBe(hub2);
+      expect(hub1.httpServer).not.toBeNull();
+      hub1.dispose();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

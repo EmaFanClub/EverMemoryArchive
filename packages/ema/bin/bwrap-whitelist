@@ -6,22 +6,55 @@ HOME_DIR="/home/rei"
 GLOBAL_CONFIG="$HOME_DIR/.penguin/data/ema/config.toml"
 SANDBOX_PROFILE="$HOME_DIR/.penguin/data/shell-startup/sandbox-profile"
 
+has_arg_seq() {
+  local a="$1" b="$2" c="$3"
+  shift 3
+  while [[ $# -ge 3 ]]; do
+    if [[ "$1" == "$a" && "$2" == "$b" && "$3" == "$c" ]]; then
+      return 0
+    fi
+    shift
+  done
+  return 1
+}
+
 # Fast-path for the base profile probe (`--ro-bind / / --dev /dev --proc /proc --die-with-parent -- true`)
 # or non-ro-bind modes (`danger-full-access` uses `--bind / /`).
-if [[ $# -le 10 && "${*: -1}" == "true" ]] || [[ "${1-}" != "--ro-bind" || "${2-}" != "/" || "${3-}" != "/" ]]; then
+if [[ $# -le 10 && "${*: -1}" == "true" ]] || ! has_arg_seq "--ro-bind" "/" "/" "$@"; then
   exec -a "$0" "$REAL_BWRAP" "$@"
 fi
 
-# Pure-bash TOML string array parser for [sandbox] allowed_bins / owner_approved_bins
-parse_toml_array() {
+# Pure-bash TOML string parser for top-level keys (e.g. app_data_dir)
+parse_toml_root_string() {
   local file="$1" key="$2"
   [[ -r "$file" ]] || return 0
-  local content in_array=0 line rest
-  content=$(<"$file")
+  local line
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    if [[ "$line" =~ ^[[:space:]]*\[([a-zA-Z0-9_.-]+)\][[:space:]]*$ ]]; then
+      break
+    fi
+    if [[ "$line" =~ ^[[:space:]]*${key}[[:space:]]*=[[:space:]]*[\"\']([^\"\']+)[\"\'] ]]; then
+      printf "%s\n" "${BASH_REMATCH[1]}"
+      return 0
+    fi
+  done < "$file"
+}
+
+# Pure-bash TOML string array parser scoped strictly to a specific [section]
+# Supports both single-quoted and double-quoted string items.
+parse_toml_array() {
+  local file="$1" section="$2" key="$3"
+  [[ -r "$file" ]] || return 0
+  local current_section="" in_array=0 line rest matched
   while IFS= read -r line; do
     line="${line%%#*}"
     if [[ $in_array -eq 0 ]]; then
-      if [[ "$line" =~ ^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\[(.*)$ ]]; then
+      if [[ "$line" =~ ^[[:space:]]*\[([a-zA-Z0-9_.-]+)\][[:space:]]*$ ]]; then
+        current_section="${BASH_REMATCH[1]}"
+        continue
+      fi
+      if [[ "$current_section" == "$section" && "$line" =~ ^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\[(.*)$ ]]; then
         in_array=1
         line="${BASH_REMATCH[1]}"
       else
@@ -30,15 +63,16 @@ parse_toml_array() {
     fi
     if [[ $in_array -eq 1 ]]; then
       rest="$line"
-      while [[ "$rest" =~ \"([^\"]+)\"(.*) ]]; do
+      while [[ "$rest" =~ [\"\']([^\"\']+)[\"\'] ]]; do
+        matched="${BASH_REMATCH[0]}"
         printf "%s\n" "${BASH_REMATCH[1]}"
-        rest="${BASH_REMATCH[2]}"
+        rest="${rest#*"$matched"}"
       done
-      if [[ "$line" == *"]"* ]]; then
+      if [[ "$rest" == *"]"* ]]; then
         break
       fi
     fi
-  done <<< "$content"
+  done < "$file"
 }
 
 # Parse bwrap args before `--` and command argv after `--`
@@ -119,30 +153,42 @@ if [[ ! -r "$GLOBAL_CONFIG" ]]; then
   exit 1
 fi
 
-mapfile -t ALLOWED_BINS < <(parse_toml_array "$GLOBAL_CONFIG" "allowed_bins")
+mapfile -t ALLOWED_BINS < <(parse_toml_array "$GLOBAL_CONFIG" "sandbox" "allowed_bins")
 if [[ ${#ALLOWED_BINS[@]} -eq 0 ]]; then
   echo "[EMA Sandbox Panic] Missing or empty [sandbox].allowed_bins in $GLOBAL_CONFIG" >&2
   exit 1
 fi
 
-# 2. Load [sandbox].owner_approved_bins from agent-specific config.toml (if present)
+# 2. Load [sandbox].owner_approved_bins from the current session agent's config.toml (if present)
 if [[ -n "$AGENT_DIR" && -r "$AGENT_DIR/agent_state/config.toml" ]]; then
-  mapfile -t EXTRA_BINS < <(parse_toml_array "$AGENT_DIR/agent_state/config.toml" "owner_approved_bins")
+  mapfile -t EXTRA_BINS < <(parse_toml_array "$AGENT_DIR/agent_state/config.toml" "sandbox" "owner_approved_bins")
   if [[ ${#EXTRA_BINS[@]} -gt 0 ]]; then
     ALLOWED_BINS+=("${EXTRA_BINS[@]}")
   fi
 fi
 
-# 3. Build strict /usr/bin (and /bin -> usr/bin) whitelist mounts
-BIN_MOUNTS=(
-  "--tmpfs" "/etc/ssh"
-  "--tmpfs" "/usr/bin"
-  "--tmpfs" "/usr/sbin"
-  "--tmpfs" "/usr/local/bin"
-  "--tmpfs" "/usr/local/sbin"
-  "--tmpfs" "/usr/games"
-  "--tmpfs" "/usr/local/games"
+# 3. Build strict /usr/bin (and /bin -> usr/bin) + helper executable directory whitelist mounts
+SYS_BIN_DIRS=(
+  "/etc/ssh"
+  "/usr/bin"
+  "/usr/sbin"
+  "/usr/local/bin"
+  "/usr/local/sbin"
+  "/usr/games"
+  "/usr/local/games"
+  "/usr/lib/git-core"
+  "/usr/lib/openssh"
+  "/usr/libexec"
 )
+
+BIN_MOUNTS=()
+BIN_REMOUNT_RO=()
+for d in "${SYS_BIN_DIRS[@]}"; do
+  if [[ -d "$d" ]]; then
+    BIN_MOUNTS+=("--tmpfs" "$d")
+    BIN_REMOUNT_RO+=("--remount-ro" "$d")
+  fi
+done
 
 HOME_BIN_MOUNTS=()
 declare -A SEEN_BINS=()
@@ -185,46 +231,31 @@ for bin in "${ALLOWED_BINS[@]}"; do
   done
 done
 
-BIN_REMOUNT_RO=(
-  "--remount-ro" "/etc/ssh"
-  "--remount-ro" "/usr/bin"
-  "--remount-ro" "/usr/sbin"
-  "--remount-ro" "/usr/local/bin"
-  "--remount-ro" "/usr/local/sbin"
-  "--remount-ro" "/usr/games"
-  "--remount-ro" "/usr/local/games"
-)
-
-# 4. Whitelist read-only runtime data/code paths under /home/rei
+# 4. Whitelist read-only runtime data/code paths under /home/rei from config.toml
 RO_WHITELIST=(
   "$HOME_DIR/.penguin/data/shell-startup"
   "$GLOBAL_CONFIG"
-  "$HOME_DIR/.penguin/data/default_project/agents/sakana_kawaii/agent_state/config.toml"
-  "$HOME_DIR/.penguin/data/default_project/agents/sakana_chan/agent_state/config.toml"
-  "$HOME_DIR/.penguin/data/default_project/agents/aoi_rei/agent_state/config.toml"
-  "$HOME_DIR/.penguin/data/default_project/agents/shirobana/agent_state/config.toml"
-  "$HOME_DIR/.penguin/data/default_project/agents/ema_minimal/agent_state/config.toml"
-  "$HOME_DIR/worktrees/EverMemoryArchive/persona/node_modules"
-  "$HOME_DIR/worktrees/EverMemoryArchive/persona/packages/ema/bin"
-  "$HOME_DIR/worktrees/EverMemoryArchive/persona/packages/ema/dist"
-  "$HOME_DIR/worktrees/EverMemoryArchive/persona/packages/ema/node_modules"
-  "$HOME_DIR/worktrees/EverMemoryArchive/persona/packages/ema/package.json"
-  "$HOME_DIR/work/ts/penguin-harness/node_modules"
-  "$HOME_DIR/work/ts/penguin-harness/packages/cli/dist"
-  "$HOME_DIR/work/ts/penguin-harness/packages/cli/node_modules"
-  "$HOME_DIR/work/ts/penguin-harness/packages/cli/package.json"
-  "$HOME_DIR/work/ts/penguin-harness/packages/core/dist"
-  "$HOME_DIR/work/ts/penguin-harness/packages/core/node_modules"
-  "$HOME_DIR/work/ts/penguin-harness/packages/core/package.json"
 )
 
 if [[ -n "$AGENT_DIR" ]]; then
   RO_WHITELIST+=("$AGENT_DIR/agent_state/config.toml")
 fi
 
+# If command explicitly passes `--agent <id>` or `-a <id>`, mount only that agent's non-secret config.toml
+APP_DATA_DIR=$(parse_toml_root_string "$GLOBAL_CONFIG" "app_data_dir" || true)
+if [[ -n "$APP_DATA_DIR" && "${CMD_ARGV[*]}" =~ (--agent|-a)[[:space:]]+([a-zA-Z0-9_-]+) ]]; then
+  TARGET_AGENT_CFG="$APP_DATA_DIR/agents/${BASH_REMATCH[2]}/agent_state/config.toml"
+  RO_WHITELIST+=("$TARGET_AGENT_CFG")
+fi
+
+mapfile -t EXTRA_RO_PATHS < <(parse_toml_array "$GLOBAL_CONFIG" "sandbox" "ro_paths")
+if [[ ${#EXTRA_RO_PATHS[@]} -gt 0 ]]; then
+  RO_WHITELIST+=("${EXTRA_RO_PATHS[@]}")
+fi
+
 RO_ARGS=("--ro-bind" "$SANDBOX_PROFILE" "$HOME_DIR/.profile")
 for p in "${RO_WHITELIST[@]}"; do
-  RO_ARGS+=("--ro-bind-try" "$p" "$p")
+  [[ -n "$p" ]] && RO_ARGS+=("--ro-bind-try" "$p" "$p")
 done
 
 FINAL_ARGS=(
