@@ -393,5 +393,25 @@ describe("Adversarial Issues Verification Suite", () => {
       expect(Array.isArray(parsed.parts)).toBe(true);
       expect(parsed.parts.some((p: { id: string }) => p.id === "ch_ema_minimal_test")).toBe(true);
     });
+
+    it("panics immediately when global or agent config.toml is missing or malformed", async () => {
+      const { loadEmaGlobalConfig, loadEmaAgentConfig } = await import("../src/config.js");
+
+      expect(() => loadEmaGlobalConfig("/tmp/non-existent-ema-config-99999.toml")).toThrow(
+        /\[EMA Config Panic\] Global config\.toml not found/,
+      );
+
+      expect(() => loadEmaAgentConfig("non_existent_agent_99999")).toThrow(
+        /\[EMA Config Panic\] Agent config\.toml for 'non_existent_agent_99999' not found/,
+      );
+
+      const globalCfg = loadEmaGlobalConfig();
+      expect(globalCfg.world.url).toBe("http://127.0.0.1:17480");
+      expect(globalCfg.world.dataDir).toContain("/.penguin/data/ema/worlds");
+
+      const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
+      expect(sakanaCfg.agent.id).toBe("sakana_kawaii");
+      expect(sakanaCfg.world.url).toBe("http://127.0.0.1:17480");
+    });
   });
 });

@@ -26,6 +26,8 @@ import {
   getAgentPreset,
   getPersonalityPreset,
   installWebWorkbench,
+   ensureSharedWorldServer,
+  loadEmaGlobalConfig,
   PenguinServerLLMClient,
   type EmaAgentConfig,
   type EmaPersonalityFeatureConfig,
@@ -71,22 +73,18 @@ export interface WorkbenchModuleCtx<Use = { host: WorkbenchHost }> {
   effect?: (dispose: () => void) => void;
 }
 
+let personasDirOverride: string | null = null;
+
+export function setPersonasDirOverride(dir: string | null): void {
+  personasDirOverride = dir ? path.resolve(dir) : null;
+}
+
 export function getPersonasDir(): string {
-  if (process.env.EMA_PERSONAS_DIR) {
-    return path.resolve(process.env.EMA_PERSONAS_DIR);
+  const dir = personasDirOverride ?? loadEmaGlobalConfig().personasDir;
+  if (!fs.existsSync(dir)) {
+    throw new Error(`[EMA Personas Panic] Configured personas_dir does not exist: ${dir}`);
   }
-  const currentDir = path.dirname(fileURLToPath(import.meta.url));
-  const searchCandidates = [
-    path.resolve(currentDir, "../../../personas"),
-    path.resolve(currentDir, "../../personas"),
-    path.resolve(process.cwd(), "personas"),
-    path.resolve(process.cwd(), "../../personas"),
-    path.resolve(process.cwd(), "../personas"),
-  ];
-  for (const dir of searchCandidates) {
-    if (fs.existsSync(dir)) return dir;
-  }
-  return path.resolve(process.cwd(), "personas");
+  return dir;
 }
 
 export function readAvatarDataUrl(filePath: string): string | null {
@@ -654,6 +652,40 @@ export async function handleWorkbenchRequest(
 ): Promise<WorkbenchResponse> {
   const rawPath = (req.path || "").replace(/\/$/, "");
   const path = rawPath.startsWith("/api") ? rawPath.slice(4) || "/" : rawPath;
+  const globalCfg = loadEmaGlobalConfig();
+
+  // Shared EMA World HTTP Router endpoints (/world/*)
+  if (path === "/world" || path.startsWith("/world/")) {
+    const worldHub = await ensureSharedWorldServer();
+    try {
+      const qs =
+        req.query && Object.keys(req.query).length > 0
+          ? `?${new URLSearchParams(req.query).toString()}`
+          : "";
+      const targetUri = `${path}${qs}`;
+      const result = await worldHub.router.read(
+        targetUri,
+        req.method === "POST" || req.method === "PUT" || req.method === "PATCH"
+          ? {
+              method: req.method,
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(req.body ?? {}),
+            }
+          : { method: req.method || "GET" },
+      );
+      return {
+        status: 200,
+        body: result,
+      };
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      const status = msg.startsWith("Route not found:") ? 404 : 500;
+      return {
+        status,
+        body: { error: msg },
+      };
+    }
+  }
 
   // Health check
   if (req.method === "GET" && (path === "" || path === "/" || path === "/health")) {
@@ -664,6 +696,8 @@ export async function handleWorkbenchRequest(
         service: "@prism-shadow/use-ema",
         version: "0.1.0",
         mission: "We build lifelong AI companions that grow, remember, and evolve with you.",
+        worldServerUrl: globalCfg.world.url,
+        worldDataDir: globalCfg.world.dataDir,
       },
     };
   }
@@ -973,6 +1007,7 @@ export async function handleWorkbenchRequest(
  */
 export function createWorkbenchModule(ctx: WorkbenchModuleCtx<{ host: WorkbenchHost }>) {
   const host = ctx.use.host;
+  void ensureSharedWorldServer();
   return {
     api: {
       main: {

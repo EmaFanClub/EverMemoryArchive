@@ -160,8 +160,8 @@ export class QQLoginManager {
       storageStatePath:
         options.storageStatePath ?? path.resolve(process.cwd(), "qq-storage-state.json"),
       userDataDir: options.userDataDir,
-      gatewayUrl: options.gatewayUrl ?? process.env.QQ_GATEWAY_URL,
-      gatewayToken: options.gatewayToken ?? process.env.QQ_GATEWAY_TOKEN,
+      gatewayUrl: options.gatewayUrl,
+      gatewayToken: options.gatewayToken,
       browser: options.browser,
       context: options.context,
       userAgent: options.userAgent,
