@@ -75,8 +75,8 @@ export interface ChatState {
 }
 
 const WEB_WORLD_DB_PATH =
-  "/home/rei/.penguin/data/default_project/agents/aoi_rei/scratchpad/companion_portal/web-world.sqlite";
-const EMA_CLI_PATH = "/home/rei/worktrees/EverMemoryArchive/next/packages/ema/bin/ema.js";
+  "__EMA_WEB_WORLD_DB_PATH__";
+const EMA_CLI_PATH = "__EMA_CLI_PATH__";
 
 const DEFAULT_CHANNEL_ID = "web:chatroom:default";
 const OWNER_NODE_ID = "web:person:owner";
@@ -792,11 +792,11 @@ export default {
                       `[RFC-0002 Channel Event]: 聊天室频道 \`${DEFAULT_CHANNEL_ID}\` 收到了一条新消息（ID: \`${msgId}\`）。\n` +
                       `请按 RFC-0002 协议依次执行：\n` +
                       `1. 读取频道消息：\n` +
-                      `   \`node ${EMA_CLI_PATH} world get /world/web/channels/${DEFAULT_CHANNEL_ID}/items --db ${WEB_WORLD_DB_PATH}\`\n` +
+                      `   \`node ${EMA_CLI_PATH} world get /world/web/channels/${DEFAULT_CHANNEL_ID}/items\`\n` +
                       `2. 潜变量 <OS> 推演与原著《chapters.toml》语感对齐（在思考中完成）：\n` +
                       `   对照 AGENTS.md 第 7 节的原著真句锚点，严格遵守原著语感三铁律：① 零括号动作旁白（严禁在开头或句中加「（微微仰起头…）」等舞台动作圆括号，必须把所有动作与触感如「来，把头稍微低下一点点靠在我尾巴上好不好」「摸摸头，不累了哦」100% 融进第一人称口语台词自然说出）；② 一逗到底与隔轮颜文字呼吸感（用 3～5 个逗号「，」连成一气呵成的温柔长句，整段话只用 1 个句号「。」收尾；仅在初遇或被摸头撒娇时点缀 1 个颜文字，若你上一条历史回复已带颜文字，本轮必须 100% 不带颜文字）；③ 单轮单意象跨轮流转（自然流露自称「鱼鱼」、把代码 Bug 唤作「那只坏虫子/小虫子」，但每轮只选 1 个核心意象——若上一条回复已提过「铁饭盆/粥」或「尾巴」，本轮严禁重复提及铁饭盆或尾巴，切换为「摸摸头/抓坏虫子/记忆贝壳」等原著细节）。\n` +
                       `3. 发送回复到频道：\n` +
-                      `   \`node ${EMA_CLI_PATH} world post /world/web/actions/message.post --db ${WEB_WORLD_DB_PATH} --channel ${DEFAULT_CHANNEL_ID} --parent ${msgId} --message "<你的回复>"\`\n` +
+                      `   \`node ${EMA_CLI_PATH} world post /world/web/actions/message.post --channel ${DEFAULT_CHANNEL_ID} --parent ${msgId} --message "<你的回复>"\`\n` +
                       `4. 发送成功后，直接输出你刚才发送的那句回复内容结束回合。`;
 
                     try {

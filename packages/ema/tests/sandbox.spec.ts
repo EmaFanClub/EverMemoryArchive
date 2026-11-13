@@ -1,0 +1,300 @@
+import fs from "node:fs";
+import path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  assertSandboxBinaryAllowed,
+  buildLinuxBwrapWhitelistArgs,
+  buildMacosSeatbeltWhitelistProfile,
+  buildWindowsWslBwrapWhitelistArgs,
+  getEmaSandboxStatus,
+  loadEmaAgentConfig,
+  loadEmaGlobalConfig,
+  resolveEffectiveAllowedBins,
+  toWslLinuxPath,
+} from "../src/index.js";
+
+describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
+  let tmpDir = "";
+  let tmpGlobalConfigPath = "";
+  let tmpAppDataDir = "";
+
+  beforeAll(() => {
+    tmpDir = fs.mkdtempSync("/tmp/ema-sandbox-test-fixture-");
+    tmpAppDataDir = path.join(tmpDir, "app-data");
+    const worldsDir = path.join(tmpDir, "worlds");
+    const sakanaStateDir = path.join(tmpAppDataDir, "agents", "sakana_kawaii", "agent_state");
+    fs.mkdirSync(worldsDir, { recursive: true });
+    fs.mkdirSync(sakanaStateDir, { recursive: true });
+
+    tmpGlobalConfigPath = path.join(tmpDir, "config.toml");
+    fs.writeFileSync(
+      tmpGlobalConfigPath,
+      `app_data_dir = "${tmpAppDataDir}"
+personas_dir = "${path.join(tmpDir, "personas")}"
+
+[world]
+host = "127.0.0.1"
+port = 17480
+url = "http://127.0.0.1:17480"
+data_dir = "${worldsDir}"
+
+[world.web]
+db_path = "${path.join(worldsDir, "web-world.sqlite")}"
+initial_sessions = ["default"]
+
+[world.qq]
+db_path = "${path.join(worldsDir, "qq-world.sqlite")}"
+self_id = "1000000001"
+gateway_url = "http://localhost:13000"
+groups = ["2000000001"]
+private_users = ["3000000001"]
+
+[world.bilibili]
+db_path = "${path.join(worldsDir, "bilibili-world.sqlite")}"
+rooms = ["123456"]
+video_targets = ["video:BV1xx411c7mD"]
+dm_targets = ["3000000001"]
+
+[world.channel]
+db_path = "${path.join(worldsDir, "channel-world.sqlite")}"
+channels = ["ch_ema_minimal_test", "default_channel"]
+
+[sandbox]
+owner = "rei"
+allowed_bins = [
+  "sh", "bash", "dash", "env", "true", "false", "run-parts",
+  "cat", "ls", "rm", "cp", "mv", "mkdir", "rmdir", "touch",
+  "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "sed", "awk", "mawk", "jq", "diff",
+  "find", "xargs", "sort", "uniq", "tr", "cut", "paste", "tee",
+  "dirname", "basename", "realpath", "readlink", "stat", "chmod",
+  "date", "sleep", "pwd", "echo", "printf", "test", "[", "expr",
+  "id", "whoami", "uname", "which", "dircolors", "tput", "clear",
+  "node", "penguin"
+]
+ro_paths = ["/home/rei/worktrees/EverMemoryArchive/adv-eval-review-round1/packages/ema"]
+`,
+      "utf8",
+    );
+
+    fs.writeFileSync(
+      path.join(sakanaStateDir, "config.toml"),
+      `[agent]
+id = "sakana_kawaii"
+name = "大肥鱼"
+owner = "rei"
+
+[world]
+url = "http://127.0.0.1:17480"
+
+[world.web]
+channel_id = "web:chatroom:default"
+
+[sandbox]
+owner_approved_bins = []
+`,
+      "utf8",
+    );
+  });
+
+  afterAll(() => {
+    if (tmpDir && fs.existsSync(tmpDir)) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves effective allowed bins from global config.toml and agent owner_approved_bins", () => {
+    const globalCfg = loadEmaGlobalConfig(tmpGlobalConfigPath);
+    const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
+
+    const bins = resolveEffectiveAllowedBins(globalCfg, sakanaCfg);
+    expect(bins).toContain("sh");
+    expect(bins).toContain("bash");
+    expect(bins).toContain("ls");
+    expect(bins).toContain("grep");
+    expect(bins).toContain("rg");
+    expect(bins).toContain("[");
+    expect(bins).toContain("node");
+    expect(bins).not.toContain("ssh");
+    expect(bins).not.toContain("scp");
+
+    expect(() => assertSandboxBinaryAllowed("ssh", globalCfg, sakanaCfg)).toThrow(
+      /\[EMA Sandbox Panic\] Binary 'ssh' is blocked \(not in sandbox bin whitelist\)\. Execution requires explicit approval from the EMA Agent Owner/,
+    );
+
+    // Simulate EMA Agent Owner explicitly approving `git` for this agent
+    const ownerApprovedCfg = {
+      ...sakanaCfg,
+      sandbox: { ownerApprovedBins: ["git"] },
+    };
+    expect(() => assertSandboxBinaryAllowed("git", globalCfg, ownerApprovedCfg)).not.toThrow();
+    expect(() => assertSandboxBinaryAllowed("ssh", globalCfg, ownerApprovedCfg)).toThrow(
+      /Binary 'ssh' is blocked/,
+    );
+  });
+
+  it("builds Linux Bubblewrap dual-whitelist args (--tmpfs /home/rei + --tmpfs /usr/bin + RW workspace/scratchpad/tmp only)", () => {
+    const globalCfg = loadEmaGlobalConfig(tmpGlobalConfigPath);
+    const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
+
+    const args = buildLinuxBwrapWhitelistArgs({
+      workspaceRoot: "/home/rei/work/org/ema/assistant",
+      scratchpadDir:
+        "/home/rei/.penguin/data/default_project/agents/sakana_kawaii/scratchpad/sess-1",
+      globalCfg,
+      agentCfg: sakanaCfg,
+      homeDir: "/home/rei",
+      resolveHostBin: (bin) => `/usr/bin/${bin}`,
+    });
+
+    // Must blank out /etc/ssh, /usr/bin, /usr/lib/git-core, /usr/lib/openssh, /usr/libexec, and /home/rei
+    expect(args).toContain("/etc/ssh");
+    expect(args).toContain("/usr/bin");
+    expect(args).toContain("/usr/lib/git-core");
+    expect(args).toContain("/usr/lib/openssh");
+    expect(args).toContain("/usr/libexec");
+    expect(args).toContain("/home/rei");
+
+    // Must mount whitelisted binaries read-only into /usr/bin and NOT mount /usr/bin/ssh
+    expect(args.join(" ")).toContain("--ro-bind /usr/bin/node /usr/bin/node");
+    expect(args.join(" ")).toContain("--ro-bind /usr/bin/grep /usr/bin/grep");
+    expect(args.join(" ")).not.toContain("/usr/bin/ssh");
+
+    // Must bind workspace and scratchpad read-write, then lock /home/rei read-only
+    const bindWsIdx = args.indexOf("/home/rei/work/org/ema/assistant");
+    const remountHomeIdx = args.lastIndexOf("/home/rei");
+    expect(bindWsIdx).toBeGreaterThan(0);
+    expect(args[bindWsIdx - 1]).toBe("--bind");
+    expect(args[remountHomeIdx - 1]).toBe("--remount-ro");
+    expect(remountHomeIdx).toBeGreaterThan(bindWsIdx);
+  });
+
+  it("builds Windows WSL2 Bubblewrap dual-whitelist args (--tmpfs /mnt + --tmpfs /usr/bin + RW workspace/scratchpad only)", () => {
+    const globalCfg = loadEmaGlobalConfig(tmpGlobalConfigPath);
+    const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
+
+    expect(toWslLinuxPath("C:\\Users\\rei\\work\\ema")).toBe("/mnt/c/Users/rei/work/ema");
+
+    const args = buildWindowsWslBwrapWhitelistArgs({
+      workspaceRoot: "C:\\Users\\rei\\work\\ema",
+      scratchpadDir: "C:\\Users\\rei\\.penguin\\scratchpad\\sess-1",
+      distro: "penguin-sandbox",
+      globalCfg,
+      agentCfg: sakanaCfg,
+      resolveHostBin: (bin) => `/usr/bin/${bin}`,
+    });
+
+    const joined = args.join(" ");
+    expect(joined).toContain("--tmpfs /mnt");
+    expect(joined).toContain("--tmpfs /home/rei");
+    expect(joined).toContain("--tmpfs /usr/bin");
+    expect(joined).toContain("--tmpfs /usr/lib/git-core");
+    expect(joined).toContain("--tmpfs /usr/lib/openssh");
+    expect(joined).toContain("--tmpfs /usr/libexec");
+    expect(joined).toContain("--tmpfs /etc/ssh");
+    expect(joined).toContain("--bind /mnt/c/Users/rei/work/ema /mnt/c/Users/rei/work/ema");
+    expect(joined).toContain(
+      "--bind /mnt/c/Users/rei/.penguin/scratchpad/sess-1 /mnt/c/Users/rei/.penguin/scratchpad/sess-1",
+    );
+    expect(joined).toContain("--remount-ro /mnt");
+    expect(joined).toContain("--remount-ro /home/rei");
+    expect(joined).not.toContain("/usr/bin/ssh");
+    expect(joined).not.toContain("--share-net");
+  });
+
+  it("builds macOS Seatbelt SBPL dual-whitelist profile (deny homeDir/ssh reads + allow RW workspace/scratchpad/tmp + process-exec* whitelist)", () => {
+    const globalCfg = loadEmaGlobalConfig(tmpGlobalConfigPath);
+    const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
+
+    const profile = buildMacosSeatbeltWhitelistProfile({
+      workspaceRoot: "/Users/rei/work/ema",
+      scratchpadDir: "/Users/rei/.penguin/scratchpad/sess-1",
+      globalCfg,
+      agentCfg: sakanaCfg,
+      homeDir: "/Users/rei",
+      network: "local",
+      resolveHostBin: (bin) => `/usr/bin/${bin}`,
+    });
+
+    expect(profile).toContain(
+      '(deny file-read* file-write* (subpath "/Users/rei") (subpath "/private/etc/ssh"))',
+    );
+    expect(profile).toContain(
+      '(allow file-read* file-write* (subpath "/Users/rei/work/ema") (subpath "/Users/rei/.penguin/scratchpad/sess-1") (subpath "/private/tmp") (subpath "/tmp") (subpath "/private/var/folders") (subpath "/var/folders"))',
+    );
+    expect(profile).toContain("(deny process-exec*)");
+    expect(profile).toContain('(allow process-exec* (literal "/usr/bin/sh")');
+    expect(profile).not.toContain('"/usr/bin/ssh"');
+    expect(profile).toContain('(allow network-outbound (remote ip "localhost:*"))');
+  });
+
+  it("reports structured sandbox status with sshBlocked = true", () => {
+    const status = getEmaSandboxStatus({
+      configPath: tmpGlobalConfigPath,
+      agentId: "sakana_kawaii",
+      platform: "linux",
+    });
+    expect(status.backend).toBe("penguin-bwrap (bwrap-whitelist)");
+    expect(status.sshBlocked).toBe(true);
+    expect(status.writableRoots).toEqual(["<session.workspace>", "<session.scratchpad>", "/tmp"]);
+  });
+
+  it("handles concurrent ensureSharedWorldServer calls safely without EADDRINUSE race", async () => {
+    const { ensureSharedWorldServer } = await import("../src/world-server.js");
+
+    const concDir = fs.mkdtempSync("/tmp/ema-concurrency-test-");
+    const worldsDir = path.join(concDir, "worlds");
+    fs.mkdirSync(worldsDir, { recursive: true });
+
+    const concConfigPath = path.join(concDir, "config.toml");
+    fs.writeFileSync(
+      concConfigPath,
+      `app_data_dir = "/tmp/ema-conc-appdata"
+personas_dir = "/tmp/ema-conc-personas"
+
+[world]
+host = "127.0.0.1"
+port = 17496
+url = "http://127.0.0.1:17496"
+data_dir = "${worldsDir}"
+
+[world.web]
+db_path = "${path.join(worldsDir, "web-world.sqlite")}"
+initial_sessions = ["default"]
+
+[world.qq]
+db_path = "${path.join(worldsDir, "qq-world.sqlite")}"
+self_id = "1000000001"
+gateway_url = "http://localhost:13000"
+groups = ["2000000001"]
+private_users = ["3000000001"]
+
+[world.bilibili]
+db_path = "${path.join(worldsDir, "bilibili-world.sqlite")}"
+rooms = ["123456"]
+video_targets = ["video:BV1xx411c7mD"]
+dm_targets = ["3000000001"]
+
+[world.channel]
+db_path = "${path.join(worldsDir, "channel-world.sqlite")}"
+channels = ["ch_ema_minimal_test", "default_channel"]
+
+[sandbox]
+owner = "rei"
+allowed_bins = ["node", "bash", "sh"]
+`,
+      "utf8",
+    );
+
+    try {
+      const [hub1, hub2] = await Promise.all([
+        ensureSharedWorldServer({ configPath: concConfigPath }),
+        ensureSharedWorldServer({ configPath: concConfigPath }),
+      ]);
+      expect(hub1).toBe(hub2);
+      expect(hub1.httpServer).not.toBeNull();
+      hub1.dispose();
+    } finally {
+      fs.rmSync(concDir, { recursive: true, force: true });
+    }
+  });
+});
