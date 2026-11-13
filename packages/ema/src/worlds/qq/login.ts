@@ -100,6 +100,7 @@ export function ensureQQPlaywrightEnvironment(): void {
     path.join(os.homedir(), ".local", "share", "playwright-libs");
   const libDir = path.join(baseDir, "usr", "lib", "x86_64-linux-gnu");
   const fontsConf = path.join(baseDir, "etc", "fonts");
+  const usrShare = path.join(baseDir, "usr", "share");
 
   if (fs.existsSync(libDir)) {
     const current = process.env.LD_LIBRARY_PATH || "";
@@ -110,6 +111,10 @@ export function ensureQQPlaywrightEnvironment(): void {
 
   if (fs.existsSync(fontsConf) && !process.env.FONTCONFIG_PATH) {
     process.env.FONTCONFIG_PATH = fontsConf;
+  }
+
+  if (fs.existsSync(path.join(usrShare, "fonts")) && !process.env.XDG_DATA_HOME) {
+    process.env.XDG_DATA_HOME = usrShare;
   }
 }
 
