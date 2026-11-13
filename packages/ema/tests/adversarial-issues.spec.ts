@@ -378,12 +378,15 @@ describe("Adversarial Issues Verification Suite", () => {
 
       tmpDir = fs.mkdtempSync("/tmp/ema-cli-test-fixture-");
       const worldsDir = path.join(tmpDir, "worlds");
+      const appDataDir = path.join(tmpDir, "app-data");
+      const sakanaStateDir = path.join(appDataDir, "agents", "sakana_kawaii", "agent_state");
       fs.mkdirSync(worldsDir, { recursive: true });
+      fs.mkdirSync(sakanaStateDir, { recursive: true });
 
       tmpConfigPath = path.join(tmpDir, "config.toml");
       fs.writeFileSync(
         tmpConfigPath,
-        `app_data_dir = "/tmp/ema-cli-test-appdata"
+        `app_data_dir = "${appDataDir}"
 personas_dir = "/tmp/ema-cli-test-personas"
 
 [world]
@@ -416,6 +419,25 @@ channels = ["ch_ema_minimal_test", "default_channel"]
 [sandbox]
 owner = "rei"
 allowed_bins = ["node", "bash", "sh", "ls", "grep"]
+`,
+        "utf8",
+      );
+
+      fs.writeFileSync(
+        path.join(sakanaStateDir, "config.toml"),
+        `[agent]
+id = "sakana_kawaii"
+name = "大肥鱼"
+owner = "rei"
+
+[world]
+url = "http://127.0.0.1:17495"
+
+[world.web]
+channel_id = "web:chatroom:default"
+
+[sandbox]
+owner_approved_bins = []
 `,
         "utf8",
       );
@@ -477,20 +499,20 @@ allowed_bins = ["node", "bash", "sh", "ls", "grep"]
         /\[EMA Config Panic\] Global config\.toml not found/,
       );
 
-      expect(() => loadEmaAgentConfig("non_existent_agent_99999")).toThrow(
-        /\[EMA Config Panic\] Agent config\.toml for 'non_existent_agent_99999' not found/,
-      );
+      expect(() =>
+        loadEmaAgentConfig("non_existent_agent_99999", { globalConfigPath: tmpConfigPath }),
+      ).toThrow(/\[EMA Config Panic\] Agent config\.toml for 'non_existent_agent_99999' not found/);
 
-      const globalCfg = loadEmaGlobalConfig();
-      expect(globalCfg.world.url).toBe("http://127.0.0.1:17480");
-      expect(globalCfg.world.dataDir).toContain("/.penguin/data/ema/worlds");
+      const globalCfg = loadEmaGlobalConfig(tmpConfigPath);
+      expect(globalCfg.world.url).toBe("http://127.0.0.1:17495");
+      expect(globalCfg.world.dataDir).toContain("/worlds");
       expect(globalCfg.sandbox?.owner).toBe("rei");
       expect(globalCfg.sandbox?.allowedBins).toContain("node");
       expect(globalCfg.sandbox?.allowedBins).not.toContain("ssh");
 
       const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
       expect(sakanaCfg.agent.id).toBe("sakana_kawaii");
-      expect(sakanaCfg.world.url).toBe("http://127.0.0.1:17480");
+      expect(sakanaCfg.world.url).toBe("http://127.0.0.1:17495");
       expect(sakanaCfg.sandbox?.ownerApprovedBins).toEqual([]);
 
       const { assertSandboxBinaryAllowed } = await import("../src/config.js");

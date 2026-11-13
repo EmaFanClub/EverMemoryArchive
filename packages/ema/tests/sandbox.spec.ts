@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   assertSandboxBinaryAllowed,
   buildLinuxBwrapWhitelistArgs,
@@ -12,8 +14,96 @@ import {
 } from "../src/index.js";
 
 describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
+  let tmpDir = "";
+  let tmpGlobalConfigPath = "";
+  let tmpAppDataDir = "";
+
+  beforeAll(() => {
+    tmpDir = fs.mkdtempSync("/tmp/ema-sandbox-test-fixture-");
+    tmpAppDataDir = path.join(tmpDir, "app-data");
+    const worldsDir = path.join(tmpDir, "worlds");
+    const sakanaStateDir = path.join(tmpAppDataDir, "agents", "sakana_kawaii", "agent_state");
+    fs.mkdirSync(worldsDir, { recursive: true });
+    fs.mkdirSync(sakanaStateDir, { recursive: true });
+
+    tmpGlobalConfigPath = path.join(tmpDir, "config.toml");
+    fs.writeFileSync(
+      tmpGlobalConfigPath,
+      `app_data_dir = "${tmpAppDataDir}"
+personas_dir = "${path.join(tmpDir, "personas")}"
+
+[world]
+host = "127.0.0.1"
+port = 17480
+url = "http://127.0.0.1:17480"
+data_dir = "${worldsDir}"
+
+[world.web]
+db_path = "${path.join(worldsDir, "web-world.sqlite")}"
+initial_sessions = ["default"]
+
+[world.qq]
+db_path = "${path.join(worldsDir, "qq-world.sqlite")}"
+self_id = "1000000001"
+gateway_url = "http://localhost:13000"
+groups = ["2000000001"]
+private_users = ["3000000001"]
+
+[world.bilibili]
+db_path = "${path.join(worldsDir, "bilibili-world.sqlite")}"
+rooms = ["123456"]
+video_targets = ["video:BV1xx411c7mD"]
+dm_targets = ["3000000001"]
+
+[world.channel]
+db_path = "${path.join(worldsDir, "channel-world.sqlite")}"
+channels = ["ch_ema_minimal_test", "default_channel"]
+
+[sandbox]
+owner = "rei"
+allowed_bins = [
+  "sh", "bash", "dash", "env", "true", "false", "run-parts",
+  "cat", "ls", "rm", "cp", "mv", "mkdir", "rmdir", "touch",
+  "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "sed", "awk", "mawk", "jq", "diff",
+  "find", "xargs", "sort", "uniq", "tr", "cut", "paste", "tee",
+  "dirname", "basename", "realpath", "readlink", "stat", "chmod",
+  "date", "sleep", "pwd", "echo", "printf", "test", "[", "expr",
+  "id", "whoami", "uname", "which", "dircolors", "tput", "clear",
+  "node", "penguin"
+]
+ro_paths = ["/home/rei/worktrees/EverMemoryArchive/adv-eval-review-round1/packages/ema"]
+`,
+      "utf8",
+    );
+
+    fs.writeFileSync(
+      path.join(sakanaStateDir, "config.toml"),
+      `[agent]
+id = "sakana_kawaii"
+name = "大肥鱼"
+owner = "rei"
+
+[world]
+url = "http://127.0.0.1:17480"
+
+[world.web]
+channel_id = "web:chatroom:default"
+
+[sandbox]
+owner_approved_bins = []
+`,
+      "utf8",
+    );
+  });
+
+  afterAll(() => {
+    if (tmpDir && fs.existsSync(tmpDir)) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("resolves effective allowed bins from global config.toml and agent owner_approved_bins", () => {
-    const globalCfg = loadEmaGlobalConfig();
+    const globalCfg = loadEmaGlobalConfig(tmpGlobalConfigPath);
     const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
 
     const bins = resolveEffectiveAllowedBins(globalCfg, sakanaCfg);
@@ -43,7 +133,7 @@ describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
   });
 
   it("builds Linux Bubblewrap dual-whitelist args (--tmpfs /home/rei + --tmpfs /usr/bin + RW workspace/scratchpad/tmp only)", () => {
-    const globalCfg = loadEmaGlobalConfig();
+    const globalCfg = loadEmaGlobalConfig(tmpGlobalConfigPath);
     const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
 
     const args = buildLinuxBwrapWhitelistArgs({
@@ -79,7 +169,7 @@ describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
   });
 
   it("builds Windows WSL2 Bubblewrap dual-whitelist args (--tmpfs /mnt + --tmpfs /usr/bin + RW workspace/scratchpad only)", () => {
-    const globalCfg = loadEmaGlobalConfig();
+    const globalCfg = loadEmaGlobalConfig(tmpGlobalConfigPath);
     const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
 
     expect(toWslLinuxPath("C:\\Users\\rei\\work\\ema")).toBe("/mnt/c/Users/rei/work/ema");
@@ -112,7 +202,7 @@ describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
   });
 
   it("builds macOS Seatbelt SBPL dual-whitelist profile (deny homeDir/ssh reads + allow RW workspace/scratchpad/tmp + process-exec* whitelist)", () => {
-    const globalCfg = loadEmaGlobalConfig();
+    const globalCfg = loadEmaGlobalConfig(tmpGlobalConfigPath);
     const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
 
     const profile = buildMacosSeatbeltWhitelistProfile({
@@ -138,24 +228,26 @@ describe("EMA Cross-Platform Dual-Whitelist Sandbox Engine", () => {
   });
 
   it("reports structured sandbox status with sshBlocked = true", () => {
-    const status = getEmaSandboxStatus({ agentId: "sakana_kawaii", platform: "linux" });
+    const status = getEmaSandboxStatus({
+      configPath: tmpGlobalConfigPath,
+      agentId: "sakana_kawaii",
+      platform: "linux",
+    });
     expect(status.backend).toBe("penguin-bwrap (bwrap-whitelist)");
     expect(status.sshBlocked).toBe(true);
     expect(status.writableRoots).toEqual(["<session.workspace>", "<session.scratchpad>", "/tmp"]);
   });
 
   it("handles concurrent ensureSharedWorldServer calls safely without EADDRINUSE race", async () => {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
     const { ensureSharedWorldServer } = await import("../src/world-server.js");
 
-    const tmpDir = fs.mkdtempSync("/tmp/ema-concurrency-test-");
-    const worldsDir = path.join(tmpDir, "worlds");
+    const concDir = fs.mkdtempSync("/tmp/ema-concurrency-test-");
+    const worldsDir = path.join(concDir, "worlds");
     fs.mkdirSync(worldsDir, { recursive: true });
 
-    const tmpConfigPath = path.join(tmpDir, "config.toml");
+    const concConfigPath = path.join(concDir, "config.toml");
     fs.writeFileSync(
-      tmpConfigPath,
+      concConfigPath,
       `app_data_dir = "/tmp/ema-conc-appdata"
 personas_dir = "/tmp/ema-conc-personas"
 
@@ -195,14 +287,14 @@ allowed_bins = ["node", "bash", "sh"]
 
     try {
       const [hub1, hub2] = await Promise.all([
-        ensureSharedWorldServer({ configPath: tmpConfigPath }),
-        ensureSharedWorldServer({ configPath: tmpConfigPath }),
+        ensureSharedWorldServer({ configPath: concConfigPath }),
+        ensureSharedWorldServer({ configPath: concConfigPath }),
       ]);
       expect(hub1).toBe(hub2);
       expect(hub1.httpServer).not.toBeNull();
       hub1.dispose();
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(concDir, { recursive: true, force: true });
     }
   });
 });
