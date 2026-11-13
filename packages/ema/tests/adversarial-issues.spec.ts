@@ -408,10 +408,20 @@ describe("Adversarial Issues Verification Suite", () => {
       const globalCfg = loadEmaGlobalConfig();
       expect(globalCfg.world.url).toBe("http://127.0.0.1:17480");
       expect(globalCfg.world.dataDir).toContain("/.penguin/data/ema/worlds");
+      expect(globalCfg.sandbox?.owner).toBe("rei");
+      expect(globalCfg.sandbox?.allowedBins).toContain("node");
+      expect(globalCfg.sandbox?.allowedBins).not.toContain("ssh");
 
       const sakanaCfg = loadEmaAgentConfig("sakana_kawaii", globalCfg.appDataDir);
       expect(sakanaCfg.agent.id).toBe("sakana_kawaii");
       expect(sakanaCfg.world.url).toBe("http://127.0.0.1:17480");
+      expect(sakanaCfg.sandbox?.ownerApprovedBins).toEqual([]);
+
+      const { assertSandboxBinaryAllowed } = await import("../src/config.js");
+      expect(() => assertSandboxBinaryAllowed("node", globalCfg, sakanaCfg)).not.toThrow();
+      expect(() => assertSandboxBinaryAllowed("ssh", globalCfg, sakanaCfg)).toThrow(
+        /\[EMA Sandbox Panic\] Binary 'ssh' is blocked \(not in sandbox bin whitelist\)\. Execution requires explicit approval from the EMA Agent Owner/,
+      );
     });
   });
 });

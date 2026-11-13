@@ -189,7 +189,9 @@ channel_id = "web:chatroom:default"
 - `workspace`（会话的 `CWD`）**仅作为 EMA Agent 当前会话的工作目录**。
 - **不存记忆**：EMA 的人设权重、短期热记忆索引（`AGENTS.md`）与长期情景/事实记忆（`memory/`）全部存储在 `<app_data_dir>/agents/<agent_id>/agent_state/` 中，绝不写入 `workspace`。
 - **不存 World 状态**：所有外部世界的消息流水、群聊列表、投递游标全部存储在 `~/.penguin/data/ema/worlds/*.sqlite` 中，绝不写入 `workspace`。
-- **`workspace-write` 沙箱隔离**：所有 EMA Agent 会话默认运行在 `{"mode": "workspace-write"}` 沙箱中，文件写权限严格限制在当前 `workspace`（与当前会话 `scratchpad`）内；对宿主机其他目录（含 `~/.penguin/data/ema/worlds/`）的直接文件写入均被内核拦截（`EROFS`）。
+- **`workspace-write` 双重白名单沙箱隔离（目录白名单 + `bin` 可执行文件白名单）**：
+  1. **目录读写白名单（`/home/rei` Whitelist）**：Bubblewrap 先以 `--tmpfs /home/rei` 与 `--tmpfs /etc/ssh` 清空家目录与系统 SSH 配置（使 `~/.ssh`、`~/.gnupg`、`web.db`、`ema/worlds/*.sqlite`、`.vault.toml` 及其他仓库在沙箱内完全不存在、不可读），仅只读挂载运行所需的最小运行时与 `config.toml`，并**仅允许读写当前会话的 `workspace`、`scratchpad` 与内存 `/tmp`**，最后执行 `--remount-ro /home/rei` 锁定家目录骨架只读。
+  2. **`bin` 可执行文件白名单（需经 EMA Agent Owner 同意）**：Bubblewrap 以 `--tmpfs /usr/bin`（含 `/bin`、`/usr/sbin`、`/usr/local/bin` 等）清空系统命令目录，仅按全局 `~/.penguin/data/ema/config.toml` 的 `[sandbox].allowed_bins` 与 Agent 专属 `config.toml` 的 `[sandbox].owner_approved_bins` 只读挂载白名单内的基础命令（如 `sh`、`bash`、`ls`、`cat`、`node`、`penguin` 等）。任何非白名单二进制（如 `ssh`、`scp`、`sftp`、`curl`、`git`、`python3` 等）在沙箱内均不存在且无法执行；若需要使用，**必须经过 EMA Agent Owner（`owner = "rei"`）同意**并在只读挂载的 `config.toml` 中显式加入 `[sandbox].owner_approved_bins`。
 
 #### 3.2 模式 A：像正常的 Coding Agent 一样（`workspace = some repo`）
 

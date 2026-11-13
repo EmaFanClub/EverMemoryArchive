@@ -189,7 +189,9 @@ Single-TOML configuration driving offline dataset washing, RSI training, and age
 - `workspace` (the session's `CWD`) is **exclusively the working directory** for the EMA Agent.
 - **No Memory in Workspace**: Persona weights, in-context hot memory indices (`AGENTS.md`), and long-term memories (`memory/`) reside strictly in `<app_data_dir>/agents/<agent_id>/agent_state/`.
 - **No World State in Workspace**: Message histories, channel rosters, and batcher cursors reside strictly in `~/.penguin/data/ema/worlds/*.sqlite`.
-- **`workspace-write` Sandbox Isolation**: All EMA Agent sessions run inside the `{"mode": "workspace-write"}` sandbox, restricting file writes to the active `workspace` (and session `scratchpad`) while blocking direct writes to `~/.penguin/data/ema/worlds/` (`EROFS`).
+- **`workspace-write` Dual-Whitelist Sandbox Isolation (Filesystem Whitelist + `bin` Whitelist)**:
+  1. **Directory Read/Write Whitelist (`/home/rei` Whitelist)**: Bubblewrap first mounts `--tmpfs /home/rei` and `--tmpfs /etc/ssh` to blank out the entire home directory and system SSH configs (rendering `~/.ssh`, `~/.gnupg`, `web.db`, `ema/worlds/*.sqlite`, `.vault.toml`, and other repositories completely invisible and unreadable), selectively mounts only minimal read-only runtime files and `config.toml`, **grants read-write access strictly to the session's `workspace`, `scratchpad`, and in-memory `/tmp`**, and finishes with `--remount-ro /home/rei`.
+  2. **`bin` Executable Whitelist (Requires Explicit EMA Agent Owner Approval)**: Bubblewrap mounts `--tmpfs /usr/bin` (along with `/usr/sbin`, `/usr/local/bin`, etc.) and binds only the binaries listed in `[sandbox].allowed_bins` (global `~/.penguin/data/ema/config.toml`) and `[sandbox].owner_approved_bins` (agent-specific `config.toml`). Non-whitelisted binaries (such as `ssh`, `scp`, `sftp`, `curl`, `git`, `python3`) do not exist inside the sandbox namespace; using any additional binary **requires explicit approval from the EMA Agent Owner (`owner = "rei"`)** by adding it to `[sandbox].owner_approved_bins` in `config.toml`.
 
 #### 3.2 Pattern A: Using EMA as a Normal Coding Agent (`workspace = some repo`)
 

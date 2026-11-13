@@ -50,6 +50,11 @@ export interface EmaWorldChannelConfig {
   channels: string[];
 }
 
+export interface EmaGlobalSandboxConfig {
+  owner: string;
+  allowedBins: string[];
+}
+
 export interface EmaGlobalConfig {
   configPath: string;
   appDataDir: string;
@@ -64,6 +69,7 @@ export interface EmaGlobalConfig {
     bilibili: EmaWorldBilibiliConfig;
     channel: EmaWorldChannelConfig;
   };
+  sandbox?: EmaGlobalSandboxConfig;
 }
 
 export interface EmaAgentSpecificConfig {
@@ -78,6 +84,9 @@ export interface EmaAgentSpecificConfig {
     web: {
       channelId: string;
     };
+  };
+  sandbox?: {
+    ownerApprovedBins: string[];
   };
 }
 
@@ -216,6 +225,18 @@ export function loadEmaGlobalConfig(
         ),
       },
     },
+    ...(parsed.sandbox && typeof parsed.sandbox === "object"
+      ? {
+          sandbox: {
+            owner: requireNonEmptyString(parsed.sandbox.owner, "sandbox.owner", resolvedPath),
+            allowedBins: requireStringArray(
+              parsed.sandbox.allowed_bins,
+              "sandbox.allowed_bins",
+              resolvedPath,
+            ),
+          },
+        }
+      : {}),
   };
 }
 
@@ -226,15 +247,19 @@ export function loadEmaGlobalConfig(
  */
 export function loadEmaAgentConfig(
   agentId: string,
-  options: {
-    globalConfigPath?: string;
-    agentConfigPath?: string;
-  } = {},
+  options:
+    | string
+    | {
+        globalConfigPath?: string;
+        agentConfigPath?: string;
+        appDataDir?: string;
+      } = {},
 ): EmaAgentSpecificConfig {
-  const globalCfg = loadEmaGlobalConfig(options.globalConfigPath);
-  const resolvedAgentPath = options.agentConfigPath
-    ? path.resolve(options.agentConfigPath)
-    : path.join(globalCfg.appDataDir, "agents", agentId, "agent_state", "config.toml");
+  const opts = typeof options === "string" ? { appDataDir: options } : options;
+  const appDataDir = opts.appDataDir || loadEmaGlobalConfig(opts.globalConfigPath).appDataDir;
+  const resolvedAgentPath = opts.agentConfigPath
+    ? path.resolve(opts.agentConfigPath)
+    : path.join(appDataDir, "agents", agentId, "agent_state", "config.toml");
 
   if (!fs.existsSync(resolvedAgentPath)) {
     throw new Error(
@@ -275,5 +300,44 @@ export function loadEmaAgentConfig(
         ),
       },
     },
+    ...(parsed.sandbox && typeof parsed.sandbox === "object"
+      ? {
+          sandbox: {
+            ownerApprovedBins: requireStringArray(
+              parsed.sandbox.owner_approved_bins,
+              "sandbox.owner_approved_bins",
+              resolvedAgentPath,
+            ),
+          },
+        }
+      : {}),
   };
+}
+
+/**
+ * Verifies that `binName` is in the global `allowed_bins` or the agent's `owner_approved_bins`.
+ * Panics immediately if the binary is not whitelisted, requiring explicit EMA Agent Owner approval.
+ */
+export function assertSandboxBinaryAllowed(
+  binName: string,
+  globalCfg: EmaGlobalConfig,
+  agentCfg?: EmaAgentSpecificConfig | null,
+): void {
+  if (!globalCfg.sandbox || globalCfg.sandbox.allowedBins.length === 0) {
+    throw new Error(
+      `[EMA Sandbox Panic] Missing or empty [sandbox].allowed_bins in ${globalCfg.configPath}`,
+    );
+  }
+  const baseName = path.basename(binName.trim());
+  const allowed = new Set([
+    ...globalCfg.sandbox.allowedBins,
+    ...(agentCfg?.sandbox?.ownerApprovedBins ?? []),
+  ]);
+  if (!allowed.has(baseName)) {
+    const owner = agentCfg?.agent.owner || globalCfg.sandbox.owner;
+    const targetConfig = agentCfg?.configPath || globalCfg.configPath;
+    throw new Error(
+      `[EMA Sandbox Panic] Binary '${baseName}' is blocked (not in sandbox bin whitelist). Execution requires explicit approval from the EMA Agent Owner ('${owner}') via [sandbox].owner_approved_bins in ${targetConfig}.`,
+    );
+  }
 }
