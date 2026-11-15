@@ -41,6 +41,14 @@ import {
   washDatasetFromConfig,
   trainFromConfig,
   managePersonaFromConfig,
+  loadEmaGlobalConfig,
+  loadEmaAgentConfig,
+  ensureSharedWorldServer,
+  getEmaSandboxStatus,
+  assertSandboxBinaryAllowed,
+  buildLinuxBwrapWhitelistArgs,
+  buildWindowsWslBwrapWhitelistArgs,
+  buildMacosSeatbeltWhitelistProfile,
 } from "../dist/index.js";
 import { execFileSync } from "node:child_process";
 
@@ -102,169 +110,259 @@ async function main() {
     process.exit(0);
   }
 
+  if (command === "sandbox") {
+    const sub = args[1] || "status";
+    let configPath;
+    let agentId;
+    let targetBin;
+    let targetPlatform;
+    let workspaceRoot = "/home/rei/work/org/ema/assistant";
+    let scratchpadDir;
+    let distro = "penguin-sandbox";
+
+    for (let i = 2; i < args.length; i++) {
+      const a = args[i];
+      if (a === "--config" && i + 1 < args.length) {
+        configPath = args[++i];
+      } else if (a === "--agent" && i + 1 < args.length) {
+        agentId = args[++i];
+      } else if (a === "--platform" && i + 1 < args.length) {
+        targetPlatform = args[++i];
+      } else if (a === "--workspace" && i + 1 < args.length) {
+        workspaceRoot = args[++i];
+      } else if (a === "--scratchpad" && i + 1 < args.length) {
+        scratchpadDir = args[++i];
+      } else if (a === "--distro" && i + 1 < args.length) {
+        distro = args[++i];
+      } else if (!a.startsWith("--") && !targetBin) {
+        targetBin = a;
+      }
+    }
+
+    const globalCfg = loadEmaGlobalConfig(configPath);
+    const agentCfg = agentId
+      ? loadEmaAgentConfig(agentId, { globalConfigPath: configPath })
+      : null;
+
+    if (sub === "status") {
+      const status = getEmaSandboxStatus({
+        configPath,
+        agentId,
+        platform: targetPlatform,
+      });
+      console.log(JSON.stringify(status, null, 2));
+      process.exit(0);
+    } else if (sub === "check-bin") {
+      if (!targetBin) {
+        console.error("Usage: ema.js sandbox check-bin <binName> [--agent <id>] [--config <path>]");
+        process.exit(1);
+      }
+      assertSandboxBinaryAllowed(targetBin, globalCfg, agentCfg);
+      console.log(JSON.stringify({ ok: true, bin: targetBin, allowed: true }, null, 2));
+      process.exit(0);
+    } else if (sub === "profile") {
+      const plat = targetPlatform || process.platform;
+      if (plat === "linux") {
+        console.log(
+          JSON.stringify(
+            buildLinuxBwrapWhitelistArgs({
+              workspaceRoot,
+              scratchpadDir,
+              globalCfg,
+              agentCfg,
+            }),
+            null,
+            2,
+          ),
+        );
+      } else if (plat === "win32") {
+        console.log(
+          JSON.stringify(
+            buildWindowsWslBwrapWhitelistArgs({
+              workspaceRoot,
+              scratchpadDir,
+              distro,
+              globalCfg,
+              agentCfg,
+            }),
+            null,
+            2,
+          ),
+        );
+      } else if (plat === "darwin") {
+        console.log(
+          buildMacosSeatbeltWhitelistProfile({
+            workspaceRoot,
+            scratchpadDir,
+            globalCfg,
+            agentCfg,
+          }),
+        );
+      } else {
+        throw new Error(`[EMA Sandbox Panic] Unsupported platform '${plat}'`);
+      }
+      process.exit(0);
+    } else {
+      console.error(`Unknown 'sandbox' subcommand: ${sub}. Use 'status', 'check-bin', or 'profile'.`);
+      process.exit(1);
+    }
+  }
+
   if (command === "world") {
     const sub = args[1];
 
-    // Parse optional flags (--db, --channel, --message, --parent, --qq-gateway, etc.)
-    let webDbPath = process.env.EMA_WEB_DB_PATH || ":memory:";
-    let qqGatewayUrl = process.env.SNOWLUMA_GATEWAY_URL || process.env.ONEBOT_GATEWAY_URL;
-    let qqGatewayToken = process.env.SNOWLUMA_TOKEN || process.env.ONEBOT_TOKEN;
-    let qqAllowedUsers;
-    let qqAllowedGroups;
+    let configPath;
+    let agentId;
+    let explicitWorldUrl;
     let flagChannel;
     let flagMessage;
     let flagParent;
+    let flagSender;
+    let flagSenderName;
+    let flagBody;
     const positional = [];
 
     for (let i = 2; i < args.length; i++) {
-      if (args[i] === "--db" && i + 1 < args.length) {
-        webDbPath = args[++i];
-      } else if (args[i] === "--qq-gateway" && i + 1 < args.length) {
-        qqGatewayUrl = args[++i];
-      } else if (args[i] === "--qq-token" && i + 1 < args.length) {
-        qqGatewayToken = args[++i];
-      } else if (args[i] === "--qq-allowed-users" && i + 1 < args.length) {
-        qqAllowedUsers = args[++i].split(",").map((s) => s.trim());
-      } else if (args[i] === "--qq-allowed-groups" && i + 1 < args.length) {
-        qqAllowedGroups = args[++i].split(",").map((s) => s.trim());
+      if (args[i] === "--config" && i + 1 < args.length) {
+        configPath = args[++i];
+      } else if ((args[i] === "--agent" || args[i] === "-a") && i + 1 < args.length) {
+        agentId = args[++i];
+      } else if ((args[i] === "--url" || args[i] === "--world-url") && i + 1 < args.length) {
+        explicitWorldUrl = args[++i].replace(/\/$/, "");
       } else if ((args[i] === "--channel" || args[i] === "--channel-id") && i + 1 < args.length) {
         flagChannel = args[++i];
       } else if ((args[i] === "--message" || args[i] === "--text" || args[i] === "-m") && i + 1 < args.length) {
         flagMessage = args[++i];
       } else if ((args[i] === "--parent" || args[i] === "--reply-to") && i + 1 < args.length) {
         flagParent = args[++i];
+      } else if (args[i] === "--sender" && i + 1 < args.length) {
+        flagSender = args[++i];
+      } else if (args[i] === "--sender-name" && i + 1 < args.length) {
+        flagSenderName = args[++i];
+      } else if ((args[i] === "--body" || args[i] === "-d") && i + 1 < args.length) {
+        flagBody = args[++i];
+      } else if (args[i].startsWith("--")) {
+        throw new Error(`[EMA World CLI Panic] Unknown flag for 'ema.js world': ${args[i]}`);
       } else {
         positional.push(args[i]);
       }
     }
 
-    // Instantiate prototype router & worlds
-    const router = new SimpleEmaRouter();
-    const channelWorld = new PenguinChannelWorld({
-      channels: ["ch_ema_minimal_test", "default_channel"],
-      passive: true,
-    });
-    const bilibiliWorld = new BilibiliWorld({
-      rooms: ["123456"],
-      videoTargets: ["video:BV1xx411c7mD"],
-      dmTargets: ["1001"],
-      passive: true,
-    });
-    const webWorld = new WebWorld({
-      initialSessions: ["default"],
-      dbPath: webDbPath,
-      heartbeatIntervalMs: 0,
-    });
-    const qqWorld = new QQWorld({
-      selfId: process.env.SNOWLUMA_SELF_ID || process.env.ONEBOT_SELF_ID || "1000000001",
-      gatewayUrl: qqGatewayUrl,
-      gatewayToken: qqGatewayToken,
-      allowedUsers: qqAllowedUsers,
-      allowedGroups: qqAllowedGroups,
-      groups: ["2000000001", "123456"],
-      privateUsers: ["789012"],
-      passive: true,
-      dbPath: webDbPath,
-    });
+    if (sub === "serve") {
+      const hub = await ensureSharedWorldServer({ configPath });
+      console.log(`=== EMA Shared World HTTP Server ===`);
+      console.log(`Listening:  ${hub.url}`);
+      console.log(`World Data: ${hub.worldDataDir}`);
+      console.log(`Web DB:     ${hub.webDbPath}`);
+      console.log(`QQ DB:      ${hub.qqDbPath}`);
+      for (const r of hub.listFormattedRoutes()) {
+        console.log(`  - ${r.worldName} ${r.prefix}`);
+      }
+      const shutdown = () => {
+        hub.dispose();
+        process.exit(0);
+      };
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+      return;
+    }
 
-    const ctx = {
-      router,
-      inputBatcher: { push: () => {}, onBatch: () => ({ dispose: () => {} }) },
-      registry: { register: () => ({ dispose: () => {} }), get: () => undefined, list: () => [] },
-    };
+    const globalCfg = loadEmaGlobalConfig(configPath);
+    const agentCfg = agentId ? loadEmaAgentConfig(agentId, globalCfg.appDataDir) : null;
+    const worldHttpUrl =
+      explicitWorldUrl || (agentCfg ? agentCfg.world.url : globalCfg.world.url);
 
-    const handle = channelWorld.start(ctx);
-    const biliHandle = bilibiliWorld.start(ctx);
-    const webHandle = webWorld.start(ctx);
-    const qqHandle = qqWorld.start(ctx);
-
-    const disposeAll = () => {
-      handle.dispose();
-      biliHandle.dispose();
-      webHandle.dispose();
-      qqHandle.dispose();
+    const requestWorldOverHttp = async (routePath, init = {}) => {
+      const normalizedPath = routePath.startsWith("/") ? routePath : `/${routePath}`;
+      const url = `${worldHttpUrl}${normalizedPath}`;
+      let res;
+      try {
+        res = await fetch(url, init);
+      } catch (err) {
+        throw new Error(
+          `[EMA World Panic] Failed to connect to Shared World HTTP Server at ${worldHttpUrl}: ${err?.message || err}. Ensure the server is running with 'ema.js world serve' or check 'world.url' in config.toml.`,
+        );
+      }
+      if (res.status === 404) {
+        const text = await res.text();
+        throw new Error(`Route not found: ${normalizedPath}${text ? ` (${text})` : ""}`);
+      }
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Route error (${res.status}): ${text || normalizedPath}`);
+      }
+      const ct = res.headers.get("content-type") || "";
+      if (ct.includes("application/json")) {
+        return await res.json();
+      }
+      return await res.text();
     };
 
     if (sub === "ls") {
-      const routes = router.listRoutes();
-      for (const r of routes) {
-        if (r.prefix.startsWith("/world/channel")) {
-          console.log(`PenguinChannelWorld ${r.prefix}`);
-        } else if (r.prefix.startsWith("/world/bilibili")) {
-          console.log(`BilibiliWorld ${r.prefix}`);
-        } else if (r.prefix.startsWith("/world/web")) {
-          console.log(`WebWorld ${r.prefix}`);
-        } else if (r.prefix.startsWith("/world/qq")) {
-          console.log(`QQWorld ${r.prefix}`);
-        } else {
-          console.log(`${r.worldName || "World"} ${r.prefix}`);
-        }
+      const data = await requestWorldOverHttp("/world/routes");
+      if (!data || !Array.isArray(data.routes)) {
+        throw new Error(`[EMA World Panic] Invalid response from /world/routes`);
       }
-      disposeAll();
+      for (const r of data.routes) {
+        console.log(`${r.worldName} ${r.prefix}`);
+      }
       process.exit(0);
     }
 
     if (sub === "get") {
       const targetPath = positional[0];
       if (!targetPath) {
-        console.error(
-          "Error: Missing path argument for 'world get'. Example: ema.js world get /world/web/channels/web:chatroom:default/items",
+        throw new Error(
+          "Missing path argument for 'world get'. Example: ema.js world get /world/web/channels/web:chatroom:default/items",
         );
-        disposeAll();
-        process.exit(1);
       }
-
-      try {
-        const result = await router.read(targetPath);
-        console.log(JSON.stringify(result, null, 2));
-        disposeAll();
-        process.exit(0);
-      } catch (err) {
-        console.error(`Error querying ${targetPath}:`, err.message || err);
-        disposeAll();
-        process.exit(1);
-      }
+      const result = await requestWorldOverHttp(targetPath, { method: "GET" });
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(0);
     }
 
     if (sub === "post") {
       const targetPath = positional[0];
       if (!targetPath) {
-        console.error(
-          "Error: Missing path argument for 'world post'. Example: ema.js world post /world/web/actions/message.post '{\"channelId\":\"web:chatroom:default\",\"message\":\"Hello\"}'",
+        throw new Error(
+          "Missing path argument for 'world post'. Example: ema.js world post /world/web/actions/message.post '{\"channelId\":\"web:chatroom:default\",\"message\":\"Hello\"}'",
         );
-        disposeAll();
-        process.exit(1);
       }
-
       let payloadObj = {};
-      if (positional[1]) {
-        try {
-          payloadObj = JSON.parse(positional[1]);
-        } catch {
-          payloadObj = { message: positional[1] };
-        }
+      const rawJsonArg = flagBody !== undefined ? flagBody : positional[1];
+      if (rawJsonArg !== undefined) {
+        payloadObj = JSON.parse(rawJsonArg);
       }
       if (flagChannel !== undefined) payloadObj.channelId = flagChannel;
       if (flagMessage !== undefined) payloadObj.message = flagMessage;
       if (flagParent !== undefined) payloadObj.parentItemId = flagParent;
-
-      try {
-        const result = await router.read(targetPath, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payloadObj),
-        });
-        console.log(JSON.stringify(result, null, 2));
-        disposeAll();
-        process.exit(0);
-      } catch (err) {
-        console.error(`Error posting to ${targetPath}:`, err.message || err);
-        disposeAll();
-        process.exit(1);
+      if (flagSender !== undefined) {
+        payloadObj.sender = flagSender;
+        payloadObj.actorId = `actor:${flagSender.replace(/^actor:/, "")}`;
       }
+      if (flagSenderName !== undefined) {
+        payloadObj.senderName = flagSenderName;
+        payloadObj.actorName = flagSenderName;
+      }
+      if (agentCfg) {
+        if (!payloadObj.sender) payloadObj.sender = agentCfg.agent.id;
+        if (!payloadObj.senderName) payloadObj.senderName = agentCfg.agent.name;
+        if (!payloadObj.actorId) payloadObj.actorId = `actor:${agentCfg.agent.id}`;
+        if (!payloadObj.actorName) payloadObj.actorName = agentCfg.agent.name;
+        if (!payloadObj.channelId && agentCfg.world.web.channelId) {
+          payloadObj.channelId = agentCfg.world.web.channelId;
+        }
+      }
+
+      const result = await requestWorldOverHttp(targetPath, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadObj),
+      });
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(0);
     }
 
-    disposeAll();
     printUsage();
     process.exit(1);
   }
@@ -311,22 +409,24 @@ async function main() {
   if (command === "qq" || command === "snowluma") {
     const sub = args[1];
     if (sub === "run") {
-      let gateway = process.env.SNOWLUMA_GATEWAY_URL || process.env.ONEBOT_GATEWAY_URL || "http://localhost:13000";
-      let token = process.env.SNOWLUMA_TOKEN || process.env.ONEBOT_TOKEN;
-      let group = "2000000001";
+      let configPath;
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--config" && i + 1 < args.length) configPath = args[++i];
+      }
+      const qqCfg = loadEmaGlobalConfig(configPath).world.qq;
+      let gateway = qqCfg.gatewayUrl;
+      let token = qqCfg.gatewayToken;
+      let group = qqCfg.groups[0];
       let session = "619e98db";
       let agent = "aoi_rei";
       let pollInterval = 2000;
       let watchFor = "";
       let requireMention = true;
-      let dbPath =
-        process.env.EMA_QQ_DB_PATH ||
-        (fs.existsSync("/home/rei/work/aoi-rei")
-          ? "/home/rei/work/aoi-rei/data/qq-world.sqlite"
-          : path.resolve(process.cwd(), "data", "qq-world.sqlite"));
+      let dbPath = qqCfg.dbPath;
 
       for (let i = 2; i < args.length; i++) {
-        if (args[i] === "--gateway" || args[i] === "--url") gateway = args[++i];
+        if (args[i] === "--config") i++;
+        else if (args[i] === "--gateway" || args[i] === "--url") gateway = args[++i];
         else if (args[i] === "--token") token = args[++i];
         else if (args[i] === "--group") group = args[++i];
         else if (args[i] === "--session") session = args[++i];
@@ -384,11 +484,16 @@ async function main() {
     }
 
     if (sub === "login") {
+      let configPath;
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--config" && i + 1 < args.length) configPath = args[++i];
+      }
       let qrPath = path.resolve(process.cwd(), ".qq-login-qrcode.png");
       let credentialPath = path.resolve(process.cwd(), "qq-credentials.json");
-      let gatewayUrl = process.env.ONEBOT_GATEWAY_URL || "http://127.0.0.1:3000";
+      let gatewayUrl = loadEmaGlobalConfig(configPath).world.qq.gatewayUrl;
       for (let i = 2; i < args.length; i++) {
-        if (args[i] === "--qr-path") qrPath = path.resolve(args[++i]);
+        if (args[i] === "--config") i++;
+        else if (args[i] === "--qr-path") qrPath = path.resolve(args[++i]);
         else if (args[i] === "--credential-path") credentialPath = path.resolve(args[++i]);
         else if (args[i] === "--gateway" || args[i] === "--url") gatewayUrl = args[++i];
       }

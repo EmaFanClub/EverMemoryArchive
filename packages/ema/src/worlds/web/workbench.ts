@@ -7,9 +7,9 @@
  */
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadEmaGlobalConfig } from "../../config.js";
 import type { WebWorkbenchInstallOptions, WebWorkbenchInstallResult } from "./types.js";
 
 export const WEB_CHANNEL_PROTOCOL_START_MARKER = "<!-- EMA_WEB_CHANNEL_PROTOCOL_START -->";
@@ -43,11 +43,12 @@ export function resolveEmaCliPath(): string {
  */
 export function buildWebChannelProtocolSection(options: {
   channelId?: string;
-  dbPath: string;
+  dbPath?: string;
   emaCliPath?: string;
 }): string {
   const channelId = options.channelId || "web:chatroom:default";
   const emaCliPath = options.emaCliPath || resolveEmaCliPath();
+  const dbFlag = options.dbPath ? ` --db ${options.dbPath}` : "";
 
   return [
     WEB_CHANNEL_PROTOCOL_START_MARKER,
@@ -58,14 +59,14 @@ export function buildWebChannelProtocolSection(options: {
     "1. **第一步：读取聊天室频道 (`world get`)**",
     "   使用 shell 工具读取当前聊天室频道的消息列表与时间锚点上下文（`EmaTemporalEnvelope`）：",
     "   ```bash",
-    `   node ${emaCliPath} world get /world/web/channels/${channelId}/items --db ${options.dbPath}`,
+    `   node ${emaCliPath} world get /world/web/channels/${channelId}/items${dbFlag}`,
     "   ```",
     "2. **第二步：潜变量 `<OS>` 推演与角色语感对齐（在思考中完成）**",
     "   - 先以第一人称「我」在内心 `<OS>` 中体察对方这句话的真实意图与情绪，并严格遵循 `AGENTS.md` 中的人格设定、语言风格铁律与真句锚点（Golden Exemplars）。",
     "3. **第三步：发送回复消息到聊天室频道 (`world post`)**",
     "   将通过防复读自检后的纯净回复发送到聊天室频道：",
     "   ```bash",
-    `   node ${emaCliPath} world post /world/web/actions/message.post --db ${options.dbPath} --channel ${channelId} --parent <回复的目标消息ID> --message "<你的回复内容>"`,
+    `   node ${emaCliPath} world post /world/web/actions/message.post${dbFlag} --channel ${channelId} --parent <回复的目标消息ID> --message "<你的回复内容>"`,
     "   ```",
     "4. **完成回合**：",
     `   成功通过 \`world post\` 将消息发布到 \`${channelId}\` 频道后，直接输出你刚才发送的那句回复内容结束当前回合（不要输出“我已发送到频道”等元解释）。`,
@@ -80,7 +81,7 @@ export function installWebChannelProtocolToAgentsMd(
   existingAgentsMd: string,
   options: {
     channelId?: string;
-    dbPath: string;
+    dbPath?: string;
     emaCliPath?: string;
   },
 ): string {
@@ -134,18 +135,15 @@ export function installWebWorkbench(
   const ownerName = (options.ownerName || "Rei").trim();
   const channelId = (options.channelId || "web:chatroom:default").trim();
 
-  const appDataDir =
-    options.appDataDir ||
-    process.env.PENGUIN_APP_DATA_DIR ||
-    path.join(os.homedir(), ".penguin", "data", "default_project");
+  const globalCfg = loadEmaGlobalConfig();
+  const appDataDir = options.appDataDir || globalCfg.appDataDir;
 
   const agentRootDir = path.join(appDataDir, "agents", agentId);
   const workbenchDir =
     options.targetWorkbenchDir ||
     path.join(agentRootDir, "agent_state", "workbenches", workbenchId);
 
-  const dbPath =
-    options.dbPath || path.join(agentRootDir, "scratchpad", workbenchId, "web-world.sqlite");
+  const dbPath = options.dbPath || globalCfg.world.web.dbPath;
 
   const emaCliPath = options.emaCliPath || resolveEmaCliPath();
   const templateDir = resolveWebWorkbenchTemplateDir();
@@ -269,7 +267,7 @@ export function installWebWorkbench(
       const existingMd = fs.readFileSync(agentsMdPath, "utf8");
       const updatedMd = installWebChannelProtocolToAgentsMd(existingMd, {
         channelId,
-        dbPath,
+        dbPath: options.dbPath,
         emaCliPath,
       });
       fs.writeFileSync(agentsMdPath, updatedMd, "utf8");

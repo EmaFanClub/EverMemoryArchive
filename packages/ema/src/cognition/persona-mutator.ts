@@ -9,8 +9,8 @@
  */
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import { loadEmaGlobalConfig } from "../config.js";
 import type {
   CompanionPersonality,
   CompressionPromptConfig,
@@ -302,10 +302,7 @@ export function syncCompanionAgentState(options: {
   preserveProtocolBlocks?: boolean;
 }): { agentsMdPath: string; systemConfigPath: string } {
   const agentId = options.agentId;
-  const appDataDir =
-    options.appDataDir ||
-    process.env.PENGUIN_APP_DATA_DIR ||
-    path.join(os.homedir(), ".penguin", "data", "default_project");
+  const appDataDir = options.appDataDir || loadEmaGlobalConfig().appDataDir;
 
   const agentStateDir = path.join(appDataDir, "agents", agentId, "agent_state");
   fs.mkdirSync(agentStateDir, { recursive: true });

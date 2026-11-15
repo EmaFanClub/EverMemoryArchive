@@ -1,0 +1,9 @@
+# EMA Sandbox login profile (bound read-only at ~/.profile inside bwrap-whitelist)
+export PATH="/home/rei/.penguin/data/bin:/home/rei/.local/node/bin:/usr/local/bin:/usr/bin:/bin"
+export PENGUIN_HOME="/home/rei/.penguin/data"
+
+command_not_found_handle() {
+  printf '[EMA Sandbox Panic] Binary "%s" is blocked (not in sandbox bin whitelist). Execution requires explicit approval from the EMA Agent Owner (owner = "rei") via [sandbox].owner_approved_bins in config.toml.\n' "$1" >&2
+  return 127
+}
+export -f command_not_found_handle

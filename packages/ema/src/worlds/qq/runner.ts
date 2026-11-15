@@ -10,8 +10,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
+import { loadEmaGlobalConfig } from "../../config.js";
 import { SimpleEmaRouter } from "../../router.js";
 import { SimpleEmaInputBatcher, formatBatchToXml } from "../../input-batcher.js";
 import { assertAgentIdentity } from "../../minimal.js";
@@ -95,28 +94,18 @@ export interface QQCompanionRunnerInstance {
 export function createQQCompanionRunner(
   options: QQCompanionRunnerOptions = {},
 ): QQCompanionRunnerInstance {
+  const qqCfg = loadEmaGlobalConfig().world.qq;
   const env = options.env ?? process.env;
-  const agentId = options.agentId || env.PENGUIN_AGENT_ID || "aoi_rei";
+  const agentId = options.agentId || "aoi_rei";
   const session = options.session || "619e98db";
-  const groupId = String(options.groupId || "2000000001").replace(/^group:/, "");
-  const gatewayUrl =
-    options.gatewayUrl ||
-    env.SNOWLUMA_GATEWAY_URL ||
-    env.ONEBOT_GATEWAY_URL ||
-    "http://localhost:13000";
-  const gatewayToken =
-    options.gatewayToken ||
-    env.SNOWLUMA_TOKEN ||
-    env.ONEBOT_TOKEN;
-  const selfId = options.selfId || "1000000001";
+  const groupId = String(options.groupId || qqCfg.groups[0]).replace(/^group:/, "");
+  const gatewayUrl = options.gatewayUrl || qqCfg.gatewayUrl;
+  const gatewayToken = options.gatewayToken ?? qqCfg.gatewayToken;
+  const selfId = options.selfId || qqCfg.selfId;
   const nicknames = options.nicknames || ["小纸夜", "Ema", "怜", "Aoi Rei"];
   const pollIntervalMs = options.pollIntervalMs ?? 2000;
   const requireMentionInGroups = options.requireMentionInGroups ?? true;
-  const dbPath =
-    options.dbPath ||
-    env.EMA_QQ_DB_PATH ||
-    process.env.EMA_QQ_DB_PATH ||
-    path.resolve(process.cwd(), "data", "qq-world.sqlite");
+  const dbPath = options.dbPath || qqCfg.dbPath;
 
   const router = new SimpleEmaRouter();
   const inputBatcher = new SimpleEmaInputBatcher({

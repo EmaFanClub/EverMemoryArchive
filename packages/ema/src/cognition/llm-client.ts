@@ -12,6 +12,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { loadEmaGlobalConfig } from "../config.js";
 import type { LiveConversationTurn, LlmCallMetrics } from "./types.js";
 
 export interface LlmCallOptions {
@@ -153,12 +154,11 @@ export class PenguinServerLLMClient {
     projectId?: string;
     workspace?: string;
   }) {
-    const baseUrl = options?.baseUrl || process.env.PENGUIN_API_URL || "http://127.0.0.1:25750";
-    const token = options?.token || process.env.PENGUIN_API_TOKEN || "";
+    const baseUrl = options?.baseUrl || "http://127.0.0.1:25750";
+    const token = options?.token || "";
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.token = token.trim();
-    this.defaultProjectId =
-      options?.projectId || process.env.PENGUIN_PROJECT_ID || "default_project";
+    this.defaultProjectId = options?.projectId || "default_project";
     this.defaultWorkspace = options?.workspace || process.cwd();
   }
 
@@ -236,9 +236,7 @@ export class PenguinServerLLMClient {
     }
 
     let fullId = resolvedMeta?.sessionId || sessionIdOrSuffix;
-    const appDataDir =
-      process.env.PENGUIN_APP_DATA_DIR ||
-      path.join(os.homedir(), ".penguin", "data", projectId);
+    const appDataDir = loadEmaGlobalConfig().appDataDir;
     const tracesRoot = path.join(appDataDir, "agents", agentId, "traces");
     const shardPaths: string[] = [];
     if (fs.existsSync(tracesRoot)) {

@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { handleWorkbenchRequest, type WorkbenchHost } from "../module.js";
+import {
+  handleWorkbenchRequest,
+  setPersonasDirOverride,
+  type WorkbenchHost,
+} from "../module.js";
 
 describe("Penguin Workbench Module (Use EMA)", () => {
   it("responds to health check route", async () => {
@@ -135,7 +139,6 @@ describe("Penguin Workbench Module (Use EMA)", () => {
 
   describe("Persona & Playscript Hot Update API", () => {
     let tmpPersonasDir = "";
-    const prevPersonasDir = process.env.EMA_PERSONAS_DIR;
 
     beforeAll(() => {
       tmpPersonasDir = fs.mkdtempSync("/tmp/use-ema-personas-fixture-");
@@ -179,15 +182,11 @@ describe("Penguin Workbench Module (Use EMA)", () => {
           "utf8",
         );
       }
-      process.env.EMA_PERSONAS_DIR = tmpPersonasDir;
+      setPersonasDirOverride(tmpPersonasDir);
     });
 
     afterAll(() => {
-      if (prevPersonasDir === undefined) {
-        delete process.env.EMA_PERSONAS_DIR;
-      } else {
-        process.env.EMA_PERSONAS_DIR = prevPersonasDir;
-      }
+      setPersonasDirOverride(null);
       if (tmpPersonasDir && fs.existsSync(tmpPersonasDir)) {
         fs.rmSync(tmpPersonasDir, { recursive: true, force: true });
       }

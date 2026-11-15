@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.resolve(__dirname, "..");
 const uiRoot = path.join(pkgRoot, "ui");
-const port = Number(process.env.PORT || 18765);
+const port = 18765;
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
