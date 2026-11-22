@@ -5,6 +5,13 @@
   "type": "module",
   "penguin": {
     "version": "2026.10.26.1",
+    "appCenter": {
+      "show": true,
+      "title": "EMA",
+      "titleZh": "EMA",
+      "icon": "ui/icon.png",
+      "tab": "use-ema"
+    },
     "modules": [
       {
         "name": "Workbench",
@@ -22,8 +29,8 @@
             {
               "id": "use_ema.main",
               "key": "use-ema",
-              "title": "Use EMA",
-              "titleZh": "使用 EMA",
+              "title": "EMA",
+              "titleZh": "EMA",
               "renderer": {
                 "iframe": {
                   "src": "ui/index.html"
