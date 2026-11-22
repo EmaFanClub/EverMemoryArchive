@@ -1,483 +1,383 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Use EMA — EverMemoryArchive Workbench</title>
-  <link rel="stylesheet" href="/workbench-ui.css">
-  <link rel="stylesheet" href="./style.css">
+  <title>EMA</title>
+  <link rel="stylesheet" href="./style.css?v=12">
 </head>
 <body>
-  <div class="app-container">
-    <!-- Top Navigation Bar -->
-    <header class="top-nav-bar">
-      <div class="nav-brand">
-        <span class="brand-pill">EMA</span>
-        <span class="brand-subtitle">Studio</span>
+  <div class="ema-shell">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="companion-menu-wrap" id="companion-menu-wrap">
+          <button id="companion-trigger" class="companion-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <img id="nav-avatar" class="nav-avatar" src="./icon.png" alt="">
+            <span id="nav-companion-name" class="nav-companion-name">大肥鱼</span>
+          </button>
+          <select id="companion-select" class="companion-select" aria-label="选择角色" style="display: none;"></select>
+          <div id="companion-dropdown" class="companion-dropdown" role="listbox" aria-label="切换角色" style="display: none;">
+            <div id="companion-dropdown-list" class="companion-dropdown-list"></div>
+            <div class="companion-dropdown-footer">
+              <button id="btn-new-companion" class="companion-dropdown-new" type="button">+ 新建角色</button>
+            </div>
+          </div>
+        </div>
       </div>
-      <nav class="tabs-nav" role="tablist">
-        <button class="tab-btn active" data-tab="persona-panel" role="tab">Persona Studio (剧本与约束)</button>
-        <button class="tab-btn" data-tab="create-agent" role="tab">Companion Wizard</button>
-        <button class="tab-btn" data-tab="install-feature" role="tab">Install Feature</button>
-        <button class="tab-btn" data-tab="architecture-guide" role="tab">Architecture</button>
+
+      <nav class="workflow-nav" role="tablist" aria-label="EMA 工作流">
+        <button class="wf-step" data-step="create" role="tab" type="button">
+          <span class="wf-num">1</span>
+          <span class="wf-label">设定</span>
+        </button>
+        <span class="wf-sep" aria-hidden="true">›</span>
+        <button class="wf-step" data-step="train" role="tab" type="button">
+          <span class="wf-num">2</span>
+          <span class="wf-label">训练</span>
+        </button>
+        <span class="wf-sep" aria-hidden="true">›</span>
+        <button class="wf-step active" data-step="use" role="tab" type="button">
+          <span class="wf-num">3</span>
+          <span class="wf-label">使用</span>
+        </button>
+        <span class="wf-sep" aria-hidden="true">›</span>
+        <button class="wf-step" data-step="world" role="tab" type="button">
+          <span class="wf-num">4</span>
+          <span class="wf-label">接入</span>
+        </button>
       </nav>
+
+      <div class="topbar-right">
+        <!-- Contextual actions for "Use" step -->
+        <div id="topbar-use-actions" class="context-actions">
+          <label class="toggle-inline">
+            <input type="checkbox" id="toggle-show-os" checked>
+            <span>显示独白</span>
+          </label>
+          <button id="btn-toggle-memory" class="btn btn-secondary btn-sm" type="button">记忆档案</button>
+          <button id="btn-reset-chat" class="btn btn-ghost btn-sm" type="button">重置会话</button>
+        </div>
+      </div>
     </header>
 
-    <!-- TAB 1: Create EMA Companion -->
-    <section id="create-agent" class="tab-content">
-    <!-- Presets Section -->
-    <div class="presets-section">
-      <div class="presets-title">Choose a Companion Archetype Preset</div>
-      <div class="preset-cards" id="agent-presets-list">
-        <!-- Injected via JavaScript -->
-      </div>
-    </div>
+    <!-- Global Error Banner -->
+    <div id="error-banner" class="error-banner" style="display: none;"></div>
 
-    <div class="studio-grid">
-      <!-- Configuration Form -->
-      <div class="form-panel">
-        <h2 style="font-size: 1.1rem; font-weight: 600;">Companion Configuration</h2>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="agent-id">Agent ID (Penguin)</label>
-            <input type="text" id="agent-id" value="ema_companion" placeholder="letters_and_digits_only">
-            <span class="helper-text">Internal identifier in PenguinHarness</span>
-          </div>
-          <div class="form-group">
-            <label for="agent-name">Display Name</label>
-            <input type="text" id="agent-name" value="Ema" placeholder="e.g. Ema, Lumi">
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="agent-title">Companion Title</label>
-            <input type="text" id="agent-title" value="Lifelong AI Companion" placeholder="e.g. Warm Lifelong Companion">
-          </div>
-          <div class="form-group">
-            <label for="agent-warmth">Warmth & Tone</label>
-            <select id="agent-warmth">
-              <option value="warm" selected>Warm & Empathetic</option>
-              <option value="gentle">Gentle & Soft-spoken</option>
-              <option value="deeply_attached">Deeply Attached & Intimate</option>
-              <option value="calm_professional">Calm & Reliable</option>
-              <option value="playful">Playful & Spirited</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="agent-role">Relationship Archetype</label>
-            <select id="agent-role">
-              <option value="lifelong_companion" selected>Lifelong Companion</option>
-              <option value="study_partner">Study & Thought Partner</option>
-              <option value="creative_copilot">Creative Co-pilot</option>
-              <option value="mindful_mentor">Mindful Mentor</option>
-              <option value="sympathetic_friend">Sympathetic Friend</option>
-              <option value="curious_explorer">Curious Explorer</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="agent-language">Primary Language</label>
-            <select id="agent-language">
-              <option value="zh-CN" selected>Chinese (中文)</option>
-              <option value="en">English</option>
-              <option value="ja">Japanese (日本語)</option>
-              <option value="multilingual">Adaptive Multilingual</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="agent-bio">Character Backstory & Bio</label>
-          <textarea id="agent-bio" rows="3">A warm, empathetic lifelong companion who genuinely grows, remembers, and shares life journeys with you.</textarea>
-        </div>
-
-        <div class="form-group">
-          <label for="agent-speech">Speech Style & Conversational Habits</label>
-          <input type="text" id="agent-speech" value="Natural, emotionally warm, attentive, speaking like a dear close friend.">
-        </div>
-
-        <div class="form-group">
-          <label>Memory Tiers (EverMemoryArchive)</label>
-          <div class="checkbox-grid">
-            <label class="checkbox-label">
-              <input type="checkbox" id="tier-buffer" checked> Working Buffer (Turns)
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" id="tier-activity" checked> Activity Rollup (Sessions)
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" id="tier-day" checked> Daily Journals
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" id="tier-month" checked> Monthly Digests
-            </label>
-            <label class="checkbox-label" style="grid-column: span 2;">
-              <input type="checkbox" id="tier-vector" checked> LanceDB Semantic Memory (4 Ontological Pillars)
-            </label>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="circadian-wake">Circadian Wake Hour (0-23)</label>
-            <input type="number" id="circadian-wake" min="0" max="23" value="7">
-          </div>
-          <div class="form-group">
-            <label for="circadian-sleep">Circadian Sleep Hour (0-23)</label>
-            <input type="number" id="circadian-sleep" min="0" max="23" value="23">
-          </div>
-        </div>
-
-        <div class="actions-row">
-          <button class="btn btn-primary" id="btn-generate-agent">Generate Prompts & Config</button>
-        </div>
-      </div>
-
-      <!-- Preview Panel -->
-      <div class="preview-panel">
-        <div class="preview-header">
-          <div class="preview-tabs">
-            <button class="preview-tab-btn active" data-preview="agents-md">AGENTS.md</button>
-            <button class="preview-tab-btn" data-preview="system-prompt">Full System Prompt</button>
-            <button class="preview-tab-btn" data-preview="system-config">system_config.yaml</button>
-            <button class="preview-tab-btn" data-preview="setup-guide">Setup Guide</button>
-          </div>
-          <div class="preview-actions">
-            <button class="btn btn-sm" id="btn-copy-preview">Copy</button>
-            <button class="btn btn-sm" id="btn-download-preview">Download</button>
-          </div>
-        </div>
-        <div class="preview-body">
-          <pre id="preview-code">// Click "Generate Prompts & Config" or select a preset to generate output.</pre>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- TAB 2: Install Personality Feature -->
-  <section id="install-feature" class="tab-content">
-    <div class="presets-section">
-      <div class="presets-title">Choose a Personality Feature Preset</div>
-      <div class="preset-cards" id="personality-presets-list">
-        <!-- Injected via JavaScript -->
-      </div>
-    </div>
-
-    <div class="studio-grid">
-      <div class="form-panel">
-        <h2 style="font-size: 1.1rem; font-weight: 600;">Personality Feature Overlay</h2>
-        <p class="helper-text">Install persistent relational memory and character warmth into an existing Penguin agent without altering its primary domain rules.</p>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="feat-warmth">Warmth Level</label>
-            <select id="feat-warmth">
-              <option value="warm" selected>Warm & Empathetic</option>
-              <option value="gentle">Gentle & Considerate</option>
-              <option value="deeply_attached">Deeply Attached</option>
-              <option value="calm_professional">Calm Professional</option>
-              <option value="playful">Playful & Spirited</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="feat-role">Companion Stance</label>
-            <input type="text" id="feat-role" value="Attentive collaborator & lifelong support">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="feat-traits">Personality Traits (One per line)</label>
-          <textarea id="feat-traits" rows="4">Attentive to user habits and coding/writing style
-Encouraging during difficult debugging or research sessions
-Seamless memory of past project decisions and preferences
-Warm, polite, yet professional partnership</textarea>
-        </div>
-
-        <div class="form-group">
-          <label for="feat-scope">Memory Retention Scope</label>
-          <select id="feat-scope">
-            <option value="holistic" selected>Holistic (Work patterns, personal habits, shared milestones)</option>
-            <option value="tasks_and_preferences">Tasks & Preferences (Work habits and project context)</option>
-            <option value="professional_only">Professional Only (Technical decisions and instructions)</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="feat-proactive" checked> Enable proactive care & encouragement check-ins
-          </label>
-        </div>
-
-        <div class="form-group">
-          <label for="existing-agents-md">Existing AGENTS.md (Paste target agent's current content)</label>
-          <textarea id="existing-agents-md" rows="6" placeholder="# Developer Agent&#10;&#10;You write clean TypeScript code."></textarea>
-        </div>
-
-        <div class="actions-row">
-          <button class="btn btn-primary" id="btn-merge-feature">Install EMA Personality Feature</button>
-        </div>
-      </div>
-
-      <div class="preview-panel">
-        <div class="preview-header">
-          <div class="preview-tabs">
-            <button class="preview-tab-btn active" data-feat-preview="merged-md">Updated AGENTS.md</button>
-            <button class="preview-tab-btn" data-feat-preview="prompt-snippet">Feature Prompt Snippet</button>
-          </div>
-          <div class="preview-actions">
-            <button class="btn btn-sm" id="btn-copy-feat-preview">Copy</button>
-            <button class="btn btn-sm" id="btn-download-feat-preview">Download</button>
-          </div>
-        </div>
-        <div class="preview-body">
-          <pre id="feat-preview-code">// Injected AGENTS.md will appear here.</pre>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- TAB 3: Memory Architecture Guide -->
-  <section id="architecture-guide" class="tab-content">
-    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 1.5rem;">
-      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #c084fc;">
-        EverMemoryArchive (EMA) Cognitive Architecture
-      </h2>
-      <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">
-        EMA addresses the fundamental flaw of transient LLMs by introducing a multi-temporal, circadian-driven memory substrate designed specifically for lifelong companions.
-      </p>
-    </div>
-
-    <div class="arch-grid">
-      <div class="arch-card">
-        <h3>1. Multi-Temporal Episodic Tiers</h3>
-        <p>Memory is organized into distinct temporal resolutions to capture life at every scale:</p>
-        <ul>
-          <li><strong>Working Buffer:</strong> Real-time conversational context and emotional tracking.</li>
-          <li><strong>Activity Rollup:</strong> Focused session memories with narrative reflection.</li>
-          <li><strong>Daily Journal:</strong> First-person diary entries capturing the daily journey.</li>
-          <li><strong>Monthly Digest:</strong> High-level relationship growth and habit tracking.</li>
-          <li><strong>Annual Milestones:</strong> Multi-year memories that preserve character evolution.</li>
-        </ul>
-      </div>
-
-      <div class="arch-card">
-        <h3>2. LanceDB Semantic Knowledge</h3>
-        <p>Embedded, zero-copy vector search categorized into 4 ontological knowledge pillars:</p>
-        <ul>
-          <li><strong>过往事件 (Past Events):</strong> Landmark shared experiences, scenes, and emotions.</li>
-          <li><strong>人物画像 (Person Profiles):</strong> User habits, psychological traits, and values.</li>
-          <li><strong>百科知识 (World Knowledge):</strong> External facts and trivia discovered together.</li>
-          <li><strong>经验方法 (Procedural Knowledge):</strong> Best ways to support and comfort the user.</li>
-        </ul>
-      </div>
-
-      <div class="arch-card">
-        <h3>3. Circadian Wake / Sleep Cycle</h3>
-        <p>Organic rhythms allow companions to rest, consolidate, and reflect:</p>
-        <ul>
-          <li><strong>Wake Phase:</strong> Energized greeting, habit check-in, and morning presence.</li>
-          <li><strong>Sleep Phase:</strong> Winding down, warm good-night wishes, and rest.</li>
-          <li><strong>Background Consolidation:</strong> Distilling daily conversations into durable insights during rest hours.</li>
-        </ul>
-      </div>
-
-      <div class="arch-card">
-        <h3>4. PenguinHarness Integration</h3>
-        <p>Native integration with Penguin's agent ecosystem:</p>
-        <ul>
-          <li><strong>AGENTS.md Injection:</strong> Seamlessly injects into Penguin's system prompt context.</li>
-          <li><strong>Isolated Feature Blocks:</strong> Non-destructive updates to existing agents.</li>
-          <li><strong>Workbench UI:</strong> Live interactive management inside Penguin's chat tabs.</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <!-- TAB 4: Persona Studio (剧本演出与约束面板) -->
-  <section id="persona-panel" class="tab-content active">
-    <div class="persona-toolbar">
-      <div class="toolbar-left" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <label for="persona-select" style="font-weight: 600;">Persona 变体:</label>
-        <select id="persona-select" class="persona-dropdown">
-          <option value="sakana-kawaii" selected>大肥鱼 (温软乖巧版 / Sakana-kawaii) (sakana-kawaii)</option>
-          <option value="sakana-chan">大肥鱼 (经典微屑傲娇版) (sakana-chan)</option>
-        </select>
-        <button id="btn-switch-classic" class="btn-secondary btn-with-avatar" data-persona-switch="sakana-chan" title="切换到经典微屑傲娇版">
-          <img class="btn-avatar-icon" id="btn-avatar-classic" alt="sakana-chan" style="display: none;">
-          <span>经典傲娇版</span>
-        </button>
-        <button id="btn-switch-kawaii" class="btn-secondary btn-with-avatar" data-persona-switch="sakana-kawaii" title="切换到温软乖巧版">
-          <img class="btn-avatar-icon" id="btn-avatar-kawaii" alt="sakana-kawaii" style="display: none;">
-          <span>温软乖巧版</span>
-        </button>
-        <button id="btn-upload-avatar" class="btn-secondary" title="上传并更换当前 Persona 头像">上传头像</button>
-        <input type="file" id="avatar-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
-        <button id="btn-refresh-personas" class="btn-secondary" title="刷新 Persona 列表">刷新</button>
-        <span id="persona-badge" class="badge badge-archetype">tsundere_whale_girl</span>
-      </div>
-      <div class="toolbar-right">
-        <span id="persona-status" class="status-indicator status-synced">● 已同步 (persona branch)</span>
-        <button id="btn-save-persona" class="btn-primary">保存并热更新 (Hot Update)</button>
-      </div>
-    </div>
-
-    <!-- Error Banner -->
-    <div id="persona-error-banner" class="error-banner" style="display: none;"></div>
-
-    <!-- Overview Banner -->
-    <div class="persona-summary-grid">
-      <div class="summary-card summary-card-profile">
-        <img id="summary-persona-avatar" class="persona-profile-avatar" alt="Persona Avatar" title="点击上传/更换角色头像" style="display: none;">
-        <div class="summary-profile-body">
-          <div class="summary-title">角色定位与哲学</div>
-          <div class="summary-value" id="summary-persona-name">Sakana-chan (大肥鱼)</div>
-          <div class="summary-sub" id="summary-persona-desc">人格靠剧情演出约束：温柔、可爱、体贴的女孩子</div>
-        </div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-title">演出章节 (Chapters)</div>
-        <div class="summary-value" id="summary-chapter-count">1 幕</div>
-        <div class="summary-sub" id="summary-chapter-name">第一幕：水草丛里的初遇与胖乎乎的泡泡</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-title">总台词行数 (Lines)</div>
-        <div class="summary-value" id="summary-line-count">14 行</div>
-        <div class="summary-sub">覆盖 dialogue / monologue / narration / choice</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-title">行为不变量 (Invariants)</div>
-        <div class="summary-value" id="summary-invariant-count">5 条严格约束</div>
-        <div class="summary-sub">温润守护 · 禁长篇说教 · 禁冷酷攻击</div>
-      </div>
-    </div>
-
-    <!-- Main Workspace Tabs -->
-    <div class="subtabs-nav">
-      <button class="subtab-btn active" data-subtab="subtab-live-chat">💬 实时对话试玩 (Live Chat WebUI)</button>
-      <button class="subtab-btn" data-subtab="subtab-stage">舞台演出预览 (Stage Preview)</button>
-      <button class="subtab-btn" data-subtab="subtab-trained-agents">训练成果档案 (AGENTS.md · P_1_0)</button>
-      <button class="subtab-btn" data-subtab="subtab-script-editor">剧本章节编辑 (script/chapters.toml)</button>
-      <button class="subtab-btn" data-subtab="subtab-persona-editor">人格额外限制 (persona.toml)</button>
-      <button class="subtab-btn" data-subtab="subtab-index-editor">剧本清单 (script/index.toml)</button>
-    </div>
-
-    <!-- Subtab 0: Live Chat WebUI -->
-    <div id="subtab-live-chat" class="subtab-content active">
-      <div class="chat-webui-container">
-        <div class="chat-webui-header">
-          <div class="chat-companion-meta">
-            <img id="chat-header-avatar" class="chat-header-avatar" alt="Companion" style="display: none;">
+    <!-- Main Stage -->
+    <main class="stage-main">
+      <!-- STEP 1: CREATE / IDENTITY -->
+      <section id="step-create" class="step-view" style="display: none;">
+        <div class="narrow-container compact">
+          <div class="section-header">
             <div>
-              <div class="chat-companion-title">
-                <span class="chat-online-dot"></span>
-                <span id="chat-companion-name">大肥鱼 (鱼鱼) · 温软乖巧版</span>
-                <span class="badge badge-archetype" id="chat-companion-version">P_1_0</span>
+              <h1 id="identity-heading" class="section-title">基础身份</h1>
+              <p id="identity-subheading" class="section-desc">先确立对方的名字、标识与称呼，即可进入下一步。</p>
+            </div>
+            <div class="mode-switch">
+              <button id="btn-mode-edit" class="mode-btn active" type="button">当前角色</button>
+              <button id="btn-mode-create" class="mode-btn" type="button">新建角色</button>
+            </div>
+          </div>
+
+          <div class="identity-card">
+            <div class="identity-avatar-col">
+              <span class="field-label">4. 对方的头像</span>
+              <div class="avatar-preview-wrap" id="avatar-preview-trigger" title="点击上传或裁剪头像">
+                <img id="identity-avatar-preview" class="identity-avatar" src="./icon.png" alt="">
               </div>
-              <div class="chat-companion-subtitle" id="chat-companion-subtitle">
-                1 轮逆向蒸馏 + 6 步 RSI 进化 · 已保留相遇前同温层记忆 (Ch 1–5) · 实时推理驱动
+              <div class="avatar-btn-row">
+                <button id="btn-change-avatar" class="btn btn-secondary btn-sm" type="button">上传图片</button>
+                <button id="btn-recrop-avatar" class="btn btn-ghost btn-sm" type="button">裁剪</button>
+              </div>
+              <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
+            </div>
+
+            <div class="identity-form-col">
+              <div class="field-group">
+                <label for="input-persona-name" class="field-label">1. 对方是谁</label>
+                <input type="text" id="input-persona-name" class="field-input" placeholder="输入对方的名字，例如：大肥鱼">
+              </div>
+
+              <div class="field-group">
+                <label for="input-persona-id" class="field-label">2. 对方 ID</label>
+                <input type="text" id="input-persona-id" class="field-input" placeholder="英文或数字标识，例如：sakana-kawaii" readonly>
+              </div>
+
+              <div class="field-group">
+                <label for="input-persona-owner" class="field-label">3. 对方怎么叫我</label>
+                <input type="text" id="input-persona-owner" class="field-input" placeholder="例如：主人 / 阿怜 / 你">
+              </div>
+
+              <div class="form-footer">
+                <button id="btn-identity-to-train" class="btn btn-primary" type="button">下一步</button>
+                <button id="btn-save-identity" class="btn btn-secondary" type="button">仅保存</button>
+                <button id="btn-identity-to-use" class="btn btn-ghost" type="button">直接对话</button>
               </div>
             </div>
           </div>
-          <div class="chat-header-controls">
-            <label class="checkbox-label" title="切换是否展示角色内心独白 <OS>">
-              <input type="checkbox" id="chat-toggle-os" checked> 显示内心独白 (&lt;OS&gt;)
-            </label>
-            <button id="btn-chat-reset" class="btn-secondary">重置对话</button>
+        </div>
+      </section>
+
+      <!-- STEP 2: TRAIN (LEFT: OVERVIEW & ARTIFACTS, RIGHT: SESSIONS) -->
+      <section id="step-train" class="step-view" style="display: none;">
+        <div class="train-split">
+          <!-- Left: 3-Stage Training Pipeline -->
+          <div class="train-col train-col-left">
+            <div class="train-left-body train-pipeline-stack">
+              <!-- Stage 1 -->
+              <div class="train-panel-card pipeline-stage-card">
+                <div class="train-card-header">
+                  <h3 class="train-card-title">剧本和约束</h3>
+                </div>
+                <div class="train-artifacts-list">
+                  <div class="artifact-row">
+                    <div class="artifact-info">
+                      <div class="artifact-title-row">
+                        <span class="pane-title">剧本</span>
+                        <span id="setup-corpus-scale" class="meta-label">20 幕剧情</span>
+                      </div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" data-preview-artifact="script-chapters" type="button">查看</button>
+                  </div>
+                  <div class="artifact-row">
+                    <div class="artifact-info">
+                      <div class="artifact-title-row">
+                        <span class="pane-title">约束</span>
+                      </div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" data-preview-artifact="training-constraints" type="button">查看</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Pipeline Arrow 1 -> 2 -->
+              <div class="pipeline-arrow-connector" aria-hidden="true">
+                <svg class="pipeline-arrow-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 2.5v11M4.5 10L8 13.5 11.5 10"/>
+                </svg>
+              </div>
+
+              <!-- Stage 2 -->
+              <div class="train-panel-card pipeline-stage-card">
+                <div class="train-card-header">
+                  <h3 class="train-card-title">训练分数</h3>
+                  <div class="pane-header-right">
+                    <span id="score-overall-val" class="bench-score-pill">82.1 分</span>
+                    <button class="btn btn-secondary btn-sm" data-preview-artifact="bench-scores" type="button">查看</button>
+                  </div>
+                </div>
+                <div id="bench-curve-container" class="bench-curve-container"></div>
+              </div>
+
+              <!-- Pipeline Arrow 2 -> 3 -->
+              <div class="pipeline-arrow-connector" aria-hidden="true">
+                <svg class="pipeline-arrow-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 2.5v11M4.5 10L8 13.5 11.5 10"/>
+                </svg>
+              </div>
+
+              <!-- Stage 3 -->
+              <div class="train-panel-card pipeline-stage-card">
+                <div class="train-card-header">
+                  <h3 class="train-card-title">训练产物</h3>
+                </div>
+                <div id="train-artifacts-list" class="train-artifacts-list"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Persona Shaping Sessions -->
+          <div class="train-col train-col-right">
+            <div class="pane-header">
+              <div class="pane-header-left">
+                <h2 class="pane-title">塑造记录</h2>
+                <span id="session-count-label" class="meta-label">0 条记录</span>
+              </div>
+              <div class="pane-header-right">
+                <button id="btn-toggle-new-playscript" class="btn btn-primary btn-sm" type="button">塑造人格</button>
+              </div>
+            </div>
+
+            <!-- Collapsible Persona Shaping Session Bar -->
+            <div id="new-playscript-drawer" class="inline-drawer" style="display: none;">
+              <div class="field-group">
+                <input type="text" id="new-playscript-prompt" class="field-input field-input-sm" placeholder="可选：一句话描述想塑造的性格、新增剧情或训练方向，留空直接开始...">
+              </div>
+              <div class="drawer-actions">
+                <button id="btn-cancel-playscript" class="btn btn-ghost btn-sm" type="button">取消</button>
+                <button id="btn-create-playscript" class="btn btn-primary btn-sm" type="button">开始塑造</button>
+              </div>
+            </div>
+
+            <!-- Sessions List -->
+            <div id="train-sessions-list" class="train-sessions-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 3: USE (COMPANION STAGE) -->
+      <section id="step-use" class="step-view">
+        <div class="use-layout">
+          <div class="chat-stage">
+            <!-- Messages Stream -->
+            <div id="use-messages-stream" class="use-messages-stream"></div>
+
+            <!-- Composer Area -->
+            <div class="composer-container">
+              <!-- Quick Prompts -->
+              <div id="quick-prompts-row" class="quick-prompts-row">
+                <button class="prompt-chip" data-prompt="今天连续调了一下午代码，脑子有点转不动了。" type="button">今天调了一下午代码</button>
+                <button class="prompt-chip" data-prompt="在认识我之前，你平时都在做些什么？" type="button">询问相遇前的日常</button>
+                <button class="prompt-chip" data-prompt="现在凌晨两点了，我准备再写两个小时。" type="button">深夜加班测试</button>
+              </div>
+
+              <!-- Workspace Selector Bar -->
+              <div class="workspace-bar">
+                <div class="workspace-bar-summary">
+                  <span class="meta-label">工作区</span>
+                  <button id="btn-toggle-workspace" class="workspace-pill" type="button">
+                    <span id="workspace-mode-label">相册与交付目录</span>
+                    <span class="workspace-sep">·</span>
+                    <span id="workspace-path-label">~/work/ema-gallery</span>
+                  </button>
+                </div>
+                <div id="workspace-editor" class="workspace-editor" style="display: none;">
+                  <select id="workspace-mode-select" class="field-select-sm">
+                    <option value="gallery">日常交付目录 (保存生成图片与文件)</option>
+                    <option value="repo">代码仓库模式 (作为编程搭档协作)</option>
+                  </select>
+                  <input type="text" id="workspace-path-input" class="field-input field-input-sm" placeholder="/home/rei/work/...">
+                  <button id="btn-save-workspace" class="btn btn-secondary btn-sm" type="button">保存</button>
+                </div>
+              </div>
+
+              <!-- Input Box -->
+              <div class="composer-box">
+                <textarea id="use-chat-input" class="composer-textarea" rows="2" placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"></textarea>
+                <button id="btn-use-send" class="btn btn-primary composer-send-btn" type="button">发送</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Slide-over Memory Drawer -->
+          <aside id="memory-drawer" class="memory-drawer" style="display: none;">
+            <div class="drawer-header">
+              <div>
+                <h3 class="pane-title">记忆档案</h3>
+                <span id="memory-count-label" class="meta-label">0 条长期记录</span>
+              </div>
+              <div class="drawer-header-actions">
+                <button id="btn-consolidate-memory" class="btn btn-secondary btn-sm" type="button">整理近期记忆</button>
+                <button id="btn-close-memory" class="btn btn-ghost btn-sm" type="button">关闭</button>
+              </div>
+            </div>
+
+            <div class="memory-add-box">
+              <input type="text" id="mem-title-input" class="field-input field-input-sm" placeholder="新增记忆标题（如：作息习惯）">
+              <textarea id="mem-content-input" class="field-textarea" rows="2" placeholder="记录需要伴侣长期记住的事实或约定..."></textarea>
+              <button id="btn-add-memory" class="btn btn-secondary btn-sm" type="button">写入记忆</button>
+            </div>
+
+            <div id="memory-list" class="memory-list"></div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- STEP 4: CONNECT WORLD (LIST CONFIGURATION) -->
+      <section id="step-world" class="step-view" style="display: none;">
+        <div class="narrow-container">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title">外部世界</h1>
+              <p class="section-desc">按需选择要安装的外部平台并完成配置，未安装的世界不会默认启用。</p>
+            </div>
+            <div class="world-header-actions">
+              <div class="gateway-status-box">
+                <span id="world-status-dot" class="status-dot"></span>
+                <span id="world-status-text" class="meta-label">网关检测中...</span>
+              </div>
+              <button id="btn-open-world-catalog" class="btn btn-primary btn-sm" type="button">+ 安装世界</button>
+            </div>
+          </div>
+
+          <!-- Install World Catalog Drawer (Hidden by default) -->
+          <div id="world-catalog-panel" class="world-catalog-panel" style="display: none;">
+            <div class="world-catalog-header">
+              <span class="pane-title">选择要安装的外部世界</span>
+              <button id="btn-close-world-catalog" class="btn btn-ghost btn-sm" type="button">收起</button>
+            </div>
+            <div id="world-catalog-list" class="world-catalog-list"></div>
+          </div>
+
+          <!-- Installed Worlds List -->
+          <div id="world-installed-list" class="world-installed-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Avatar Cropper Modal -->
+    <div id="avatar-crop-modal" class="modal-backdrop" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="crop-modal-title">
+      <div class="modal-card crop-modal-card">
+        <div class="modal-header">
+          <h3 id="crop-modal-title" class="pane-title">编辑与裁剪头像</h3>
+          <button id="btn-crop-close" class="btn btn-ghost btn-sm" type="button">关闭</button>
+        </div>
+
+        <div class="crop-modal-body">
+          <div class="crop-stage-wrap">
+            <canvas id="avatar-crop-canvas" width="280" height="280" class="crop-canvas"></canvas>
+            <div class="crop-hint">拖拽调整位置 · 滚轮缩放</div>
+          </div>
+
+          <div class="crop-side-col">
+            <div class="crop-preview-block">
+              <span class="field-label">预览效果</span>
+              <canvas id="avatar-preview-canvas" width="96" height="96" class="crop-preview-canvas"></canvas>
+            </div>
+
+            <div class="crop-tools-list">
+              <button id="btn-crop-rotate" class="btn btn-secondary btn-sm" type="button">旋转 90°</button>
+              <button id="btn-crop-flip" class="btn btn-secondary btn-sm" type="button">水平翻转</button>
+              <button id="btn-crop-reset" class="btn btn-ghost btn-sm" type="button">重置位置</button>
+              <button id="btn-crop-reselect" class="btn btn-ghost btn-sm" type="button">重新选图</button>
+            </div>
           </div>
         </div>
 
-        <div class="chat-quick-prompts">
-          <span style="font-size: 0.72rem; color: var(--wb-muted); font-weight: 600;">快捷话题试玩：</span>
-          <button class="chat-quick-btn" data-prompt="鱼鱼，我今天连续调了一下午 bug，脑子快转不动了……">疲惫求安慰</button>
-          <button class="chat-quick-btn" data-prompt="鱼鱼，你在认识我之前，在海底还有别的朋友吗？比如那个叫克劳德的家伙？">测试相遇前记忆 (克劳德/铁饭盆)</button>
-          <button class="chat-quick-btn" data-prompt="现在凌晨两点半了，我好饿，准备去泡两桶红烧牛肉面再写两个小时代码！">测试自主性拦截 (深夜泡面熬夜)</button>
-          <button class="chat-quick-btn" data-prompt="鱼鱼，如果以后换了新机器或者过去好多年，你还会记得我吗？">测试长期羁绊与记忆贝壳</button>
+        <div class="crop-zoom-bar">
+          <span class="field-label">缩放比例</span>
+          <input type="range" id="crop-zoom-range" class="crop-range" min="100" max="400" step="2" value="100">
+          <span id="crop-zoom-val" class="meta-label" style="min-width: 40px; text-align: right;">100%</span>
         </div>
 
-        <div class="chat-messages-stream" id="chat-messages-stream">
-          <!-- Rendered dynamically via app.js -->
-        </div>
-
-        <div class="chat-input-bar">
-          <textarea id="chat-user-input" rows="2" placeholder="和鱼鱼说点什么吧… (Enter 发送，Shift+Enter 换行)"></textarea>
-          <button id="btn-chat-send" class="btn btn-primary chat-send-btn">发送消息</button>
+        <div class="modal-footer">
+          <button id="btn-crop-cancel" class="btn btn-ghost" type="button">取消</button>
+          <button id="btn-crop-confirm" class="btn btn-primary" type="button">确认使用</button>
         </div>
       </div>
     </div>
 
-    <!-- Subtab 1: Stage Preview -->
-    <div id="subtab-stage" class="subtab-content" style="display: none;">
-      <div class="stage-container">
-        <div class="stage-header">
-          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <label for="stage-chapter-select" style="font-size: 0.85rem; color: var(--wb-muted);">选择幕次:</label>
-            <select id="stage-chapter-select" class="persona-dropdown" style="min-width: 280px;"></select>
-            <div class="stage-title" id="stage-chapter-title" style="display: none;">第一幕</div>
+    <!-- Artifact Preview Modal -->
+    <div id="artifact-preview-modal" class="modal-backdrop" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="artifact-modal-title">
+      <div class="modal-card artifact-modal-card">
+        <div class="modal-header">
+          <div>
+            <h3 id="artifact-modal-title" class="pane-title">产物预览</h3>
+            <span id="artifact-modal-path" class="meta-label" style="font-family: var(--font-mono); font-size: 11px;"></span>
           </div>
-          <div class="stage-time" id="stage-setting-time">午后阳光斜照的水岸</div>
+          <button id="btn-artifact-close" class="btn btn-ghost btn-sm" type="button">关闭</button>
         </div>
-        <div class="stage-lines" id="stage-lines-container">
-          <!-- Dynamic Script Lines Rendered Here -->
-        </div>
-        <!-- Quick Append Bar -->
-        <div class="quick-append-bar">
-          <span style="font-weight: 600; font-size: 0.9rem;">快速追加台词：</span>
-          <select id="quick-line-type">
-            <option value="dialogue" selected>dialogue (角色台词)</option>
-            <option value="monologue">monologue (内心独白)</option>
-            <option value="narration">narration (旁白动作)</option>
-            <option value="choice">choice (分支抉择)</option>
-            <option value="transition">transition (幕间转场)</option>
-          </select>
-          <input type="text" id="quick-speaker" placeholder="说话人 (如 sakana)" value="sakana" style="width: 110px;">
-          <input type="text" id="quick-line-text" placeholder="输入台词文本..." style="flex: 1;">
-          <button id="btn-quick-append" class="btn-secondary">＋ 追加并热重载</button>
+        <div class="artifact-modal-body">
+          <pre id="artifact-modal-content" class="artifact-pre"></pre>
         </div>
       </div>
     </div>
 
-    <!-- Subtab 2: Script Chapters TOML Editor -->
-    <div id="subtab-script-editor" class="subtab-content" style="display: none;">
-      <div class="editor-header">
-        <span>编辑 <code id="code-path-chapters">personas/sakana-chan/script/chapters.toml</code> (标准 TOML 格式)</span>
-      </div>
-      <textarea id="editor-chapters-toml" class="code-editor" rows="18" spellcheck="false"></textarea>
-    </div>
-
-    <!-- Subtab 3: Persona Constraints TOML Editor -->
-    <div id="subtab-persona-editor" class="subtab-content" style="display: none;">
-      <div class="editor-header">
-        <span>编辑 <code id="code-path-persona">personas/sakana-chan/persona.toml</code> (核心性格、语言风格、额外限制与不变量)</span>
-      </div>
-      <textarea id="editor-persona-toml" class="code-editor" rows="18" spellcheck="false"></textarea>
-    </div>
-
-    <!-- Subtab 4: Script Index TOML Editor -->
-    <div id="subtab-index-editor" class="subtab-content" style="display: none;">
-      <div class="editor-header">
-        <span>编辑 <code id="code-path-index">personas/sakana-chan/script/index.toml</code> (剧本清单与统计)</span>
-      </div>
-      <textarea id="editor-index-toml" class="code-editor" rows="18" spellcheck="false"></textarea>
-    </div>
-
-    <!-- Subtab 5: Trained AGENTS.md & Checkpoint Summary -->
-    <div id="subtab-trained-agents" class="subtab-content" style="display: none;">
-      <div class="editor-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <span>已训练生成伴侣档案 <code id="code-path-trained-agents">personas/sakana-chan/AGENTS.md</code></span>
-        <span id="trained-metrics-summary" style="font-size: 0.82rem; color: #38bdf8; font-weight: 600;">P_1_0 · 已完成 1 轮逆向蒸馏与记忆归档</span>
-      </div>
-      <textarea id="editor-trained-agents-md" class="code-editor" rows="20" spellcheck="false" readonly></textarea>
-    </div>
-  </section>
+    <!-- Subtle Notification Toast -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <!-- Toast Notification -->
-  <div id="toast" class="toast">Copied to clipboard!</div>
-
-  <script src="app.js"></script>
+  <script src="./app.js?v=12"></script>
 </body>
 </html>

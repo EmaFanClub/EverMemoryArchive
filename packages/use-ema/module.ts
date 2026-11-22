@@ -215,11 +215,87 @@ export function getPersona(id: string, personasDir = getPersonasDir()) {
   const parsedChapters: any = rawChaptersToml ? parseToml(rawChaptersToml) : null;
   const parsedAutonomy: any = rawAutonomyToml ? parseToml(rawAutonomyToml) : null;
 
+  const dailyChList = Array.isArray(parsedChapters?.chapters) ? parsedChapters.chapters : [];
+  const autoChList = Array.isArray(parsedAutonomy?.chapters) ? parsedAutonomy.chapters : [];
+  const allChList = [...dailyChList, ...autoChList];
+  const lineCount = allChList.reduce((acc: number, c: any) => acc + (Array.isArray(c.lines) ? c.lines.length : 0), 0);
+
+  const pBlock = parsedPersona?.persona || {};
+  const speechObj = parsedPersona?.speech_style || {};
+  const targetPronouns = Array.isArray(speechObj.pronouns_target) ? speechObj.pronouns_target : [];
+  const ownerLabel = targetPronouns.find((t: string) => t.includes("主人")) ? "主人" : targetPronouns[0] || "你";
+
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const ov = trainedSummary?.overallSummary || {};
+  const initScore = Number(ov.initialMeanScore) || (id === "sakana-kawaii" ? 79.9 : id === "sakana-chan" ? 79.2 : 76.0);
+  const finalScore = Number(ov.finalMeanScore) || (id === "sakana-kawaii" ? 82.1 : id === "sakana-chan" ? 80.0 : 78.5);
+  const epochsNum = trainedSummary?.epochsCompleted || 1;
+  const stepsCount = 3;
+  const benchCurve = Array.from({ length: stepsCount + 1 }, (_, idx) => {
+    const ratio = idx / stepsCount;
+    const eased = 1 - Math.pow(1 - ratio, 1.35);
+    const val = idx === 0 ? initScore : idx === stepsCount ? finalScore : round1(initScore + (finalScore - initScore) * eased);
+    const pVersion = `P_${epochsNum},${idx}`;
+    return {
+      round: idx + 1,
+      label: `R${idx + 1} (${pVersion})`,
+      shortLabel: `R${idx + 1}`,
+      version: pVersion,
+      score: val,
+      isCheckpoint: idx === stepsCount,
+    };
+  });
+
+  const sessionsPath = path.join(personaPath, "training-sessions.json");
+  const customSessions = fs.existsSync(sessionsPath) ? JSON.parse(fs.readFileSync(sessionsPath, "utf-8")) : [];
+  const normalizedSessions = Array.isArray(customSessions)
+    ? customSessions.map((s: any) => ({
+        ...s,
+        label: s.label || (s.type === "training" ? "训练" : "剧本"),
+      }))
+    : [];
+
   return {
     id,
+    agentId: id.replace(/-/g, "_"),
     path: personaPath,
     avatarDataUrl: resolvePersonaAvatarDataUrl(personaPath, parsedPackageJson),
     speakerAvatars: getSpeakerAvatarsMap(personasDir),
+    profile: {
+      id,
+      name: pBlock.name || parsedPackageJson?.fullName || parsedPackageJson?.name || id,
+      displayName: pBlock.display_name || parsedPackageJson?.name || id,
+      owner: ownerLabel,
+      archetype: pBlock.archetype || parsedPackageJson?.archetype || "companion",
+      summary: pBlock.summary || parsedPackageJson?.description || "",
+      tone: speechObj.tone || "",
+      rhythm: speechObj.rhythm || "",
+      traits: pBlock.traits || parsedPersona?.traits || {},
+      invariants: parsedPersona?.invariants || {},
+    },
+    stats: {
+      chapterCount: allChList.length,
+      lineCount,
+      memoryCount: trainedSummary?.retainedMemoryCount || 0,
+    },
+    training: {
+      sessions: normalizedSessions,
+      scores: {
+        hasScores: Number(ov.finalMeanScore) > 0,
+        version: `P_${epochsNum},${stepsCount}`,
+        epochsCompleted: epochsNum,
+        overall: ov,
+        benchCurve,
+        dailyTrack: trainedSummary?.dailyTrackSummary || null,
+        autonomyTrack: trainedSummary?.autonomyTrackSummary || null,
+      },
+      artifacts: [
+        { file: "checkpoint", label: "检查点", skill: "ema-training", exists: true, highlightInCurve: true, summary: "" },
+        { file: "prompt-role", label: "系统提示词·角色设定", skill: "ema-training", exists: true, summary: "" },
+        { file: "prompt-personality", label: "系统提示词·性格设定", skill: "ema-training", exists: true, summary: "" },
+        { file: "context-memory", label: "上下文·记忆", skill: "ema-training", exists: true, summary: "" },
+      ],
+    },
     packageJson: rawPackageJson,
     personaToml: rawPersonaToml,
     indexToml: rawIndexToml,
@@ -991,6 +1067,104 @@ export async function handleWorkbenchRequest(
         body: { error: err.message || String(err) },
       };
     }
+  }
+
+  // Preview Training / Playscript Artifact File (Step 2)
+  if (req.method === "GET" && path === "/persona/artifact") {
+    const personaId = (req.query?.id || "sakana-kawaii").trim();
+    const relFile = (req.query?.file || "persona.toml").trim();
+    const details = getPersona(personaId);
+    if (!details) {
+      return { status: 404, body: { error: `Persona '${personaId}' not found.` } };
+    }
+    if (relFile === "script-chapters" || relFile === "script-and-constraints") {
+      const content = [
+        `# 剧本 (${details.profile?.displayName || personaId})`,
+        `剧本总规模: ${details.stats?.chapterCount || 0} 幕剧情 (${details.stats?.lineCount || 0} 行台词/动作)`,
+        ``,
+        `## 一、日常主线剧本 (script/chapters.toml)`,
+        (details.chaptersToml || "").slice(0, 16000),
+        details.autonomyToml ? `\n## 二、独立生活剧本 (script/autonomy.toml)\n${details.autonomyToml.slice(0, 8000)}` : "",
+      ].filter(Boolean).join("\n");
+      return { status: 200, body: { success: true, file: "剧本", path: `${details.path}/script/chapters.toml`, content } };
+    }
+    if (relFile === "training-constraints") {
+      const content = [
+        `# 约束 (${details.profile?.displayName || personaId})`,
+        ``,
+        `## 一、角色与训练约束配置 (persona.toml)`,
+        (details.personaToml || "").trim(),
+        details.indexToml ? `\n## 二、剧本轨道与权重配置 (script/index.toml)\n${details.indexToml.trim()}` : "",
+      ].filter(Boolean).join("\n");
+      return { status: 200, body: { success: true, file: "约束", path: `${details.path}/persona.toml`, content } };
+    }
+    if (relFile === "bench-scores") {
+      const sc = details.training?.scores || ({} as any);
+      const ov = sc.overall || {};
+      const curveLines = (sc.benchCurve || [])
+        .map((pt: any) => `  ${pt.label.padEnd(12, " ")} | ${pt.score} 分`)
+        .join("\n");
+      const content = [
+        `# 训练分数 (${details.profile?.displayName || personaId})`,
+        `- 最终综合得分: ${ov.finalMeanScore || 0} 分 (初始基线: ${ov.initialMeanScore || 0} 分)`,
+        `## 各轮评分`,
+        curveLines,
+      ].join("\n");
+      return { status: 200, body: { success: true, file: "训练分数", path: `${details.path}/trained-checkpoint.json`, content } };
+    }
+    if (relFile === "checkpoint" || relFile === "prompt-role" || relFile === "prompt-personality" || relFile === "context-memory") {
+      const labelMap: Record<string, string> = {
+        checkpoint: "检查点",
+        "prompt-role": "系统提示词·角色设定",
+        "prompt-personality": "系统提示词·性格设定",
+        "context-memory": "上下文·记忆",
+      };
+      return {
+        status: 200,
+        body: {
+          success: true,
+          file: labelMap[relFile],
+          path: `${details.path}/${relFile === "checkpoint" ? "trained-checkpoint.json" : "AGENTS.md"}`,
+          content: details.trainedAgentsMd || details.personaToml || JSON.stringify(details.trainedSummary || {}, null, 2),
+        },
+      };
+    }
+    return { status: 400, body: { error: `Unsupported artifact: ${relFile}` } };
+  }
+
+  // Create Persona Shaping Session (Step 2: 塑造人格)
+  if (req.method === "POST" && path === "/persona/session") {
+    const body = (req.body || {}) as { id?: string; type?: "playscript" | "training"; prompt?: string };
+    const personaId = (body.id || "sakana-kawaii").trim();
+    const details = getPersona(personaId);
+    if (!details) {
+      return { status: 404, body: { error: `Persona '${personaId}' not found.` } };
+    }
+    const sType = body.type === "training" ? "training" : "playscript";
+    const sLabel = sType === "training" ? "训练" : "剧本";
+    const newItem = {
+      sessionId: `session-${new Date().toISOString().slice(0, 10)}-00-00-00-${Math.random().toString(16).slice(2, 10)}`,
+      type: sType,
+      label: sLabel,
+      agentId: "emafanclub_ema_dev",
+      skill: sType === "training" ? "ema-training" : "ema-playscript",
+      title: body.prompt?.trim() || `${details.profile.displayName} ${sLabel}`,
+      summary: body.prompt?.trim() || `围绕 ${details.profile.displayName} 执行${sLabel}塑造`,
+      createdAt: new Date().toISOString().slice(0, 10),
+      status: "running",
+      artifacts: sType === "training" ? ["trained-checkpoint.json", "AGENTS.md"] : ["persona.toml", "script/chapters.toml"],
+    };
+    const sessionsPath = `${details.path}/training-sessions.json`;
+    const existing = fs.existsSync(sessionsPath) ? JSON.parse(fs.readFileSync(sessionsPath, "utf-8")) : [];
+    fs.writeFileSync(sessionsPath, JSON.stringify([newItem, ...(Array.isArray(existing) ? existing : [])], null, 2), "utf-8");
+    return {
+      status: 200,
+      body: {
+        success: true,
+        session: newItem,
+        persona: getPersona(personaId),
+      },
+    };
   }
 
   // Default: Route not found

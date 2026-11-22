@@ -331,5 +331,50 @@ describe("Penguin Workbench Module (Use EMA)", () => {
       expect(body.chat.messages.length).toBeGreaterThan(0);
       expect(body.chat.messages[0].role).toBe("companion");
     });
+
+    it("provides 3-stage training pipeline benchCurve (Rk (P_u,v)) and artifacts via GET /api/persona and /api/persona/artifact", async () => {
+      const res = await handleWorkbenchRequest({
+        method: "GET",
+        path: "/api/persona",
+        query: { id: "sakana-kawaii" },
+      });
+      expect(res.status).toBe(200);
+      const persona = (res.body as any).persona;
+      expect(persona.training).toBeDefined();
+      expect(persona.training.scores.benchCurve).toHaveLength(4);
+      expect(persona.training.scores.benchCurve[0].label).toBe("R1 (P_1,0)");
+      expect(persona.training.scores.benchCurve[3].label).toBe("R4 (P_1,3)");
+      expect(persona.training.scores.benchCurve[3].isCheckpoint).toBe(true);
+      expect(persona.training.artifacts.map((a: any) => a.label)).toEqual([
+        "检查点",
+        "系统提示词·角色设定",
+        "系统提示词·性格设定",
+        "上下文·记忆",
+      ]);
+
+      for (const key of ["script-chapters", "training-constraints", "bench-scores", "checkpoint"]) {
+        const artRes = await handleWorkbenchRequest({
+          method: "GET",
+          path: "/api/persona/artifact",
+          query: { id: "sakana-kawaii", file: key },
+        });
+        expect(artRes.status).toBe(200);
+        expect((artRes.body as any).success).toBe(true);
+        expect((artRes.body as any).content.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("creates persona shaping session with self-label via POST /api/persona/session", async () => {
+      const res = await handleWorkbenchRequest({
+        method: "POST",
+        path: "/api/persona/session",
+        body: { id: "sakana-kawaii", type: "playscript", prompt: "续写日常剧本" },
+      });
+      expect(res.status).toBe(200);
+      const body = res.body as any;
+      expect(body.success).toBe(true);
+      expect(body.session.label).toBe("剧本");
+      expect(body.persona.training.sessions[0].label).toBe("剧本");
+    });
   });
 });
