@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   assertSandboxBinaryAllowed,
@@ -7,6 +8,7 @@ import {
   buildMacosSeatbeltWhitelistProfile,
   buildWindowsWslBwrapWhitelistArgs,
   getEmaSandboxStatus,
+  isEmaAgent,
   loadEmaAgentConfig,
   loadEmaGlobalConfig,
   resolveEffectiveAllowedBins,
@@ -72,6 +74,7 @@ allowed_bins = [
   "node", "penguin"
 ]
 ro_paths = ["/home/rei/worktrees/EverMemoryArchive/adv-eval-review-round1/packages/ema"]
+ema_agents = ["sakana_kawaii"]
 `,
       "utf8",
     );
@@ -159,6 +162,14 @@ owner_approved_bins = []
     expect(args.join(" ")).toContain("--ro-bind /usr/bin/grep /usr/bin/grep");
     expect(args.join(" ")).not.toContain("/usr/bin/ssh");
 
+    // Must mount agent config.toml, AGENTS.md, skills, and memory read-only into container
+    expect(args).toContain("--ro-bind-try");
+    const sakanaStateDir = path.dirname(sakanaCfg.configPath);
+    expect(args).toContain(path.join(sakanaStateDir, "skills"));
+    expect(args).toContain(path.join(sakanaStateDir, "memory"));
+    expect(args).toContain(path.join(sakanaStateDir, "AGENTS.md"));
+    expect(args).not.toContain(path.join(sakanaStateDir, ".vault.toml"));
+
     // Must bind workspace and scratchpad read-write, then lock /home/rei read-only
     const bindWsIdx = args.indexOf("/home/rei/work/org/ema/assistant");
     const remountHomeIdx = args.lastIndexOf("/home/rei");
@@ -199,6 +210,12 @@ owner_approved_bins = []
     expect(joined).toContain("--remount-ro /home/rei");
     expect(joined).not.toContain("/usr/bin/ssh");
     expect(joined).not.toContain("--share-net");
+
+    const sakanaStateDir = path.dirname(sakanaCfg.configPath);
+    expect(joined).toContain(toWslLinuxPath(path.join(sakanaStateDir, "skills")));
+    expect(joined).toContain(toWslLinuxPath(path.join(sakanaStateDir, "memory")));
+    expect(joined).toContain(toWslLinuxPath(path.join(sakanaStateDir, "AGENTS.md")));
+    expect(joined).not.toContain(".vault.toml");
   });
 
   it("builds macOS Seatbelt SBPL dual-whitelist profile (deny homeDir/ssh reads + allow RW workspace/scratchpad/tmp + process-exec* whitelist)", () => {
@@ -225,6 +242,12 @@ owner_approved_bins = []
     expect(profile).toContain('(allow process-exec* (literal "/usr/bin/sh")');
     expect(profile).not.toContain('"/usr/bin/ssh"');
     expect(profile).toContain('(allow network-outbound (remote ip "localhost:*"))');
+
+    const sakanaStateDir = path.dirname(sakanaCfg.configPath);
+    expect(profile).toContain(path.join(sakanaStateDir, "skills"));
+    expect(profile).toContain(path.join(sakanaStateDir, "memory"));
+    expect(profile).toContain(path.join(sakanaStateDir, "AGENTS.md"));
+    expect(profile).not.toContain(".vault.toml");
   });
 
   it("reports structured sandbox status with sshBlocked = true", () => {
@@ -236,6 +259,118 @@ owner_approved_bins = []
     expect(status.backend).toBe("penguin-bwrap (bwrap-whitelist)");
     expect(status.sshBlocked).toBe(true);
     expect(status.writableRoots).toEqual(["<session.workspace>", "<session.scratchpad>", "/tmp"]);
+  });
+
+  it("determines whether an agent is an EMA companion agent using isEmaAgent", () => {
+    const globalCfg = loadEmaGlobalConfig(tmpGlobalConfigPath);
+
+    // sakana_kawaii has agent_state/config.toml with [agent] and [world] (and is in ema_agents)
+    expect(isEmaAgent("sakana_kawaii", { globalCfg })).toBe(true);
+
+    // Non-EMA agent has no config.toml and is not in ema_agents
+    expect(isEmaAgent("emafanclub_assistant", { globalCfg })).toBe(false);
+    expect(isEmaAgent("default_agent", { globalCfg })).toBe(false);
+  });
+
+  it("enforces scope isolation in bwrap-whitelist: passthrough for non-EMA agents, dual-whitelist for EMA agents", () => {
+    const scriptPath = path.resolve(__dirname, "../bin/bwrap-whitelist");
+    const mockBwrap = path.join(tmpDir, "mock-bwrap");
+    fs.writeFileSync(
+      mockBwrap,
+      `#!/usr/bin/env bash
+printf "%s\\n" "$@"
+`,
+      { mode: 0o755 },
+    );
+
+    // 1. Invocation for non-EMA agent (e.g. emafanclub_assistant)
+    const nonEmaScratchpad = path.join(
+      tmpAppDataDir,
+      "agents",
+      "emafanclub_assistant",
+      "scratchpad",
+      "sess-non-ema",
+    );
+    fs.mkdirSync(nonEmaScratchpad, { recursive: true });
+
+    const nonEmaResult = spawnSync(
+      scriptPath,
+      [
+        "--ro-bind", "/", "/",
+        "--dev", "/dev",
+        "--proc", "/proc",
+        "--die-with-parent",
+        "--bind", "/tmp/ws", "/tmp/ws",
+        "--bind", nonEmaScratchpad, nonEmaScratchpad,
+        "--",
+        "bash", "-c", "echo ok",
+      ],
+      {
+        env: {
+          ...process.env,
+          REAL_BWRAP: mockBwrap,
+          GLOBAL_CONFIG: tmpGlobalConfigPath,
+          HOME_DIR: "/home/rei",
+        },
+        encoding: "utf8",
+      },
+    );
+
+    expect(nonEmaResult.status).toBe(0);
+    // Non-EMA agent must NOT contain --tmpfs /home/rei or /usr/bin blanking
+    expect(nonEmaResult.stdout).not.toContain("--tmpfs\n/home/rei");
+    expect(nonEmaResult.stdout).not.toContain("--tmpfs\n/usr/bin");
+    // Non-EMA agent must preserve original arguments
+    expect(nonEmaResult.stdout).toContain(nonEmaScratchpad);
+
+    // 2. Invocation for EMA agent (sakana_kawaii)
+    const emaScratchpad = path.join(
+      tmpAppDataDir,
+      "agents",
+      "sakana_kawaii",
+      "scratchpad",
+      "sess-ema",
+    );
+    fs.mkdirSync(emaScratchpad, { recursive: true });
+
+    const emaResult = spawnSync(
+      scriptPath,
+      [
+        "--ro-bind", "/", "/",
+        "--dev", "/dev",
+        "--proc", "/proc",
+        "--die-with-parent",
+        "--bind", "/tmp/ws", "/tmp/ws",
+        "--bind", emaScratchpad, emaScratchpad,
+        "--",
+        "bash", "-c", "echo ok",
+      ],
+      {
+        env: {
+          ...process.env,
+          REAL_BWRAP: mockBwrap,
+          GLOBAL_CONFIG: tmpGlobalConfigPath,
+          HOME_DIR: "/home/rei",
+        },
+        encoding: "utf8",
+      },
+    );
+
+    expect(emaResult.status).toBe(0);
+    // EMA companion agent must enforce --tmpfs /home/rei and system binary whitelisting
+    expect(emaResult.stdout).toContain("--tmpfs\n/home/rei");
+    expect(emaResult.stdout).toContain("--tmpfs\n/usr/bin");
+    expect(emaResult.stdout).toContain("--remount-ro\n/home/rei");
+    expect(emaResult.stdout).toContain(
+      path.join(tmpAppDataDir, "agents", "sakana_kawaii", "agent_state", "skills"),
+    );
+    expect(emaResult.stdout).toContain(
+      path.join(tmpAppDataDir, "agents", "sakana_kawaii", "agent_state", "memory"),
+    );
+    expect(emaResult.stdout).toContain(
+      path.join(tmpAppDataDir, "agents", "sakana_kawaii", "agent_state", "AGENTS.md"),
+    );
+    expect(emaResult.stdout).not.toContain(".vault.toml");
   });
 
   it("handles concurrent ensureSharedWorldServer calls safely without EADDRINUSE race", async () => {

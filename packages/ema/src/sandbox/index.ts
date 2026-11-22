@@ -23,6 +23,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   assertSandboxBinaryAllowed,
+  isEmaAgent,
   loadEmaAgentConfig,
   loadEmaGlobalConfig,
   type EmaAgentSpecificConfig,
@@ -192,6 +193,21 @@ export function buildLinuxBwrapWhitelistArgs(options: EmaSandboxProfileOptions):
 
   if (options.agentCfg) {
     args.push("--ro-bind", options.agentCfg.configPath, options.agentCfg.configPath);
+    const agentStateDir = path.dirname(options.agentCfg.configPath);
+    const agentsMd = path.join(agentStateDir, "AGENTS.md");
+    const skillsDir = path.join(agentStateDir, "skills");
+    const memoryDir = path.join(agentStateDir, "memory");
+    args.push(
+      "--ro-bind-try",
+      agentsMd,
+      agentsMd,
+      "--ro-bind-try",
+      skillsDir,
+      skillsDir,
+      "--ro-bind-try",
+      memoryDir,
+      memoryDir,
+    );
   }
 
   for (const roPath of options.globalCfg.sandbox?.roPaths ?? []) {
@@ -320,6 +336,26 @@ export function buildWindowsWslBwrapWhitelistArgs(
   const homeDir = path.resolve(options.homeDir ?? os.homedir());
   args.push("--tmpfs", homeDir);
 
+  if (options.agentCfg) {
+    const wslCfgPath = toWslLinuxPath(options.agentCfg.configPath);
+    args.push("--ro-bind", wslCfgPath, wslCfgPath);
+    const agentStateDir = path.dirname(options.agentCfg.configPath);
+    const agentsMd = toWslLinuxPath(path.join(agentStateDir, "AGENTS.md"));
+    const skillsDir = toWslLinuxPath(path.join(agentStateDir, "skills"));
+    const memoryDir = toWslLinuxPath(path.join(agentStateDir, "memory"));
+    args.push(
+      "--ro-bind-try",
+      agentsMd,
+      agentsMd,
+      "--ro-bind-try",
+      skillsDir,
+      skillsDir,
+      "--ro-bind-try",
+      memoryDir,
+      memoryDir,
+    );
+  }
+
   // 3. Blank out /mnt (all Windows drives, C:\Users\<user>\.ssh, etc.) and mount ONLY workspace & scratchpad
   args.push("--tmpfs", "/mnt");
   args.push("--bind", wslWorkspace, wslWorkspace);
@@ -383,7 +419,9 @@ export function buildMacosSeatbeltWhitelistProfile(options: EmaSandboxProfileOpt
     `(deny file-read* file-write* (subpath ${sbplString(homeDir)}) (subpath "/private/etc/ssh"))`,
     // 2. Allow read-only access strictly to minimal runtime and config.toml files
     `(allow file-read* (literal ${sbplString(homeDir)}) (subpath ${sbplString(path.join(homeDir, ".local", "node"))}) (literal ${sbplString(options.globalCfg.configPath)})${
-      options.agentCfg ? ` (literal ${sbplString(options.agentCfg.configPath)})` : ""
+      options.agentCfg
+        ? ` (literal ${sbplString(options.agentCfg.configPath)}) (literal ${sbplString(path.join(path.dirname(options.agentCfg.configPath), "AGENTS.md"))}) (subpath ${sbplString(path.join(path.dirname(options.agentCfg.configPath), "skills"))}) (subpath ${sbplString(path.join(path.dirname(options.agentCfg.configPath), "memory"))})`
+        : ""
     })`,
   ];
 
@@ -463,10 +501,11 @@ export function getEmaSandboxStatus(options: {
     ],
     allowedBinsCount: globalCfg.sandbox!.allowedBins.length,
     allowedBins: globalCfg.sandbox!.allowedBins,
+    emaAgents: globalCfg.sandbox?.emaAgents ?? [],
     ownerApprovedBins: agentCfg?.sandbox?.ownerApprovedBins ?? [],
     effectiveBinsCount: effectiveBins.length,
     sshBlocked: !effectiveBins.includes("ssh"),
   };
 }
 
-export { assertSandboxBinaryAllowed };
+export { assertSandboxBinaryAllowed, isEmaAgent };

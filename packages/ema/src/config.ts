@@ -54,6 +54,7 @@ export interface EmaGlobalSandboxConfig {
   owner: string;
   allowedBins: string[];
   roPaths?: string[];
+  emaAgents?: string[];
 }
 
 export interface EmaGlobalConfig {
@@ -244,6 +245,15 @@ export function loadEmaGlobalConfig(
                   ),
                 }
               : {}),
+            ...(Array.isArray(parsed.sandbox.ema_agents)
+              ? {
+                  emaAgents: requireStringArray(
+                    parsed.sandbox.ema_agents,
+                    "sandbox.ema_agents",
+                    resolvedPath,
+                  ),
+                }
+              : {}),
           },
         }
       : {}),
@@ -350,4 +360,42 @@ export function assertSandboxBinaryAllowed(
       `[EMA Sandbox Panic] Binary '${baseName}' is blocked (not in sandbox bin whitelist). Execution requires explicit approval from the EMA Agent Owner ('${owner}') via [sandbox].owner_approved_bins in ${targetConfig}.`,
     );
   }
+}
+
+/**
+ * Determines whether a given agent is an EMA companion agent subject to the
+ * Dual-Whitelist sandbox. An agent is an EMA companion if:
+ * 1. It is explicitly listed in `[sandbox].ema_agents` in global `config.toml`, OR
+ * 2. Its agent directory contains `agent_state/config.toml` with valid `[agent]` and `[world]` sections.
+ */
+export function isEmaAgent(
+  agentId: string,
+  options: {
+    globalCfg?: EmaGlobalConfig | null;
+    agentDir?: string;
+    appDataDir?: string;
+  } = {},
+): boolean {
+  if (options.globalCfg?.sandbox?.emaAgents?.includes(agentId)) {
+    return true;
+  }
+  const appDataDir = options.appDataDir ?? options.globalCfg?.appDataDir;
+  const agentDir =
+    options.agentDir ??
+    (appDataDir ? path.join(appDataDir, "agents", agentId) : undefined);
+  if (agentDir) {
+    const agentCfgPath = path.join(agentDir, "agent_state", "config.toml");
+    if (fs.existsSync(agentCfgPath)) {
+      try {
+        const raw = fs.readFileSync(agentCfgPath, "utf8");
+        const parsed = parseToml(raw) as Record<string, any>;
+        if (parsed && typeof parsed === "object" && parsed.agent && parsed.world) {
+          return true;
+        }
+      } catch {
+        return false;
+      }
+    }
+  }
+  return false;
 }

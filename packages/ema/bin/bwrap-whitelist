@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REAL_BWRAP="/home/rei/.penguin/data/plugins/node_modules/@penguinharness/sandbox-bwrap/vendor/linux-x64/bin/bwrap"
-HOME_DIR="/home/rei"
-GLOBAL_CONFIG="$HOME_DIR/.penguin/data/ema/config.toml"
-SANDBOX_PROFILE="$HOME_DIR/.penguin/data/shell-startup/sandbox-profile"
+REAL_BWRAP="${REAL_BWRAP:-/home/rei/.penguin/data/plugins/node_modules/@penguinharness/sandbox-bwrap/vendor/linux-x64/bin/bwrap}"
+HOME_DIR="${HOME_DIR:-${HOME:-/home/rei}}"
+GLOBAL_CONFIG="${GLOBAL_CONFIG:-$HOME_DIR/.penguin/data/ema/config.toml}"
+SANDBOX_PROFILE="${SANDBOX_PROFILE:-$HOME_DIR/.penguin/data/shell-startup/sandbox-profile}"
 
 has_arg_seq() {
   local a="$1" b="$2" c="$3"
@@ -75,6 +75,9 @@ parse_toml_array() {
   done < "$file"
 }
 
+# Preserve exact original arguments for non-EMA agent passthrough
+ORIG_ARGS=("$@")
+
 # Parse bwrap args before `--` and command argv after `--`
 BWRAP_BASE=()
 RW_BINDS=()
@@ -132,7 +135,7 @@ while [[ $# -gt 0 ]]; do
       dst="$3"
       shift 3
       RW_BINDS+=("--bind" "$src" "$dst")
-      if [[ "$src" == "$HOME_DIR/.penguin/data/"*"/agents/"*"/scratchpad/"* ]]; then
+      if [[ "$src" == *"/agents/"*"/scratchpad/"* ]]; then
         AGENT_DIR="${src%/scratchpad/*}"
       fi
       ;;
@@ -146,6 +149,54 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+AGENT_ID=""
+if [[ -n "$AGENT_DIR" ]]; then
+  AGENT_ID="${AGENT_DIR##*/}"
+fi
+
+APP_DATA_DIR=""
+if [[ -r "$GLOBAL_CONFIG" ]]; then
+  APP_DATA_DIR=$(parse_toml_root_string "$GLOBAL_CONFIG" "app_data_dir" || true)
+fi
+
+if [[ -z "$AGENT_ID" && -n "$APP_DATA_DIR" && "${CMD_ARGV[*]}" =~ (--agent|-a)[[:space:]]+([a-zA-Z0-9_-]+) ]]; then
+  AGENT_ID="${BASH_REMATCH[2]}"
+  AGENT_DIR="$APP_DATA_DIR/agents/$AGENT_ID"
+fi
+
+# Scope Isolation: Determine if session belongs to an EMA companion agent
+IS_EMA_AGENT=0
+
+if [[ -n "$AGENT_ID" ]]; then
+  # 1. Check if explicitly listed in [sandbox].ema_agents in global config.toml
+  if [[ -r "$GLOBAL_CONFIG" ]]; then
+    mapfile -t EMA_AGENTS < <(parse_toml_array "$GLOBAL_CONFIG" "sandbox" "ema_agents")
+    for ea in "${EMA_AGENTS[@]}"; do
+      if [[ "$ea" == "$AGENT_ID" ]]; then
+        IS_EMA_AGENT=1
+        break
+      fi
+    done
+  fi
+
+  # 2. Check if agent directory has agent_state/config.toml with valid [agent] and [world]
+  if [[ $IS_EMA_AGENT -eq 0 && -n "$AGENT_DIR" && -r "$AGENT_DIR/agent_state/config.toml" ]]; then
+    if grep -qE '^[[:space:]]*\[agent\]' "$AGENT_DIR/agent_state/config.toml" && \
+       grep -qE '^[[:space:]]*\[world\]' "$AGENT_DIR/agent_state/config.toml"; then
+      IS_EMA_AGENT=1
+    fi
+  fi
+fi
+
+# Non-EMA agent session fast-path:
+# If this session does not belong to an EMA companion agent, immediately execute
+# standard Bubblewrap with original arguments without --tmpfs /home/rei or binary whitelisting.
+if [[ $IS_EMA_AGENT -eq 0 ]]; then
+  exec -a "$0" "$REAL_BWRAP" "${ORIG_ARGS[@]}"
+fi
+
+# --- From this point on, enforce EMA Companion Dual-Whitelist ---
 
 # 1. Load [sandbox].allowed_bins from global config.toml (Panic if missing or empty)
 if [[ ! -r "$GLOBAL_CONFIG" ]]; then
@@ -238,14 +289,23 @@ RO_WHITELIST=(
 )
 
 if [[ -n "$AGENT_DIR" ]]; then
-  RO_WHITELIST+=("$AGENT_DIR/agent_state/config.toml")
+  RO_WHITELIST+=(
+    "$AGENT_DIR/agent_state/config.toml"
+    "$AGENT_DIR/agent_state/AGENTS.md"
+    "$AGENT_DIR/agent_state/skills"
+    "$AGENT_DIR/agent_state/memory"
+  )
 fi
 
-# If command explicitly passes `--agent <id>` or `-a <id>`, mount only that agent's non-secret config.toml
-APP_DATA_DIR=$(parse_toml_root_string "$GLOBAL_CONFIG" "app_data_dir" || true)
+# If command explicitly passes `--agent <id>` or `-a <id>`, mount that agent's config & assets
 if [[ -n "$APP_DATA_DIR" && "${CMD_ARGV[*]}" =~ (--agent|-a)[[:space:]]+([a-zA-Z0-9_-]+) ]]; then
-  TARGET_AGENT_CFG="$APP_DATA_DIR/agents/${BASH_REMATCH[2]}/agent_state/config.toml"
-  RO_WHITELIST+=("$TARGET_AGENT_CFG")
+  TARGET_AGENT_DIR="$APP_DATA_DIR/agents/${BASH_REMATCH[2]}"
+  RO_WHITELIST+=(
+    "$TARGET_AGENT_DIR/agent_state/config.toml"
+    "$TARGET_AGENT_DIR/agent_state/AGENTS.md"
+    "$TARGET_AGENT_DIR/agent_state/skills"
+    "$TARGET_AGENT_DIR/agent_state/memory"
+  )
 fi
 
 mapfile -t EXTRA_RO_PATHS < <(parse_toml_array "$GLOBAL_CONFIG" "sandbox" "ro_paths")
