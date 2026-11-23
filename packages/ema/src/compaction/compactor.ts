@@ -45,7 +45,7 @@ export interface EmaCompactorConfig {
   model?: {
     provider: string;
     modelId: string;
-    thinkingLevel?: "low" | "medium" | "high";
+    thinkingLevel?: "low" | "medium" | "high" | "xhigh" | "max";
   };
   evaluatorAgentId?: string;
   companionAgentId?: string;

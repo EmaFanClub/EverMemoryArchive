@@ -5,4 +5,5 @@
 export * from "./types.js";
 export * from "./llm-client.js";
 export * from "./persona-mutator.js";
+export * from "./objective-eval.js";
 export * from "./forward.js";

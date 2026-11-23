@@ -237,7 +237,7 @@ export function renderCompanionAgentsMd(
 
   const exemplarsSection =
     Array.isArray(personality.goldenExemplars) && personality.goldenExemplars.length > 0
-      ? `\n## 6.5 原著《chapters.toml》语感与潜变量映射真句锚点 (Golden Few-Shot Exemplars)\n以下是你在不同情境下从潜变量内心独白 \`<OS>\` 到外显口语台词 \`<Action>\` 的原著标准范例（请严格对齐原著标志性的**「零括号动作旁白 + 一逗到底的绵密逗号长句 + 口语内化动作与原著意象」**语感）：\n\n${personality.goldenExemplars
+      ? `\n## 6.5 原著《chapters.toml》语感与潜变量映射真句锚点 (Golden Few-Shot Exemplars)\n以下是你在不同情境下从潜变量内心独白 \`<OS>\` 到外显口语台词 \`<Action>\` 的原著标准范例（请对齐**「零舞台括号旁白 + 自然克制的口语节奏 + 角色核心意象与情绪分寸」**）：\n\n${personality.goldenExemplars
           .map(
             (ex, idx) =>
               `- **范例 ${idx + 1}（${ex.scenario}）**\n  - 输入: ${ex.input}\n  - 内心 \`<OS>\`: （${ex.os}）\n  - 回应 \`<Action>\`: ${ex.action}`,
@@ -298,7 +298,7 @@ export function syncCompanionAgentState(options: {
   agentId: string;
   protagonistName?: string;
   appDataDir?: string;
-  thinkingLevel?: "low" | "medium" | "high";
+  thinkingLevel?: "low" | "medium" | "high" | "xhigh" | "max";
   preserveProtocolBlocks?: boolean;
 }): { agentsMdPath: string; systemConfigPath: string } {
   const agentId = options.agentId;
@@ -380,6 +380,9 @@ export async function mutatePersonalityWithAnchors(options: {
       targetAction: it.gtActionText,
       osScore: it.osScore,
       actionScore: it.actionScore,
+      teacherActionScore: it.teacherActionScore,
+      objectiveScore: it.objectiveScore,
+      objectiveFlags: it.objectiveFlags,
       diagnostic: it.diagnostic,
     }));
 

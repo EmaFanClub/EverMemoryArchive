@@ -86,7 +86,7 @@ export interface RunAblationOptions {
   teacherModel?: {
     provider: string;
     modelId: string;
-    thinkingLevel: "low" | "medium" | "high";
+    thinkingLevel: "low" | "medium" | "high" | "xhigh" | "max";
   };
   studentBatchSize?: number;
   onCandidateResult?: (res: ModelAblationResult) => void;

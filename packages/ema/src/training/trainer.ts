@@ -39,6 +39,7 @@ import {
   type ForwardPrediction,
   runCompanionSceneForward,
 } from "../cognition/forward.js";
+import { evaluateSceneObjectiveMetrics } from "../cognition/objective-eval.js";
 import { EmaMemoryCompactor } from "../compaction/compactor.js";
 
 export { parseStudentTurnOutput, extractJsonFromLlm };
@@ -51,12 +52,12 @@ export interface TrainerConfig {
   studentModel: {
     provider: string;
     modelId: string;
-    thinkingLevel: "low" | "medium" | "high";
+    thinkingLevel: "low" | "medium" | "high" | "xhigh" | "max";
   };
   teacherModel: {
     provider: string;
     modelId: string;
-    thinkingLevel: "low" | "medium" | "high";
+    thinkingLevel: "low" | "medium" | "high" | "xhigh" | "max";
   };
   /** Agent ID in PenguinHarness for the Student companion (default: "ema_minimal") */
   companionAgentId?: string;
@@ -78,6 +79,12 @@ export interface TrainerConfig {
    * and testing multi-turn cadence/kaomoji/metaphor variation (default: false).
    */
   useSelfRolloutHistory?: boolean;
+  /**
+   * Objective style evaluation mode:
+   * - `"advisory"` (default): computes objective style metrics & passes flags to Teacher while keeping Teacher actionScore
+   * - `"enforced"`: blends objectiveScore (35%) with Teacher actionScore (65%) and applies hard red-line caps
+   */
+  objectiveEvalMode?: "advisory" | "enforced";
 }
 
 export class EmaPersonaTrainer {
@@ -113,6 +120,7 @@ export class EmaPersonaTrainer {
       enableReflectionCheck: true,
       syncAgentOnDisk: false,
       useSelfRolloutHistory: false,
+      objectiveEvalMode: "advisory",
       ...config,
     };
 
@@ -293,9 +301,11 @@ export class EmaPersonaTrainer {
       client: this.client,
       teacherCallOptions: this.teacherCallOptions(),
       targetCharacter: this.config.targetCharacter,
+      protagonistCharacter: this.config.protagonistCharacter,
       personality: this.personality,
       scene,
       predictions,
+      objectiveEvalMode: this.config.objectiveEvalMode,
     });
   }
 
@@ -446,6 +456,20 @@ export class EmaPersonaTrainer {
       bestItems.reduce((s, it) => s + it.osScore, 0) / Math.max(1, bestItems.length);
     const meanActionScore =
       bestItems.reduce((s, it) => s + it.actionScore, 0) / Math.max(1, bestItems.length);
+    const objectiveSummary = evaluateSceneObjectiveMetrics({
+      turns: bestItems.map((it) => ({
+        turnId: it.turnId,
+        inputText: it.inputText,
+        predictedOS: it.predictedOS,
+        predictedAction: it.predictedAction,
+        gtActionText: it.gtActionText,
+        teacherActionScore: it.teacherActionScore ?? it.actionScore,
+      })),
+      config: {
+        targetCharacter: this.config.targetCharacter,
+        protagonistCharacter: this.config.protagonistCharacter,
+      },
+    }).summary;
 
     return {
       sceneId: scene.sceneId,
@@ -459,6 +483,7 @@ export class EmaPersonaTrainer {
       osConsistencyRate: Number((osConsistentCount / Math.max(1, bestItems.length)).toFixed(3)),
       meanOsScore: Number(meanOsScore.toFixed(1)),
       meanActionScore: Number(meanActionScore.toFixed(1)),
+      objectiveSummary,
       reflectionScore: compacted.reflectionScore,
       memoryIndexItem: compacted.indexItem,
       items: bestItems,
