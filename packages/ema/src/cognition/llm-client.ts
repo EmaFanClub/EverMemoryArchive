@@ -154,11 +154,12 @@ export class PenguinServerLLMClient {
     projectId?: string;
     workspace?: string;
   }) {
-    const baseUrl = options?.baseUrl || "http://127.0.0.1:25750";
-    const token = options?.token || "";
+    const baseUrl = options?.baseUrl || process.env.PENGUIN_API_URL || "http://127.0.0.1:25750";
+    const token = options?.token || process.env.PENGUIN_API_TOKEN || "";
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.token = token.trim();
-    this.defaultProjectId = options?.projectId || "default_project";
+    this.defaultProjectId =
+      options?.projectId || process.env.PENGUIN_PROJECT_ID || "default_project";
     this.defaultWorkspace = options?.workspace || process.cwd();
   }
 

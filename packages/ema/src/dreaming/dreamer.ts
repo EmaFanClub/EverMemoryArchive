@@ -55,12 +55,12 @@ export interface EmaDreamerConfig {
   studentModel?: {
     provider: string;
     modelId: string;
-    thinkingLevel: "low" | "medium" | "high";
+    thinkingLevel: "low" | "medium" | "high" | "xhigh" | "max";
   };
   teacherModel?: {
     provider: string;
     modelId: string;
-    thinkingLevel: "low" | "medium" | "high";
+    thinkingLevel: "low" | "medium" | "high" | "xhigh" | "max";
   };
   companionAgentId: string;
   evaluatorAgentId?: string;

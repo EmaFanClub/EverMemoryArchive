@@ -10,3 +10,4 @@ export * from "./unified-cli.js";
 export * from "./llm-client.js";
 export * from "./trainer.js";
 export * from "./ablation.js";
+export * from "./im-benchmark.js";

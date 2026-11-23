@@ -22,6 +22,7 @@ import {
   parseStudentTurnOutput,
   syncCompanionAgentState,
 } from "./persona-mutator.js";
+import { evaluateSceneObjectiveMetrics, type ObjectiveEvalConfig } from "./objective-eval.js";
 
 export interface ForwardPrediction {
   turn: TurnBundle;
@@ -77,7 +78,7 @@ export function buildCompanionReactPrompt(options: {
         `- 反OOC约束: ${personality.antiOocConstraints.join(" ")}`,
         ...(Array.isArray(personality.goldenExemplars) && personality.goldenExemplars.length > 0
           ? [
-              `- 原著真句语感锚点 (Golden Few-Shot Exemplars — 零括号动作旁白、全部动作融入口语、3～5个逗号一逗到底、隔轮颜文字换气):`,
+              `- 语感锚点 (Golden Few-Shot Exemplars — 零舞台括号旁白、自然口语表达与情绪分寸):`,
               ...personality.goldenExemplars
                 .slice(0, 6)
                 .map(
@@ -283,34 +284,72 @@ export async function evaluateScenePredictionsWithTarget(options: {
   client: PenguinServerLLMClient;
   teacherCallOptions: LlmCallOptions;
   targetCharacter: string;
+  protagonistCharacter?: string;
   personality: CompanionPersonality;
   scene: SceneWindow;
   predictions: ForwardPrediction[];
+  objectiveEvalMode?: "advisory" | "enforced";
+  objectiveEvalConfig?: Partial<ObjectiveEvalConfig>;
 }): Promise<{
   items: MemoryItem[];
   metrics: LlmCallMetrics[];
 }> {
-  const { client, teacherCallOptions, targetCharacter: target, personality, scene, predictions } =
-    options;
+  const {
+    client,
+    teacherCallOptions,
+    targetCharacter: target,
+    protagonistCharacter,
+    personality,
+    scene,
+    predictions,
+    objectiveEvalMode = "advisory",
+    objectiveEvalConfig,
+  } = options;
   const items: MemoryItem[] = [];
   const metrics: LlmCallMetrics[] = [];
+
+  const objectiveEval = evaluateSceneObjectiveMetrics({
+    turns: predictions.map((p) => ({
+      turnId: p.turn.id,
+      inputText: p.turn.inputText,
+      predictedOS: p.predictedOS,
+      predictedAction: p.predictedAction,
+      gtActionText: p.turn.gtActionText,
+    })),
+    config: {
+      targetCharacter: target,
+      protagonistCharacter,
+      ...objectiveEvalConfig,
+    },
+  });
 
   const evalChunkSize = 18;
   for (let i = 0; i < predictions.length; i += evalChunkSize) {
     const chunk = predictions.slice(i, i + evalChunkSize);
-    const turnsPayload = chunk.map((p) => ({
-      turnId: p.turn.id,
-      turnIndex: p.turn.turnIndexInScene,
-      input: p.turn.inputText,
-      predictedOS: p.predictedOS,
-      predictedAction: p.predictedAction,
-      groundTruthAction: p.turn.gtActionText,
-      explicitScriptOS: p.turn.explicitOS,
-    }));
+    const turnsPayload = chunk.map((p, idx) => {
+      const obj = objectiveEval.perTurn[i + idx];
+      return {
+        turnId: p.turn.id,
+        turnIndex: p.turn.turnIndexInScene,
+        input: p.turn.inputText,
+        predictedOS: p.predictedOS,
+        predictedAction: p.predictedAction,
+        groundTruthAction: p.turn.gtActionText,
+        explicitScriptOS: p.turn.explicitOS,
+        objectiveScore: obj.objectiveScore,
+        objectiveFlags: obj.flags,
+        objectiveStats: {
+          inputDialogueChars: obj.metrics.inputDialogueChars,
+          predChars: obj.metrics.predChars,
+          gtChars: obj.metrics.gtChars,
+          adjacentBigramJaccard: obj.metrics.adjacentBigramJaccard,
+        },
+      };
+    });
 
     const prompt = [
       `你是 EverMemoryArchive (EMA) 的 **Teacher 审稿与评分器**。`,
-      `请根据角色 **${target}** 的参考理想表现（groundTruthAction）与当前人格设定，严格评测模型预测的潜变量内心独白 \`predictedOS\` 与外显动作台词 \`predictedAction\`。`,
+      `请根据角色 **${target}** 的参考理想表现（groundTruthAction）、当前人格设定以及代码计算出的 **客观语言指标 (objectiveScore / objectiveFlags / objectiveStats)**，严格评测模型预测的潜变量内心独白 \`predictedOS\` 与外显动作台词 \`predictedAction\`。`,
       ``,
       `## 当前角色人格摘要 (${personality.version})`,
       `- 核心身份: ${personality.coreIdentity}`,
@@ -321,11 +360,11 @@ export async function evaluateScenePredictionsWithTarget(options: {
       `1. **OS 一致性 (osConsistent: boolean, osScore: 0-100)**:`,
       `   - 检查 \`predictedOS\` 是否能作为连接 \`input\` 与真实反应 \`groundTruthAction\` 的合理心理桥梁。`,
       `   - 如果 \`predictedOS\` 与 \`groundTruthAction\` 的情感走向或潜台词矛盾，设 \`osConsistent: false\`，并在 \`committedOS\` 中给出修正后的真实内心独白 \`OS^*\`。`,
-      `2. **Action 还原度 (actionScore: 0-100)**:`,
-      `   - 语气与潜台词 (30分): 是否符合角色的人格语调与情感特质？`,
-      `   - 句长与呼吸感 (25分): 句长节奏是否与 \`groundTruthAction\` 契合？若 \`predictedAction\` 啰嗦冗长或带有AI客服味，必须重扣分！`,
-      `   - 情境与情绪准确度 (25分): 对输入情境的反应方向是否与 \`groundTruthAction\` 一致（即使字面用词不同，只要神韵、态度高度契合即可给高分 80-95）。`,
-      `   - 标志性动作与口癖 (20分): 角色称呼、口头禅与习惯性反应是否自然恰当。`,
+      `2. **Action 还原度与类人自然度 (actionScore: 0-100)**:`,
+      `   - 语气与潜台词 (25分): 是否符合角色的人格语调、温柔度与真实情感分寸？`,
+      `   - IM 类人自然度与弹性句长 (30分): 是否随输入复杂度自然缩放句长（短问短答、自然省主语、保留留白，不把自我肢体动作像广播一样念出来）？若出现 \`objectiveFlags\` 告警（如 \`LENGTH_BLOAT\`、\`COMMA_CHAINING\`、\`ADJACENT_REPEAT\`、\`NAME_CALLING_OVERUSE\`、\`LORE_STUFFING\`、\`DOUBLE_BUBBLE\`、\`ACTION_BROADCAST\`、\`CAUSAL_OVEREXPLAIN\`）或 AI 客服/咨询师三段式模板，必须对应扣分！`,
+      `   - 情境与情绪准确度 (25分): 对输入情境的情绪反应与行动方向是否自然契合（只要神韵、态度贴合即可给高分，不强制字面对齐参考句长）。`,
+      `   - 角色标志性与无 OOC (20分): 严守零「（...）」舞台括号旁白，不背诵技术术语或说教，称呼与设定边界自然。`,
       ``,
       `## 待评测回合数据 (场景: ${scene.sceneId} 《${scene.title}》)`,
       JSON.stringify(turnsPayload, null, 2),
@@ -364,6 +403,7 @@ export async function evaluateScenePredictionsWithTarget(options: {
 
     for (let j = 0; j < chunk.length; j++) {
       const p = chunk[j];
+      const obj = objectiveEval.perTurn[i + j];
       const e = evalArr.find((x) => x?.turnId === p.turn.id) || evalArr[j];
       if (!e || typeof e.osScore !== "number" || typeof e.actionScore !== "number") {
         throw new Error(
@@ -373,16 +413,32 @@ export async function evaluateScenePredictionsWithTarget(options: {
 
       const osConsistent = typeof e.osConsistent === "boolean" ? e.osConsistent : true;
       const osScore = Math.max(0, Math.min(100, e.osScore));
-      const actionScore = Math.max(0, Math.min(100, e.actionScore));
+      const teacherActionScore = Math.max(0, Math.min(100, e.actionScore));
+      const actionScore =
+        objectiveEvalMode === "enforced"
+          ? Math.max(
+              0,
+              Math.min(
+                obj.hardScoreCap,
+                Math.round(0.35 * obj.objectiveScore + 0.65 * teacherActionScore),
+              ),
+            )
+          : teacherActionScore;
       const combinedScore = Number((0.4 * osScore + 0.6 * actionScore).toFixed(1));
       const committedOS =
         typeof e.committedOS === "string" && e.committedOS.trim()
           ? e.committedOS.trim()
           : p.predictedOS;
-      const diagnostic =
+      const baseDiagnostic =
         typeof e.diagnostic === "string" && e.diagnostic.trim()
           ? e.diagnostic.trim()
           : "";
+      const diagnostic =
+        obj.flags.length > 0
+          ? [baseDiagnostic, `[客观指标=${obj.objectiveScore}: ${obj.flags.join(", ")}]`]
+              .filter(Boolean)
+              .join(" ")
+          : baseDiagnostic;
 
       items.push({
         turnId: p.turn.id,
@@ -396,6 +452,10 @@ export async function evaluateScenePredictionsWithTarget(options: {
         osConsistent,
         osScore,
         actionScore,
+        teacherActionScore,
+        objectiveScore: obj.objectiveScore,
+        objectiveFlags: obj.flags,
+        objectiveMetrics: obj.metrics,
         combinedScore,
         diagnostic,
       });

@@ -41,6 +41,8 @@ import {
   washDatasetFromConfig,
   trainFromConfig,
   managePersonaFromConfig,
+  loadUnifiedTomlConfig,
+  runHeldOutImComparison,
   loadEmaGlobalConfig,
   loadEmaAgentConfig,
   ensureSharedWorldServer,
@@ -64,6 +66,9 @@ Unified Single-TOML Persona & Training Commands:
 
   ema.js persona [show|sync|init] --config <persona.toml> [--prompt "<directive>"]
     Inspect, initialize, or sync a persona's AGENTS.md & workbench from the single TOML config
+
+  ema.js eval --baseline <v1/AGENTS.md> --candidate <v2/AGENTS.md> [--config <persona.toml>] [--judge] [--out-md <report.md>] [--out-json <report.json>]
+    Run held-out multi-turn IM A/B evaluation with zero-LLM objective telemetry & blind transcripts
 
 World & Runtime Commands:
   ema.js world ls [--db <path>]
@@ -688,7 +693,7 @@ async function main() {
 
     if (!configPath) {
       console.error(
-        'Error: Missing --config <persona.toml>. Example: ema.js wash --config personas/sakana-kawaii/persona.toml --prompt "清洗日常与自主意识剧本，对齐第一人称<OS>与一逗到底口语<Action>"',
+        'Error: Missing --config <persona.toml>. Example: ema.js wash --config personas/sakana-kawaii/persona.toml --prompt "清洗日常与自主意识剧本，对齐第一人称<OS>与自然口语<Action>"',
       );
       process.exit(1);
     }
@@ -854,7 +859,7 @@ async function main() {
 
     if (!scriptPath) {
       console.error(
-        'Error: --config <persona.toml> is required for `ema.js train`. Example: ema.js train --config personas/sakana-kawaii/persona.toml --prompt "强化一逗到底语感与零括号口语化动作"',
+        'Error: --config <persona.toml> is required for `ema.js train`. Example: ema.js train --config personas/sakana-kawaii/persona.toml --prompt "强化类人口语自然度与零括号表达"',
       );
       process.exit(1);
     }
@@ -918,6 +923,93 @@ async function main() {
       "utf8",
     );
     console.log(`Saved checkpoint to ${outPath}`);
+    return;
+  }
+
+  if (command === "eval") {
+    let configPath = "";
+    let baselinePath = "";
+    let candidatePath = "";
+    let baselineLabel = "baseline (v1)";
+    let candidateLabel = "candidate (v2)";
+    let modelId = "";
+    let provider = "";
+    let thinkingLevel = "";
+    let workerAgentId = "";
+    let outMd = "";
+    let outJson = "";
+    let runPairwiseJudge = false;
+
+    for (let i = 1; i < args.length; i++) {
+      if ((args[i] === "--config" || args[i] === "-c") && i + 1 < args.length)
+        configPath = args[++i];
+      else if (args[i] === "--baseline" && i + 1 < args.length) baselinePath = args[++i];
+      else if (args[i] === "--candidate" && i + 1 < args.length) candidatePath = args[++i];
+      else if (args[i] === "--baseline-label" && i + 1 < args.length) baselineLabel = args[++i];
+      else if (args[i] === "--candidate-label" && i + 1 < args.length) candidateLabel = args[++i];
+      else if (args[i] === "--model" && i + 1 < args.length) modelId = args[++i];
+      else if (args[i] === "--provider" && i + 1 < args.length) provider = args[++i];
+      else if (args[i] === "--thinking" && i + 1 < args.length) thinkingLevel = args[++i];
+      else if (args[i] === "--worker-agent" && i + 1 < args.length) workerAgentId = args[++i];
+      else if (args[i] === "--out-md" && i + 1 < args.length) outMd = args[++i];
+      else if (args[i] === "--out-json" && i + 1 < args.length) outJson = args[++i];
+      else if (args[i] === "--judge") runPairwiseJudge = true;
+    }
+
+    const cfg = configPath ? loadUnifiedTomlConfig(configPath) : null;
+    if (!candidatePath && cfg) {
+      candidatePath = cfg.agentsMdPath;
+    }
+    if (!baselinePath || !candidatePath) {
+      console.error(
+        "Error: --baseline <v1/AGENTS.md> and --candidate <v2/AGENTS.md> (or --config <persona.toml>) are required.",
+      );
+      process.exit(1);
+    }
+
+    const resolvedProvider = provider || cfg?.training.provider || "penguin-go";
+    const resolvedModelId = modelId || cfg?.training.studentModel || "gemini-4-hydrogen";
+    const resolvedThinking =
+      thinkingLevel || cfg?.training.studentThinkingLevel || "medium";
+    const resolvedWorker = workerAgentId || cfg?.training.workerAgentId || "default_agent";
+
+    console.log(`=== EMA Held-Out Multi-Turn IM A/B Eval ===`);
+    console.log(`Model:     ${resolvedProvider}/${resolvedModelId}@${resolvedThinking}`);
+    console.log(`Worker:    ${resolvedWorker}`);
+    console.log(`Baseline:  ${path.resolve(baselinePath)}`);
+    console.log(`Candidate: ${path.resolve(candidatePath)}`);
+
+    const res = await runHeldOutImComparison({
+      baselinePath,
+      candidatePath,
+      baselineLabel,
+      candidateLabel,
+      objectiveEvalConfig: {
+        targetCharacter: cfg?.targetCharacter || "大肥鱼",
+        protagonistCharacter: cfg?.protagonistCharacter || "主人",
+      },
+      workerAgentId: resolvedWorker,
+      provider: resolvedProvider,
+      modelId: resolvedModelId,
+      thinkingLevel: resolvedThinking,
+      teacherModelId: cfg?.training.teacherModel,
+      teacherThinkingLevel: cfg?.training.teacherThinkingLevel,
+      runPairwiseJudge,
+    });
+
+    if (outMd) {
+      fs.mkdirSync(path.dirname(path.resolve(outMd)), { recursive: true });
+      fs.writeFileSync(path.resolve(outMd), res.blindTranscriptMarkdown, "utf8");
+      console.log(`Saved Markdown report: ${path.resolve(outMd)}`);
+    }
+    if (outJson) {
+      fs.mkdirSync(path.dirname(path.resolve(outJson)), { recursive: true });
+      fs.writeFileSync(path.resolve(outJson), JSON.stringify(res, null, 2), "utf8");
+      console.log(`Saved JSON report:     ${path.resolve(outJson)}`);
+    }
+    if (!outMd) {
+      console.log("\n" + res.blindTranscriptMarkdown);
+    }
     return;
   }
 

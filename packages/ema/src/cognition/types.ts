@@ -7,6 +7,8 @@
  * - Parallel Background & Circadian Dreaming Consolidation (`dreaming/`, RFC-0007)
  */
 
+import type { ObjectiveTurnMetrics, WindowObjectiveSummary } from "./objective-eval.js";
+
 export type ScriptLineType = "narration" | "dialogue" | "monologue";
 
 export interface RawScriptLine {
@@ -166,8 +168,16 @@ export interface MemoryItem {
   osConsistent: boolean;
   /** Teacher score (0-100) for OS consistency & depth */
   osScore: number;
-  /** Teacher score (0-100) for Action quality (tone, cadence, subtext, action habits) */
+  /** Final audited Action score (0-100) combining objective style checks and Teacher score */
   actionScore: number;
+  /** Raw LLM Teacher Action score (0-100) prior to deterministic style audit */
+  teacherActionScore?: number;
+  /** Deterministic objective style score (0-100) */
+  objectiveScore?: number;
+  /** Objective flags detected by deterministic evaluator */
+  objectiveFlags?: string[];
+  /** Objective per-turn measurements */
+  objectiveMetrics?: ObjectiveTurnMetrics;
   /** Weighted combined turn score (0.4 * osScore + 0.6 * actionScore) */
   combinedScore: number;
   /** Brief diagnostic from Teacher explaining gaps or praising accuracy */
@@ -252,6 +262,7 @@ export interface WindowTrainingResult {
   osConsistencyRate: number;
   meanOsScore: number;
   meanActionScore: number;
+  objectiveSummary?: WindowObjectiveSummary;
   reflectionScore?: number;
   memoryIndexItem: SceneMemoryIndexItem;
   items: MemoryItem[];
@@ -262,7 +273,7 @@ export interface ModelAblationCandidate {
   id: string;
   provider: string;
   modelId: string;
-  thinkingLevel: "low" | "medium" | "high";
+  thinkingLevel: "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 export interface ModelAblationResult {

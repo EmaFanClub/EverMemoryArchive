@@ -19,6 +19,7 @@ import type {
 } from "../cognition/types.js";
 import { PenguinServerLLMClient, sumMetrics } from "../cognition/llm-client.js";
 import {
+  extractPreservedProtocolBlocks,
   renderCompanionAgentsMd,
   syncCompanionAgentState,
 } from "../cognition/persona-mutator.js";
@@ -64,13 +65,17 @@ export interface UnifiedPersonaConfig {
     provider: string;
     studentModel: string;
     teacherModel: string;
-    thinkingLevel: "low" | "medium" | "high";
+    workerAgentId: string;
+    thinkingLevel: "low" | "medium" | "high" | "xhigh" | "max";
+    studentThinkingLevel: "low" | "medium" | "high" | "xhigh" | "max";
+    teacherThinkingLevel: "low" | "medium" | "high" | "xhigh" | "max";
     rsiScoreThreshold: number;
     maxWindowAttempts: number;
     studentBatchSize: number;
     maxScenes?: number;
     syncAgent: boolean;
     useSelfRolloutHistory: boolean;
+    objectiveEvalMode: "advisory" | "enforced";
   };
 }
 
@@ -196,9 +201,25 @@ export function loadUnifiedTomlConfig(configPath: string): UnifiedPersonaConfig 
   const checkpointPath = path.resolve(personaDir, checkpointRel);
   const agentsMdPath = path.resolve(personaDir, agentsMdRel);
 
-  const thinkingRaw = String(trainingSection.thinking_level || "medium");
-  const thinkingLevel: "low" | "medium" | "high" =
-    thinkingRaw === "low" || thinkingRaw === "high" ? thinkingRaw : "medium";
+  const parseThinkingLevel = (
+    rawVal: unknown,
+    fallback: "low" | "medium" | "high" | "xhigh" | "max",
+  ): "low" | "medium" | "high" | "xhigh" | "max" => {
+    const s = String(rawVal || "");
+    return s === "low" || s === "medium" || s === "high" || s === "xhigh" || s === "max"
+      ? s
+      : fallback;
+  };
+
+  const thinkingLevel = parseThinkingLevel(trainingSection.thinking_level, "medium");
+  const studentThinkingLevel = parseThinkingLevel(
+    trainingSection.student_thinking_level,
+    thinkingLevel,
+  );
+  const teacherThinkingLevel = parseThinkingLevel(
+    trainingSection.teacher_thinking_level,
+    thinkingLevel,
+  );
 
   return {
     configFile,
@@ -218,7 +239,10 @@ export function loadUnifiedTomlConfig(configPath: string): UnifiedPersonaConfig 
       provider: String(trainingSection.provider || "penguin-go"),
       studentModel: String(trainingSection.student_model || "gemini-3.8-flash"),
       teacherModel: String(trainingSection.teacher_model || "gemini-3.8-flash"),
+      workerAgentId: String(trainingSection.worker_agent_id || "default_agent"),
       thinkingLevel,
+      studentThinkingLevel,
+      teacherThinkingLevel,
       rsiScoreThreshold: Number(trainingSection.rsi_score_threshold ?? 85),
       maxWindowAttempts: Number(trainingSection.max_window_attempts ?? 2),
       studentBatchSize: Number(trainingSection.student_batch_size ?? 12),
@@ -226,6 +250,8 @@ export function loadUnifiedTomlConfig(configPath: string): UnifiedPersonaConfig 
         trainingSection.max_scenes !== undefined ? Number(trainingSection.max_scenes) : undefined,
       syncAgent: trainingSection.sync_agent !== false,
       useSelfRolloutHistory: Boolean(trainingSection.use_self_rollout_history ?? false),
+      objectiveEvalMode:
+        trainingSection.objective_eval_mode === "advisory" ? "advisory" : "enforced",
     },
   };
 }
@@ -477,17 +503,17 @@ export async function trainFromConfig(options: {
     {
       targetCharacter: artifact.targetCharacter,
       protagonistCharacter: artifact.protagonistCharacter,
-      companionAgentId: cfg.agentId,
-      teacherAgentId: cfg.agentId,
+      companionAgentId: cfg.training.workerAgentId,
+      teacherAgentId: cfg.training.workerAgentId,
       studentModel: {
         provider: cfg.training.provider,
         modelId: cfg.training.studentModel,
-        thinkingLevel: cfg.training.thinkingLevel,
+        thinkingLevel: cfg.training.studentThinkingLevel,
       },
       teacherModel: {
         provider: cfg.training.provider,
         modelId: cfg.training.teacherModel,
-        thinkingLevel: cfg.training.thinkingLevel,
+        thinkingLevel: cfg.training.teacherThinkingLevel,
       },
       rsiScoreThreshold: cfg.training.rsiScoreThreshold,
       maxWindowAttempts: cfg.training.maxWindowAttempts,
@@ -495,6 +521,7 @@ export async function trainFromConfig(options: {
       enableReflectionCheck: true,
       syncAgentOnDisk: false,
       useSelfRolloutHistory: cfg.training.useSelfRolloutHistory,
+      objectiveEvalMode: cfg.training.objectiveEvalMode,
     },
     {
       client: options.client,
@@ -547,6 +574,30 @@ export async function trainFromConfig(options: {
         )
       : 0;
   const totalMetrics = sumMetrics(results.map((r) => r.metrics));
+  const allItems = results.flatMap((r) => r.items);
+  const meanObjectiveScore =
+    allItems.length > 0
+      ? Number(
+          (
+            allItems.reduce((acc, it) => acc + (it.objectiveScore ?? 100), 0) / allItems.length
+          ).toFixed(2),
+        )
+      : 0;
+  const meanTeacherActionScore =
+    allItems.length > 0
+      ? Number(
+          (
+            allItems.reduce((acc, it) => acc + (it.teacherActionScore ?? it.actionScore), 0) /
+            allItems.length
+          ).toFixed(2),
+        )
+      : 0;
+  const meanAuditedActionScore =
+    allItems.length > 0
+      ? Number(
+          (allItems.reduce((acc, it) => acc + it.actionScore, 0) / allItems.length).toFixed(2),
+        )
+      : 0;
 
   const checkpointPayload = {
     personaId: cfg.personaId,
@@ -554,8 +605,12 @@ export async function trainFromConfig(options: {
     trainedAt: new Date().toISOString(),
     trainPrompt,
     washPrompt: artifact.washPrompt,
+    objectiveEvalMode: cfg.training.objectiveEvalMode,
     initialMeanScore,
     finalMeanScore,
+    meanObjectiveScore,
+    meanTeacherActionScore,
+    meanAuditedActionScore,
     totalScenes: results.length,
     totalMetrics,
     personality: trainer.personality,
@@ -585,7 +640,7 @@ export async function trainFromConfig(options: {
       memoryIndex: deployedMemoryIndex,
       agentId: cfg.agentId,
       protagonistName: artifact.protagonistCharacter,
-      thinkingLevel: cfg.training.thinkingLevel,
+      thinkingLevel: cfg.training.studentThinkingLevel,
       appDataDir: options.appDataDir,
     });
     syncedAgentPath = syncRes.agentsMdPath;
@@ -801,14 +856,26 @@ export function managePersonaFromConfig(options: {
       personality = buildInitialPersonalityFromPersonaToml(cfg.parsedToml);
     }
 
-    if (checkpointData?.personality) {
-      const cp = checkpointData.personality as CompanionPersonality;
-      personality.version = cp.version || personality.version;
-      if (Array.isArray(cp.mutationHistory) && cp.mutationHistory.length > 0) {
-        personality.mutationHistory = cp.mutationHistory;
-      }
+    const cp = (checkpointData?.trainedPersonality ||
+      checkpointData?.personality) as CompanionPersonality | undefined;
+    if (cp) {
+      personality = {
+        ...personality,
+        ...cp,
+        version: cp.version || personality.version,
+        goldenExemplars:
+          Array.isArray(cp.goldenExemplars) && cp.goldenExemplars.length > 0
+            ? cp.goldenExemplars
+            : personality.goldenExemplars,
+        mutationHistory:
+          Array.isArray(cp.mutationHistory) && cp.mutationHistory.length > 0
+            ? cp.mutationHistory
+            : personality.mutationHistory,
+      };
     }
-    if (Array.isArray(checkpointData?.deployedPeerMemoryIndex)) {
+    if (Array.isArray(checkpointData?.retainedMemoryIndex)) {
+      memoryIndex = checkpointData.retainedMemoryIndex;
+    } else if (Array.isArray(checkpointData?.deployedPeerMemoryIndex)) {
       memoryIndex = checkpointData.deployedPeerMemoryIndex;
     } else if (Array.isArray(checkpointData?.memoryIndex)) {
       memoryIndex = checkpointData.memoryIndex;
@@ -820,8 +887,12 @@ export function managePersonaFromConfig(options: {
       "Persona 管理与微调指令",
     );
 
+    const existingRepoBlocks = fs.existsSync(cfg.agentsMdPath)
+      ? extractPreservedProtocolBlocks(fs.readFileSync(cfg.agentsMdPath, "utf8"))
+      : [];
     const agentsMd = renderCompanionAgentsMd(personality, memoryIndex, {
       protagonistName: cfg.protagonistCharacter,
+      preservedProtocolBlocks: existingRepoBlocks,
     });
     fs.writeFileSync(cfg.agentsMdPath, agentsMd, "utf8");
 
@@ -830,7 +901,7 @@ export function managePersonaFromConfig(options: {
       memoryIndex,
       agentId: cfg.agentId,
       protagonistName: cfg.protagonistCharacter,
-      thinkingLevel: cfg.training.thinkingLevel,
+      thinkingLevel: cfg.training.studentThinkingLevel,
       appDataDir: options.appDataDir,
     });
     syncedAgentPath = syncRes.agentsMdPath;
@@ -858,7 +929,8 @@ export function managePersonaFromConfig(options: {
     chaptersCount,
     autonomyChaptersCount,
     checkpointExists,
-    checkpointVersion: checkpointData?.personality?.version,
+    checkpointVersion:
+      checkpointData?.trainedPersonality?.version || checkpointData?.personality?.version,
     agentsMdPath: cfg.agentsMdPath,
     syncedAgentPath,
     workbenchInstalled,

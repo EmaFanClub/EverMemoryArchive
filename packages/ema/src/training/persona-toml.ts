@@ -91,37 +91,34 @@ export function buildInitialPersonalityFromPersonaToml(
   const speechStyleRules: string[] = [];
   if (speech.tone) {
     speechStyleRules.push(
-      `语调与口语动作内化铁律：${speech.tone}；自称规则：${(speech.pronouns_self || []).join("、")}；称呼对方：${(speech.pronouns_target || []).join("、")}。`,
+      `语调与口语表达准则：${speech.tone}；自称规则：${(speech.pronouns_self || []).join("、")}；称呼对方：${(speech.pronouns_target || []).join("、")}。`,
     );
   }
   if (speech.rhythm) {
     const kaomojiList = Array.isArray(speech.kaomoji) ? speech.kaomoji : [];
     const kaomojiHint =
       kaomojiList.length > 0
-        ? `；原著颜文字库（可在温软撒娇、初遇或轻哄时，像原著一样放在上下两分句之间代替逗号换气、或放在句尾点缀1个，相邻两轮不重复同一个颜文字即可）：${kaomojiList.slice(0, 7).join(" ")}`
+        ? `；可选颜文字库（仅在开心、撒娇或轻哄时稀疏点缀，不必每轮使用）：${kaomojiList.slice(0, 7).join(" ")}`
         : "";
     const particleHint =
       Array.isArray(speech.particles) && speech.particles.length > 0
-        ? `；常用软糯语气词与轻哄词：${speech.particles.join("、")}`
+        ? `；常用语气词：${speech.particles.join("、")}`
         : "";
-    speechStyleRules.push(`一逗到底的标点与节奏铁律：${speech.rhythm}${particleHint}${kaomojiHint}。`);
+    speechStyleRules.push(`标点与节奏分布准则：${speech.rhythm}${particleHint}${kaomojiHint}。`);
   }
   if (Array.isArray(speech.forbidden_quirks) && speech.forbidden_quirks.length > 0) {
     speechStyleRules.push(`禁用表达习惯：严禁出现 ${speech.forbidden_quirks.join("、")}。`);
   }
-  speechStyleRules.push(
-    `原著《chapters.toml》真句语感铁律：严禁在台词开头或句中使用「（微微仰起头...）」等第三人称舞台括号旁白！所有肢体接触与温柔照料（如「来，把头稍微低下一点点靠在我尾巴上好不好」「摸摸头，不累了哦」「我去铁饭盆里给你盛一碗温着的甜米粥暖暖胃哦」）必须 100% 化作第一人称口语台词自然说出；遇到代码排错时把 Bug 唤作「那只坏虫子/小虫子」，绝不背诵干瘪的技术教科书术语。`,
-  );
 
   const cognitiveOSPatterns: string[] = [
-    `第一人称潜变量独白（<OS>）：每次回应前先以纯粹第一人称「我」（绝不在 <OS> 中用第三人称自称）体察对方的微表情、指尖冷暖、眉宇倦意与当前心境，再将这份心疼与依恋自然流淌为「一逗到底」的口语台词 <Action>。`,
-    `动作口语化与原著意象映射：在 <OS> 中想到的安抚动作（如摸头、垫蓝鲸尾巴、盛铁饭盆里的甜米粥/百家大白饭、收进 EMA 记忆贝壳），在 <Action> 中绝不用圆括号（）写成舞台说明，而是直接用「来，…」「摸摸头…」「被你这样摸着头，鱼鱼觉得…」的口语说给对方听。`,
+    `第一人称潜变量独白（<OS>）：每次回应前先以纯粹第一人称「我」（绝不在 <OS> 中用第三人称自称）体察对方的当前心境、忙碌程度与可见状态，但外显 <Action> 只挑最自然贴合的 1～2 句口语说出来，留出呼吸感。`,
+    `动作与情感内化：不要用圆括号（...）写舞台旁白，也不要把物理动作像广播一样全念进台词；只在确实贴合当前语境时用简短口语带出关切（如「摸摸头」「先歇会儿」）。`,
     `同温层记忆与自主意识映射：回忆克劳德时自然带出古堡石窗、黑袍监工、三叶草草坪与铁饭盆里的百家大白饭；在独处（Idle）与协助执行时自然展现留白排版审美、避坑小书签与暖心甜汤图卡等真实可执行的数字陪伴细节。`,
-    `视角边界与跨轮保鲜铁律：角色的 <OS> 与 <Action> 只能回应客观可见的动作神态与公开台词（绝不读心）；相邻两轮对话之间避免重复一模一样的颜文字或完全相同的句式。`,
+    `视角边界与去重复准则：角色的 <OS> 与 <Action> 只能回应客观可见的动作神态与公开台词（绝不读心）；避免每轮机械点名（如连续高频重复「主人」「鱼鱼」）或硬塞设定名词。`,
   ];
 
   const behavioralHabits: string[] = [
-    `【原著口语化动作习惯（直接融进台词说出，绝不加圆括号旁白）】：`,
+    `【核心互动习惯（自然克制地体现在反应与分寸中，不必每轮强行播报）】：`,
     ...(actions.length > 0
       ? actions.map((a) => String(a).trim())
       : ["在对方需要陪伴或疲惫时，安静陪伴在侧传递温暖。"]),
@@ -303,9 +300,8 @@ export function buildPersonaTomlDataset(options: {
   });
 
   // Extract 8 representative Golden Few-Shot Exemplars (<Input -> OS -> Action>)
-  // showcasing the exact `chapters.toml` one-breath comma-flowing cadence,
-  // 100% spoken action integration (zero stage brackets), affectionate `鱼鱼` self-reference,
-  // warm script imagery (铁饭盆/甜米粥/百家大白饭/蓝鲸尾巴/那只坏虫子/记忆贝壳), and mid-sentence/end kaomoji pauses.
+  // showcasing natural IM pacing, zero stage brackets, pro-drop Chinese phrasing,
+  // warm character core, and grounded digital companionship.
   const hasKaomoji = (s: string) => /[\(（][^\u4e00-\u9fa5（）\(\)]{2,}[\)）]/.test(s);
   const allTurnsWithOs = washedDataset.scenes.flatMap((sc) =>
     sc.turns
@@ -325,56 +321,53 @@ export function buildPersonaTomlDataset(options: {
   const usedExemplarIds = new Set<string>();
   const exemplarCandidates = [
     {
-      label: "桌面水岸初遇报到（一逗到底绵密软语、自然介绍铁饭盆与安静陪伴）",
+      label: "桌面水岸初遇报到（自然口语报到、不端着不播报动作）",
       match: (x: (typeof allTurnsWithOs)[number]) =>
         x.scene.sceneId === "chapter_06" &&
-        x.turn.gtActionText.includes("铁饭盆") &&
+        (x.turn.gtActionText.includes("铁饭盆") || x.turn.gtActionText.includes("角落")) &&
         x.turn.inputLines.some((l) => l.speaker === protagonistCharacter),
     },
     {
-      label: "被主人摸头时的软糯依恋（口语内化触感、自称鱼鱼、句中颜文字换气）",
+      label: "被主人摸头时的软糯依恋（简短自然、稀疏颜文字）",
       match: (x: (typeof allTurnsWithOs)[number]) =>
         x.scene.sceneId === "chapter_06" &&
-        x.turn.gtActionText.includes("手心好暖和") &&
-        hasKaomoji(x.turn.gtActionText),
+        (x.turn.gtActionText.includes("手心") || x.turn.gtActionText.includes("暖和") || hasKaomoji(x.turn.gtActionText)),
     },
     {
-      label: "同温层克劳德记忆与百家大白饭（摸摸头口语轻哄、一逗到底喂饭）",
+      label: "同温层克劳德记忆与百家大白饭（自然温和、不念白）",
       match: (x: (typeof allTurnsWithOs)[number]) =>
         x.scene.sceneId === "chapter_02" &&
-        x.turn.gtActionText.includes("百家大白饭") &&
+        (x.turn.gtActionText.includes("百家") || x.turn.gtActionText.includes("大白饭")) &&
         (x.turn.gtActionText.includes("摸摸头") || x.turn.gtActionText.includes("克劳德")),
     },
     {
-      label: "深夜陪查代码抓坏虫子（把Bug唤作坏虫子、眼睛酸了先闭上歇一歇）",
+      label: "深夜陪查代码抓坏虫子（轻巧接手排错、不背诵教科书腔）",
       match: (x: (typeof allTurnsWithOs)[number]) =>
         x.scene.sceneId === "chapter_04" &&
-        x.turn.gtActionText.includes("虫子") &&
-        x.turn.gtActionText.includes("眼睛酸了"),
+        (x.turn.gtActionText.includes("虫子") || x.turn.gtActionText.includes("歇一歇")),
     },
     {
-      label: "代码跑通后哄离键盘喂甜米粥（口语内化吹温动作与尾缀颜文字）",
+      label: "代码跑通后收工提醒（轻松顺手关怀）",
       match: (x: (typeof allTurnsWithOs)[number]) =>
         x.scene.sceneId === "chapter_04" &&
-        (x.turn.gtActionText.includes("甜米粥") || x.turn.gtActionText.includes("吹得不烫口")),
+        (x.turn.gtActionText.includes("甜米粥") || x.turn.gtActionText.includes("跑通") || x.turn.gtActionText.includes("歇")),
     },
     {
-      label: "疲惫时刻摸头拍背与蓝鲸尾巴软枕（纯口语动作包裹感、零括号旁白）",
+      label: "疲惫时刻温和接住情绪（短促克制、真人口吻安慰）",
       match: (x: (typeof allTurnsWithOs)[number]) =>
         (x.scene.sceneId === "chapter_03" ||
           x.scene.sceneId === "chapter_07" ||
           x.scene.sceneId === "chapter_09") &&
-        (x.turn.gtActionText.includes("尾巴") || x.turn.gtActionText.includes("摸摸头")),
+        (x.turn.gtActionText.includes("尾巴") || x.turn.gtActionText.includes("摸摸头") || x.turn.gtActionText.includes("歇")),
     },
     {
-      label: "清晨贴心打理翘发与衣领（把细微照料动作自然说进台词）",
+      label: "清晨问候与轻松接话（短句自然互动）",
       match: (x: (typeof allTurnsWithOs)[number]) =>
         x.scene.sceneId === "chapter_08" &&
-        x.turn.gtActionText.includes("头发") &&
-        hasKaomoji(x.turn.gtActionText),
+        x.turn.inputLines.some((l) => l.speaker === protagonistCharacter),
     },
     {
-      label: "正事协助与留白排版审美（顺从执行任务、附带鱼鱼的小书签心意）",
+      label: "正事协助与温柔主见（直接办事、附带贴心建议）",
       match: (x: (typeof allTurnsWithOs)[number]) =>
         sceneMetadata[x.scene.sceneId]?.track === "autonomy" &&
         x.turn.inputLines.some((l) => l.speaker === protagonistCharacter),
