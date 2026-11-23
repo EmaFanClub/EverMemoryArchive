@@ -50,6 +50,22 @@ export interface EmaWorldChannelConfig {
   channels: string[];
 }
 
+export interface EmaWorldTelegramConfig {
+  dbPath: string;
+  botId: string;
+  botUsername: string;
+  botToken?: string;
+  defaultChatId?: string;
+  allowedChatIds: string[];
+  writeChatIds: string[];
+  forwardSourceChatIds: string[];
+  ownerIds: string[];
+  allowedMediaDirs?: string[];
+  webhookSecret?: string;
+  botIndexDir?: string;
+  opsLogDir?: string;
+}
+
 export interface EmaGlobalSandboxConfig {
   owner: string;
   allowedBins: string[];
@@ -70,6 +86,7 @@ export interface EmaGlobalConfig {
     qq: EmaWorldQQConfig;
     bilibili: EmaWorldBilibiliConfig;
     channel: EmaWorldChannelConfig;
+    telegram?: EmaWorldTelegramConfig;
   };
   sandbox?: EmaGlobalSandboxConfig;
 }
@@ -226,6 +243,86 @@ export function loadEmaGlobalConfig(
           resolvedPath,
         ),
       },
+      ...(world.telegram && typeof world.telegram === "object"
+        ? {
+            telegram: {
+              dbPath: requireNonEmptyString(
+                world.telegram.db_path,
+                "world.telegram.db_path",
+                resolvedPath,
+              ),
+              botId: requireNonEmptyString(
+                world.telegram.bot_id,
+                "world.telegram.bot_id",
+                resolvedPath,
+              ),
+              botUsername: requireNonEmptyString(
+                world.telegram.bot_username,
+                "world.telegram.bot_username",
+                resolvedPath,
+              ),
+              botToken:
+                typeof world.telegram.bot_token === "string" && world.telegram.bot_token.trim()
+                  ? world.telegram.bot_token.trim()
+                  : undefined,
+              defaultChatId:
+                typeof world.telegram.default_chat_id === "string" &&
+                world.telegram.default_chat_id.trim()
+                  ? world.telegram.default_chat_id.trim()
+                  : undefined,
+              allowedChatIds: requireStringArray(
+                world.telegram.allowed_chat_ids,
+                "world.telegram.allowed_chat_ids",
+                resolvedPath,
+              ),
+              writeChatIds: Array.isArray(world.telegram.write_chat_ids)
+                ? requireStringArray(
+                    world.telegram.write_chat_ids,
+                    "world.telegram.write_chat_ids",
+                    resolvedPath,
+                  )
+                : requireStringArray(
+                    world.telegram.allowed_chat_ids,
+                    "world.telegram.allowed_chat_ids",
+                    resolvedPath,
+                  ),
+              forwardSourceChatIds: Array.isArray(world.telegram.forward_source_chat_ids)
+                ? requireStringArray(
+                    world.telegram.forward_source_chat_ids,
+                    "world.telegram.forward_source_chat_ids",
+                    resolvedPath,
+                  )
+                : [],
+              ownerIds: Array.isArray(world.telegram.owner_ids)
+                ? requireStringArray(
+                    world.telegram.owner_ids,
+                    "world.telegram.owner_ids",
+                    resolvedPath,
+                  )
+                : [],
+              allowedMediaDirs: Array.isArray(world.telegram.allowed_media_dirs)
+                ? requireStringArray(
+                    world.telegram.allowed_media_dirs,
+                    "world.telegram.allowed_media_dirs",
+                    resolvedPath,
+                  )
+                : undefined,
+              webhookSecret:
+                typeof world.telegram.webhook_secret === "string" &&
+                world.telegram.webhook_secret.trim()
+                  ? world.telegram.webhook_secret.trim()
+                  : undefined,
+              botIndexDir:
+                typeof world.telegram.bot_index_dir === "string"
+                  ? world.telegram.bot_index_dir.trim()
+                  : undefined,
+              opsLogDir:
+                typeof world.telegram.ops_log_dir === "string"
+                  ? world.telegram.ops_log_dir.trim()
+                  : undefined,
+            },
+          }
+        : {}),
     },
     ...(parsed.sandbox && typeof parsed.sandbox === "object"
       ? {

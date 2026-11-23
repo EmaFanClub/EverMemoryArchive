@@ -23,6 +23,12 @@ import {
   QQWorld,
   QQLoginManager,
   createQQCompanionRunner,
+  TelegramWorld,
+  TelegramBotIndexStore,
+  crawlTelegramPublicChannel,
+  createTelegramCompanionRunner,
+  installTelegramProtocolToAgentsMd,
+  resolveAgentStateAgentsMdPath,
   installWebWorkbench,
   BilibiliLoginManager,
   publishBilibiliDynamic,
@@ -81,6 +87,12 @@ World & Runtime Commands:
 
   ema.js qq login [options]
     Interactive QR code login for QQ / OneBot gateway authentication
+
+  ema.js telegram run --agent <id> [options]
+    Run the Telegram Companion watch bridge (requires [world.telegram] in config.toml or --chat/--db)
+
+  ema.js telegram archive <channel_username> --bot-index <dir> [options]
+    Crawl a public Telegram channel's web preview and merge into BotIndex JSONL
 
   ema.js bilibili login [options]
     Interactive Playwright QR code login for Bilibili account authentication
@@ -267,8 +279,8 @@ async function main() {
       return;
     }
 
-    const globalCfg = loadEmaGlobalConfig(configPath);
-    const agentCfg = agentId ? loadEmaAgentConfig(agentId, globalCfg.appDataDir) : null;
+    const globalCfg = !explicitWorldUrl || agentId ? loadEmaGlobalConfig(configPath) : null;
+    const agentCfg = agentId && globalCfg ? loadEmaAgentConfig(agentId, globalCfg.appDataDir) : null;
     const worldHttpUrl =
       explicitWorldUrl || (agentCfg ? agentCfg.world.url : globalCfg.world.url);
 
@@ -510,6 +522,222 @@ async function main() {
         console.error(`\nLogin failed: ${result.message}`);
       }
       process.exit(result.success ? 0 : 1);
+    }
+
+    printUsage();
+    process.exit(1);
+  }
+
+  if (command === "telegram" || command === "tg") {
+    const sub = args[1] || "run";
+    if (sub === "run") {
+      let configPath;
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--config" && i + 1 < args.length) configPath = args[++i];
+      }
+      const globalCfg = loadEmaGlobalConfig(configPath);
+      const tgCfg = globalCfg.world.telegram;
+      let token = tgCfg?.botToken || process.env.TELEGRAM_API_KEY;
+      let chatId = tgCfg?.defaultChatId || tgCfg?.allowedChatIds?.[0];
+      let session;
+      let agent = "";
+      let provider = "penguin-go";
+      let modelId = "gemini-4-hydrogen";
+      let thinking = "max";
+      let workspace;
+      let pollInterval = 2000;
+      let watchFor = "";
+      let requireMentionInGroups = true;
+      let requireMentionInChannels = false;
+      let skipInitialUpdates = true;
+      let dbPath = tgCfg?.dbPath;
+      let botIndexDir = tgCfg?.botIndexDir;
+      let opsLogDir = tgCfg?.opsLogDir;
+      let serveHttp = true;
+      let worldHost = globalCfg.world?.host || "127.0.0.1";
+      let worldPort = (globalCfg.world?.port || 17480) + 1;
+      let approveMode = "deny-all";
+
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--config") i++;
+        else if (args[i] === "--token") token = args[++i];
+        else if (args[i] === "--chat" || args[i] === "--chat-id") chatId = args[++i];
+        else if (args[i] === "--session") session = args[++i];
+        else if (args[i] === "--agent" || args[i] === "--agent-id") agent = args[++i];
+        else if (args[i] === "--provider") provider = args[++i];
+        else if (args[i] === "--model" || args[i] === "--model-id") modelId = args[++i];
+        else if (args[i] === "--thinking") thinking = args[++i];
+        else if (args[i] === "--workspace") workspace = path.resolve(args[++i]);
+        else if (args[i] === "--poll-interval") {
+          const parsed = Number(args[++i]);
+          if (!Number.isInteger(parsed) || parsed < 200) {
+            console.error("Error: --poll-interval must be an integer >= 200 (milliseconds).");
+            process.exit(1);
+          }
+          pollInterval = parsed;
+        }
+        else if (args[i] === "--watch-for") watchFor = args[++i];
+        else if (args[i] === "--all-messages") requireMentionInGroups = false;
+        else if (args[i] === "--require-channel-mention") requireMentionInChannels = true;
+        else if (args[i] === "--include-backlog") skipInitialUpdates = false;
+        else if (args[i] === "--db") dbPath = path.resolve(args[++i]);
+        else if (args[i] === "--bot-index") botIndexDir = path.resolve(args[++i]);
+        else if (args[i] === "--ops-log") opsLogDir = path.resolve(args[++i]);
+        else if (args[i] === "--host") worldHost = args[++i];
+        else if (args[i] === "--port") {
+          const parsed = Number(args[++i]);
+          if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+            console.error("Error: --port must be an integer between 1 and 65535.");
+            process.exit(1);
+          }
+          worldPort = parsed;
+        }
+        else if (args[i] === "--no-http") serveHttp = false;
+        else if (args[i] === "--approve") approveMode = args[++i];
+      }
+
+      if (!agent) {
+        console.error(
+          "Error: Missing --agent <agent_id>. Example: ema.js telegram run --agent <agent_id> [--chat <chat_id>]",
+        );
+        process.exit(1);
+      }
+      const allowedChatIds = tgCfg?.allowedChatIds ?? (chatId ? [chatId] : []);
+      if (allowedChatIds.length === 0 && (!tgCfg?.ownerIds || tgCfg.ownerIds.length === 0)) {
+        console.error(
+          "Error: Missing target chat authorization. Configure [world.telegram] in config.toml or pass --chat <chat_id>.",
+        );
+        process.exit(1);
+      }
+
+      const durationMs = watchFor ? parseWatchDuration(watchFor) : Infinity;
+      const endTime = Number.isFinite(durationMs) ? Date.now() + durationMs : Infinity;
+      const writeChatIds = tgCfg?.writeChatIds ?? allowedChatIds;
+
+      const agentAgentsMdPath = resolveAgentStateAgentsMdPath(globalCfg.appDataDir, agent);
+      if (fs.existsSync(agentAgentsMdPath)) {
+        const currentAgentsMd = fs.readFileSync(agentAgentsMdPath, "utf8");
+        const nextAgentsMd = installTelegramProtocolToAgentsMd(currentAgentsMd);
+        if (nextAgentsMd !== currentAgentsMd) {
+          fs.writeFileSync(agentAgentsMdPath, nextAgentsMd, "utf8");
+        }
+      }
+
+      console.log("=== EMA Telegram Companion Runner (Bot API) ===");
+      if (chatId) console.log(`Primary Chat:    ${chatId}`);
+      console.log(`Allowed Chats:   ${allowedChatIds.join(", ") || "(owner DMs only)"}`);
+      console.log(`Companion Agent: ${agent} (${provider}:${modelId}, thinking:${thinking})`);
+      console.log(`Backend Session: ${session || "(new)"}`);
+      console.log(`Approve Mode:    ${approveMode}`);
+      console.log(`Poll Interval:   ${pollInterval} ms`);
+      console.log(`World HTTP API:  ${serveHttp ? `http://${worldHost}:${worldPort}/world/telegram/*` : "disabled"}`);
+      if (botIndexDir) console.log(`BotIndex Dir:    ${botIndexDir}`);
+      if (opsLogDir) console.log(`OpsLog Dir:      ${opsLogDir}`);
+      if (dbPath) console.log(`Local DB:        ${dbPath}`);
+      console.log(
+        `Watch Duration:  ${Number.isFinite(durationMs) ? `${watchFor} (until ${new Date(endTime).toISOString()})` : "Permanent (persistent companion mode)"}`,
+      );
+      console.log("------------------------------------------------------------");
+
+      const runner = createTelegramCompanionRunner({
+        botToken: token,
+        botId: tgCfg?.botId,
+        botUsername: tgCfg?.botUsername,
+        chatId,
+        allowedChatIds,
+        writeChatIds,
+        forwardSourceChatIds: tgCfg?.forwardSourceChatIds,
+        ownerIds: tgCfg?.ownerIds,
+        allowedMediaDirs: tgCfg?.allowedMediaDirs,
+        webhookSecret: tgCfg?.webhookSecret,
+        session,
+        agentId: agent,
+        provider,
+        modelId,
+        thinking,
+        workspace,
+        pollIntervalMs: pollInterval,
+        requireMentionInGroups,
+        requireMentionInChannels,
+        skipInitialUpdates,
+        dbPath,
+        botIndexDir,
+        opsLogDir,
+        serveHttp,
+        worldHost,
+        worldPort,
+        approveMode,
+      });
+
+      const shutdown = () => {
+        console.log("\n[Telegram Runner] Shutting down companion bridge...");
+        runner.dispose();
+        process.exit(0);
+      };
+
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
+      if (Number.isFinite(durationMs)) {
+        const waitInterval = setInterval(() => {
+          if (Date.now() >= endTime) {
+            clearInterval(waitInterval);
+            console.log(`\n[Telegram Runner] Watch duration (${watchFor}) completed. Exiting.`);
+            runner.dispose();
+            process.exit(0);
+          }
+        }, 10000);
+      }
+      return;
+    }
+
+    if (sub === "archive") {
+      let configPath;
+      let channel = "";
+      let maxPages = 10;
+      let ledgerPath;
+      let archiveOutDir;
+      let botIndexDir;
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--config" && i + 1 < args.length) configPath = args[++i];
+        else if (args[i] === "--channel" || args[i] === "-c") channel = args[++i];
+        else if (args[i] === "--max-pages") maxPages = parseInt(args[++i], 10);
+        else if (args[i] === "--ledger") ledgerPath = path.resolve(args[++i]);
+        else if (args[i] === "--out") archiveOutDir = path.resolve(args[++i]);
+        else if (args[i] === "--bot-index") botIndexDir = path.resolve(args[++i]);
+        else if (!channel && !args[i].startsWith("-")) channel = args[i];
+      }
+      if (!botIndexDir && configPath) {
+        botIndexDir = loadEmaGlobalConfig(configPath).world.telegram?.botIndexDir;
+      }
+      if (!channel) {
+        console.error(
+          "Usage: ema.js telegram archive <channel_username> [--max-pages 10] [--ledger published.jsonl] [--bot-index <dir>]",
+        );
+        process.exit(1);
+      }
+      const store = botIndexDir ? new TelegramBotIndexStore({ botIndexDir }) : undefined;
+      const res = await crawlTelegramPublicChannel({
+        channel,
+        maxPages,
+        ledgerPath,
+        archiveOutDir,
+        botIndexStore: store,
+      });
+      console.log(
+        JSON.stringify(
+          {
+            channel: res.channel,
+            fetchedCount: res.fetchedCount,
+            mergedCount: res.mergedCount,
+            minMsgId: res.minMsgId,
+            maxMsgId: res.maxMsgId,
+          },
+          null,
+          2,
+        ),
+      );
+      process.exit(0);
     }
 
     printUsage();
