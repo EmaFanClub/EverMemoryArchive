@@ -13,6 +13,7 @@ export * from "./input-batcher.js";
 export * from "./worlds/penguin-channel-world.js";
 export * from "./worlds/bilibili/index.js";
 export * from "./worlds/qq/index.js";
+export * from "./worlds/telegram/index.js";
 export * from "./worlds/web/index.js";
 export * from "./config.js";
 export * from "./sandbox/index.js";

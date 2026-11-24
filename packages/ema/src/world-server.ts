@@ -20,6 +20,7 @@ import { PenguinChannelWorld } from "./worlds/penguin-channel-world.js";
 import { BilibiliWorld } from "./worlds/bilibili/index.js";
 import { WebWorld } from "./worlds/web/index.js";
 import { QQWorld } from "./worlds/qq/index.js";
+import { TelegramWorld } from "./worlds/telegram/index.js";
 import type { Disposable, EmaWorldRegistry } from "./interfaces.js";
 
 export function getDefaultWorldDataDir(configPath?: string): string {
@@ -56,11 +57,13 @@ export interface SharedWorldHub {
   qqDbPath: string;
   bilibiliDbPath: string;
   channelDbPath: string;
+  telegramDbPath?: string;
   router: SimpleEmaRouter;
   channelWorld: PenguinChannelWorld;
   bilibiliWorld: BilibiliWorld;
   webWorld: WebWorld;
   qqWorld: QQWorld;
+  telegramWorld?: TelegramWorld;
   httpServer: http.Server | null;
   port: number;
   host: string;
@@ -138,6 +141,34 @@ export function createWorldHubInstance(options: SharedWorldHubOptions = {}): Sha
     qqWorld.start(ctx),
   ];
 
+  let telegramDbPath: string | undefined;
+  let telegramWorld: TelegramWorld | undefined;
+  if (world.telegram) {
+    telegramDbPath = world.telegram.dbPath;
+    telegramWorld = new TelegramWorld({
+      botToken: world.telegram.botToken,
+      botId: world.telegram.botId,
+      botUsername: world.telegram.botUsername,
+      ownerIds: world.telegram.ownerIds,
+      defaultChatId: world.telegram.defaultChatId ?? world.telegram.allowedChatIds[0],
+      allowedMediaDirs: world.telegram.allowedMediaDirs,
+      webhookSecret: world.telegram.webhookSecret,
+      botIndexDir: world.telegram.botIndexDir,
+      opsLogDir: world.telegram.opsLogDir,
+      authorization: {
+        enabled: true,
+        allowedChatIds: world.telegram.allowedChatIds,
+        writeChatIds: world.telegram.writeChatIds,
+        forwardSourceChatIds: world.telegram.forwardSourceChatIds,
+        adminUsers: world.telegram.ownerIds,
+      },
+      passive: true,
+      dbPath: telegramDbPath,
+      env: {},
+    });
+    handles.push(telegramWorld.start(ctx));
+  }
+
   const listFormattedRoutes = () => {
     return router
       .listRoutes()
@@ -149,6 +180,7 @@ export function createWorldHubInstance(options: SharedWorldHubOptions = {}): Sha
           else if (r.prefix.startsWith("/world/bilibili")) worldName = "BilibiliWorld";
           else if (r.prefix.startsWith("/world/web")) worldName = "WebWorld";
           else if (r.prefix.startsWith("/world/qq")) worldName = "QQWorld";
+          else if (r.prefix.startsWith("/world/telegram")) worldName = "TelegramWorld";
           else {
             throw new Error(`[EMA World Panic] Unknown world route prefix: ${r.prefix}`);
           }
@@ -178,11 +210,13 @@ export function createWorldHubInstance(options: SharedWorldHubOptions = {}): Sha
     qqDbPath: world.qq.dbPath,
     bilibiliDbPath: world.bilibili.dbPath,
     channelDbPath: world.channel.dbPath,
+    telegramDbPath,
     router,
     channelWorld,
     bilibiliWorld,
     webWorld,
     qqWorld,
+    telegramWorld,
     httpServer: null,
     port: world.port,
     host: world.host,
